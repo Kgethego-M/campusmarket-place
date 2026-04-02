@@ -17,3 +17,4 @@ jobs:
           firebaseServiceAccount: '${{ secrets.FIREBASE_TOKEN }}'
           projectId: campusmarketplace-34f57
           channelId: live
+          firebaseToolsVersion: '13.0.0'
