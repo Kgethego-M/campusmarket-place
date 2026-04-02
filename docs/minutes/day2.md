@@ -13,7 +13,7 @@
 - Mmaphefo Thobejane
 - Victor Hyginus
 - Tebogo Sebopela
-​Absent (Excused): Athalia Mamba, Nontokozo Mbatha.
+- ​Absent (Excused): Athalia Mamba, Nontokozo Mbatha.
 
 ## ​3. Individual Updates
 
