@@ -1,93 +1,127 @@
-// tests/us2-role-assignment/roleAssignment.test.jsx
-// US2 — Role Assignment
-// Test cases derived from UAT
-// Written by: Dev 3
-
 import React from 'react';
-import { describe, it, expect } from 'vitest';
-import { render, screen } from '@testing-library/react';
-import { act } from 'react';
-import AccessDenied from '../../src/components/AccessDenied';
+import { useEffect, useState } from 'react';
+import { collection, getDocs, doc, updateDoc } from 'firebase/firestore';
+import { db } from '../firebase';
+import useRequireRole from '../hooks/useRequireRole';
+import AccessDenied from '../components/AccessDenied';
 
-describe('US2 - Role Assignment (Logic)', () => {
+const VALID_ROLES = ['student', 'staff', 'admin'];
 
-  // UAT 1
-  it('should grant staff access when admin assigns staff role', () => {
-    const user = { uid: 'test-uid', role: 'student' };
-    const updatedRole = 'staff';
-    expect(updatedRole).not.toBe(user.role);
-    expect(['student', 'staff', 'admin']).toContain(updatedRole);
-  });
+const AdminUsers = () => {
+  const { loading, accessGranted } = useRequireRole(['admin']);
+  const [users, setUsers] = useState([]);
+  const [fetchError, setFetchError] = useState(null);
 
-  // UAT 2
-  it('should deny access when student tries to access admin page', () => {
-    const userRole = 'student';
-    const allowedRoles = ['admin'];
-    const hasAccess = allowedRoles.includes(userRole);
-    expect(hasAccess).toBe(false);
-  });
+  useEffect(() => {
+    if (!accessGranted) return;
+    const loadUsers = async () => {
+      try {
+        const snapshot = await getDocs(collection(db, 'users'));
+        const userList = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
+        setUsers(userList);
+      } catch (error) {
+        console.error('Failed to load users:', error);
+        setFetchError('Failed to load users. Check your Firestore rules.');
+      }
+    };
+    loadUsers();
+  }, [accessGranted]);
 
-  it('should only accept valid role values', () => {
-    const validRoles = ['student', 'staff', 'admin'];
-    expect(validRoles).toContain('student');
-    expect(validRoles).toContain('staff');
-    expect(validRoles).toContain('admin');
-    expect(validRoles).not.toContain('superuser');
-    expect(validRoles).not.toContain('');
-  });
+  const handleRoleChange = async (uid, newRole) => {
+    try {
+      await updateDoc(doc(db, 'users', uid), { role: newRole });
+      setUsers((prev) =>
+        prev.map((u) => (u.id === uid ? { ...u, role: newRole } : u))
+      );
+    } catch (error) {
+      console.error('Failed to update role:', error);
+      alert('Failed to update role. Check your Firestore rules.');
+    }
+  };
 
-  it('should allow access when user role matches allowed roles', () => {
-    const userRole = 'admin';
-    const allowedRoles = ['admin'];
-    expect(allowedRoles.includes(userRole)).toBe(true);
-  });
+  const getInitials = (name) => {
+    if (!name) return '?';
+    return name.split(' ').map((w) => w[0]).join('').toUpperCase().slice(0, 2);
+  };
 
-  it('should deny access when user role does not match allowed roles', () => {
-    const userRole = 'student';
-    const allowedRoles = ['admin', 'staff'];
-    expect(allowedRoles.includes(userRole)).toBe(false);
-  });
+  if (loading) {
+    return <div style={styles.center}>Checking permissions...</div>;
+  }
 
-});
+  if (!accessGranted) {
+    return <AccessDenied />;
+  }
 
-describe('US2 - Role Assignment (Components)', () => {
+  return (
+    <div style={styles.container}>
+      <div style={styles.header}>
+        <h1 style={styles.title}>User Management</h1>
+        <span style={styles.badge}>Admin panel</span>
+      </div>
+      {fetchError && <div style={styles.error}>{fetchError}</div>}
+      <table style={styles.table}>
+        <thead>
+          <tr>
+            {['User', 'Email', 'Role', 'Action'].map((h) => (
+              <th key={h} style={styles.th}>{h}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {users.length === 0 ? (
+            <tr>
+              <td colSpan="4" style={styles.empty}>No users found.</td>
+            </tr>
+          ) : (
+            users.map((user) => (
+              <tr key={user.id}>
+                <td style={styles.td}>
+                  <div style={styles.userCell}>
+                    <div style={styles.avatar}>{getInitials(user.displayName)}</div>
+                    <span>{user.displayName || 'No name'}</span>
+                  </div>
+                </td>
+                <td style={styles.td}>{user.email || '-'}</td>
+                <td style={styles.td}>
+                  <select
+                    value={user.role}
+                    onChange={(e) => handleRoleChange(user.id, e.target.value)}
+                    style={styles.select}
+                  >
+                    {VALID_ROLES.map((r) => (
+                      <option key={r} value={r}>
+                        {r.charAt(0).toUpperCase() + r.slice(1)}
+                      </option>
+                    ))}
+                  </select>
+                </td>
+                <td style={styles.td}>
+                  <span style={styles.savedTag}>Auto-saved</span>
+                </td>
+              </tr>
+            ))
+          )}
+        </tbody>
+      </table>
+    </div>
+  );
+};
 
-  it('should render access denied page with correct message', async () => {
-    await act(async () => {
-      render(<AccessDenied />);
-    });
-    expect(screen.getByText('Access Denied')).toBeInTheDocument();
-    expect(screen.getByText(/don't have permission/i)).toBeInTheDocument();
-    expect(screen.getByText(/go back home/i)).toBeInTheDocument();
-  });
+const styles = {
+  container: { maxWidth: '900px', margin: '2rem auto', padding: '0 1.5rem' },
+  header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' },
+  title: { fontSize: '1.5rem', fontWeight: '600' },
+  badge: { background: '#e8f0fe', color: '#1967d2', fontSize: '0.75rem', padding: '4px 10px', borderRadius: '999px' },
+  error: { background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', borderRadius: '8px', padding: '1rem', marginBottom: '1rem' },
+  table: { width: '100%', borderCollapse: 'collapse', background: '#fff', borderRadius: '8px', overflow: 'hidden' },
+  th: { textAlign: 'left', padding: '12px 16px', fontSize: '0.8rem', fontWeight: '600', color: '#666', textTransform: 'uppercase', borderBottom: '1px solid #e5e7eb', background: '#f8f9fa' },
+  td: { padding: '12px 16px', borderBottom: '1px solid #f3f4f6', fontSize: '0.9rem', verticalAlign: 'middle' },
+  userCell: { display: 'flex', alignItems: 'center', gap: '10px' },
+  avatar: { width: '34px', height: '34px', borderRadius: '50%', background: '#dbeafe', color: '#1d4ed8', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: '600' },
+  select: { padding: '6px 10px', border: '1px solid #d1d5db', borderRadius: '6px', fontSize: '0.875rem' },
+  savedTag: { fontSize: '0.8rem', color: '#16a34a' },
+  center: { display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh', color: '#666' },
+  empty: { textAlign: 'center', padding: '2rem', color: '#888' },
+};
 
-  it('should allow admin role through admin gate', () => {
-    const allowedRoles = ['admin'];
-    expect(allowedRoles.includes('admin')).toBe(true);
-    expect(allowedRoles.includes('student')).toBe(false);
-    expect(allowedRoles.includes('staff')).toBe(false);
-  });
-
-  it('should allow admin and staff through staff gate', () => {
-    const allowedRoles = ['admin', 'staff'];
-    expect(allowedRoles.includes('admin')).toBe(true);
-    expect(allowedRoles.includes('staff')).toBe(true);
-    expect(allowedRoles.includes('student')).toBe(false);
-  });
-
-  it('should recognise all three platform roles', () => {
-    const roles = ['student', 'staff', 'admin'];
-    expect(roles).toHaveLength(3);
-    expect(roles[0]).toBe('student');
-    expect(roles[1]).toBe('staff');
-    expect(roles[2]).toBe('admin');
-  });
-
-  it('should reflect updated role after change', () => {
-    const user = { uid: '123', role: 'student' };
-    const updatedUser = { ...user, role: 'staff' };
-    expect(updatedUser.role).toBe('staff');
-    expect(updatedUser.uid).toBe(user.uid);
-  });
-
-});
+export default AdminUsers;
