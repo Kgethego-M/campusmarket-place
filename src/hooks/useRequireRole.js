@@ -2,6 +2,7 @@
 // Protects any page by checking login + role
 // Written by: Dev 3
 
+import React from 'react';
 import { useEffect, useState } from 'react';
 import { onAuthStateChanged } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';

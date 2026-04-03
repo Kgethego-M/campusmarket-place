@@ -2,6 +2,8 @@
 // Shown when a user tries to access a page they don't have permission for
 // Written by: Dev 3
 
+import React from 'react';
+
 const AccessDenied = () => {
 return (
     <div style={styles.container}>
