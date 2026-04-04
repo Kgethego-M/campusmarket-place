@@ -3,7 +3,21 @@ name: Deploy to Firebase Hosting on merge
   push:
     branches:
       - develop
+  pull_request:
+    branches:
+      - develop
 jobs:
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Dependencies
+        run: npm install
+      - name: Run Vitest
+        run: npm test
+
+
   build_and_deploy:
     runs-on: ubuntu-latest
     steps:
