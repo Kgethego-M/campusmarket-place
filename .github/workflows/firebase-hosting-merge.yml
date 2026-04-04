@@ -4,24 +4,27 @@ name: Deploy to Firebase Hosting on merge
     branches:
       - develop
   pull_request:
-    types: [opened, synchronize, reopened] 
-jobs:
+    types: [opened, synchronize, reopened]
 
+jobs:
   test:
     runs-on: ubuntu-latest
     steps:
+      # This pulls the code from the PR branch specifically
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          
       - name: Install Dependencies
         run: npm install
+        
       - name: Run Vitest
         run: npm test
-
 
   build_and_deploy:
     runs-on: ubuntu-latest
     needs: test 
     if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
-    
     steps:
       - uses: actions/checkout@v4
       - name: Install and Build
@@ -33,4 +36,3 @@ jobs:
           firebaseServiceAccount: '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}'
           projectId: campusmarketplace-34f57
           channelId: live
-          
