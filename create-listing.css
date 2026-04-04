@@ -1,0 +1,134 @@
+body {
+  background-color:#FBFBFB;
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+h1 {
+  color: #6AA6DA;
+  font-size: 2.5rem;
+  margin-bottom: 20px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+form {
+  background-color: #DBE3E9;
+  padding: 30px;
+  border-radius: 10px;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 1);
+  width: 400px;
+  margin-bottom: 50px;
+}
+
+label {
+  display: block;
+  color: #333;
+  font-family: Impact, Haettenschweiler, 'Arial Narrow Bold', sans-serif;
+}
+
+input {
+    width: 94%;
+    padding: 10px;
+    border: 3px solid #ccc;
+    border-radius: 8px;
+    font-family: 'Franklin Gothic Medium', 'Arial Narrow', Arial, sans-serif;
+}
+input:focus {
+    border-color: #6AA6DA;
+    outline: none;
+}
+input:hover {
+    border-color: #6AA6DA;
+}
+
+button {
+  height: 40px;
+  background-color: #6AA6DA;
+  color: white;
+  padding: 10px 20px;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  font-family: 'Franklin Gothic Medium', 'Arial Narrow', Arial, sans-serif;
+  text-align: center;
+}
+button:hover {
+  background-color: #5A95C8;
+}
+
+textarea {
+    width: 94%;
+    padding: 10px;
+    border: 3px solid #ccc;
+    border-radius: 8px;
+    font-family: 'Franklin Gothic Medium', 'Arial Narrow', Arial, sans-serif;
+}
+textarea:focus {
+    border-color: #6AA6DA;
+    outline: none;
+}
+textarea:hover {
+    border-color: #6AA6DA;
+}
+
+select {
+    width: 100%;
+    padding: 10px;
+    border: 3px solid #ccc;
+    border-radius: 8px;
+    font-family: 'Franklin Gothic Medium', 'Arial Narrow', Arial, sans-serif;
+}
+select:focus {
+    border-color: #6AA6DA;
+    outline: none;
+}
+select:hover {
+    border-color: #6AA6DA;
+}
+
+#other-category{
+    width: 94%;
+    margin-top: 5px;
+}
+
+#choose-image {
+    background-color: #6AA6DA;
+    color: white;
+    padding: 10px;
+    border-radius: 8px;
+    font-family: 'Franklin Gothic Medium', 'Arial Narrow', Arial, sans-serif;
+    width: 40%;
+    height: 40px;
+    cursor: pointer;
+    align-content: center;
+    text-align: center;
+    display: block;
+    margin: 0 auto;
+}
+#choose-image:hover {
+    background-color: #5A95C8;
+    border-color: #5A95C8;
+}
+
+#image-label{
+    margin-bottom: 20px;
+}
+
+#image-preview {
+    border-radius: 8px;
+    margin-bottom: 10px;
+    height: "wrap-content";
+    display: block;
+    margin: 0 auto;
+    text-align: center;
+    padding: 5px;
+}
+
+button[type="submit"] {
+    display: block;
+    margin: 0 auto;
+}

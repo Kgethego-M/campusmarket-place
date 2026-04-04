@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Create Listing</title>
+    <link rel="stylesheet" href="./create-listing.css">
+</head>
+<body>
+    <section>
+        <h1>Create New Listing</h1>
+        <form id="listing-form">
+            <label for=" title"> Product Title:</label><br>
+            <input type="text" id="title" name="title" placeholder="Calculus Textbook" required><br><br>
+
+            <label for="description">Product Description:</label><br>
+            <textarea id="description" name="description" rows="4" cols="50" placeholder="Describe your item..." required></textarea><br><br>
+
+            <label for="specification">Product Specification:</label><br>
+            <textarea id="specification" name="specification" rows="4" cols="50" placeholder="Enter product specifications and details..."></textarea><br><br>
+
+            <label for="price">Price of Product:</label><br>
+            <input type="number" id="price" name="price"  placeholder="25.99" min="0" step="0.01" required><br><br>
+
+            <input type="file" id="image" name="image" multiple accept="image/*" style="display:none">
+            <label for="image" id="image-label">Images of Product</label>
+            <label for="image" id="choose-image" style="padding: 8px 16px;">
+                Choose Images
+            </label><br>
+            <section id="image-preview"></section>
+
+            <label for="Category">Category of Product:</label><br>
+            <select id="category" name="category" required>
+                <option value="" disabled selected>Select a category</option>
+                <option value="electronics">Electronics</option>
+                <option value="books">Books</option>
+                <option value="clothing">Clothing</option>
+                <option value="furniture">Furniture</option>
+                <option value="appliance">Appliances</option>
+                <option value="sports">Sports Equipment</option>
+                <option value="outdoors">Outdoor Gear</option>
+                <option value="accessories">Accessories and Jewelry</option>
+                <option value="toys">Toys and Games</option>
+                <option value="beauty">Beauty and Personal Care</option>
+                <option value="stationary">Stationary</option>
+                <option value="study_materials">Study Materials</option>
+                <option value="other">Other</option>
+            </select><br>
+            <input type="text" id="other-category" name="other-category" placeholder="Specify category" style="display: none;"><br>
+
+            <label for="Condition">Condition of Product:</label><br>
+            <select id="condition" name="condition" required>
+                <option value="" disabled selected>Select a condition</option>
+                <option value="new">New</option>
+                <option value="like_new">Like New</option>
+                <option value="good">Good</option>
+                <option value="fair">Fair</option>
+                <option value="poor">Poor</option>
+            </select><br><br>
+        
+            <label for="Listing Type">Listing Type:</label><br>
+            <select id="listing-type" name="listing-type" required>
+                <option value="" disabled selected>Select a listing type</option>
+                <option value="sale">For Sale</option>
+                <option value="trade">For Trade</option>
+                <option value="either">Either</option>
+            </select><br><br>
+
+            <button type="submit">Create Listing</button>
+        </form>
+
+    <script type="module" src="./create-listing.js"></script>
+    </section>
+</body>
+</html>
