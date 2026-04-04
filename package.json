@@ -8,7 +8,7 @@
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "test": "vitest run --dir tests"
+    "test": "ls -R && vitest run --dir tests"
   },
   "dependencies": {
     "firebase": "^12.11.0",
