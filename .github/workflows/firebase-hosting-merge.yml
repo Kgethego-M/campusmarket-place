@@ -4,8 +4,7 @@ name: Deploy to Firebase Hosting on merge
     branches:
       - develop
   pull_request:
-    branches:
-      - develop
+    types: [opened, synchronize, reopened] 
 jobs:
 
   test:
@@ -20,6 +19,9 @@ jobs:
 
   build_and_deploy:
     runs-on: ubuntu-latest
+    needs: test 
+    if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
+    
     steps:
       - uses: actions/checkout@v4
       - name: Install and Build
