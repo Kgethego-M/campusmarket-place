@@ -13,7 +13,12 @@ export const categoryMap = {
     'furniture': 'Furniture',
     'appliance': 'Appliances',
     'sports': 'Sports Equipment',
-    'study_materials': 'Study Materials'
+    'study_materials': 'Study Materials',
+    'outdoors': 'Outdoor Gear',
+    'accessories': 'Accessories and Jewelry',
+    'toys': 'Toys and Games',
+    'beauty': 'Beauty and Personal Care',
+    'stationary': 'Stationary'
 };
 
 export const listingTypeMap = {
@@ -23,8 +28,11 @@ export const listingTypeMap = {
 };
 
 export function validateListing({ title, description, price, category, condition, listingType }) {
-    if (!title || !description || isNaN(price) || price < 0 || !category || !condition || !listingType) {
+    if (!title || !description || !category || !condition || !listingType) {
         return { valid: false, error: "Please fill in all fields correctly." };
+    }
+    if (listingType !== "trade" && (isNaN(price) || price < 0)) {
+        return { valid: false, error: "Please enter a valid price." };
     }
     return { valid: true };
 }

@@ -42,6 +42,28 @@ describe("Field Validation", () => {
         const result = validateListing({ title: "Headphones", description: "test", price: 50, category: "electronics", condition: "new", listingType: "sale" });
         expect(result.valid).toBe(true);
     });
+    test("should fail if price is zero for sale listing", () => {
+    // zero is valid, should pass
+    const result = validateListing({ title: "Item", description: "test", price: 0, category: "electronics", condition: "new", listingType: "sale" });
+    expect(result.valid).toBe(true);
+});
+
+    test("should pass if listingType is either and price is provided", () => {
+        const result = validateListing({ title: "Item", description: "test", price: 50, category: "electronics", condition: "new", listingType: "either" });
+        expect(result.valid).toBe(true);
+    });
+
+    test("should fail if exactly 6 images uploaded", () => {
+        const fakeFiles = new Array(6).fill({ type: "image/jpeg", name: "photo.jpg" });
+        const result = validateImages(fakeFiles);
+        expect(result.valid).toBe(false);
+    });
+
+    test("should pass with exactly 1 image", () => {
+        const fakeFiles = [{ type: "image/png", name: "photo.png" }];
+        const result = validateImages(fakeFiles);
+        expect(result.valid).toBe(true);
+    });
 
 });
 

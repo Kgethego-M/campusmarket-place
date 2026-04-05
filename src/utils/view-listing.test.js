@@ -18,6 +18,13 @@ describe("formatPrice", () => {
     test("should format decimal prices correctly", () => {
         expect(formatPrice(99.9, "For Sale")).toBe("R99.90");
     });
+    test("should format price with exactly 2 decimal places", () => {
+    expect(formatPrice(100, "For Sale")).toBe("R100.00");
+});
+
+    test("should return null if listingType is Either and no price", () => {
+        expect(formatPrice(0, "Either")).toBe("R0.00");
+    });
 
 });
 
@@ -34,6 +41,10 @@ describe("getFirstImage", () => {
 
     test("should return null if photos is undefined", () => {
         expect(getFirstImage(undefined)).toBeNull();
+    });
+
+    test("should return first image even if only one photo", () => {
+    expect(getFirstImage(["onlyone.jpg"])).toBe("onlyone.jpg"); 
     });
 
 });
@@ -73,6 +84,28 @@ describe("validateListingData", () => {
         expect(validateListingData({ ...validListing, photos: undefined }).valid).toBe(false);
     });
 
+    test("should fail if condition is missing", () => {
+    const listing = {
+        title: "Item",
+        description: "desc",
+        category: "Electronics",
+        condition: "",
+        listingType: "For Sale",
+        photos: ["url1"]
+    };
+    expect(validateListingData(listing).valid).toBe(false);
+    });
+    test("should fail if listingType is missing", () => {
+        const listing = {
+            title: "Item",
+            description: "desc",
+            category: "Electronics",
+            condition: "New",
+            listingType: "",
+            photos: ["url1"]
+        };
+        expect(validateListingData(listing).valid).toBe(false);
+    });
 });
 
 describe("Acceptance Tests", () => {

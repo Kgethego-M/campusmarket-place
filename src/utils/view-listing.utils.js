@@ -1,6 +1,7 @@
 export function formatPrice(price, listingType) {
     if (listingType === "For Trade") return null;
-    return `R${price.toFixed(2)}`;
+    const rounded = Math.round(Number(price) * 100) / 100;
+    return `R${rounded.toFixed(2)}`;
 }
 
 export function getFirstImage(photos) {

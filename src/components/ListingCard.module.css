@@ -1,0 +1,128 @@
+.cardWrapper {
+    width: 300px;
+    min-height: 400px;
+    perspective: 1000px;
+    cursor: pointer;
+}
+
+.card {
+    width: 100%;
+    height: 100%;
+    min-height: 400px;
+    position: relative;
+    transform-style: preserve-3d;
+    transition: transform 0.6s ease;
+}
+
+.flipped {
+    transform: rotateY(180deg);
+}
+
+.cardFront,
+.cardBack {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    min-height: 400px;
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+    border-radius: 8px;
+    box-sizing: border-box;
+}
+
+/* ── Front ── */
+.cardFront {
+    background-color: #DBE3E9;
+    padding: 15px;
+    text-align: center;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.8);
+    transition: box-shadow 0.3s;
+}
+
+.cardWrapper:hover .cardFront {
+    box-shadow: 0 8px 16px rgba(106, 166, 218, 1);
+}
+
+.cardTitle {
+    font-weight: 400;
+    font-family: Impact, Haettenschweiler, 'Arial Narrow Bold', sans-serif;
+    margin: 0 0 10px 0;
+}
+
+.cardBody {
+    background-color: #FBFBFB;
+    padding: 15px;
+    border-radius: 8px;
+    text-align: center;
+    box-shadow: 0 4px 8px rgba(106, 166, 218, 1);
+    display: flex;
+    flex-direction: column;
+    min-height: 300px;
+}
+
+.cardBody p {
+    margin: 6px 0;
+    font-weight: bold;
+}
+
+.imgContainer {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 10px;
+}
+
+.img {
+    width: 90%;
+    object-fit: cover;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.8);
+    border-radius: 4px;
+    margin-top: 10px;
+    margin-bottom: 10px;
+    border: 2px solid #000;
+}
+
+.buttonSection {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin-top: auto;
+    padding-top: 15px;
+}
+
+.viewMoreBtn {
+    height: 40px;
+    background-color: #6AA6DA;
+    color: white;
+    padding: 10px 20px;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    font-family: 'Franklin Gothic Medium', 'Arial Narrow', Arial, sans-serif;
+    transition: background-color 0.2s;
+}
+.viewMoreBtn:hover {
+    background-color: #5A95C8;
+}
+
+/* ── Back ── */
+.cardBack {
+    background-color: #DBE3E9;
+    transform: rotateY(180deg);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 20px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.8);
+    transition: box-shadow 0.3s;
+}
+
+.cardWrapper:hover .cardBack {
+    box-shadow: 0 8px 16px rgba(106, 166, 218, 1);
+}
+
+.descriptionText {
+    text-align: center;
+    font-family: 'Franklin Gothic Medium', 'Arial Narrow', Arial, sans-serif;
+    font-weight: bold;
+}
