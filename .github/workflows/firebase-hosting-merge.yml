@@ -3,6 +3,7 @@ name: Deploy to Firebase Hosting on merge
   push:
     branches:
       - develop
+<<<<<<< HEAD
   pull_request:
     types: [opened, synchronize, reopened]
 
@@ -39,6 +40,15 @@ jobs:
       - name: Install and Build
         run: npm ci && npm run build
         
+=======
+jobs:
+  build_and_deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install and Build
+        run: npm ci && npm run build
+>>>>>>> origin/feature/sprint1-us3-dev4
       - name: Deploy to Firebase
         uses: FirebaseExtended/action-hosting-deploy@v0
         with:
@@ -46,3 +56,7 @@ jobs:
           firebaseServiceAccount: '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}'
           projectId: campusmarketplace-34f57
           channelId: live
+<<<<<<< HEAD
+=======
+          
+>>>>>>> origin/feature/sprint1-us3-dev4

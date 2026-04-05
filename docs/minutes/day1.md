@@ -36,7 +36,7 @@ Today:Waiting for Firebase configuration from Kgethego (Dev 1),then will begin i
 Blockers:Dependent on Firebase setup from Dev 1.
 
 
-- Athalia(Dev 3)
+- Athatia(Dev 3)
 
 Yesterday:Reviewed requirments and access control logic
 Today:Defining firestore user schema (uid,email,roel,createdAt)and planing  RBAD implimentation.
