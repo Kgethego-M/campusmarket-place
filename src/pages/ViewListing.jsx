@@ -1,96 +1,83 @@
-import { useEffect, useState } from "react";
-
-// --- MOCK IMPORTS ---
+// src/pages/ViewListing.jsx
+import React, { useEffect, useState } from "react";
 import { mockListings } from "../mockData.js";
+import ListingCard from "../components/ListingCard.jsx";
 
-// --- UTIL ---
-import { validateListingData } from "../utils/view-listing.utils.js";
-import ListingCard from "./ListingCard.jsx";
-import styles from "./ViewListing.module.css";
+export default function ViewListing() {
+  const [listings, setListings] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [filterCategory, setFilterCategory] = useState("all");
+  const [filterType, setFilterType] = useState("all"); // NEW state for type filter
 
-export default function ViewListings() {
-    const [listings, setListings] = useState([]);
-    const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    setListings(mockListings);
+    setLoading(false);
+  }, []);
 
-    const [searchTerm, setSearchTerm] = useState("");
-    const [filterCategory, setFilterCategory] = useState("all");
+  const filteredListings = listings.filter((listing) => {
+    const q = searchTerm.trim().toLowerCase();
+    const matchesSearch =
+      !q ||
+      (listing.title || "").toLowerCase().includes(q) ||
+      (listing.description || "").toLowerCase().includes(q);
 
-    useEffect(() => {
-        async function fetchListings() {
-            try {
-                const valid = mockListings.filter(
-                    (l) => validateListingData(l).valid
-                );
-                setListings(valid);
-            } catch (err) {
-                console.error("Failed to fetch listings:", err);
-            } finally {
-                setLoading(false);
-            }
-        }
+    const matchesCategory =
+      filterCategory === "all" || listing.category === filterCategory;
 
-        fetchListings();
-    }, []);
+    const matchesType =
+      filterType === "all" || listing.type === filterType;
 
-    const filteredListings = listings.filter((listing) => {
-        const matchesSearch = listing.title
-            ?.toLowerCase()
-            .includes(searchTerm.toLowerCase());
+    return matchesSearch && matchesCategory && matchesType;
+  });
 
-        const matchesFilter =
-            filterCategory === "all" ||
-            listing.category === filterCategory;
+  return (
+    <div style={{ padding: 20 }}>
+      <h1>Campus Marketplace</h1>
 
-        return matchesSearch && matchesFilter;
-    });
+      <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+        <input
+          placeholder="Search listings..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          style={{ flex: 1, padding: 8 }}
+        />
 
-    return (
-        <div className={styles.page}>
-            <h1 className={styles.heading}>Campus Marketplace</h1>
+        {/* Category filter */}
+        <select
+          value={filterCategory}
+          onChange={(e) => setFilterCategory(e.target.value)}
+          style={{ padding: 8 }}
+        >
+          <option value="all">All Categories</option>
+          <option value="books">Books</option>
+          <option value="electronics">Electronics</option>
+          <option value="clothing">Clothing</option>
+        </select>
 
-            {loading ? (
-                <p className={styles.loadingText}>Loading listings...</p>
-            ) : (
-                <>
-                    {/* SEARCH + FILTER CONTROLS */}
-                    <div className={styles.controls}>
-                        <input
-                            type="text"
-                            placeholder="Search listings..."
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                            className={styles.searchInput}
-                        />
+        {/* Listing type filter */}
+        <select
+          value={filterType}
+          onChange={(e) => setFilterType(e.target.value)}
+          style={{ padding: 8 }}
+        >
+          <option value="all">All Types</option>
+          <option value="ForSale">For Sale</option>
+          <option value="ForTrade">For Trade</option>
+        </select>
+      </div>
 
-                        <select
-                            value={filterCategory}
-                            onChange={(e) => setFilterCategory(e.target.value)}
-                            className={styles.filterSelect}
-                        >
-                            <option value="all">All</option>
-                            <option value="books">Books</option>
-                            <option value="electronics">Electronics</option>
-                            <option value="clothing">Clothing</option>
-                        </select>
-                    </div>
-
-                    {/* LISTINGS */}
-                    {filteredListings.length === 0 ? (
-                        <p className={styles.loadingText}>
-                            No listings found.
-                        </p>
-                    ) : (
-                        <div className={styles.listingsGrid}>
-                            {filteredListings.map((listing, index) => (
-                                <ListingCard
-                                    key={listing.id ?? index}
-                                    listing={listing}
-                                />
-                            ))}
-                        </div>
-                    )}
-                </>
-            )}
+      {loading ? (
+        <p>Loading listings...</p>
+      ) : filteredListings.length === 0 ? (
+        <p>No listings found.</p>
+      ) : (
+        <div style={{ display: "flex", flexWrap: "wrap" }}>
+          {filteredListings.map((l, i) => (
+            <ListingCard key={l.id ?? i} listing={l} />
+          ))}
         </div>
-    );
+      )}
+    </div>
+  );
 }
