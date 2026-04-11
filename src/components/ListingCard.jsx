@@ -1,13 +1,20 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { formatPrice, getFirstImage } from "../utils/view-listing.utils.js";
 import styles from "./ListingCard.module.css";
 
 export default function ListingCard({ listing }) {
     const [flipped, setFlipped] = useState(false);
+    const navigate = useNavigate();
 
-    const { title, description, category, condition, listingType, price, photos } = listing;
+    const { id, title, description, category, condition, listingType, price, photos } = listing;
     const firstImage = getFirstImage(photos);
     const formattedPrice = formatPrice(price, listingType);
+
+    function handleViewMore(e) {
+        e.stopPropagation(); // stop card from flipping
+        navigate(`/listing/${id}/edit`);
+    }
 
     return (
         <div className={styles.cardWrapper} onClick={() => setFlipped((f) => !f)}>
@@ -29,7 +36,7 @@ export default function ListingCard({ listing }) {
                         <div className={styles.buttonSection}>
                             <button
                                 className={styles.viewMoreBtn}
-                                onClick={(e) => e.stopPropagation()}
+                                onClick={handleViewMore}
                             >
                                 View More
                             </button>
