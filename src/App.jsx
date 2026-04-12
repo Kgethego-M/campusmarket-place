@@ -20,7 +20,13 @@ function LoginWrapper() {
     <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh' }}>
       <LoginForm
         onSwitchToSignup={() => navigate('/signup')}
-        onLoginSuccess={() => navigate('/view-listing')}
+        onLoginSuccess={(userData) => {
+          if (userData.userType === 'admin') {
+            navigate('/admin/users');
+          } else {
+            navigate('/view-listing');
+          }
+        }}
       />
     </div>
   );
