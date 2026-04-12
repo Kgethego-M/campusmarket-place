@@ -5,12 +5,19 @@ import AdminUsers from './pages/AdminUsers';
 import AccessDenied from './components/AccessDenied';
 import ViewListing from './pages/ViewListing';
 import EditListing from './pages/EditListing';
+import LandingPage from './components/LandingPage';
+import LoginForm from './components/LoginForm';
+import SignupForm from './components/SignupForm';
+import Dashboard from './components/Dashboard';
 
 function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<Navigate to="/view-listing" />} />
+        <Route path="/" element={<LandingPage />} />
+        <Route path="/login" element={<LoginForm />} />
+        <Route path="/signup" element={<SignupForm />} />
+        <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/view-listing" element={<ViewListing />} />
         <Route path="/edit-listing/:id" element={<EditListing />} />
         <Route path="/admin/users" element={<AdminUsers />} />
