@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
+  build_and_deploy:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -19,24 +19,8 @@ jobs:
 
       - name: Install dependencies
         run: |
-          python -m venv antenv
-          source antenv/bin/activate
-          pip install -r backend/requirements.txt
-
-      - name: Upload artifact for deployment jobs
-        uses: actions/upload-artifact@v4
-        with:
-          name: python-app
-          path: backend
-
-  deploy:
-    runs-on: ubuntu-latest
-    needs: build
-    steps:
-      - name: Download artifact from build job
-        uses: actions/download-artifact@v4
-        with:
-          name: python-app
+          cd backend
+          pip install -r requirements.txt
 
       - name: Deploy to Azure Web App
         uses: azure/webapps-deploy@v3
@@ -44,4 +28,5 @@ jobs:
           app-name: 'campus-marketplace-api'
           slot-name: 'Production'
           publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_CBCB5A73852647FB8F6E6F18FFBE2C60 }}
+          package: backend
           startup-command: 'pip install -r requirements.txt && uvicorn main:app --host 0.0.0.0 --port 8000'
