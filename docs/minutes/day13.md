@@ -26,16 +26,16 @@
 - Kgethego(Dev 1)
 
 
-Yesterday:Finished up the mockups for the student(s) page.
-Today:Completing the sprint retrospective and reflecting on the progress and challenges faced during Sprint 1 and finalise Sprint 1 minutes and push all my work to the develop branch.
-Blockers:
+Yesterday:Finished up the mockups for the student(s) page.  
+Today:Completing the sprint retrospective and reflecting on the progress and challenges faced during Sprint 1 and finalise Sprint 1 minutes and push all my work to the develop branch.  
+Blockers:None
 
 
 - Nontokozo(Dev 2)
 
 
-Yesterday:Completed user authentification.
-Today:Preping for meeting with the product owner.
+Yesterday:Completed user authentification.  
+Today:Preping for meeting with the product owner.  
 Blockers:None
 
 
@@ -43,28 +43,28 @@ Blockers:None
 - Athalia(Dev 3)
 
 
-Yesterday:Deployment with Azure is finally working Finished up setting up the database in azure.Resorlved PR issues and all merged Feature branches to develop.
-Today:Preping for meeting with the product owner.
+Yesterday:Deployment with Azure is finally working Finished up setting up the database in azure.Resorlved PR issues and all merged Feature branches to develop.  
+Today:Preping for meeting with the product owner.  
 Blockers:None
 
 - Victor(Dev 4)
 
-Yesterday:Started working on  Sprint 1 restrospective.
-Today:Preping for meeting with the product owner.
-Blockers:
+Yesterday:Started working on  Sprint 1 restrospective.  
+Today:Preping for meeting with the product owner.  
+Blockers:None
 
 
 - Tebogo (Dev 5)
 
-Yesterday:Started working on Sprint 1 restrospective.
-Today:Preping for meeting with the product owner.
-Blockers:
+Yesterday:Started working on Sprint 1 restrospective.  
+Today:Preping for meeting with the product owner.  
+Blockers:None
 
 - Mmaphefo (Dev 6)
 
 
-Yesterday:Prepared for final validation of listing, searching, and filtering functionality after successful testing and merge.
-Today:Completing the sprint retrospective and reflecting on progress, challenges, and areas for improvement.
+Yesterday:Prepared for final validation of listing, searching, and filtering functionality after successful testing and merge.  
+Today:Completing the sprint retrospective and reflecting on progress, challenges, and areas for improvement.  
 Blockers:None
 
 

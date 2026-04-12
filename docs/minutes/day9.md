@@ -26,16 +26,16 @@
 - Kgethego(Dev 1)
 
 
-Yesterday:Continued on minutes documentation and started working on the mockup.
-Today: Continue working on minutes and draft the wireframes for Admin and Trade facillity staff.
+Yesterday:Continued on minutes documentation and started working on the mockup.  
+Today: Continue working on minutes and draft the wireframes for Admin and Trade facillity staff.  
 Blockers:None
 
 
 - Nontokozo(Dev 2)
 
 
-Yesterday:Started connection of firebase authentification to code.
-Today: Clean up code and make sure that everything is well connected.
+Yesterday:Started connection of firebase authentification to code.  
+Today: Clean up code and make sure that everything is well connected.  
 Blockers:None.
 
 
@@ -43,28 +43,28 @@ Blockers:None.
 - Athalia(Dev 3)
 
 
-Yesterday:Continued to work on documentation(Product backlog) in Github actions.
-Today:All assigned tasks complete.
+Yesterday:Continued to work on documentation(Product backlog) in Github actions.  
+Today:All assigned tasks complete.  
 Blockers:None.
 
 - Victor(Dev 4)
 
-Yesterday:Pushed to Github.
-Today:Try to fix PRS issue.
+Yesterday:Pushed to Github.  
+Today:Try to fix PRS issue.  
 Blockers:GitHub is saying  that the two branches(develop and feature/sprint1-us3-dev4) don’t share a common ancestor.
 
 
 - Tebogo (Dev 5)
 
-Yesterday:Everything completed.
-Today:plans to send a pull request to develop branch.
+Yesterday:Everything completed.  
+Today:plans to send a pull request to develop branch.  
 Blockers:None.
 
 - Mmaphefo (Dev 6)
 
 
-Yesterday:Prepared for testing and validation of listing, search, and filter features.
-Today: Continue working on testing and debugging listing, search, and filter functionality.
+Yesterday:Prepared for testing and validation of listing, search, and filter features.  
+Today: Continue working on testing and debugging listing, search, and filter functionality.  
 Blockers: Firebase configuration and data availability issues preventing proper testing.
 
 

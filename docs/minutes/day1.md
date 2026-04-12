@@ -25,40 +25,40 @@
 
 - Kgethego(Dev 1)
 
-Yesterday:Participated in Sprint Planning and reviewes infrastructure requirements.
-Today:Creating Firebase project (Auth,Firestore,Storage,Hosting)and set up reprository structure.
+Yesterday:Participated in Sprint Planning and reviewes infrastructure requirements.  
+Today:Creating Firebase project (Auth,Firestore,Storage,Hosting)and set up reprository structure.  
 Blockers:None
 
 - Nontokozo(Dev 2)
 
-Yesterday:Reviewed authentification requirments and user login flow.
-Today:Waiting for Firebase configuration from Kgethego (Dev 1),then will begin implementing Google authentification.
+Yesterday:Reviewed authentification requirments and user login flow.  
+Today:Waiting for Firebase configuration from Kgethego (Dev 1),then will begin implementing Google authentification.  
 Blockers:Dependent on Firebase setup from Dev 1.
 
 
 - Athatia(Dev 3)
 
-Yesterday:Reviewed requirments and access control logic
-Today:Defining firestore user schema (uid,email,roel,createdAt)and planing  RBAD implimentation.
+Yesterday:Reviewed requirments and access control logic.  
+Today:Defining firestore user schema (uid,email,roel,createdAt)and planing  RBAD implimentation.  
 Blockers:None
 
 - Victor(Dev 4)
 
-Yesterday:Reviewed listing requirments and UI structure.
-Today:Designing listing creating form and discussing listing schema with Mmaphefo (Dev 6).
+Yesterday:Reviewed listing requirments and UI structure.  
+Today:Designing listing creating form and discussing listing schema with Mmaphefo (Dev 6).  
 Blockers:None
 
 
 - Tebogo (Dev 5)
 
-Yesterday:Reviewed requirments for managing listings.
-Today:Waiting for listing schema Victor(Dev 4) and role schema from Athalia(Dev 3)
-Blockers:Dependent on agreement with Victor
+Yesterday:Reviewed requirments for managing listings.  
+Today:Waiting for listing schema Victor(Dev 4) and role schema from Athalia(Dev 3).  
+Blockers:Dependent on agreement with Victor.
 
 - Mmaphefo (Dev 6)
 
-Yesterday:Reviewed listing type requirements.
-Today:Plan to start working on the system architecture diagram and review how it aligns with other user stories, especially listing creation.
+Yesterday:Reviewed listing type requirements.  
+Today:Plan to start working on the system architecture diagram and review how it aligns with other user stories, especially listing creation.  
 Blockers:Waiting for alignment with Dev 4 on the listing schema (listingType field) before starting US5 implementation.
 
 

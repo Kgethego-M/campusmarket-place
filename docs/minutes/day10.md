@@ -26,16 +26,16 @@
 - Kgethego(Dev 1)
 
 
-Yesterday:Continue working on minutes and drafted the wireframes for Admin 
-Today:Finish up trade facility staff 
+Yesterday:Continue working on minutes and drafted the wireframes for Admin.  
+Today:Finish up trade facility staff.  
 Blockers:None
 
 
 - Nontokozo(Dev 2)
 
 
-Yesterday: Tried to clean up code and make sure that everything is well connected.
-Today:Finishing up the google Authentication using Firebase and remove the email/password one.
+Yesterday: Tried to clean up code and make sure that everything is well connected.  
+Today:Finishing up the google Authentication using Firebase and remove the email/password one.  
 Blockers:None
 
 
@@ -43,28 +43,28 @@ Blockers:None
 - Athalia(Dev 3)
 
 
-Yesterday:Assigned tasks complete
-Today:Set up Azure storage account.
+Yesterday:Assigned tasks complete.  
+Today:Set up Azure storage account.  
 Blockers:None
 
 - Victor(Dev 4)
 
-Yesterday:Faced PR issues.
-Today:Working with team to fix the PR issue.
+Yesterday:Faced PR issues.  
+Today:Working with team to fix the PR issue.  
 Blockers:none
 
 
 - Tebogo (Dev 5)
 
-Yesterday:Planed to send a pull request to develop branch.
-Today:Ask them to help with the pull request conflict.
+Yesterday:Planed to send a pull request to develop branch.  
+Today:Ask them to help with the pull request conflict.  
 Blockers:None
 
 - Mmaphefo (Dev 6)
 
 
-Yesterday:Continued attempting to test listing, search, and filtering functionality. Made adjustments to improve integration but testing was still unsuccessful.
-Today:Focus on resolving testing issues and ensuring the features work as expected.
+Yesterday:Continued attempting to test listing, search, and filtering functionality. Made adjustments to improve integration but testing was still unsuccessful.  
+Today:Focus on resolving testing issues and ensuring the features work as expected.  
 Blockers:Ongoing Firebase configuration and lack of reliable data for testing.
 
 
