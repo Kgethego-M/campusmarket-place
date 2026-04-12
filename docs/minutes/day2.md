@@ -24,9 +24,15 @@
 ​Today: Finalizing project infrastructure, including the README and environment variables.
 ​Blockers: Assisting the team in pivoting from planning to documentation.
 
+- Athalia (dev 3)
+
+Yesterday: Agreed on Firestore user schema with Dev 2 (uid, email, role, createdAt) and planned RBAC implementation.
+Today:Planning and setting up. Review access control logic and prepar test cases based on UAT.
+Blockers:None
 
 
-- ​Team Progress (Dev 2 - Dev 6)
+
+- ​Team Progress (Dev 4 - Dev 6)
 
 ​Status Update: The team shifted focus from immediate coding to Technical Documentation to ensure long-term project stability.
 ​Action Taken: Assigned roles for the Product Backlog maintenance and identified the need for a System Architecture diagram and a Testing Plan before heavy production begins.

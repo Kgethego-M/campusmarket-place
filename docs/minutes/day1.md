@@ -36,7 +36,7 @@ Today:Waiting for Firebase configuration from Kgethego (Dev 1),then will begin i
 Blockers:Dependent on Firebase setup from Dev 1.
 
 
-- Athalia(Dev 3)
+- Athatia(Dev 3)
 
 Yesterday:Reviewed requirments and access control logic
 Today:Defining firestore user schema (uid,email,roel,createdAt)and planing  RBAD implimentation.
@@ -45,7 +45,7 @@ Blockers:None
 - Victor(Dev 4)
 
 Yesterday:Reviewed listing requirments and UI structure.
-Today:Designing listing creating form and discussing listing schema with MMaphefo (Dev 6).
+Today:Designing listing creating form and discussing listing schema with Mmaphefo (Dev 6).
 Blockers:None
 
 
@@ -58,8 +58,8 @@ Blockers:Dependent on agreement with Victor
 - Mmaphefo (Dev 6)
 
 Yesterday:Reviewed listing type requirements.
-Today:Coordinating with Victor(Dev 4) to define listing type field and  values.
-Blockers:Dependent on agreement with Victor
+Today:Plan to start working on the system architecture diagram and review how it aligns with other user stories, especially listing creation.
+Blockers:Waiting for alignment with Dev 4 on the listing schema (listingType field) before starting US5 implementation.
 
 
 
@@ -68,7 +68,7 @@ Blockers:Dependent on agreement with Victor
 
 Sprint 1 has started successfully
 Firebase setup is in progress (critical dependency)
-Authentication, listing, and role tasks are ready to begin once dependencies are resolved
+Authentication, listing, and user schema and role logic tasks are ready to begin once dependencies are resolved
 Multiple dependencies identified between team members
 
 ---
