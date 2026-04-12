@@ -1,6 +1,5 @@
-// src/App.jsx
 import React from 'react';
-import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, useNavigate } from 'react-router-dom';
 import AdminUsers from './pages/AdminUsers';
 import AccessDenied from './components/AccessDenied';
 import ViewListing from './pages/ViewListing';
@@ -15,13 +14,37 @@ function LandingPageWrapper() {
   return <LandingPage onGetStarted={() => navigate('/login')} />;
 }
 
+function LoginWrapper() {
+  const navigate = useNavigate();
+  return (
+    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh' }}>
+      <LoginForm
+        onSwitchToSignup={() => navigate('/signup')}
+        onLoginSuccess={() => navigate('/view-listing')}
+      />
+    </div>
+  );
+}
+
+function SignupWrapper() {
+  const navigate = useNavigate();
+  return (
+    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh' }}>
+      <SignupForm
+        onSwitchToLogin={() => navigate('/login')}
+        onSignupSuccess={() => navigate('/view-listing')}
+      />
+    </div>
+  );
+}
+
 function App() {
   return (
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<LandingPageWrapper />} />
-        <Route path="/login" element={<LoginForm />} />
-        <Route path="/signup" element={<SignupForm />} />
+        <Route path="/login" element={<LoginWrapper />} />
+        <Route path="/signup" element={<SignupWrapper />} />
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/view-listing" element={<ViewListing />} />
         <Route path="/edit-listing/:id" element={<EditListing />} />
