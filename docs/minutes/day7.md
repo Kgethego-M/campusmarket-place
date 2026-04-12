@@ -25,28 +25,28 @@
 
 - Kgethego(Dev 1)
 
-Yesterday: 
-Today: 
-Blockers:None
+Yesterday: Resolved merge conflict with Athalia.
+Today: Try and resolve our issue whith Azure deployment.
+Blockers:Waiting for a response from the lecturers on how to proceed.
 
 
 - Nontokozo(Dev 2)
 
-Yesterday:
-Today:
-Blockers:
+Yesterday: Looked at how firebase Authentification works and set it up.
+Today: Still looking at firebase authentification
+Blockers:None
 
 
 
 - Athalia(Dev 3)
 
-Yesterday:
-Today:
-Blockers:
+Yesterday:Helped Kgethego Resolve merge conflict
+Today: Also looking into the Azure deployment error.
+Blockers:Azure returned an error: "RequestDisallowedByAzure." Waiting for a response from the lecturers on how to proceed.
 
 - Victor(Dev 4)
 
-Yesterday: 
+Yesterday: Continued with improvements and pushed,Did some documentation
 Today: Should be done with part for this sprint / doing final touches and pushing
 and maybe Make list view clickable to see full view
 Blockers:
@@ -68,7 +68,7 @@ Blockers: Limited testing and full development progress due to Firebase setup/co
 
 
 ## 4. Summary
-
+The team is steadily advancing. Major progress includes completion of edit/delete listing features and preparation for search/filter implementation. The critical blocker remains Azure deployment, which requires external input. Firebase setup also needs resolution to enable full testing.
 
 
 ---

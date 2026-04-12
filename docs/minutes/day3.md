@@ -67,7 +67,7 @@ Blockers:Waiting for confirmation from Dev 4 on the listingType field and schema
 
 
 ## 4. Summary
-
+The team is advancing with infrastructure, role assignment, and architecture. The main dependencies are the .env file for Firebase setup and schema confirmations, which need resolution to keep momentum steady.
 
 
 ---

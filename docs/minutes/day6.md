@@ -32,8 +32,8 @@ Blockers:None
 
 - Nontokozo(Dev 2)
 
-Yesterday: 
-Today: 
+Yesterday: Was not able to do firebase configuration.
+Today: Look at how firebase Authentification works and set it up.
 Blockers:None
 
 
@@ -67,8 +67,7 @@ Blockers: None
 
 
 ## 4. Summary
-
-
+The team is making strong progress. Merge conflicts are being resolved, Firebase Authentication setup is underway, and listing features are advancing with edit/delete logic complete. Dependencies are clearing, enabling Dev 5 and Dev 6 to proceed with their tasks.
 
 ---
 
