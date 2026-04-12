@@ -1,38 +1,33 @@
+// src/mockData.js
 export const mockListings = [
   {
-    id: "listing-001",
+    id: "1",
     title: "Calculus Textbook",
-    description: "Good condition, no highlights. Perfect for first year maths.",
-    category: "Textbooks",
+    description: "2nd edition, some notes in margins",
+    category: "books",
     condition: "Good",
-    listingType: "For Sale",
-    price: 150,
-    photos: ["https://via.placeholder.com/300x200?text=Calculus+Textbook"],
-    sellerUID: "user-123",
-    timestamp: Date.now()
+    price: 120,
+    type: "ForSale",
+    photos: []
   },
   {
-    id: "listing-002",
-    title: "Laptop Stand",
-    description: "Barely used, foldable and lightweight.",
-    category: "Electronics",
+    id: "2",
+    title: "Laptop Charger",
+    description: "Compatible with Dell and HP",
+    category: "electronics",
     condition: "Like New",
-    listingType: "For Sale",
-    price: 200,
-    photos: ["https://via.placeholder.com/300x200?text=Laptop+Stand"],
-    sellerUID: "user-123",
-    timestamp: Date.now()
+    price: 300,
+    type: "ForSale",
+    photos: []
   },
   {
-    id: "listing-003",
-    title: "Tablet Lenovo",
-    description: "Great for studying and taking notes in class.",
-    category: "Electronics",
-    condition: "New",
-    listingType: "For Sale",
-    price: 2000.03,
-    photos: ["https://via.placeholder.com/300x200?text=Tablet+Lenovo"],
-    sellerUID: "user-123",
-    timestamp: Date.now()
+    id: "3",
+    title: "Winter Jacket",
+    description: "Warm, size M, lightly used",
+    category: "clothing",
+    condition: "Fair",
+    price: 200,
+    type: "ForTrade",
+    photos: []
   }
 ];
