@@ -29,4 +29,3 @@ jobs:
           slot-name: 'Production'
           publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_CBCB5A73852647FB8F6E6F18FFBE2C60 }}
           package: backend
-          startup-command: 'pip install -r requirements.txt && uvicorn main:app --host 0.0.0.0 --port 8000'
