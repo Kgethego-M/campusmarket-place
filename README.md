@@ -1,6 +1,6 @@
 ﻿# Campus Marketplace
 
-Link to the deployed app: https://campus-market-place-dnczhjgjc0bqh4ew.southafricanorth-01.azurewebsites.net/admin/users
+Link to the deployed app: https://campus-market-place-dnczhjgjc0bqh4ew.southafricanorth-01.azurewebsites.net/
 This is the foundation for the Campus Marketplace, built using **Vite**, **React (JSX)**, and **Firebase**.
 
 ## Project Infrastructure (Dev 1-Kgthego)
