@@ -1,5 +1,6 @@
 // src/pages/ViewListing.jsx
 import React, { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { mockListings } from "../mockData.js";
 import ListingCard from "../components/ListingCard.jsx";
 
@@ -8,7 +9,7 @@ export default function ViewListing() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [filterCategory, setFilterCategory] = useState("all");
-  const [filterType, setFilterType] = useState("all"); // NEW state for type filter
+  const [filterType, setFilterType] = useState("all");
 
   useEffect(() => {
     setListings(mockListings);
@@ -17,6 +18,7 @@ export default function ViewListing() {
 
   const filteredListings = listings.filter((listing) => {
     const q = searchTerm.trim().toLowerCase();
+
     const matchesSearch =
       !q ||
       (listing.title || "").toLowerCase().includes(q) ||
@@ -35,12 +37,20 @@ export default function ViewListing() {
     <div style={{ padding: 20 }}>
       <h1>Campus Marketplace</h1>
 
-      <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+      <div
+        style={{
+          display: "flex",
+          gap: 8,
+          marginBottom: 12,
+          alignItems: "center",
+          flexWrap: "wrap",
+        }}
+      >
         <input
           placeholder="Search listings..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
-          style={{ flex: 1, padding: 8 }}
+          style={{ flex: 1, padding: 8, minWidth: "200px" }}
         />
 
         {/* Category filter */}
@@ -65,6 +75,21 @@ export default function ViewListing() {
           <option value="ForSale">For Sale</option>
           <option value="ForTrade">For Trade</option>
         </select>
+
+        {/* Add Listing button */}
+        <Link
+          to="/create-listing"
+          style={{
+            padding: "8px 16px",
+            backgroundColor: "#007bff",
+            color: "white",
+            textDecoration: "none",
+            borderRadius: "4px",
+            fontWeight: "bold",
+          }}
+        >
+          Add Listing
+        </Link>
       </div>
 
       {loading ? (
@@ -72,7 +97,7 @@ export default function ViewListing() {
       ) : filteredListings.length === 0 ? (
         <p>No listings found.</p>
       ) : (
-        <div style={{ display: "flex", flexWrap: "wrap" }}>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
           {filteredListings.map((l, i) => (
             <ListingCard key={l.id ?? i} listing={l} />
           ))}
