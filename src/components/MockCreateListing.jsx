@@ -1,14 +1,7 @@
 import { useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 
-// --- MOCK IMPORTS (remove these when switching back to Firebase) ---
 import { auth } from "../firebase.mock.js";
-import { mockListings } from "../mockData.js";
-
-// --- FIREBASE IMPORTS (uncomment these when switching back to Firebase) ---
-// import { db, storage, auth } from "../firebase.js";
-// import { collection, addDoc, serverTimestamp } from "firebase/firestore";
-// import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 
 import {
     validateListing,
@@ -83,11 +76,11 @@ export default function CreateListing() {
 
         setLoading(true);
 
-        // --- MOCK SUBMIT (remove this block when switching back to Firebase) ---
         try {
             const photoPreviews = imageFiles.map((f) => URL.createObjectURL(f));
 
-            mockListings.push({
+            const newListing = {
+                id: `listing-${Date.now()}`,
                 title,
                 description,
                 specification,
@@ -98,7 +91,11 @@ export default function CreateListing() {
                 photos: photoPreviews,
                 sellerUID: user.uid,
                 timestamp: Date.now(),
-            });
+            };
+
+            // Save to sessionStorage as source of truth
+            const existing = JSON.parse(sessionStorage.getItem("listings") || "[]");
+            sessionStorage.setItem("listings", JSON.stringify([...existing, newListing]));
 
             alert("Successfully created listing!");
             navigate("/view-listing");
@@ -108,40 +105,6 @@ export default function CreateListing() {
         } finally {
             setLoading(false);
         }
-        // --- END MOCK SUBMIT ---
-
-        // --- FIREBASE SUBMIT (uncomment this block when switching back to Firebase) ---
-        // try {
-        //     const photoURLs = [];
-        //     for (const file of imageFiles) {
-        //         const storageRef = ref(storage, `listings/${Date.now()}_${file.name}`);
-        //         await uploadBytes(storageRef, file);
-        //         const url = await getDownloadURL(storageRef);
-        //         photoURLs.push(url);
-        //     }
-        //
-        //     await addDoc(collection(db, "listings"), {
-        //         title,
-        //         description,
-        //         specification,
-        //         price: Math.round(parsedPrice * 100) / 100,
-        //         category: finalCategory,
-        //         condition: conditionMap[condition],
-        //         listingType: listingTypeMap[listingType],
-        //         photos: photoURLs,
-        //         sellerUID: user.uid,
-        //         timestamp: serverTimestamp(),
-        //     });
-        //
-        //     alert("Successfully created listing!");
-        //     navigate("/view-listing");
-        // } catch (err) {
-        //     console.error(err);
-        //     alert("Failed to create listing. Please try again.");
-        // } finally {
-        //     setLoading(false);
-        // }
-        // --- END FIREBASE SUBMIT ---
     }
 
     return (

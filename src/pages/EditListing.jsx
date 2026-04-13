@@ -2,10 +2,9 @@ import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 
 function EditListing() {
-  const { listingId } = useParams();
+  const { id } = useParams(); // matches /edit-listing/:id in App.jsx
   const navigate = useNavigate();
 
-  const [listing, setListing] = useState(null);
   const [title, setTitle] = useState("");
   const [price, setPrice] = useState("");
   const [description, setDescription] = useState("");
@@ -25,7 +24,7 @@ function EditListing() {
     }
 
     const listings = JSON.parse(stored);
-    const found = listings.find((l) => l.id === listingId);
+    const found = listings.find((l) => l.id === id);
 
     if (!found) {
       setError("Listing not found.");
@@ -33,13 +32,12 @@ function EditListing() {
       return;
     }
 
-    setListing(found);
     setTitle(found.title);
     setPrice(found.price);
     setDescription(found.description);
     setCondition(found.condition);
     setLoading(false);
-  }, [listingId]);
+  }, [id]);
 
   function handleSave() {
     if (!title || !price) {
@@ -50,12 +48,9 @@ function EditListing() {
     const stored = sessionStorage.getItem("listings");
     const listings = JSON.parse(stored);
 
-    const updated = listings.map((l) => {
-      if (l.id === listingId) {
-        return { ...l, title, price, description, condition };
-      }
-      return l;
-    });
+    const updated = listings.map((l) =>
+      l.id === id ? { ...l, title, price: parseFloat(price), description, condition } : l
+    );
 
     sessionStorage.setItem("listings", JSON.stringify(updated));
     setSaveSuccess(true);
@@ -66,13 +61,12 @@ function EditListing() {
   function handleDelete() {
     const stored = sessionStorage.getItem("listings");
     const listings = JSON.parse(stored);
-    const updated = listings.filter((l) => l.id !== listingId);
+    const updated = listings.filter((l) => l.id !== id);
     sessionStorage.setItem("listings", JSON.stringify(updated));
     navigate("/view-listing");
   }
 
   if (loading) return <p>Loading...</p>;
-  //if (error) return <p style={{ color: "red" }}>{error}</p>;
 
   return (
     <div style={{
@@ -91,7 +85,6 @@ function EditListing() {
         border: "1px solid #dce3ed"
       }}>
 
-        {/* Header */}
         <h1 style={{
           textAlign: "center",
           color: "#4a90d9",
@@ -124,7 +117,7 @@ function EditListing() {
             fontWeight: "600",
             textAlign: "center"
           }}>
-             Listing updated successfully!
+            ✅ Listing updated successfully!
           </div>
         )}
 
@@ -143,7 +136,6 @@ function EditListing() {
           </div>
         )}
 
-        {/* Title */}
         <div style={{ marginBottom: "18px" }}>
           <label style={{ fontWeight: "600", color: "#444", display: "block", marginBottom: "6px" }}>
             Title
@@ -153,18 +145,12 @@ function EditListing() {
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             style={{
-              width: "100%",
-              padding: "10px 14px",
-              borderRadius: "8px",
-              border: "1px solid #ccd6e0",
-              fontSize: "14px",
-              outline: "none",
-              boxSizing: "border-box"
+              width: "100%", padding: "10px 14px", borderRadius: "8px",
+              border: "1px solid #ccd6e0", fontSize: "14px", outline: "none", boxSizing: "border-box"
             }}
           />
         </div>
 
-        {/* Price */}
         <div style={{ marginBottom: "18px" }}>
           <label style={{ fontWeight: "600", color: "#444", display: "block", marginBottom: "6px" }}>
             Price (R)
@@ -174,18 +160,12 @@ function EditListing() {
             value={price}
             onChange={(e) => setPrice(e.target.value)}
             style={{
-              width: "100%",
-              padding: "10px 14px",
-              borderRadius: "8px",
-              border: "1px solid #ccd6e0",
-              fontSize: "14px",
-              outline: "none",
-              boxSizing: "border-box"
+              width: "100%", padding: "10px 14px", borderRadius: "8px",
+              border: "1px solid #ccd6e0", fontSize: "14px", outline: "none", boxSizing: "border-box"
             }}
           />
         </div>
 
-        {/* Description */}
         <div style={{ marginBottom: "18px" }}>
           <label style={{ fontWeight: "600", color: "#444", display: "block", marginBottom: "6px" }}>
             Description
@@ -195,19 +175,13 @@ function EditListing() {
             onChange={(e) => setDescription(e.target.value)}
             rows={4}
             style={{
-              width: "100%",
-              padding: "10px 14px",
-              borderRadius: "8px",
-              border: "1px solid #ccd6e0",
-              fontSize: "14px",
-              outline: "none",
-              resize: "vertical",
-              boxSizing: "border-box"
+              width: "100%", padding: "10px 14px", borderRadius: "8px",
+              border: "1px solid #ccd6e0", fontSize: "14px", outline: "none",
+              resize: "vertical", boxSizing: "border-box"
             }}
           />
         </div>
 
-        {/* Condition */}
         <div style={{ marginBottom: "28px" }}>
           <label style={{ fontWeight: "600", color: "#444", display: "block", marginBottom: "6px" }}>
             Condition
@@ -216,14 +190,9 @@ function EditListing() {
             value={condition}
             onChange={(e) => setCondition(e.target.value)}
             style={{
-              width: "100%",
-              padding: "10px 14px",
-              borderRadius: "8px",
-              border: "1px solid #ccd6e0",
-              fontSize: "14px",
-              outline: "none",
-              backgroundColor: "white",
-              boxSizing: "border-box"
+              width: "100%", padding: "10px 14px", borderRadius: "8px",
+              border: "1px solid #ccd6e0", fontSize: "14px", outline: "none",
+              backgroundColor: "white", boxSizing: "border-box"
             }}
           >
             <option value="">Select condition</option>
@@ -235,20 +204,13 @@ function EditListing() {
           </select>
         </div>
 
-        {/* Action buttons */}
         <div style={{ display: "flex", gap: "12px", marginBottom: "16px" }}>
           <button
             onClick={handleSave}
             style={{
-              flex: 1,
-              padding: "12px",
-              backgroundColor: "#27ae60",
-              color: "white",
-              border: "none",
-              borderRadius: "8px",
-              fontSize: "15px",
-              fontWeight: "600",
-              cursor: "pointer"
+              flex: 1, padding: "12px", backgroundColor: "#27ae60",
+              color: "white", border: "none", borderRadius: "8px",
+              fontSize: "15px", fontWeight: "600", cursor: "pointer"
             }}
           >
             Save Changes
@@ -256,22 +218,15 @@ function EditListing() {
           <button
             onClick={() => setShowConfirm(true)}
             style={{
-              flex: 1,
-              padding: "12px",
-              backgroundColor: "#e74c3c",
-              color: "white",
-              border: "none",
-              borderRadius: "8px",
-              fontSize: "15px",
-              fontWeight: "600",
-              cursor: "pointer"
+              flex: 1, padding: "12px", backgroundColor: "#e74c3c",
+              color: "white", border: "none", borderRadius: "8px",
+              fontSize: "15px", fontWeight: "600", cursor: "pointer"
             }}
           >
             Delete Listing
           </button>
         </div>
 
-        {/* Confirmation dialog */}
         {showConfirm && (
           <div style={{
             backgroundColor: "#fff5f5",
@@ -288,13 +243,8 @@ function EditListing() {
               <button
                 onClick={handleDelete}
                 style={{
-                  padding: "10px 24px",
-                  backgroundColor: "#e74c3c",
-                  color: "white",
-                  border: "none",
-                  borderRadius: "8px",
-                  fontWeight: "600",
-                  cursor: "pointer"
+                  padding: "10px 24px", backgroundColor: "#e74c3c", color: "white",
+                  border: "none", borderRadius: "8px", fontWeight: "600", cursor: "pointer"
                 }}
               >
                 Yes, Delete
@@ -302,13 +252,8 @@ function EditListing() {
               <button
                 onClick={() => setShowConfirm(false)}
                 style={{
-                  padding: "10px 24px",
-                  backgroundColor: "white",
-                  color: "#333",
-                  border: "1px solid #ccc",
-                  borderRadius: "8px",
-                  fontWeight: "600",
-                  cursor: "pointer"
+                  padding: "10px 24px", backgroundColor: "white", color: "#333",
+                  border: "1px solid #ccc", borderRadius: "8px", fontWeight: "600", cursor: "pointer"
                 }}
               >
                 Cancel
@@ -317,19 +262,12 @@ function EditListing() {
           </div>
         )}
 
-        {/* Back button */}
         <button
           onClick={() => navigate("/view-listing")}
           style={{
-            width: "100%",
-            padding: "11px",
-            backgroundColor: "white",
-            color: "#4a90d9",
-            border: "2px solid #4a90d9",
-            borderRadius: "8px",
-            fontSize: "14px",
-            fontWeight: "600",
-            cursor: "pointer"
+            width: "100%", padding: "11px", backgroundColor: "white",
+            color: "#4a90d9", border: "2px solid #4a90d9", borderRadius: "8px",
+            fontSize: "14px", fontWeight: "600", cursor: "pointer"
           }}
         >
           ← Back to Listings
