@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { mockListings } from "../mockData.js";
 import { validateListingData } from "../utils/view-listing.utils.js";
 import ListingCard from "../components/ListingCard.jsx";
-import styles from "./ViewListing.module.css";
+import styles from "../components/ViewListing.module.css";
 
 export default function ViewListings() {
     const [listings, setListings] = useState([]);
