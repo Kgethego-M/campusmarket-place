@@ -16,12 +16,10 @@ export default function ViewListings() {
             let allListings;
 
             if (!stored) {
-                // First visit: seed sessionStorage from mockData
                 sessionStorage.setItem("listings", JSON.stringify(mockListings));
                 allListings = mockListings;
             } else {
                 const parsed = JSON.parse(stored);
-                // Merge: add any mockListings whose IDs aren't in sessionStorage yet
                 const parsedIds = new Set(parsed.map((l) => l.id));
                 const missing = mockListings.filter((l) => !parsedIds.has(l.id));
                 allListings = [...parsed, ...missing];
