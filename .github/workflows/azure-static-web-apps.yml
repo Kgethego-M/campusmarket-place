@@ -22,7 +22,7 @@ jobs:
       - name: Run Vitest with coverage
         run: npm run test -- --coverage
 
-       - name: Upload frontend coverage to Codecov
+      - name: Upload frontend coverage to Codecov
         uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
