@@ -1,48 +1,19 @@
 import { useState } from "react";
 import {
-  signInWithEmailAndPassword,
   signInWithPopup,
   signOut,
   GoogleAuthProvider,
 } from "firebase/auth";
-
-
 import { doc, getDoc, setDoc } from "firebase/firestore";
 import { auth, db, isValidWitsEmail, getUserType } from "../firebase";
 import GoogleIcon from "./GoogleIcon";
 import Message from "./Message";
 
 export default function LoginForm({ onSwitchToSignup, onLoginSuccess }) {
-  const [email,    setEmail]    = useState("");
-  const [password, setPassword] = useState("");
-  const [msg,      setMsg]      = useState({ text: "", error: false });
-  const [loading,  setLoading]  = useState(false);
+  const [msg, setMsg] = useState({ text: "", error: false });
+  const [loading, setLoading] = useState(false);
 
   const show = (text, error = false) => setMsg({ text, error });
-
-  async function handleEmailLogin(e) {
-    e.preventDefault();
-    if (!email || !password) { show("Please enter both email and password.", true); return; }
-    if (!isValidWitsEmail(email)) { show("Only Wits emails are allowed!", true); return; }
-
-    setLoading(true);
-    try {
-      const cred = await signInWithEmailAndPassword(auth, email, password);
-      const snap = await getDoc(doc(db, "users", cred.user.uid));
-      localStorage.setItem("loggedInUserId", cred.user.uid);
-      onLoginSuccess(snap.exists() ? snap.data() : { email, userType: getUserType(email), firstName: "", lastName: "" });
-    } catch (err) {
-      const codes = {
-        "auth/user-not-found":     "No account found. Please sign up first.",
-        "auth/wrong-password":     "Incorrect password.",
-        "auth/invalid-credential": "Invalid email or password.",
-        "auth/too-many-requests":  "Too many attempts. Try again later.",
-      };
-      show(codes[err.code] || "Login failed: " + err.message, true);
-    } finally {
-      setLoading(false);
-    }
-  }
 
   async function handleGoogleLogin(e) {
     e.preventDefault();
@@ -51,7 +22,7 @@ export default function LoginForm({ onSwitchToSignup, onLoginSuccess }) {
       const provider = new GoogleAuthProvider();
       provider.setCustomParameters({ prompt: "select_account" });
       const result = await signInWithPopup(auth, provider);
-      const user   = result.user;
+      const user = result.user;
 
       if (!isValidWitsEmail(user.email)) {
         await signOut(auth);
@@ -59,13 +30,13 @@ export default function LoginForm({ onSwitchToSignup, onLoginSuccess }) {
         return;
       }
 
-      const userType  = getUserType(user.email);
+      const userType = getUserType(user.email);
       const nameParts = (user.displayName || "").split(" ");
       const firstName = nameParts[0] || "";
-      const lastName  = nameParts.slice(1).join(" ") || "";
-      const docRef    = doc(db, "users", user.uid);
-      const docSnap   = await getDoc(docRef);
-      const userData  = docSnap.exists()
+      const lastName = nameParts.slice(1).join(" ") || "";
+      const docRef = doc(db, "users", user.uid);
+      const docSnap = await getDoc(docRef);
+      const userData = docSnap.exists()
         ? docSnap.data()
         : { email: user.email, firstName, lastName, userType };
 
