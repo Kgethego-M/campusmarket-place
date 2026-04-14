@@ -11,9 +11,9 @@ flags:
   frontend:
     paths:
       - src/          
-  backend:
-    paths:
-      - backend/      
+ # backend:
+    #paths:
+      #- backend/      
 
 comment:
   layout: "reach, diff, flags, files"
