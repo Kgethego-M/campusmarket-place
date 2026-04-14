@@ -1,0 +1,22 @@
+coverage:
+  status:
+    project:
+      default:
+        target: 50%   
+    patch:
+      default:
+        target: 50%   
+
+flags:
+  frontend:
+    paths:
+      - src/          
+  backend:
+    paths:
+      - backend/      
+
+comment:
+  layout: "reach, diff, flags, files"
+  behavior: default
+  require_changes: true
+
