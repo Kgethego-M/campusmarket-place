@@ -26,7 +26,7 @@ export default function LoginForm({ onSwitchToSignup, onLoginSuccess }) {
 
       if (!isValidWitsEmail(user.email)) {
         await signOut(auth);
-        show(`❌ Only Wits emails allowed. You used: ${user.email}`, true);
+        show(` Only Wits emails allowed. You used: ${user.email}`, true);
         return;
       }
 
@@ -71,8 +71,7 @@ export default function LoginForm({ onSwitchToSignup, onLoginSuccess }) {
 
       <div className="wits-note">
         <i className="fas fa-info-circle"></i>{" "}
-        Only <strong>@students.wits.ac.za</strong> and{" "}
-        <strong>@wits.ac.za</strong> accounts are accepted.
+        Only <strong>@School email</strong> accounts are accepted.
       </div>
 
       <div className="divider" />
