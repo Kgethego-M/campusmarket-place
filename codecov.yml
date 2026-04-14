@@ -8,13 +8,9 @@ coverage:
         target: 50%   
 
 flags:
-  frontend:
-    paths:
-      - src/          
- # backend:
-    #paths:
-      #- backend/      
-
+  default:
+    carryforward: true
+    
 comment:
   layout: "reach, diff, flags, files"
   behavior: default
