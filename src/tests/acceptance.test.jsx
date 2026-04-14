@@ -1,4 +1,5 @@
 // src/tests/acceptance.test.jsx
+
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, beforeEach } from "vitest";
@@ -9,12 +10,10 @@ vi.mock("firebase/auth", () => ({
   getAuth:                        vi.fn(() => ({})),
   onAuthStateChanged:             vi.fn((_auth, cb) => { cb(null); return () => {}; }),
   signInWithPopup:                vi.fn(),
-  signInWithEmailAndPassword:     vi.fn(),
   signOut:                        vi.fn(() => Promise.resolve()),
   GoogleAuthProvider:             vi.fn(function() {
     this.setCustomParameters = vi.fn();
   }),
-  createUserWithEmailAndPassword: vi.fn(),
 }));
 
 vi.mock("firebase/firestore", () => ({
@@ -30,7 +29,6 @@ vi.mock("firebase/app", () => ({
 
 import {
   signInWithPopup,
-  signInWithEmailAndPassword,
   onAuthStateChanged,
 } from "firebase/auth";
 import { getDoc } from "firebase/firestore";
@@ -91,35 +89,41 @@ describe("Test 1 — New student signs up via Google OAuth", () => {
 
 // TEST 2
 
-describe("Test 2 — Registered student logs in with email & password", () => {
+describe("Test 2 — Registered student logs in with Google", () => {
   it("authenticates and redirects to dashboard", async () => {
     const user = userEvent.setup();
 
-    signInWithEmailAndPassword.mockResolvedValue({ user: STUDENT_USER });
+    signInWithPopup.mockResolvedValue({ user: STUDENT_USER });
 
     render(<App />);
 
     expect(screen.getByText(/buy, sell & trade/i)).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /get started/i }));
+    await user.click(screen.getByRole("button", { name: /continue with google/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/welcome to your dashboard/i)).toBeInTheDocument();
+    });
   });
 
-  it("shows error message for invalid credentials", async () => {
+  it("blocks non-Wits emails", async () => {
     const user = userEvent.setup();
+    const NON_WITS_USER = {
+      ...STUDENT_USER,
+      email: "student@gmail.com",
+    };
 
-    signInWithEmailAndPassword.mockRejectedValue({ code: "auth/invalid-credential" });
+    signInWithPopup.mockResolvedValue({ user: NON_WITS_USER });
 
     render(<App />);
 
     await user.click(screen.getByRole("button", { name: /get started/i }));
-  });
+    await user.click(screen.getByRole("button", { name: /continue with google/i }));
 
-  it("blocks non-Wits emails before calling Firebase", async () => {
-    const user = userEvent.setup();
-
-    render(<App />);
-
-    await user.click(screen.getByRole("button", { name: /get started/i }));
+    await waitFor(() => {
+      expect(screen.getByText(/only wits emails allowed/i)).toBeInTheDocument();
+    });
   });
 });
 
