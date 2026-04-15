@@ -20,6 +20,14 @@ const CATEGORIES    = [
     "Accessories and Jewelry", "Toys and Games",
     "Beauty and Personal Care", "Stationary", "Study Materials", "Other",
 ];
+const PRICE_RANGES = [
+    { label: "All",          min: 0,    max: Infinity },
+    { label: "Under R100",   min: 0,    max: 100 },
+    { label: "R100 – R300",  min: 100,  max: 300 },
+    { label: "R300 – R500",  min: 300,  max: 500 },
+    { label: "R500 – R1000", min: 500,  max: 1000 },
+    { label: "R1000+",       min: 1000, max: Infinity },
+];
 
 export default function ViewListings() {
     const [listings, setListings]       = useState([]);
@@ -28,6 +36,7 @@ export default function ViewListings() {
     const [typeFilter, setTypeFilter]   = useState("All");
     const [condFilter, setCondFilter]   = useState("All");
     const [catFilter, setCatFilter]     = useState("All");
+    const [priceFilter, setPriceFilter] = useState("All");
     const [showFilters, setShowFilters] = useState(false);
 
     // ── Fetch & merge listings ──────────────────────────────────────────────
@@ -66,22 +75,27 @@ export default function ViewListings() {
     }, []);
 
     // ── Filter logic ────────────────────────────────────────────────────────
+    const activePriceRange = PRICE_RANGES.find((r) => r.label === priceFilter) || PRICE_RANGES[0];
+
     const filtered = listings.filter((l) => {
         const matchSearch =
             l.title?.toLowerCase().includes(search.toLowerCase()) ||
             l.category?.toLowerCase().includes(search.toLowerCase());
-        const matchType = typeFilter === "All" || l.listingType === typeFilter;
-        const matchCond = condFilter === "All" || l.condition === condFilter;
-        const matchCat  = catFilter  === "All" || l.category  === catFilter;
-        return matchSearch && matchType && matchCond && matchCat;
+        const matchType  = typeFilter  === "All" || l.listingType === typeFilter;
+        const matchCond  = condFilter  === "All" || l.condition   === condFilter;
+        const matchCat   = catFilter   === "All" || l.category    === catFilter;
+        const matchPrice = priceFilter === "All" ||
+            (l.price >= activePriceRange.min && l.price < activePriceRange.max);
+        return matchSearch && matchType && matchCond && matchCat && matchPrice;
     });
 
-    const activeFilterCount = [typeFilter, condFilter, catFilter].filter(v => v !== "All").length;
+    const activeFilterCount = [typeFilter, condFilter, catFilter, priceFilter].filter(v => v !== "All").length;
 
     function clearFilters() {
         setTypeFilter("All");
         setCondFilter("All");
         setCatFilter("All");
+        setPriceFilter("All");
     }
 
     return (
@@ -138,6 +152,21 @@ export default function ViewListings() {
                                     onClick={() => setTypeFilter(t)}
                                 >
                                     {t}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    <div className={styles.filterGroup}>
+                        <span className={styles.filterLabel}>Price range</span>
+                        <div className={styles.pills}>
+                            {PRICE_RANGES.map((r) => (
+                                <button
+                                    key={r.label}
+                                    className={`${styles.pill} ${priceFilter === r.label ? styles.pillActive : ""}`}
+                                    onClick={() => setPriceFilter(r.label)}
+                                >
+                                    {r.label}
                                 </button>
                             ))}
                         </div>
