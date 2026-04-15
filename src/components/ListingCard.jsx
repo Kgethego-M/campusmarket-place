@@ -1,72 +1,81 @@
-import { useNavigate } from "react-router-dom";
+import styles from "./ListingCard.module.css";
 
-export default function ListingCard({ listing }) {
-    const navigate = useNavigate();
+const conditionColor = {
+    New:       "#4CAF50",
+    "Like New": "#8BC34A",
+    Good:      "#FFC107",
+    Fair:      "#FF9800",
+    Poor:      "#F44336",
+};
+
+export default function ListingCard({ listing, visible = true }) {
+    const {
+        title,
+        price,
+        condition,
+        listingType,
+        sellerName,
+        sellerAvatar,
+    } = listing;
+
+    // Resolve image: prefer imageUrl, fall back to first photo
+    const imageUrl = listing.imageUrl || (listing.photos && listing.photos[0]) || null;
+
+    const badgeColor = conditionColor[condition] || "#999";
 
     return (
-        <div style={{
-            width: "280px",
-            backgroundColor: "white",
-            borderRadius: "12px",
-            boxShadow: "0 2px 12px rgba(0,0,0,0.08)",
-            border: "1px solid #dce3ed",
-            overflow: "hidden",
-            display: "flex",
-            flexDirection: "column",
-        }}>
-            {listing.photos && listing.photos.length > 0 ? (
-                <img
-                    src={listing.photos[0]}
-                    alt={listing.title}
-                    style={{ width: "100%", height: "180px", objectFit: "cover" }}
-                />
-            ) : (
-                <div style={{
-                    width: "100%", height: "180px", backgroundColor: "#f0f4f8",
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    color: "#aaa", fontSize: "14px"
-                }}>
-                    No Image
-                </div>
-            )}
+        <div className={`${styles.card} ${visible ? styles.cardVisible : ""}`}>
+            {/* ── Image ── */}
+            <div className={styles.imageWrapper}>
+                {imageUrl ? (
+                    <img
+                        src={imageUrl}
+                        alt={title}
+                        className={styles.image}
+                        loading="lazy"
+                        onError={(e) => { e.currentTarget.style.display = "none"; }}
+                    />
+                ) : (
+                    <div className={styles.imagePlaceholder}>
+                        <svg width="36" height="36" viewBox="0 0 24 24" fill="none"
+                             stroke="#ccc" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                            <rect x="3" y="3" width="18" height="18" rx="2"/>
+                            <circle cx="8.5" cy="8.5" r="1.5"/>
+                            <path d="M21 15l-5-5L5 21"/>
+                        </svg>
+                    </div>
+                )}
 
-            <div style={{ padding: "16px", flex: 1, display: "flex", flexDirection: "column", gap: "6px" }}>
-                <h3 style={{ margin: 0, fontSize: "16px", color: "#222", fontWeight: "700" }}>
-                    {listing.title}
-                </h3>
-                <p style={{ margin: 0, fontSize: "13px", color: "#666" }}>
-                    {listing.description}
+                {/* Condition badge */}
+                {condition && (
+                    <span className={styles.conditionBadge} style={{ backgroundColor: badgeColor }}>
+                        {condition}
+                    </span>
+                )}
+
+                {/* Listing type badge */}
+                {listingType && (
+                    <span className={styles.typeBadge}>{listingType}</span>
+                )}
+            </div>
+
+            {/* ── Body ── */}
+            <div className={styles.body}>
+                <p className={styles.title}>{title}</p>
+                <p className={styles.price}>
+                    {price != null ? `R ${Number(price).toLocaleString()}` : "Free"}
                 </p>
-                <div style={{ display: "flex", justifyContent: "space-between", marginTop: "8px" }}>
-                    <span style={{ fontWeight: "700", color: "#4a90d9", fontSize: "15px" }}>
-                        R {listing.price}
-                    </span>
-                    <span style={{
-                        fontSize: "12px", backgroundColor: "#f0f4f8",
-                        padding: "2px 8px", borderRadius: "12px", color: "#555"
-                    }}>
-                        {listing.condition}
-                    </span>
-                </div>
-                <span style={{ fontSize: "12px", color: "#888" }}>{listing.listingType}</span>
 
-                <button
-                    onClick={() => navigate(`/edit-listing/${listing.id}`)}
-                    style={{
-                        marginTop: "12px",
-                        padding: "9px",
-                        backgroundColor: "#4a90d9",
-                        color: "white",
-                        border: "none",
-                        borderRadius: "8px",
-                        fontSize: "14px",
-                        fontWeight: "600",
-                        cursor: "pointer",
-                        width: "100%",
-                    }}
-                >
-                    Edit Listing
-                </button>
+                {/* Seller row */}
+                <div className={styles.sellerRow}>
+                    <div className={styles.avatar}>
+                        {sellerAvatar
+                            ? <img src={sellerAvatar} alt={sellerName}/>
+                            : <span>{sellerName?.[0]?.toUpperCase() ?? "?"}</span>
+                        }
+                    </div>
+                    <span className={styles.sellerName}>{sellerName ?? "Student"}</span>
+                </div>
             </div>
         </div>
     );

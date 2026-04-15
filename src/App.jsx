@@ -13,7 +13,7 @@ import { auth, db } from './firebase';
 
 import AdminUsers from './pages/AdminUsers';
 import AccessDenied from './components/AccessDenied';
-import ViewListing from './pages/ViewListing';
+import ViewListing from './components/MockViewListing';
 import EditListing from './pages/EditListing';
 import LandingPage from './components/LandingPage';
 import LoginForm from './components/LoginForm';

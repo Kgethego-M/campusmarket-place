@@ -1,19 +1,157 @@
-/* src/components/ListingCard.css */
-.listing-card {
-  border: 1px solid #ddd;
-  border-radius: 8px;
-  padding: 16px;
-  margin: 12px;
-  background-color: #fff;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+/* ── Card entrance animation ── */
+.card {
+    background: #fff;
+    border-radius: 12px;
+    overflow: hidden;
+    border: 1px solid #e8eaed;
+    display: flex;
+    flex-direction: column;
+    cursor: pointer;
+    /* start hidden, shifted down */
+    opacity: 0;
+    transform: translateY(16px);
+    transition:
+        opacity 0.35s ease,
+        transform 0.35s ease,
+        box-shadow 0.18s ease;
 }
 
-.listing-card img {
-  max-width: 100%;
-  border-radius: 4px;
+/* When visible prop is true, parent adds this class */
+.cardVisible {
+    opacity: 1;
+    transform: translateY(0);
 }
 
-.listing-card h3 {
-  margin: 8px 0;
-  font-size: 1.2rem;
+.card:hover {
+    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.10);
+    transform: translateY(-2px);
+}
+
+/* Keep hover working even after becoming visible */
+.cardVisible:hover {
+    transform: translateY(-2px);
+}
+
+/* ── Image ── */
+.imageWrapper {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 4 / 3;
+    background-color: #f0f2f5;
+    overflow: hidden;
+}
+
+.image {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    transition: transform 0.3s ease;
+}
+
+.card:hover .image {
+    transform: scale(1.03);
+}
+
+.imagePlaceholder {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: #eaecef;
+}
+
+/* ── Badges ── */
+.conditionBadge {
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    color: #fff;
+    font-size: 0.68rem;
+    font-weight: 600;
+    padding: 3px 8px;
+    border-radius: 4px;
+    letter-spacing: 0.3px;
+    font-family: 'Segoe UI', system-ui, sans-serif;
+}
+
+.typeBadge {
+    position: absolute;
+    bottom: 8px;
+    left: 8px;
+    background: rgba(0, 0, 0, 0.58);
+    color: #fff;
+    font-size: 0.65rem;
+    font-weight: 500;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    backdrop-filter: blur(4px);
+}
+
+/* ── Body ── */
+.body {
+    padding: 12px 12px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.title {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: #1a1a1a;
+    margin: 0;
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.price {
+    font-size: 0.875rem;
+    font-weight: 700;
+    color: #3d87c8;
+    margin: 0;
+    font-family: 'Segoe UI', system-ui, sans-serif;
+}
+
+/* ── Seller row ── */
+.sellerRow {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    margin-top: 6px;
+}
+
+.avatar {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background-color: #c8d8e8;
+    overflow: hidden;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.7rem;
+    font-weight: 700;
+    color: #4a7fa5;
+    font-family: 'Segoe UI', system-ui, sans-serif;
+}
+
+.avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.sellerName {
+    font-size: 0.78rem;
+    color: #999;
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }

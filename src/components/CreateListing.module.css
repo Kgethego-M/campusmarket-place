@@ -1,36 +1,40 @@
 .page {
-    background-color: #FBFBFB;
+    background-color: #F5F6F8;
     min-height: 100vh;
     display: flex;
     flex-direction: column;
     align-items: center;
-    padding: 40px 20px;
+    padding: 0 20px 60px;
+    box-sizing: border-box;
 }
 
 .headingWrapper {
-    width: 400px;
-    margin-bottom: 10px;
+    width: 560px;
+    margin-top: 32px;
+    margin-bottom: 12px;
 }
 
 .heading {
     color: #1a1a1a;
     font-size: 1.6rem;
     font-weight: 700;
-    margin-bottom: 4px;
+    margin: 0 0 4px 0;
+    font-family: 'Franklin Gothic Medium', 'Arial Narrow', Arial, sans-serif;
 }
 
 .subheading {
     color: #888;
-    font-size: 0.9rem;
-    margin: 0 0 10px 0;
+    font-size: 0.875rem;
+    margin: 0;
+    font-family: 'Franklin Gothic Medium', 'Arial Narrow', Arial, sans-serif;
 }
 
 .form {
-    background-color: #FFFFFF;
-    padding: 24px;
+    background-color: #ffffff;
+    padding: 28px 32px;
     border-radius: 12px;
-    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
-    width: 400px;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.07);
+    width: 560px;
     margin-bottom: 50px;
     display: flex;
     flex-direction: column;
@@ -59,16 +63,20 @@
     background-color: #fff;
     box-sizing: border-box;
     margin-bottom: 4px;
+    transition: border-color 0.15s;
 }
-.input::placeholder {
-    color: #aab;
+.input::placeholder { color: #aab; }
+.input:focus { border-color: #6AA6DA; outline: none; }
+.input:hover { border-color: #6AA6DA; }
+
+/* Remove number input spinners */
+.input[type="number"]::-webkit-outer-spin-button,
+.input[type="number"]::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
 }
-.input:focus {
-    border-color: #6AA6DA;
-    outline: none;
-}
-.input:hover {
-    border-color: #6AA6DA;
+.input[type="number"] {
+    -moz-appearance: textfield;
 }
 
 .textarea {
@@ -83,17 +91,11 @@
     resize: vertical;
     box-sizing: border-box;
     margin-bottom: 4px;
+    transition: border-color 0.15s;
 }
-.textarea::placeholder {
-    color: #aab;
-}
-.textarea:focus {
-    border-color: #6AA6DA;
-    outline: none;
-}
-.textarea:hover {
-    border-color: #6AA6DA;
-}
+.textarea::placeholder { color: #aab; }
+.textarea:focus { border-color: #6AA6DA; outline: none; }
+.textarea:hover { border-color: #6AA6DA; }
 
 .select {
     width: 100%;
@@ -107,19 +109,15 @@
     box-sizing: border-box;
     margin-bottom: 4px;
     appearance: auto;
+    transition: border-color 0.15s;
 }
-.select:focus {
-    border-color: #6AA6DA;
-    outline: none;
-}
-.select:hover {
-    border-color: #6AA6DA;
-}
+.select:focus { border-color: #6AA6DA; outline: none; }
+.select:hover { border-color: #6AA6DA; }
 
-/* Drop zone */
+/* ── Drop zone ── */
 .dropZone {
     width: 100%;
-    min-height: 130px;
+    min-height: 140px;
     border: 2px dashed #c5d8ea;
     border-radius: 10px;
     background-color: #f4f8fc;
@@ -145,9 +143,7 @@
     gap: 8px;
     font-family: 'Franklin Gothic Medium', 'Arial Narrow', Arial, sans-serif;
 }
-.dropZonePlaceholder p {
-    margin: 0;
-}
+.dropZonePlaceholder p { margin: 0; }
 
 .dropZoneIcon {
     width: 32px;
@@ -155,7 +151,6 @@
     color: #9aabbf;
 }
 
-/* Image previews inside drop zone */
 .imagePreview {
     display: flex;
     flex-wrap: wrap;
@@ -172,7 +167,7 @@
     border-radius: 6px;
 }
 
-/* 2-column row for paired fields */
+/* ── 2-column row ── */
 .row {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -185,7 +180,7 @@
     box-sizing: border-box;
 }
 
-/* Submit button */
+/* ── Submit ── */
 .submitBtn {
     display: block;
     width: 100%;
@@ -200,13 +195,18 @@
     font-size: 1rem;
     font-weight: 600;
     letter-spacing: 0.01em;
-    text-align: center;
     transition: background-color 0.15s;
 }
-.submitBtn:hover {
-    background-color: #5A95C8;
-}
+.submitBtn:hover { background-color: #5A95C8; }
 .submitBtn:disabled {
     background-color: #a0c4e8;
     cursor: not-allowed;
+}
+
+/* ── Responsive ── */
+@media (max-width: 620px) {
+    .headingWrapper,
+    .form {
+        width: 100%;
+    }
 }

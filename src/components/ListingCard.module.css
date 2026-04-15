@@ -1,128 +1,157 @@
-.cardWrapper {
-    width: 300px;
-    min-height: 400px;
-    perspective: 1000px;
-    cursor: pointer;
-}
-
+/* ── Card entrance animation ── */
 .card {
-    width: 100%;
-    height: 100%;
-    min-height: 400px;
-    position: relative;
-    transform-style: preserve-3d;
-    transition: transform 0.6s ease;
-}
-
-.flipped {
-    transform: rotateY(180deg);
-}
-
-.cardFront,
-.cardBack {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    min-height: 400px;
-    backface-visibility: hidden;
-    -webkit-backface-visibility: hidden;
-    border-radius: 8px;
-    box-sizing: border-box;
-}
-
-/* ── Front ── */
-.cardFront {
-    background-color: #DBE3E9;
-    padding: 15px;
-    text-align: center;
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.8);
-    transition: box-shadow 0.3s;
-}
-
-.cardWrapper:hover .cardFront {
-    box-shadow: 0 8px 16px rgba(106, 166, 218, 1);
-}
-
-.cardTitle {
-    font-weight: 400;
-    font-family: Impact, Haettenschweiler, 'Arial Narrow Bold', sans-serif;
-    margin: 0 0 10px 0;
-}
-
-.cardBody {
-    background-color: #FBFBFB;
-    padding: 15px;
-    border-radius: 8px;
-    text-align: center;
-    box-shadow: 0 4px 8px rgba(106, 166, 218, 1);
+    background: #fff;
+    border-radius: 12px;
+    overflow: hidden;
+    border: 1px solid #e8eaed;
     display: flex;
     flex-direction: column;
-    min-height: 300px;
-}
-
-.cardBody p {
-    margin: 6px 0;
-    font-weight: bold;
-}
-
-.imgContainer {
-    display: flex;
-    justify-content: center;
-    margin-bottom: 10px;
-}
-
-.img {
-    width: 90%;
-    object-fit: cover;
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.8);
-    border-radius: 4px;
-    margin-top: 10px;
-    margin-bottom: 10px;
-    border: 2px solid #000;
-}
-
-.buttonSection {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    margin-top: auto;
-    padding-top: 15px;
-}
-
-.viewMoreBtn {
-    height: 40px;
-    background-color: #6AA6DA;
-    color: white;
-    padding: 10px 20px;
-    border: none;
-    border-radius: 5px;
     cursor: pointer;
-    font-family: 'Franklin Gothic Medium', 'Arial Narrow', Arial, sans-serif;
-    transition: background-color 0.2s;
-}
-.viewMoreBtn:hover {
-    background-color: #5A95C8;
+    /* start hidden, shifted down */
+    opacity: 0;
+    transform: translateY(16px);
+    transition:
+        opacity 0.35s ease,
+        transform 0.35s ease,
+        box-shadow 0.18s ease;
 }
 
-/* ── Back ── */
-.cardBack {
-    background-color: #DBE3E9;
-    transform: rotateY(180deg);
+/* When visible prop is true, parent adds this class */
+.cardVisible {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.card:hover {
+    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.10);
+    transform: translateY(-2px);
+}
+
+/* Keep hover working even after becoming visible */
+.cardVisible:hover {
+    transform: translateY(-2px);
+}
+
+/* ── Image ── */
+.imageWrapper {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 4 / 3;
+    background-color: #f0f2f5;
+    overflow: hidden;
+}
+
+.image {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    transition: transform 0.3s ease;
+}
+
+.card:hover .image {
+    transform: scale(1.03);
+}
+
+.imagePlaceholder {
+    width: 100%;
+    height: 100%;
     display: flex;
-    justify-content: center;
     align-items: center;
-    padding: 20px;
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.8);
-    transition: box-shadow 0.3s;
+    justify-content: center;
+    background-color: #eaecef;
 }
 
-.cardWrapper:hover .cardBack {
-    box-shadow: 0 8px 16px rgba(106, 166, 218, 1);
+/* ── Badges ── */
+.conditionBadge {
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    color: #fff;
+    font-size: 0.68rem;
+    font-weight: 600;
+    padding: 3px 8px;
+    border-radius: 4px;
+    letter-spacing: 0.3px;
+    font-family: 'Segoe UI', system-ui, sans-serif;
 }
 
-.descriptionText {
-    text-align: center;
-    font-family: 'Franklin Gothic Medium', 'Arial Narrow', Arial, sans-serif;
-    font-weight: bold;
+.typeBadge {
+    position: absolute;
+    bottom: 8px;
+    left: 8px;
+    background: rgba(0, 0, 0, 0.58);
+    color: #fff;
+    font-size: 0.65rem;
+    font-weight: 500;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    backdrop-filter: blur(4px);
+}
+
+/* ── Body ── */
+.body {
+    padding: 12px 12px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.title {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: #1a1a1a;
+    margin: 0;
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.price {
+    font-size: 0.875rem;
+    font-weight: 700;
+    color: #3d87c8;
+    margin: 0;
+    font-family: 'Segoe UI', system-ui, sans-serif;
+}
+
+/* ── Seller row ── */
+.sellerRow {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    margin-top: 6px;
+}
+
+.avatar {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background-color: #c8d8e8;
+    overflow: hidden;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.7rem;
+    font-weight: 700;
+    color: #4a7fa5;
+    font-family: 'Segoe UI', system-ui, sans-serif;
+}
+
+.avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.sellerName {
+    font-size: 0.78rem;
+    color: #999;
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }

@@ -10,6 +10,7 @@ import {
     categoryMap,
     listingTypeMap,
 } from "../utils/create-listing.utils.js";
+import NavBar from "./NavBarTemp.jsx";
 import styles from "./CreateListing.module.css";
 
 export default function CreateListing() {
@@ -107,6 +108,8 @@ export default function CreateListing() {
     }
 
     return (
+        <>
+        <NavBar />
         <div className={styles.page}>
             <div className={styles.headingWrapper}>
                 <h1 className={styles.heading}>Create Listing</h1>
@@ -274,5 +277,6 @@ export default function CreateListing() {
                 </button>
             </form>
         </div>
+        </>
     );
 }
