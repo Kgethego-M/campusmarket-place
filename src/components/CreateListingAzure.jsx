@@ -3,11 +3,11 @@ import { useNavigate } from 'react-router-dom';
 
 const API_URL = import.meta.env.VITE_API_URL;
 
-// Must match DB enum exactly: sell, rent, free
+// Must match DB enum exactly: sell, trade, either
 const listingTypeMap = {
   sale: "sell",
-  trade: "rent",
-  either: "free",
+  trade: "trade",
+  either: "either",
 };
 
 // Must match DB enum exactly: new, like_new, good, fair
@@ -61,7 +61,6 @@ function CreateListingAzure() {
       if (!userId.trim()) throw new Error("User ID is required");
       if (!conditionMap[condition]) throw new Error("Please select a valid condition");
 
-      // Send as multipart/form-data to match backend Form(...) fields
       const formData = new FormData();
       formData.append('user_id', userId.trim());
       formData.append('title', title.trim());
@@ -75,7 +74,6 @@ function CreateListingAzure() {
         formData.append('image', imageFile);
       }
 
-      // ⚠️ No Content-Type header — browser sets it automatically with boundary
       const response = await fetch(`${API_URL}/listings/`, {
         method: 'POST',
         body: formData,
@@ -88,7 +86,6 @@ function CreateListingAzure() {
 
       const result = await response.json();
       console.log('Listing created:', result);
-
       navigate('/azure/view-listing');
 
     } catch (err) {
@@ -167,7 +164,7 @@ function CreateListingAzure() {
         </select>
 
         <select value={listingType} onChange={(e) => setListingType(e.target.value)} required>
-          <option value="">Select listing type</option>
+          <option value="">Select</option>
           <option value="sale">For Sale</option>
           <option value="trade">For Trade</option>
           <option value="either">Either</option>
