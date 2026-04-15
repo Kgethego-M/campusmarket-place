@@ -1,6 +1,10 @@
 ﻿# Campus Marketplace
 
 Link to the deployed app: https://campus-market-place-dnczhjgjc0bqh4ew.southafricanorth-01.azurewebsites.net/
+
+#####codecov badge
+[![codecov](https://codecov.io/gh/Kgethego-M/campusmarket-place/graph/badge.svg?token=VMCA8P0M48)](https://codecov.io/gh/Kgethego-M/campusmarket-place)
+
 This is the foundation for the Campus Marketplace, built using **Vite**, **React (JSX)**, and **Firebase**.
 
 ## Project Infrastructure (Dev 1-Kgthego)
@@ -35,4 +39,6 @@ npm run dev
 - **Provider:** GitHub Actions
 - **Trigger:** Automatic deployment on every push to the `main` branch.
 - **Build Command:** `npm run build` (Vite)
-- **Deploy Target:** Firebase Hosting
+- **Deploy Target:** Azure
+
+
