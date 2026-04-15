@@ -3,15 +3,16 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import App from "../App";
+import { MemoryRouter } from "react-router-dom";
+import { AppRoutes } from "../App";
 
-// Mock Firebase 
+// Mock Firebase
 vi.mock("firebase/auth", () => ({
-  getAuth:                        vi.fn(() => ({})),
-  onAuthStateChanged:             vi.fn((_auth, cb) => { cb(null); return () => {}; }),
-  signInWithPopup:                vi.fn(),
-  signOut:                        vi.fn(() => Promise.resolve()),
-  GoogleAuthProvider:             vi.fn(function() {
+  getAuth:            vi.fn(() => ({})),
+  onAuthStateChanged: vi.fn((_auth, cb) => { cb(null); return () => {}; }),
+  signInWithPopup:    vi.fn(),
+  signOut:            vi.fn(() => Promise.resolve()),
+  GoogleAuthProvider: vi.fn(function () {
     this.setCustomParameters = vi.fn();
   }),
 }));
@@ -47,6 +48,15 @@ const STUDENT_DB_DATA = {
   userType:  "student",
 };
 
+// Helper: renders AppRoutes inside a fresh MemoryRouter starting at "/"
+function renderApp(initialEntry = "/") {
+  return render(
+    <MemoryRouter initialEntries={[initialEntry]}>
+      <AppRoutes />
+    </MemoryRouter>
+  );
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   window.localStorage.clear();
@@ -70,7 +80,7 @@ describe("Test 1 — New student signs up via Google OAuth", () => {
 
     signInWithPopup.mockResolvedValue({ user: STUDENT_USER });
 
-    render(<App />);
+    renderApp();
 
     expect(screen.getByText(/buy, sell & trade/i)).toBeInTheDocument();
 
@@ -95,7 +105,7 @@ describe("Test 2 — Registered student logs in with Google", () => {
 
     signInWithPopup.mockResolvedValue({ user: STUDENT_USER });
 
-    render(<App />);
+    renderApp();
 
     expect(screen.getByText(/buy, sell & trade/i)).toBeInTheDocument();
 
@@ -116,7 +126,7 @@ describe("Test 2 — Registered student logs in with Google", () => {
 
     signInWithPopup.mockResolvedValue({ user: NON_WITS_USER });
 
-    render(<App />);
+    renderApp();
 
     await user.click(screen.getByRole("button", { name: /get started/i }));
     await user.click(screen.getByRole("button", { name: /continue with google/i }));
@@ -137,7 +147,7 @@ describe("Test 3 — Unauthenticated user cannot access protected page", () => {
       return () => {};
     });
 
-    render(<App />);
+    renderApp();
 
     await waitFor(() => {
       expect(screen.queryByText(/welcome to your dashboard/i)).not.toBeInTheDocument();
@@ -154,7 +164,7 @@ describe("Test 3 — Unauthenticated user cannot access protected page", () => {
       return () => {};
     });
 
-    render(<App />);
+    renderApp();
 
     await waitFor(() => {
       expect(screen.getByText(/welcome to your dashboard/i)).toBeInTheDocument();

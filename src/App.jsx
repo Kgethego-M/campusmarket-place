@@ -21,7 +21,6 @@ import SignupForm from './components/SignupForm';
 import Dashboard from './components/Dashboard';
 import MockCreateListing from './components/MockCreateListing';
 
-// ✅ ADD THESE IMPORTS FOR AZURE VERSIONS
 import ViewListingAzure from './pages/ViewListingAzure';
 import CreateListingAzure from './components/CreateListingAzure';
 import EditListingAzure from './pages/EditListingAzure';
@@ -109,7 +108,7 @@ function LoginWrapper() {
           ) {
             navigate('/admin/users');
           } else {
-            navigate('/view-listing');
+            navigate('/dashboard');
           }
         }}
       />
@@ -131,39 +130,43 @@ function SignupWrapper() {
     >
       <SignupForm
         onSwitchToLogin={() => navigate('/login')}
-        onSignupSuccess={() => navigate('/view-listing')}
+        onLoginSuccess={() => navigate('/dashboard')}
       />
     </div>
+  );
+}
+
+// Exported separately so tests can wrap with MemoryRouter
+export function AppRoutes() {
+  return (
+    <Routes>
+      <Route path="/" element={<LandingPageWrapper />} />
+      <Route path="/login" element={<LoginWrapper />} />
+      <Route path="/signup" element={<SignupWrapper />} />
+      <Route path="/dashboard" element={<Dashboard />} />
+      <Route path="/view-listing" element={<ViewListing />} />
+      <Route path="/create-listing" element={<MockCreateListing />} />
+      <Route path="/edit-listing/:id" element={<EditListing />} />
+      <Route path="/access-denied" element={<AccessDenied />} />
+      <Route
+        path="/admin/users"
+        element={
+          <ProtectedRoute allowedRoles={['admin']}>
+            <AdminUsers />
+          </ProtectedRoute>
+        }
+      />
+      <Route path="/azure/view-listing" element={<ViewListingAzure />} />
+      <Route path="/azure/create-listing" element={<CreateListingAzure />} />
+      <Route path="/azure/edit-listing/:id" element={<EditListingAzure />} />
+    </Routes>
   );
 }
 
 function App() {
   return (
     <BrowserRouter>
-      <Routes>
-        {/* ORIGINAL WORKING ROUTES (sessionStorage) */}
-        <Route path="/" element={<LandingPageWrapper />} />
-        <Route path="/login" element={<LoginWrapper />} />
-        <Route path="/signup" element={<SignupWrapper />} />
-        <Route path="/dashboard" element={<Dashboard />} />
-        <Route path="/view-listing" element={<ViewListing />} />
-        <Route path="/create-listing" element={<MockCreateListing />} />
-        <Route path="/edit-listing/:id" element={<EditListing />} />
-        <Route path="/access-denied" element={<AccessDenied />} />
-        <Route
-          path="/admin/users"
-          element={
-            <ProtectedRoute allowedRoles={['admin']}>
-              <AdminUsers />
-            </ProtectedRoute>
-          }
-        />
-
-        {/* ✅ NEW AZURE ROUTES (test these first) */}
-        <Route path="/azure/view-listing" element={<ViewListingAzure />} />
-        <Route path="/azure/create-listing" element={<CreateListingAzure />} />
-        <Route path="/azure/edit-listing/:id" element={<EditListingAzure />} />
-      </Routes>
+      <AppRoutes />
     </BrowserRouter>
   );
 }
