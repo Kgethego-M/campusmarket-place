@@ -25,34 +25,43 @@ import ViewListingAzure from './pages/ViewListingAzure';
 import CreateListingAzure from './components/CreateListingAzure';
 import EditListingAzure from './pages/EditListingAzure';
 
-// Protects routes based on role
+// -------------------------
+// Protected Route (CLEAN)
+// -------------------------
 function ProtectedRoute({ children, allowedRoles }) {
   const [loading, setLoading] = useState(true);
-  const [accessGranted, setAccessGranted] = useState(false);
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [firebaseUser, setFirebaseUser] = useState(null);
+  const [roleAllowed, setRoleAllowed] = useState(false);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (!user) {
-        setIsLoggedIn(false);
+        setFirebaseUser(null);
+        setRoleAllowed(false);
         setLoading(false);
         return;
       }
 
-      setIsLoggedIn(true);
+      setFirebaseUser(user);
 
       try {
-        const userSnap = await getDoc(doc(db, 'users', user.uid));
+        const userRef = doc(db, 'users', user.uid);
+        const userSnap = await getDoc(userRef);
 
         if (!userSnap.exists()) {
+          setRoleAllowed(false);
           setLoading(false);
           return;
         }
 
         const userData = userSnap.data();
-        setAccessGranted(allowedRoles.includes(userData.role));
-      } catch (e) {
-        console.error(e);
+
+        setRoleAllowed(
+          allowedRoles.includes(userData.role)
+        );
+      } catch (err) {
+        console.error('Role check failed:', err);
+        setRoleAllowed(false);
       }
 
       setLoading(false);
@@ -63,25 +72,26 @@ function ProtectedRoute({ children, allowedRoles }) {
 
   if (loading) {
     return (
-      <div
-        style={{
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
-          minHeight: '100vh'
-        }}
-      >
-        Checking permissions...
+      <div style={{
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        minHeight: '100vh'
+      }}>
+        Loading...
       </div>
     );
   }
 
-  if (!isLoggedIn) return <Navigate to="/login" />;
-  if (!accessGranted) return <AccessDenied />;
+  if (!firebaseUser) return <Navigate to="/login" />;
+  if (!roleAllowed) return <AccessDenied />;
 
   return children;
 }
 
+// -------------------------
+// Wrappers
+// -------------------------
 function LandingPageWrapper() {
   const navigate = useNavigate();
   return <LandingPage onGetStarted={() => navigate('/login')} />;
@@ -91,14 +101,12 @@ function LoginWrapper() {
   const navigate = useNavigate();
 
   return (
-    <div
-      style={{
-        display: 'flex',
-        justifyContent: 'center',
-        alignItems: 'center',
-        minHeight: '100vh'
-      }}
-    >
+    <div style={{
+      display: 'flex',
+      justifyContent: 'center',
+      alignItems: 'center',
+      minHeight: '100vh'
+    }}>
       <LoginForm
         onSwitchToSignup={() => navigate('/signup')}
         onLoginSuccess={(userData) => {
@@ -120,14 +128,12 @@ function SignupWrapper() {
   const navigate = useNavigate();
 
   return (
-    <div
-      style={{
-        display: 'flex',
-        justifyContent: 'center',
-        alignItems: 'center',
-        minHeight: '100vh'
-      }}
-    >
+    <div style={{
+      display: 'flex',
+      justifyContent: 'center',
+      alignItems: 'center',
+      minHeight: '100vh'
+    }}>
       <SignupForm
         onSwitchToLogin={() => navigate('/login')}
         onLoginSuccess={() => navigate('/view-listing')}
@@ -136,7 +142,9 @@ function SignupWrapper() {
   );
 }
 
-// Exported separately so tests can wrap with MemoryRouter
+// -------------------------
+// Routes
+// -------------------------
 export function AppRoutes() {
   return (
     <Routes>
@@ -144,10 +152,13 @@ export function AppRoutes() {
       <Route path="/login" element={<LoginWrapper />} />
       <Route path="/signup" element={<SignupWrapper />} />
       <Route path="/dashboard" element={<Dashboard />} />
+
       <Route path="/view-listing" element={<ViewListing />} />
       <Route path="/create-listing" element={<MockCreateListing />} />
       <Route path="/edit-listing/:id" element={<EditListing />} />
+
       <Route path="/access-denied" element={<AccessDenied />} />
+
       <Route
         path="/admin/users"
         element={
@@ -156,6 +167,8 @@ export function AppRoutes() {
           </ProtectedRoute>
         }
       />
+
+      {/* Azure routes */}
       <Route path="/azure/view-listing" element={<ViewListingAzure />} />
       <Route path="/azure/create-listing" element={<CreateListingAzure />} />
       <Route path="/azure/edit-listing/:id" element={<EditListingAzure />} />
@@ -163,6 +176,9 @@ export function AppRoutes() {
   );
 }
 
+// -------------------------
+// App entry
+// -------------------------
 function App() {
   return (
     <BrowserRouter>

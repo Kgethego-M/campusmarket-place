@@ -1,7 +1,8 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 
-import { auth } from "../firebase.mock.js";
+import { auth } from "../firebase.js";
+import { onAuthStateChanged } from "firebase/auth";
 
 import {
     validateListing,
@@ -10,12 +11,16 @@ import {
     categoryMap,
     listingTypeMap,
 } from "../utils/create-listing.utils.js";
+
 import NavBar from "./NavBarTemp.jsx";
 import styles from "./CreateListing.module.css";
 
 export default function CreateListing() {
     const navigate = useNavigate();
     const fileInputRef = useRef(null);
+
+    const [user, setUser] = useState(null);
+    const [authLoading, setAuthLoading] = useState(true);
 
     const [title, setTitle] = useState("");
     const [description, setDescription] = useState("");
@@ -29,6 +34,16 @@ export default function CreateListing() {
     const [imagePreviews, setImagePreviews] = useState([]);
     const [loading, setLoading] = useState(false);
 
+    // ✅ FIX: Proper auth listener (prevents false "not logged in")
+    useEffect(() => {
+        const unsub = onAuthStateChanged(auth, (u) => {
+            setUser(u);
+            setAuthLoading(false);
+        });
+
+        return () => unsub();
+    }, []);
+
     function handleImageChange(e) {
         const files = Array.from(e.target.files);
         setImageFiles(files);
@@ -38,13 +53,16 @@ export default function CreateListing() {
     async function handleSubmit(e) {
         e.preventDefault();
 
-        const user = auth.currentUser;
+        // ✅ FIX: wait for auth state
+        if (authLoading) return;
+
         if (!user) {
             alert("Please log in to create a listing.");
             return;
         }
 
         const parsedPrice = parseFloat(price);
+
         const validationResult = validateListing({
             title,
             description,
@@ -53,6 +71,7 @@ export default function CreateListing() {
             condition,
             listingType,
         });
+
         if (!validationResult.valid) {
             alert(validationResult.error);
             return;
@@ -65,6 +84,7 @@ export default function CreateListing() {
         }
 
         let finalCategory = category;
+
         if (category === "other") {
             if (!otherCategory) {
                 alert("Please specify the category.");
@@ -78,7 +98,9 @@ export default function CreateListing() {
         setLoading(true);
 
         try {
-            const photoPreviews = imageFiles.map((f) => URL.createObjectURL(f));
+            const photoPreviews = imageFiles.map((f) =>
+                URL.createObjectURL(f)
+            );
 
             const newListing = {
                 id: `listing-${Date.now()}`,
@@ -94,8 +116,14 @@ export default function CreateListing() {
                 timestamp: Date.now(),
             };
 
-            const existing = JSON.parse(sessionStorage.getItem("listings") || "[]");
-            sessionStorage.setItem("listings", JSON.stringify([...existing, newListing]));
+            const existing = JSON.parse(
+                sessionStorage.getItem("listings") || "[]"
+            );
+
+            sessionStorage.setItem(
+                "listings",
+                JSON.stringify([...existing, newListing])
+            );
 
             alert("Successfully created listing!");
             navigate("/view-listing");
@@ -109,174 +137,223 @@ export default function CreateListing() {
 
     return (
         <>
-        <NavBar />
-        <div className={styles.page}>
-            <div className={styles.headingWrapper}>
-                <h1 className={styles.heading}>Create Listing</h1>
-                <p className={styles.subheading}>List an item for sale or trade</p>
-            </div>
+            <NavBar />
 
-            <form className={styles.form} onSubmit={handleSubmit}>
-
-                {/* Photos — top of form */}
-                <label className={styles.label}>Photos</label>
-                <input
-                    ref={fileInputRef}
-                    type="file"
-                    multiple
-                    accept="image/*"
-                    style={{ display: "none" }}
-                    onChange={handleImageChange}
-                />
-                <div
-                    className={styles.dropZone}
-                    onClick={() => fileInputRef.current?.click()}
-                >
-                    {imagePreviews.length > 0 ? (
-                        <div className={styles.imagePreview}>
-                            {imagePreviews.map((src, i) => (
-                                <img
-                                    key={i}
-                                    src={src}
-                                    alt={`preview-${i}`}
-                                    className={styles.previewImg}
-                                />
-                            ))}
-                        </div>
-                    ) : (
-                        <div className={styles.dropZonePlaceholder}>
-                            <svg className={styles.dropZoneIcon} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                                <rect x="3" y="3" width="18" height="18" rx="2" />
-                                <circle cx="8.5" cy="8.5" r="1.5" />
-                                <path d="M21 15l-5-5L5 21" />
-                            </svg>
-                            <p>Click or drag photos here</p>
-                        </div>
-                    )}
+            <div className={styles.page}>
+                <div className={styles.headingWrapper}>
+                    <h1 className={styles.heading}>Create Listing</h1>
+                    <p className={styles.subheading}>
+                        List an item for sale or trade
+                    </p>
                 </div>
 
-                {/* Title */}
-                <label className={styles.label}>Title</label>
-                <input
-                    className={styles.input}
-                    type="text"
-                    value={title}
-                    onChange={(e) => setTitle(e.target.value)}
-                    placeholder="E.g Calculus textbook"
-                    required
-                />
+                <form className={styles.form} onSubmit={handleSubmit}>
+                    {/* Photos */}
+                    <label className={styles.label}>Photos</label>
 
-                {/* Description */}
-                <label className={styles.label}>Description</label>
-                <textarea
-                    className={styles.textarea}
-                    rows={4}
-                    value={description}
-                    onChange={(e) => setDescription(e.target.value)}
-                    placeholder="Describe the item condition, features and any relevent details"
-                    required
-                />
+                    <input
+                        ref={fileInputRef}
+                        type="file"
+                        multiple
+                        accept="image/*"
+                        style={{ display: "none" }}
+                        onChange={handleImageChange}
+                    />
 
-                {/* Specification */}
-                <label className={styles.label}>Specification</label>
-                <textarea
-                    className={styles.textarea}
-                    rows={4}
-                    value={specification}
-                    onChange={(e) => setSpecification(e.target.value)}
-                    placeholder="Enter product specifications and details..."
-                />
-
-                {/* Price + Listing Type — 2 columns */}
-                <div className={styles.row}>
-                    <div>
-                        <label className={styles.label}>Price</label>
-                        <input
-                            className={styles.input}
-                            type="number"
-                            value={price}
-                            onChange={(e) => setPrice(e.target.value)}
-                            placeholder="Select"
-                            min="0"
-                            step="0.01"
-                            required={listingType !== "trade"}
-                        />
-                    </div>
-                    <div>
-                        <label className={styles.label}>Listing Type</label>
-                        <select
-                            className={styles.select}
-                            value={listingType}
-                            onChange={(e) => setListingType(e.target.value)}
-                            required
-                        >
-                            <option value="" disabled>Select</option>
-                            <option value="sale">For Sale</option>
-                            <option value="trade">For Trade</option>
-                            <option value="either">Either</option>
-                        </select>
-                    </div>
-                </div>
-
-                {/* Category + Condition — 2 columns */}
-                <div className={styles.row}>
-                    <div>
-                        <label className={styles.label}>Category</label>
-                        <select
-                            className={styles.select}
-                            value={category}
-                            onChange={(e) => setCategory(e.target.value)}
-                            required
-                        >
-                            <option value="" disabled>Select</option>
-                            <option value="electronics">Electronics</option>
-                            <option value="books">Books</option>
-                            <option value="clothing">Clothing</option>
-                            <option value="furniture">Furniture</option>
-                            <option value="appliance">Appliances</option>
-                            <option value="sports">Sports Equipment</option>
-                            <option value="outdoors">Outdoor Gear</option>
-                            <option value="accessories">Accessories and Jewelry</option>
-                            <option value="toys">Toys and Games</option>
-                            <option value="beauty">Beauty and Personal Care</option>
-                            <option value="stationary">Stationary</option>
-                            <option value="study_materials">Study Materials</option>
-                            <option value="other">Other</option>
-                        </select>
-                        {category === "other" && (
-                            <input
-                                className={styles.input}
-                                type="text"
-                                value={otherCategory}
-                                onChange={(e) => setOtherCategory(e.target.value)}
-                                placeholder="Specify category"
-                                style={{ marginTop: "6px" }}
-                            />
+                    <div
+                        className={styles.dropZone}
+                        onClick={() => fileInputRef.current?.click()}
+                    >
+                        {imagePreviews.length > 0 ? (
+                            <div className={styles.imagePreview}>
+                                {imagePreviews.map((src, i) => (
+                                    <img
+                                        key={i}
+                                        src={src}
+                                        alt={`preview-${i}`}
+                                        className={styles.previewImg}
+                                    />
+                                ))}
+                            </div>
+                        ) : (
+                            <div
+                                className={styles.dropZonePlaceholder}
+                            >
+                                <p>Click or drag photos here</p>
+                            </div>
                         )}
                     </div>
-                    <div>
-                        <label className={styles.label}>Condition</label>
-                        <select
-                            className={styles.select}
-                            value={condition}
-                            onChange={(e) => setCondition(e.target.value)}
-                            required
-                        >
-                            <option value="" disabled>Select</option>
-                            <option value="new">New</option>
-                            <option value="like_new">Like New</option>
-                            <option value="good">Good</option>
-                            <option value="fair">Fair</option>
-                            <option value="poor">Poor</option>
-                        </select>
-                    </div>
-                </div>
 
-                <button type="submit" className={styles.submitBtn} disabled={loading}>
-                    {loading ? "Creating..." : "Publish Listing"}
-                </button>
-            </form>
-        </div>
+                    {/* Title */}
+                    <label className={styles.label}>Title</label>
+                    <input
+                        className={styles.input}
+                        type="text"
+                        value={title}
+                        onChange={(e) => setTitle(e.target.value)}
+                        required
+                    />
+
+                    {/* Description */}
+                    <label className={styles.label}>
+                        Description
+                    </label>
+                    <textarea
+                        className={styles.textarea}
+                        rows={4}
+                        value={description}
+                        onChange={(e) =>
+                            setDescription(e.target.value)
+                        }
+                        required
+                    />
+
+                    {/* Specification */}
+                    <label className={styles.label}>
+                        Specification
+                    </label>
+                    <textarea
+                        className={styles.textarea}
+                        rows={4}
+                        value={specification}
+                        onChange={(e) =>
+                            setSpecification(e.target.value)
+                        }
+                    />
+
+                    {/* Price + Listing Type */}
+                    <div className={styles.row}>
+                        <div>
+                            <label className={styles.label}>
+                                Price
+                            </label>
+                            <input
+                                className={styles.input}
+                                type="number"
+                                value={price}
+                                onChange={(e) =>
+                                    setPrice(e.target.value)
+                                }
+                                min="0"
+                                step="0.01"
+                                required={
+                                    listingType !== "trade"
+                                }
+                            />
+                        </div>
+
+                        <div>
+                            <label className={styles.label}>
+                                Listing Type
+                            </label>
+                            <select
+                                className={styles.select}
+                                value={listingType}
+                                onChange={(e) =>
+                                    setListingType(e.target.value)
+                                }
+                                required
+                            >
+                                <option value="" disabled>
+                                    Select
+                                </option>
+                                <option value="sale">
+                                    For Sale
+                                </option>
+                                <option value="trade">
+                                    For Trade
+                                </option>
+                                <option value="either">
+                                    Either
+                                </option>
+                            </select>
+                        </div>
+                    </div>
+
+                    {/* Category + Condition */}
+                    <div className={styles.row}>
+                        <div>
+                            <label className={styles.label}>
+                                Category
+                            </label>
+
+                            <select
+                                className={styles.select}
+                                value={category}
+                                onChange={(e) =>
+                                    setCategory(e.target.value)
+                                }
+                                required
+                            >
+                                <option value="" disabled>
+                                    Select
+                                </option>
+                                <option value="electronics">
+                                    Electronics
+                                </option>
+                                <option value="books">
+                                    Books
+                                </option>
+                                <option value="clothing">
+                                    Clothing
+                                </option>
+                                <option value="other">
+                                    Other
+                                </option>
+                            </select>
+
+                            {category === "other" && (
+                                <input
+                                    className={styles.input}
+                                    value={otherCategory}
+                                    onChange={(e) =>
+                                        setOtherCategory(
+                                            e.target.value
+                                        )
+                                    }
+                                    placeholder="Specify category"
+                                />
+                            )}
+                        </div>
+
+                        <div>
+                            <label className={styles.label}>
+                                Condition
+                            </label>
+
+                            <select
+                                className={styles.select}
+                                value={condition}
+                                onChange={(e) =>
+                                    setCondition(e.target.value)
+                                }
+                                required
+                            >
+                                <option value="" disabled>
+                                    Select
+                                </option>
+                                <option value="new">New</option>
+                                <option value="good">
+                                    Good
+                                </option>
+                                <option value="fair">
+                                    Fair
+                                </option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <button
+                        type="submit"
+                        className={styles.submitBtn}
+                        disabled={loading || authLoading}
+                    >
+                        {loading
+                            ? "Creating..."
+                            : "Publish Listing"}
+                    </button>
+                </form>
+            </div>
         </>
     );
 }
