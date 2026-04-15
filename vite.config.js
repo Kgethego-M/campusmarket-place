@@ -1,16 +1,13 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
-import path from "path";
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   plugins: [react()],
-  resolve: {
-    alias: {
-      // Use the same mock for both imports
-      "@firebase/auth": path.resolve(__dirname, "src/__mocks__/firebase.js"),
-      "@firebase/firestore": path.resolve(__dirname, "src/__mocks__/firebase.js"),
-    },
+
+  optimizeDeps: {
+    include: ["firebase/app", "firebase/auth", "firebase/firestore"],
   },
+
   test: {
     globals: true,
     environment: "jsdom",
@@ -18,5 +15,10 @@ export default defineConfig({
     deps: {
       inline: ["firebase"],
     },
+    // Mocks only apply when running tests
+    alias: {
+      "@firebase/auth":      new URL("src/__mocks__/firebase.js", import.meta.url).pathname,
+      "@firebase/firestore": new URL("src/__mocks__/firebase.js", import.meta.url).pathname,
+    },
   },
-});
+}));
