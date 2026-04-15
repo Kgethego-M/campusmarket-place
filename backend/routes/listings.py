@@ -18,7 +18,10 @@ def upload_image(file):
 def get_listings():
     db = get_db()
     cursor = db.cursor(dictionary=True)
-    cursor.execute("SELECT * FROM listings JOIN products ON listings.product_id = products.product_id")
+    cursor.execute("""
+        SELECT * FROM listings 
+        JOIN products ON listings.product_id = products.product_id
+    """)
     results = cursor.fetchall()
     db.close()
     return results
@@ -35,7 +38,11 @@ async def create_listing(
     listing_type: str = Form("sell"),
     image: UploadFile = File(None)
 ):
-    image_url = upload_image(image) if image else None
+    # Only upload if a real file was sent
+    image_url = None
+    if image and image.filename:
+        image_url = upload_image(image)
+
     db = get_db()
     cursor = db.cursor()
 
@@ -49,7 +56,13 @@ async def create_listing(
         INSERT INTO listings (user_id, product_id, listing_type)
         VALUES (%s, %s, %s)
     """, (user_id, product_id, listing_type))
+    listing_id = cursor.lastrowid
 
     db.commit()
     db.close()
-    return {"message": "Listing created successfully"}
+
+    return {
+        "message": "Listing created successfully",
+        "listing_id": listing_id,
+        "product_id": product_id
+    }

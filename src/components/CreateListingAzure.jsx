@@ -3,11 +3,19 @@ import { useNavigate } from 'react-router-dom';
 
 const API_URL = import.meta.env.VITE_API_URL;
 
-// 🔥 FIX: frontend → backend mapping (MUST match DB ENUM)
+// Must match DB enum exactly: sell, rent, free
 const listingTypeMap = {
   sale: "sell",
   trade: "rent",
   either: "free",
+};
+
+// Must match DB enum exactly: new, like_new, good, fair
+const conditionMap = {
+  'New': 'new',
+  'Like New': 'like_new',
+  'Good': 'good',
+  'Fair': 'fair',
 };
 
 function CreateListingAzure() {
@@ -16,12 +24,32 @@ function CreateListingAzure() {
   const [title, setTitle] = useState('');
   const [price, setPrice] = useState('');
   const [description, setDescription] = useState('');
+  const [specifications, setSpecifications] = useState('');
   const [condition, setCondition] = useState('');
   const [category, setCategory] = useState('');
   const [listingType, setListingType] = useState('');
+  const [userId, setUserId] = useState('');
+  const [imageFile, setImageFile] = useState(null);
+  const [imagePreview, setImagePreview] = useState(null);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  function handleImageChange(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    if (file.size > 2 * 1024 * 1024) {
+      setError('Image must be under 2MB');
+      return;
+    }
+
+    setError('');
+    setImageFile(file);
+    const reader = new FileReader();
+    reader.onloadend = () => setImagePreview(reader.result);
+    reader.readAsDataURL(file);
+  }
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -29,46 +57,42 @@ function CreateListingAzure() {
     setError('');
 
     try {
-      // 🔥 validation (prevents useless API calls)
-      if (!listingTypeMap[listingType]) {
-        throw new Error("Please select a valid listing type");
+      if (!listingTypeMap[listingType]) throw new Error("Please select a valid listing type");
+      if (!userId.trim()) throw new Error("User ID is required");
+      if (!conditionMap[condition]) throw new Error("Please select a valid condition");
+
+      // Send as multipart/form-data to match backend Form(...) fields
+      const formData = new FormData();
+      formData.append('user_id', userId.trim());
+      formData.append('title', title.trim());
+      formData.append('description', description.trim());
+      formData.append('specifications', specifications.trim());
+      formData.append('price', parseFloat(price));
+      formData.append('category', category);
+      formData.append('condition', conditionMap[condition]);
+      formData.append('listing_type', listingTypeMap[listingType]);
+      if (imageFile) {
+        formData.append('image', imageFile);
       }
 
-      const listingData = {
-        title: title.trim(),
-        price: parseFloat(price),
-        description: description.trim(),
-        condition,
-        category,
-        listing_type: listingTypeMap[listingType], // 🔥 FIXED HERE
-      };
-
-      console.log('Sending to API:', listingData);
-      console.log('API URL:', API_URL);
-
+      // ⚠️ No Content-Type header — browser sets it automatically with boundary
       const response = await fetch(`${API_URL}/listings/`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(listingData),
+        body: formData,
       });
 
-      console.log('Response status:', response.status);
-
       if (!response.ok) {
-        const errorText = await response.text();
-        console.error('Error response:', errorText);
-        throw new Error(`HTTP ${response.status}: Failed to create listing`);
+        const errText = await response.text();
+        throw new Error(`HTTP ${response.status}: ${errText}`);
       }
 
-      const data = await response.json();
-      console.log('Created listing:', data);
+      const result = await response.json();
+      console.log('Listing created:', result);
 
       navigate('/azure/view-listing');
 
     } catch (err) {
-      console.error('Error:', err);
+      console.error('CreateListing error:', err);
       setError(err.message);
     } finally {
       setLoading(false);
@@ -77,11 +101,23 @@ function CreateListingAzure() {
 
   return (
     <div style={{ maxWidth: '600px', margin: '0 auto', padding: '20px' }}>
-      <h2>Create New Listing (Azure)</h2>
+      <h2>Create New Listing</h2>
 
-      {error && <p style={{ color: 'red' }}>{error}</p>}
+      {error && (
+        <p style={{ color: 'red', background: '#fff0f0', padding: '10px', borderRadius: '4px' }}>
+          {error}
+        </p>
+      )}
 
-      <form onSubmit={handleSubmit}>
+      <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+
+        <input
+          placeholder="Your User ID"
+          value={userId}
+          onChange={(e) => setUserId(e.target.value)}
+          required
+        />
+
         <input
           placeholder="Title"
           value={title}
@@ -91,9 +127,11 @@ function CreateListingAzure() {
 
         <input
           type="number"
-          placeholder="Price"
+          placeholder="Price (R)"
           value={price}
           onChange={(e) => setPrice(e.target.value)}
+          min="0"
+          step="0.01"
           required
         />
 
@@ -101,6 +139,14 @@ function CreateListingAzure() {
           placeholder="Description"
           value={description}
           onChange={(e) => setDescription(e.target.value)}
+          rows={3}
+        />
+
+        <textarea
+          placeholder="Specifications (optional)"
+          value={specifications}
+          onChange={(e) => setSpecifications(e.target.value)}
+          rows={2}
         />
 
         <select value={condition} onChange={(e) => setCondition(e.target.value)} required>
@@ -120,17 +166,37 @@ function CreateListingAzure() {
           <option value="Other">Other</option>
         </select>
 
-        {/* 🔥 FIXED LISTING TYPE */}
-        <select
-          value={listingType}
-          onChange={(e) => setListingType(e.target.value)}
-          required
-        >
+        <select value={listingType} onChange={(e) => setListingType(e.target.value)} required>
           <option value="">Select listing type</option>
           <option value="sale">For Sale</option>
           <option value="trade">For Trade</option>
           <option value="either">Either</option>
         </select>
+
+        <div>
+          <label style={{ display: 'block', marginBottom: '4px' }}>
+            Product Image (optional, max 2MB)
+          </label>
+          <input
+            type="file"
+            accept="image/*"
+            onChange={handleImageChange}
+          />
+          {imagePreview && (
+            <img
+              src={imagePreview}
+              alt="Preview"
+              style={{
+                marginTop: '8px',
+                maxWidth: '100%',
+                maxHeight: '200px',
+                objectFit: 'contain',
+                borderRadius: '4px',
+                border: '1px solid #ddd'
+              }}
+            />
+          )}
+        </div>
 
         <button type="submit" disabled={loading}>
           {loading ? 'Creating...' : 'Create Listing'}
@@ -139,6 +205,7 @@ function CreateListingAzure() {
         <button type="button" onClick={() => navigate('/azure/view-listing')}>
           Cancel
         </button>
+
       </form>
     </div>
   );
