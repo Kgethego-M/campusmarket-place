@@ -26,7 +26,7 @@ const PRICE_RANGES = [
     { label: "R100 – R300",  min: 100,  max: 300 },
     { label: "R300 – R500",  min: 300,  max: 500 },
     { label: "R500 – R1000", min: 500,  max: 1000 },
-    { label: "R1000+",       min: 1000, max: Infinity },
+    { label: "Over R1000",       min: 1000, max: Infinity },
 ];
 
 export default function ViewListings() {
