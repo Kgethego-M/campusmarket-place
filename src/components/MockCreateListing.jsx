@@ -11,6 +11,7 @@ import {
     categoryMap,
     listingTypeMap,
 } from "../utils/create-listing.utils.js";
+import { createListing } from "../api/listings.js";
 
 import NavBar from "./NavBarTemp.jsx";
 import styles from "./CreateListing.module.css";
@@ -98,35 +99,23 @@ export default function CreateListing() {
         setLoading(true);
 
         try {
-            const photoPreviews = imageFiles.map((f) =>
-                URL.createObjectURL(f)
-            );
+        const formData = new FormData();
+        formData.append('user_id', user.uid);
+        formData.append('title', title);
+        formData.append('description', description);
+        formData.append('specifications', specification);
+        formData.append('price', parsedPrice);
+        formData.append('category', finalCategory);
+        formData.append('condition', conditionMap[condition]);
+        formData.append('listing_type', listingTypeMap[listingType]);
+        if (imageFiles[0]) {
+            formData.append('image', imageFiles[0]);
+        }
 
-            const newListing = {
-                id: `listing-${Date.now()}`,
-                title,
-                description,
-                specification,
-                price: Math.round(parsedPrice * 100) / 100,
-                category: finalCategory,
-                condition: conditionMap[condition],
-                listingType: listingTypeMap[listingType],
-                photos: photoPreviews,
-                sellerUID: user.uid,
-                timestamp: Date.now(),
-            };
+        await createListing(formData);
 
-            const existing = JSON.parse(
-                sessionStorage.getItem("listings") || "[]"
-            );
-
-            sessionStorage.setItem(
-                "listings",
-                JSON.stringify([...existing, newListing])
-            );
-
-            alert("Successfully created listing!");
-            navigate("/view-listing");
+        alert("Successfully created listing!");
+        navigate("/view-listing");
         } catch (err) {
             console.error(err);
             alert("Failed to create listing. Please try again.");

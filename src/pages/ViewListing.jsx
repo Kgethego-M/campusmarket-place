@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { mockListings } from "../mockData.js";
+import { fetchListings } from "../api/listings.js";
 import { validateListingData } from "../utils/view-listing.utils.js";
 import ListingCard from "../components/ListingCard.jsx";
 import styles from "../components/ViewListing.module.css";
@@ -11,28 +11,19 @@ export default function ViewListings() {
     const navigate = useNavigate();
 
     useEffect(() => {
-        try {
-            const stored = sessionStorage.getItem("listings");
-            let allListings;
-
-            if (!stored) {
-                sessionStorage.setItem("listings", JSON.stringify(mockListings));
-                allListings = mockListings;
-            } else {
-                const parsed = JSON.parse(stored);
-                const parsedIds = new Set(parsed.map((l) => l.id));
-                const missing = mockListings.filter((l) => !parsedIds.has(l.id));
-                allListings = [...parsed, ...missing];
-                sessionStorage.setItem("listings", JSON.stringify(allListings));
+        async function loadListings() {
+            try {
+                const data = await fetchListings();
+                const valid = data.filter((l) => validateListingData(l).valid);
+                setListings(valid);
+            } catch (err) {
+                console.error("Failed to fetch listings:", err);
+                alert("Failed to load listings. Is the backend running?");
+            } finally {
+                setLoading(false);
             }
-
-            const valid = allListings.filter((l) => validateListingData(l).valid);
-            setListings(valid);
-        } catch (err) {
-            console.error("Failed to fetch listings:", err);
-        } finally {
-            setLoading(false);
         }
+        loadListings();
     }, []);
 
     return (

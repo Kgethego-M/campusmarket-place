@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 
-// --- MOCK IMPORTS (remove these when switching back to Firebase) ---
-import { mockListings } from "../mockData.js";
+import { fetchListings } from "../api/listings.js";
 
 // --- FIREBASE IMPORTS (uncomment these when switching back to Firebase) ---
 // import { db } from "../firebase.js";
@@ -43,27 +42,13 @@ export default function ViewListings() {
     useEffect(() => {
         async function fetchListings() {
             try {
-                const stored    = JSON.parse(sessionStorage.getItem("listings") || "[]");
-                const storedIds = new Set(stored.map((l) => l.id));
-
+                const data = await fetchListings();
                 const normalise = (l) => ({
                     ...l,
-                    imageUrl:   l.imageUrl || (l.photos && l.photos[0]) || null,
+                    imageUrl:   l.images || null,
                     sellerName: l.sellerName || "Student",
                 });
-
-                const merged = [
-                    ...stored.map(normalise),
-                    ...mockListings.filter((l) => !storedIds.has(l.id)).map(normalise),
-                ];
-
-                // --- FIREBASE FETCH (uncomment when switching back) ---
-                // const q    = query(collection(db, "listings"), orderBy("timestamp", "desc"));
-                // const snap = await getDocs(q);
-                // const merged = snap.docs.map(d => normalise({ id: d.id, ...d.data() }));
-                // --- END FIREBASE FETCH ---
-
-                const valid = merged.filter((l) => validateListingData(l).valid);
+                const valid = data.map(normalise).filter((l) => validateListingData(l).valid);
                 setListings(valid);
             } catch (err) {
                 console.error("Failed to fetch listings:", err);
