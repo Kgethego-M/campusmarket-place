@@ -19,6 +19,17 @@ jobs:
       - name: Install dependencies
         run: npm install
 
+      - name: Run Vitest with coverage
+        run: npm run test -- --coverage
+
+      - name: Upload frontend coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./coverage/lcov.info
+          flags: frontend
+          fail_ci_if_error: true
+
       - name: Build
         run: npm run build
         env:
