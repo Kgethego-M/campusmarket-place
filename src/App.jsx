@@ -108,7 +108,7 @@ function LoginWrapper() {
           ) {
             navigate('/admin/users');
           } else {
-            navigate('/dashboard');
+            navigate('/view-listing');
           }
         }}
       />
@@ -130,7 +130,7 @@ function SignupWrapper() {
     >
       <SignupForm
         onSwitchToLogin={() => navigate('/login')}
-        onLoginSuccess={() => navigate('/dashboard')}
+        onLoginSuccess={() => navigate('/view-listing')}
       />
     </div>
   );
