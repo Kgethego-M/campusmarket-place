@@ -26,7 +26,7 @@ export default function LoginForm({ onSwitchToSignup, onLoginSuccess }) {
 
       if (!isValidWitsEmail(user.email)) {
         await signOut(auth);
-        show(` Only Wits emails allowed. You used: ${user.email}`, true);
+        show(`Only Wits emails allowed. You used: ${user.email}`, true);
         return;
       }
 
