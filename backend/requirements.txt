@@ -1,5 +1,6 @@
 fastapi
 uvicorn
+gunicorn
 mysql-connector-python
 python-dotenv
 azure-storage-blob
