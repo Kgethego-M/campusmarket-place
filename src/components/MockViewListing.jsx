@@ -1,11 +1,8 @@
 import { useEffect, useState } from "react";
 
-// --- MOCK IMPORTS (remove these when switching back to Firebase) ---
-import { mockListings } from "../mockData.js";
-
-// --- FIREBASE IMPORTS (uncomment these when switching back to Firebase) ---
-// import { db } from "../firebase.js";
-// import { collection, getDocs, orderBy, query } from "firebase/firestore";
+// --- FIREBASE IMPORTS ---
+import { db } from "../firebase.js";
+import { collection, getDocs, orderBy, query } from "firebase/firestore";
 
 import { validateListingData } from "../utils/view-listing.utils.js";
 import ListingCard from "./ListingCard.jsx";
@@ -26,7 +23,7 @@ const PRICE_RANGES = [
     { label: "R100 – R300",  min: 100,  max: 300 },
     { label: "R300 – R500",  min: 300,  max: 500 },
     { label: "R500 – R1000", min: 500,  max: 1000 },
-    { label: "Over R1000",       min: 1000, max: Infinity },
+    { label: "Over R1000",   min: 1000, max: Infinity },
 ];
 
 export default function ViewListings() {
@@ -39,34 +36,59 @@ export default function ViewListings() {
     const [priceFilter, setPriceFilter] = useState("All");
     const [showFilters, setShowFilters] = useState(false);
 
-    // ── Fetch & merge listings ──────────────────────────────────────────────
+    // ── Fetch listings from Firebase ──────────────────────────────────────────────
     useEffect(() => {
         async function fetchListings() {
+            setLoading(true);
             try {
-                const stored    = JSON.parse(sessionStorage.getItem("listings") || "[]");
-                const storedIds = new Set(stored.map((l) => l.id));
+                // Query listings collection, ordered by newest first
+                const listingsRef = collection(db, "listings");
+                const q = query(listingsRef, orderBy("timestamp", "desc"));
+                const querySnapshot = await getDocs(q);
+                
+                // Transform Firebase data to match your listing structure
+                const firebaseListings = querySnapshot.docs.map(doc => {
+                    const data = doc.data();
+                    return {
+                        id: doc.id,
+                        ...data,
+                        // FIXED: Use photos array for images
+                        imageUrl: data.photos && data.photos.length > 0 ? data.photos[0] : null,
+                        sellerName: data.sellerName || "Student",
+                        sellerAvatar: data.sellerAvatar || null,
+                        sellerUID: data.sellerUID || data.sellerUid,
+                        title: data.title || data.Title,
+                        price: data.price || data.Price,
+                        condition: data.condition || data.Condition,
+                        category: data.category || data.Category,
+                        listingType: data.listingType || data["Listing Type"],
+                        description: data.description || data.Description,
+                        status: data.status || data.Status,
+                        timestamp: data.timestamp || data.Timestamp,
+                    };
+                });
 
+                // Also get session storage listings (for user's own listings)
+                const stored = JSON.parse(sessionStorage.getItem("listings") || "[]");
+                const storedIds = new Set(stored.map((l) => l.id));
+                
+                // Merge stored listings (avoid duplicates)
                 const normalise = (l) => ({
                     ...l,
-                    imageUrl:   l.imageUrl || (l.photos && l.photos[0]) || null,
+                    imageUrl: l.imageUrl || (l.photos && l.photos[0]) || null,
                     sellerName: l.sellerName || "Student",
                 });
 
                 const merged = [
                     ...stored.map(normalise),
-                    ...mockListings.filter((l) => !storedIds.has(l.id)).map(normalise),
+                    ...firebaseListings.filter((l) => !storedIds.has(l.id)),
                 ];
 
-                // --- FIREBASE FETCH (uncomment when switching back) ---
-                // const q    = query(collection(db, "listings"), orderBy("timestamp", "desc"));
-                // const snap = await getDocs(q);
-                // const merged = snap.docs.map(d => normalise({ id: d.id, ...d.data() }));
-                // --- END FIREBASE FETCH ---
-
+                // Validate and set listings
                 const valid = merged.filter((l) => validateListingData(l).valid);
                 setListings(valid);
             } catch (err) {
-                console.error("Failed to fetch listings:", err);
+                console.error("Failed to fetch listings from Firebase:", err);
             } finally {
                 setLoading(false);
             }
@@ -80,12 +102,15 @@ export default function ViewListings() {
     const filtered = listings.filter((l) => {
         const matchSearch =
             l.title?.toLowerCase().includes(search.toLowerCase()) ||
-            l.category?.toLowerCase().includes(search.toLowerCase());
+            l.category?.toLowerCase().includes(search.toLowerCase()) ||
+            l.description?.toLowerCase().includes(search.toLowerCase());
+        
         const matchType  = typeFilter  === "All" || l.listingType === typeFilter;
         const matchCond  = condFilter  === "All" || l.condition   === condFilter;
         const matchCat   = catFilter   === "All" || l.category    === catFilter;
         const matchPrice = priceFilter === "All" ||
             (l.price >= activePriceRange.min && l.price < activePriceRange.max);
+        
         return matchSearch && matchType && matchCond && matchCat && matchPrice;
     });
 

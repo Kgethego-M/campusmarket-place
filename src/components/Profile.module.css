@@ -1,0 +1,554 @@
+.profileContainer {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 2rem;
+    background-color: #f5f7fa;
+    min-height: 100vh;
+}
+
+/* Loading State */
+.loadingContainer {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    background-color: #f5f7fa;
+}
+
+.loader {
+    text-align: center;
+}
+
+.loader i {
+    font-size: 3rem;
+    color: #6AA6DA;
+    margin-bottom: 1rem;
+}
+
+.loader p {
+    color: #6b7280;
+    font-size: 1rem;
+}
+
+/* Header */
+.header {
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+}
+
+.backButton {
+    background: none;
+    border: none;
+    font-size: 1rem;
+    color: #4b5563;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 1rem;
+    border-radius: 8px;
+    transition: all 0.2s;
+}
+
+.backButton:hover {
+    background-color: #e5e7eb;
+}
+
+.header h1 {
+    margin: 0;
+    font-size: 1.8rem;
+    color: #1f2937;
+}
+
+/* Profile Card */
+.profileCard {
+    background: white;
+    border-radius: 16px;
+    padding: 2rem;
+    margin-bottom: 2rem;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2rem;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.profileLeft {
+    display: flex;
+    gap: 2rem;
+}
+
+.profilePictureSection {
+    flex-shrink: 0;
+}
+
+.profilePictureWrapper {
+    position: relative;
+    width: 150px;
+    height: 150px;
+}
+
+.profilePicture {
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 3px solid #6AA6DA;
+}
+
+.editPhotoButton {
+    position: absolute;
+    bottom: 0;
+    right: 0;
+    background: #6AA6DA;
+    color: white;
+    border: none;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+}
+
+.editPhotoButton:hover {
+    background: #6AA6DA;
+    transform: scale(1.05);
+}
+
+.userInfo {
+    flex: 1;
+}
+
+.userInfo h2 {
+    margin: 0 0 0.5rem 0;
+    color: #1f2937;
+    font-size: 1.5rem;
+}
+
+.email {
+    color: #41444b;
+    margin-bottom: 0.75rem;
+}
+
+.bio {
+    color: #4b5563;
+    line-height: 1.5;
+    margin-bottom: 1rem;
+}
+
+.memberSince {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: #9ca3af;
+    font-size: 0.875rem;
+}
+
+/* Edit Form */
+.editForm {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.formGroup {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.formGroup label {
+    font-weight: 500;
+    color: #2d3138;
+    font-size: 0.875rem;
+}
+
+.formGroup input,
+.formGroup textarea {
+    padding: 0.625rem;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    font-size: 0.875rem;
+    transition: all 0.2s;
+    font-family: inherit;
+}
+
+.formGroup input:focus,
+.formGroup textarea:focus {
+    outline: none;
+    border-color: #6AA6DA;
+    box-shadow: 0 0 0 3px rgb(0, 0, 0);
+}
+
+.disabledInput {
+    background-color: #f3f4f6;
+    cursor: not-allowed;
+    opacity: 0.7;
+    color: #2d3138;
+}
+
+/* Stats Section */
+.statsSection {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+    padding-left: 2rem;
+    border-left: 1px solid #e5e7eb;
+}
+
+.rating {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.ratingStars {
+    color: #fbbf24;
+    font-size: 1.1rem;
+}
+
+.ratingValue {
+    font-weight: bold;
+    font-size: 1.2rem;
+    color: #1f2937;
+}
+
+.totalRatings {
+    color: #6b7280;
+    font-size: 0.875rem;
+}
+
+.statsGrid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1rem;
+}
+
+.statItem {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 1rem;
+    background-color: #f9fafb;
+    border-radius: 12px;
+}
+
+.statItem i {
+    font-size: 1.5rem;
+    color: #6AA6DA;
+}
+
+.statInfo {
+    display: flex;
+    flex-direction: column;
+}
+
+.statValue {
+    font-size: 1.5rem;
+    font-weight: bold;
+    color: #1f2937;
+}
+
+.statLabel {
+    font-size: 0.75rem;
+    color: #6b7280;
+}
+
+.saveButton,
+.cancelButton {
+    padding: 0.75rem;
+    border: none;
+    border-radius: 8px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+}
+
+.editButton {
+    background-color: #6AA6DA;
+    color: white;
+    padding: 0.75rem;
+    border: none;
+    border-radius: 20px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+}
+
+.editButton:hover {
+    background-color: #76afe1;
+    transform: translateY(-1px);
+}
+
+.editActions {
+    display: flex;
+    gap: 1rem;
+}
+
+.saveButton {
+    background-color: #E1E5AC;
+    color: white;
+    flex: 1;
+}
+
+.saveButton:hover {
+    background-color: #e1e696;
+}
+
+.cancelButton {
+    background-color: #DBE3E9;
+    color: white;
+    flex: 1;
+}
+
+.cancelButton:hover {
+    background-color: #dc2626;
+}
+
+/* Tabs Section */
+.tabsSection {
+    background: white;
+    border-radius: 16px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    overflow: hidden;
+}
+
+.tabs {
+    display: flex;
+    border-bottom: 1px solid #e5e7eb;
+    background-color: #f9fafb;
+}
+
+.tab {
+    flex: 1;
+    padding: 1rem;
+    background: none;
+    border: none;
+    font-size: 1rem;
+    font-weight: 500;
+    color: #6b7280;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+}
+
+.tab:hover {
+    color: #6AA6DA;
+    background-color: #f3f4f6;
+}
+
+.activeTab {
+    color: #6AA6DA;
+    border-bottom: 2px solid #6AA6DA;
+    background-color: white;
+}
+
+.tabContent {
+    padding: 2rem;
+}
+
+/* History Styles */
+.historyList {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.historyItem {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1.25rem;
+    background-color: #f9fafb;
+    border-radius: 12px;
+    transition: all 0.2s;
+}
+
+.historyItem:hover {
+    transform: translateX(4px);
+    background-color: #f3f4f6;
+}
+
+.historyIcon {
+    width: 48px;
+    height: 48px;
+    background-color: #e0e7ff;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #6AA6DA;
+    font-size: 1.25rem;
+}
+
+.historyDetails {
+    flex: 1;
+}
+
+.historyDetails h4 {
+    margin: 0 0 0.5rem 0;
+    color: #1f2937;
+}
+
+.historyMeta {
+    display: flex;
+    gap: 1rem;
+    font-size: 0.875rem;
+    color: #6b7280;
+    flex-wrap: wrap;
+}
+
+.historyMeta i {
+    margin-right: 0.25rem;
+}
+
+.historyStatus {
+    padding: 0.25rem 0.75rem;
+    border-radius: 20px;
+    font-size: 0.75rem;
+    font-weight: 500;
+}
+
+.historyStatus.completed {
+    background-color: #d1fae5;
+    color: #065f46;
+}
+
+/* Listings Styles */
+.listingsGrid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 1.5rem;
+}
+
+.listingCard {
+    background-color: #f9fafb;
+    border-radius: 12px;
+    padding: 1.25rem;
+    position: relative;
+    transition: all 0.2s;
+}
+
+.listingCard:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+
+.listingStatus {
+    position: absolute;
+    top: 1rem;
+    right: 1rem;
+}
+
+.statusBadge {
+    padding: 0.25rem 0.75rem;
+    border-radius: 20px;
+    font-size: 0.75rem;
+    font-weight: 500;
+}
+
+.statusBadge.active {
+    background-color: #dbeafe;
+    color: #6AA6DA;
+}
+
+.statusBadge.sold {
+    background-color: #fee2e2;
+    color: #991b1b;
+}
+
+.listingInfo h4 {
+    margin: 0 0 0.5rem 0;
+    color: #1f2937;
+    font-size: 1.1rem;
+    padding-right: 4rem;
+}
+
+.listingPrice {
+    font-size: 1.25rem;
+    font-weight: bold;
+    color: #6AA6DA;
+    margin: 0.5rem 0;
+}
+
+.listingStats {
+    display: flex;
+    gap: 1rem;
+    font-size: 0.75rem;
+    color: #6b7280;
+    margin-top: 0.75rem;
+}
+
+.listingStats i {
+    margin-right: 0.25rem;
+}
+
+.emptyState {
+    text-align: center;
+    padding: 3rem;
+    color: #6b7280;
+}
+
+.emptyState i {
+    font-size: 3rem;
+    margin-bottom: 1rem;
+    color: #9ca3af;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .profileContainer {
+        padding: 1rem;
+    }
+
+    .profileCard {
+        grid-template-columns: 1fr;
+        gap: 1.5rem;
+    }
+
+    .statsSection {
+        padding-left: 0;
+        border-left: none;
+        border-top: 1px solid #e5e7eb;
+        padding-top: 1.5rem;
+    }
+
+    .profileLeft {
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+    }
+
+    .userInfo {
+        text-align: center;
+    }
+
+    .statsGrid {
+        grid-template-columns: repeat(3, 1fr);
+    }
+
+    .listingsGrid {
+        grid-template-columns: 1fr;
+    }
+
+    .historyMeta {
+        flex-direction: column;
+        gap: 0.25rem;
+    }
+}
