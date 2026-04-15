@@ -20,7 +20,7 @@ import LoginForm from './components/LoginForm';
 import SignupForm from './components/SignupForm';
 import Dashboard from './components/Dashboard';
 import MockCreateListing from './components/MockCreateListing';
-
+import ViewRating from "./components/ViewRating.jsx";
 import ViewListingAzure from './pages/ViewListingAzure';
 import CreateListingAzure from './components/CreateListingAzure';
 import EditListingAzure from './pages/EditListingAzure';
@@ -146,6 +146,7 @@ export function AppRoutes() {
       <Route path="/dashboard" element={<Dashboard />} />
       <Route path="/view-listing" element={<ViewListing />} />
       <Route path="/create-listing" element={<MockCreateListing />} />
+      <Route path="/view-rating" element={<ViewRating userId="sampleUserId" />} />
       <Route path="/edit-listing/:id" element={<EditListing />} />
       <Route path="/access-denied" element={<AccessDenied />} />
       <Route
