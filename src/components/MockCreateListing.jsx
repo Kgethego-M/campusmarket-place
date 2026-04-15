@@ -1,7 +1,7 @@
 import { useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 
-import { auth } from "../firebase.mock.js";
+import { auth } from "../firebase.js";
 
 import {
     validateListing,
