@@ -1,7 +1,8 @@
 import { useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 
-import { auth } from "../firebase.js";
+import { auth, db } from "../firebase.js";
+import { collection, addDoc, serverTimestamp } from "firebase/firestore";
 
 import {
     validateListing,
@@ -12,6 +13,31 @@ import {
 } from "../utils/create-listing.utils.js";
 import NavBar from "./NavBarTemp.jsx";
 import styles from "./CreateListing.module.css";
+
+const CLOUDINARY_CLOUD_NAME = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME; 
+const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
+
+/**
+ * Uploads a single image file to Cloudinary using an unsigned upload preset.
+ * Returns the secure HTTPS URL of the uploaded image.
+ */
+async function uploadToCloudinary(file) {
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("upload_preset", CLOUDINARY_UPLOAD_PRESET);
+
+    const res = await fetch(
+        `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`,
+        { method: "POST", body: formData }
+    );
+
+    if (!res.ok) {
+        throw new Error(`Cloudinary upload failed: ${res.statusText}`);
+    }
+
+    const data = await res.json();
+    return data.secure_url; // permanent HTTPS URL, safe to store in Firestore
+}
 
 export default function CreateListing() {
     const navigate = useNavigate();
@@ -28,6 +54,7 @@ export default function CreateListing() {
     const [imageFiles, setImageFiles] = useState([]);
     const [imagePreviews, setImagePreviews] = useState([]);
     const [loading, setLoading] = useState(false);
+    const [uploadProgress, setUploadProgress] = useState("");
 
     function handleImageChange(e) {
         const files = Array.from(e.target.files);
@@ -66,11 +93,11 @@ export default function CreateListing() {
 
         let finalCategory = category;
         if (category === "other") {
-            if (!otherCategory) {
+            if (!otherCategory.trim()) {
                 alert("Please specify the category.");
                 return;
             }
-            finalCategory = otherCategory;
+            finalCategory = otherCategory.trim();
         } else {
             finalCategory = categoryMap[category] || category;
         }
@@ -78,10 +105,18 @@ export default function CreateListing() {
         setLoading(true);
 
         try {
-            const photoPreviews = imageFiles.map((f) => URL.createObjectURL(f));
+            // 1. Upload each photo to Cloudinary one by one, showing progress
+            const photoURLs = [];
+            for (let i = 0; i < imageFiles.length; i++) {
+                setUploadProgress(`Uploading photo ${i + 1} of ${imageFiles.length}...`);
+                const url = await uploadToCloudinary(imageFiles[i]);
+                photoURLs.push(url);
+            }
 
-            const newListing = {
-                id: `listing-${Date.now()}`,
+            setUploadProgress("Saving listing...");
+
+            // 2. Save listing to Firestore — photos array holds Cloudinary URLs
+            const listingData = {
                 title,
                 description,
                 specification,
@@ -89,21 +124,24 @@ export default function CreateListing() {
                 category: finalCategory,
                 condition: conditionMap[condition],
                 listingType: listingTypeMap[listingType],
-                photos: photoPreviews,
+                photos: photoURLs,
                 sellerUID: user.uid,
-                timestamp: Date.now(),
+                sellerName: user.displayName || "Anonymous",
+                sellerAvatar: user.photoURL || "",
+                status: "active",
+                timestamp: serverTimestamp(),
             };
 
-            const existing = JSON.parse(sessionStorage.getItem("listings") || "[]");
-            sessionStorage.setItem("listings", JSON.stringify([...existing, newListing]));
+            await addDoc(collection(db, "listings"), listingData);
 
             alert("Successfully created listing!");
             navigate("/view-listing");
         } catch (err) {
-            console.error(err);
+            console.error("Failed to create listing:", err);
             alert("Failed to create listing. Please try again.");
         } finally {
             setLoading(false);
+            setUploadProgress("");
         }
     }
 
@@ -118,7 +156,7 @@ export default function CreateListing() {
 
             <form className={styles.form} onSubmit={handleSubmit}>
 
-                {/* Photos — top of form */}
+                {/* Photos */}
                 <label className={styles.label}>Photos</label>
                 <input
                     ref={fileInputRef}
@@ -173,7 +211,7 @@ export default function CreateListing() {
                     rows={4}
                     value={description}
                     onChange={(e) => setDescription(e.target.value)}
-                    placeholder="Describe the item condition, features and any relevent details"
+                    placeholder="Describe the item condition, features and any relevant details"
                     required
                 />
 
@@ -187,7 +225,7 @@ export default function CreateListing() {
                     placeholder="Enter product specifications and details..."
                 />
 
-                {/* Price + Listing Type — 2 columns */}
+                {/* Price + Listing Type */}
                 <div className={styles.row}>
                     <div>
                         <label className={styles.label}>Price</label>
@@ -196,7 +234,7 @@ export default function CreateListing() {
                             type="number"
                             value={price}
                             onChange={(e) => setPrice(e.target.value)}
-                            placeholder="Select"
+                            placeholder="R 0.00"
                             min="0"
                             step="0.01"
                             required={listingType !== "trade"}
@@ -218,7 +256,7 @@ export default function CreateListing() {
                     </div>
                 </div>
 
-                {/* Category + Condition — 2 columns */}
+                {/* Category + Condition */}
                 <div className={styles.row}>
                     <div>
                         <label className={styles.label}>Category</label>
@@ -272,8 +310,13 @@ export default function CreateListing() {
                     </div>
                 </div>
 
+                {/* Upload progress */}
+                {uploadProgress && (
+                    <p className={styles.uploadProgress}>{uploadProgress}</p>
+                )}
+
                 <button type="submit" className={styles.submitBtn} disabled={loading}>
-                    {loading ? "Creating..." : "Publish Listing"}
+                    {loading ? uploadProgress || "Publishing..." : "Publish Listing"}
                 </button>
             </form>
         </div>
