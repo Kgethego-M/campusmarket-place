@@ -22,9 +22,6 @@ import Dashboard from './components/Dashboard';
 import CreateListing from './components/CreateListing';
 import ViewRating from './components/ViewRating';
 import Chat from './components/Chat';
-import ViewListingAzure from './pages/ViewListingAzure';
-import CreateListingAzure from './components/CreateListingAzure';
-import EditListingAzure from './pages/EditListingAzure';
 import Profile from './components/Profile';
 import ProfileListingCard from './components/ProfileListingCard';
 
@@ -165,9 +162,6 @@ export function AppRoutes() {
           </ProtectedRoute>
         }
       />
-      <Route path="/azure/view-listing" element={<ViewListingAzure />} />
-      <Route path="/azure/create-listing" element={<CreateListingAzure />} />
-      <Route path="/azure/edit-listing/:id" element={<EditListingAzure />} />
     </Routes>
   );
 }
