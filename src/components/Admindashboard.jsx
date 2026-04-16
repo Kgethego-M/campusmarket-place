@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { auth, db } from "../firebase";
 import { signOut, onAuthStateChanged } from "firebase/auth";
 import { doc, getDoc, collection, getDocs, query, orderBy, updateDoc, where } from "firebase/firestore";
-import styles from "./AdminDashboard.module.css";
+import styles from "./Admindashboard.module.css";
 
 export default function AdminDashboard() {
     const navigate = useNavigate();

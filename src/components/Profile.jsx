@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { auth, db, storage } from '../firebase';
-import { doc, getDoc, updateDoc } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, collection, query, where, getDocs, deleteDoc } from 'firebase/firestore';
 import { updateProfile } from 'firebase/auth';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
+import ProfileListingCard from './ProfileListingCard';
 import styles from './Profile.module.css';
 
 const Profile = () => {
@@ -34,6 +35,8 @@ const Profile = () => {
     const [history, setHistory] = useState([]);
     const [listings, setListings] = useState([]);
     const [activeTab, setActiveTab] = useState('history');
+    const [editingListingId, setEditingListingId] = useState(null);
+    const [editListingData, setEditListingData] = useState({});
 
     useEffect(() => {
         const loggedInUserId = localStorage.getItem('loggedInUserId');
@@ -53,13 +56,15 @@ const Profile = () => {
             }
 
             const userId = user.uid;
+            
             const docRef = doc(db, 'users', userId);
             const docSnap = await getDoc(docRef);
+            
+            await fetchUserListings(userId);
             
             if (docSnap.exists()) {
                 const userData = docSnap.data();
                 
-                // Set profile data
                 setProfileData({
                     firstName: userData.firstName || '',
                     lastName: userData.lastName || '',
@@ -75,16 +80,13 @@ const Profile = () => {
                     totalRatings: userData.totalRatings || 0
                 });
                 
-                // Set edit form data
                 setEditFormData({
                     firstName: userData.firstName || '',
                     lastName: userData.lastName || '',
                     bio: userData.bio || ''
                 });
                 
-                // Load history and listings
                 setHistory(userData.history || []);
-                setListings(userData.listings || []);
             } else {
                 console.log("No document found matching ID");
                 navigate('/login');
@@ -93,6 +95,27 @@ const Profile = () => {
             console.error("Error fetching user data:", error);
         } finally {
             setLoading(false);
+        }
+    };
+
+    const fetchUserListings = async (userId) => {
+        try {
+            const listingsRef = collection(db, "listings");
+            const q = query(listingsRef, where("sellerUID", "==", userId));
+            const querySnapshot = await getDocs(q);
+            
+            const userListings = querySnapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data(),
+                specification: doc.data().specification || '',  // FIXED: use specification (singular)
+                date: doc.data().timestamp?.toDate?.() || new Date(doc.data().timestamp),
+                views: doc.data().views || 0,
+                likes: doc.data().likes || 0
+            }));
+            
+            setListings(userListings);
+        } catch (error) {
+            console.error("Error fetching user listings:", error);
         }
     };
 
@@ -115,14 +138,11 @@ const Profile = () => {
                 await uploadBytes(storageRef, file);
                 const photoURL = await getDownloadURL(storageRef);
                 
-                // Update Firebase Auth profile
                 await updateProfile(user, { photoURL });
                 
-                // Update Firestore
                 const userDocRef = doc(db, 'users', user.uid);
                 await updateDoc(userDocRef, { photoURL });
                 
-                // Update local state
                 setProfileData(prev => ({
                     ...prev,
                     photoURL: photoURL
@@ -141,11 +161,9 @@ const Profile = () => {
             const user = auth.currentUser;
             if (!user) return;
             
-            // Update display name in Firebase Auth
             const fullName = `${editFormData.firstName} ${editFormData.lastName}`;
             await updateProfile(user, { displayName: fullName });
             
-            // Update Firestore
             const userDocRef = doc(db, 'users', user.uid);
             await updateDoc(userDocRef, {
                 firstName: editFormData.firstName,
@@ -154,7 +172,6 @@ const Profile = () => {
                 updatedAt: new Date()
             });
             
-            // Update local state
             setProfileData(prev => ({
                 ...prev,
                 firstName: editFormData.firstName,
@@ -179,6 +196,77 @@ const Profile = () => {
         setIsEditing(false);
     };
 
+    const handleDeleteListing = async (listingId, photoUrls = []) => {
+        if (!window.confirm('Are you sure you want to delete this listing? This action cannot be undone.')) {
+            return;
+        }
+        
+        try {
+            for (const photoUrl of photoUrls) {
+                try {
+                    const photoRef = ref(storage, photoUrl);
+                    await deleteObject(photoRef);
+                } catch (error) {
+                    console.error("Error deleting image:", error);
+                }
+            }
+            
+            const listingRef = doc(db, 'listings', listingId);
+            await deleteDoc(listingRef);
+            
+            setListings(prev => prev.filter(listing => listing.id !== listingId));
+            
+            alert('Listing deleted successfully!');
+        } catch (error) {
+            console.error("Error deleting listing:", error);
+            alert('Failed to delete listing. Please try again.');
+        }
+    };
+
+    const handleEditListing = (listing) => {
+        setEditingListingId(listing.id);
+        setEditListingData({
+            title: listing.title || '',
+            price: listing.price || '',
+            condition: listing.condition || '',
+            listingType: listing.listingType || '',
+            specification: listing.specification || '',  // FIXED: use specification (singular)
+            description: listing.description || ''
+        });
+    };
+
+    const handleSaveListing = async (listingId) => {
+        try {
+            const listingRef = doc(db, 'listings', listingId);
+            await updateDoc(listingRef, {
+                title: editListingData.title,
+                price: parseFloat(editListingData.price),
+                condition: editListingData.condition,
+                listingType: editListingData.listingType,
+                specification: editListingData.specification,  // FIXED: use specification (singular)
+                description: editListingData.description,
+                updatedAt: new Date()
+            });
+            
+            setListings(prev => prev.map(listing => 
+                listing.id === listingId 
+                    ? { 
+                        ...listing, 
+                        ...editListingData, 
+                        price: parseFloat(editListingData.price) 
+                    }
+                    : listing
+            ));
+            
+            setEditingListingId(null);
+            setEditListingData({});
+            alert('Listing updated successfully!');
+        } catch (error) {
+            console.error("Error updating listing:", error);
+            alert('Failed to update listing. Please try again.');
+        }
+    };
+    
     const renderStars = (rating) => {
         const fullStars = Math.floor(rating);
         const hasHalfStar = rating % 1 >= 0.5;
@@ -220,7 +308,6 @@ const Profile = () => {
             {/* Main Profile Card */}
             <div className={styles.profileCard}>
                 <div className={styles.profileLeft}>
-                    {/* Profile Picture Section */}
                     <div className={styles.profilePictureSection}>
                         <div className={styles.profilePictureWrapper}>
                             <img 
@@ -228,10 +315,16 @@ const Profile = () => {
                                 alt="Profile" 
                                 className={styles.profilePicture}
                             />
+                            <input
+                                ref={fileInputRef}
+                                type="file"
+                                accept="image/*"
+                                style={{ display: 'none' }}
+                                onChange={handlePhotoUpload}
+                            />
                         </div>
                     </div>
 
-                    {/* User Info Section */}
                     <div className={styles.userInfo}>
                         {isEditing ? (
                             <div className={styles.editForm}>
@@ -289,7 +382,6 @@ const Profile = () => {
                     </div>
                 </div>
 
-                {/* Stats Section */}
                 <div className={styles.statsSection}>
                     <div className={styles.rating}>
                         <div className={styles.ratingStars}>
@@ -353,7 +445,7 @@ const Profile = () => {
                         className={`${styles.tab} ${activeTab === 'listings' ? styles.activeTab : ''}`}
                         onClick={() => setActiveTab('listings')}
                     >
-                        <i className="fas fa-list"></i> My Listings
+                        <i className="fas fa-list"></i> My Listings ({listings.length})
                     </button>
                 </div>
 
@@ -393,34 +485,39 @@ const Profile = () => {
                         )}
                     </div>
                 )}
-
                 {/* My Listings Tab Content */}
                 {activeTab === 'listings' && (
                     <div className={styles.tabContent}>
                         {listings.length === 0 ? (
                             <div className={styles.emptyState}>
                                 <i className="fas fa-box-open"></i>
-                                <p>No listings yet</p>
+                                <p>You haven't listed any items yet</p>
+                                <button 
+                                    className={styles.createListingButton}
+                                    onClick={() => navigate('/create-listing')}
+                                >
+                                    <i className="fas fa-plus"></i> Create Your First Listing
+                                </button>
                             </div>
                         ) : (
                             <div className={styles.listingsGrid}>
                                 {listings.map(listing => (
-                                    <div key={listing.id} className={styles.listingCard}>
-                                        <div className={styles.listingStatus}>
-                                            <span className={`${styles.statusBadge} ${styles[listing.status]}`}>
-                                                {listing.status}
-                                            </span>
-                                        </div>
-                                        <div className={styles.listingInfo}>
-                                            <h4>{listing.title}</h4>
-                                            <p className={styles.listingPrice}>{listing.price}</p>
-                                            <div className={styles.listingStats}>
-                                                <span><i className="fas fa-eye"></i> {listing.views || 0}</span>
-                                                <span><i className="fas fa-heart"></i> {listing.likes || 0}</span>
-                                                <span><i className="fas fa-calendar"></i> {new Date(listing.date).toLocaleDateString()}</span>
-                                            </div>
-                                        </div>
-                                    </div>
+                                    <ProfileListingCard
+                                        key={listing.id}
+                                        listing={listing}
+                                        isEditing={editingListingId === listing.id}
+                                        editData={editListingData}
+                                        onEdit={() => handleEditListing(listing)}
+                                        onDelete={() => handleDeleteListing(listing.id, listing.photos)}
+                                        onEditChange={(field, value) => 
+                                            setEditListingData(prev => ({ ...prev, [field]: value }))
+                                        }
+                                        onSave={() => handleSaveListing(listing.id)}
+                                        onCancel={() => {
+                                            setEditingListingId(null);
+                                            setEditListingData({});
+                                        }}
+                                    />
                                 ))}
                             </div>
                         )}

@@ -1,4 +1,3 @@
-App.jsx
 import React, { useState, useEffect } from 'react';
 import {
   BrowserRouter,
@@ -13,18 +12,22 @@ import { auth, db } from './firebase';
 
 import AdminUsers from './pages/AdminUsers';
 import AccessDenied from './components/AccessDenied';
-import ViewListing from './components/MockViewListing';
+import ViewListing from './components/ViewListing.jsx';
 import EditListing from './pages/EditListing';
 import LandingPage from './components/LandingPage';
 import LoginForm from './components/LoginForm';
 import SignupForm from './components/SignupForm';
 import AdminDashboard from './components/Admindashboard';
 import Dashboard from './components/Dashboard';
-import MockCreateListing from './components/MockCreateListing';
+import CreateListing from './components/CreateListing';
+import ViewRating from './components/ViewRating';
+import Chat from './components/Chat';
 import ViewListingAzure from './pages/ViewListingAzure';
-import Profile from './components/Profile';
 import CreateListingAzure from './components/CreateListingAzure';
 import EditListingAzure from './pages/EditListingAzure';
+import Profile from './components/Profile';
+import ProfileListingCard from './components/ProfileListingCard';
+
 
 // Protects routes based on role
 function ProtectedRoute({ children, allowedRoles }) {
@@ -148,7 +151,10 @@ export function AppRoutes() {
       <Route path="/dashboard" element={<Dashboard />} />
       <Route path="/profile" element={<Profile />} />
       <Route path="/view-listing" element={<ViewListing />} />
-      <Route path="/create-listing" element={<MockCreateListing />} />
+      <Route path="/create-listing" element={<CreateListing />} />
+      <Route path="/view-rating" element={<ViewRating userId="sampleUserId" />} />
+      <Route path="/chat" element={<Chat />} />
+      <Route path="/chat/:transactionId" element={<Chat />} />
       <Route path="/edit-listing/:id" element={<EditListing />} />
       <Route path="/access-denied" element={<AccessDenied />} />
       <Route

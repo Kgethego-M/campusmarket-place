@@ -226,6 +226,7 @@ export default function CreateListing() {
                 />
 
                 {/* Price + Listing Type */}
+                {/* Price + Listing Type */}
                 <div className={styles.row}>
                     <div>
                         <label className={styles.label}>Price</label>
@@ -234,7 +235,7 @@ export default function CreateListing() {
                             type="number"
                             value={price}
                             onChange={(e) => setPrice(e.target.value)}
-                            placeholder="R 0.00"
+                            placeholder="Enter price"
                             min="0"
                             step="0.01"
                             required={listingType !== "trade"}
