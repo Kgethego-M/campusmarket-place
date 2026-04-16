@@ -24,6 +24,7 @@ import CreateListing from './components/CreateListing';
 import ViewRating from './components/ViewRating';
 
 import ViewListingAzure from './pages/ViewListingAzure';
+import Profile from './components/Profile';
 import CreateListingAzure from './components/CreateListingAzure';
 import EditListingAzure from './pages/EditListingAzure';
 
@@ -147,6 +148,7 @@ export function AppRoutes() {
       <Route path="/signup" element={<SignupWrapper />} />
       <Route path="/admin" element={<AdminDashboard />} />
       <Route path="/dashboard" element={<Dashboard />} />
+      <Route path="/profile" element={<Profile />} />
       <Route path="/view-listing" element={<ViewListing />} />
       <Route path="/create-listing" element={<CreateListing />} />
       <Route path="/profile" element={<Profile />} />
