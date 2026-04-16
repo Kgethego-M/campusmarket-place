@@ -17,6 +17,7 @@ import EditListing from './pages/EditListing';
 import LandingPage from './components/LandingPage';
 import LoginForm from './components/LoginForm';
 import SignupForm from './components/SignupForm';
+import AdminDashboard from './components/Admindashboard';
 import Dashboard from './components/Dashboard';
 import Profile from './components/Profile';
 import CreateListing from './components/CreateListing';
@@ -144,13 +145,13 @@ export function AppRoutes() {
       <Route path="/" element={<LandingPageWrapper />} />
       <Route path="/login" element={<LoginWrapper />} />
       <Route path="/signup" element={<SignupWrapper />} />
+      <Route path="/admin" element={<AdminDashboard />} />
       <Route path="/dashboard" element={<Dashboard />} />
       <Route path="/view-listing" element={<ViewListing />} />
       <Route path="/create-listing" element={<CreateListing />} />
       <Route path="/view-rating" element={<ViewRating userId="sampleUserId" />} />
       <Route path="/edit-listing/:id" element={<EditListing />} />
       <Route path="/access-denied" element={<AccessDenied />} />
-      <Route path="/profile" element={<Profile />} />
       <Route
         path="/admin/users"
         element={
