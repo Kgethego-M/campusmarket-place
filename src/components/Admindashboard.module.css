@@ -149,26 +149,23 @@
 }
 
 /* Avatar */
-.avatarWrap { position: relative; }
+.menuWrap { position: relative; }
 
-.avatar {
-    width: 36px;
-    height: 36px;
-    border-radius: 50%;
-    background-color: #6AA6DA;
+.iconButton {
+    background: none;
+    border: none;
+    color: #4b5563;
+    font-size: 1.2rem;
+    cursor: pointer;
+    padding: 0.5rem;
+    border-radius: 8px;
+    transition: all 0.2s;
+    position: relative;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 0.85rem;
-    font-weight: 700;
-    color: #fff;
-    cursor: pointer;
-    overflow: hidden;
-    flex-shrink: 0;
-    transition: box-shadow 0.15s;
 }
-.avatar:hover { box-shadow: 0 0 0 3px rgba(106,166,218,0.3); }
-.avatar img { width: 100%; height: 100%; object-fit: cover; }
+.iconButton:hover { box-shadow: 0 0 0 3px rgba(106,166,218,0.3); }
 
 /* Dropdown */
 .dropdown {

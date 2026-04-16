@@ -284,10 +284,7 @@
     justify-content: center;
 }
 
-.iconButton:hover {
-    background-color: #f3f4f6;
-    color: #6AA6DA;
-}
+.iconButton:hover { box-shadow: 0 0 0 3px rgba(106,166,218,0.3); }
 
 /* ── Notification Badge ── */
 .notificationBadge {
