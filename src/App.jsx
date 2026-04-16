@@ -22,6 +22,7 @@ import AdminDashboard from './components/Admindashboard';
 import Dashboard from './components/Dashboard';
 import MockCreateListing from './components/MockCreateListing';
 import ViewListingAzure from './pages/ViewListingAzure';
+import Profile from './components/Profile';
 import CreateListingAzure from './components/CreateListingAzure';
 import EditListingAzure from './pages/EditListingAzure';
 
@@ -145,6 +146,7 @@ export function AppRoutes() {
       <Route path="/signup" element={<SignupWrapper />} />
       <Route path="/admin" element={<AdminDashboard />} />
       <Route path="/dashboard" element={<Dashboard />} />
+      <Route path="/profile" element={<Profile />} />
       <Route path="/view-listing" element={<ViewListing />} />
       <Route path="/create-listing" element={<MockCreateListing />} />
       <Route path="/edit-listing/:id" element={<EditListing />} />
