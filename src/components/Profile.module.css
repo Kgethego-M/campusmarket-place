@@ -552,3 +552,278 @@
         gap: 0.25rem;
     }
 }
+
+/* Listing Image */
+.listingImage {
+    width: 100%;
+    height: 160px;
+    background-color: #f3f4f6;
+    border-radius: 8px;
+    overflow: hidden;
+    margin-bottom: 1rem;
+}
+
+.listingImage img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.noImage {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #9ca3af;
+    font-size: 0.875rem;
+}
+
+/* Listing Actions */
+.listingActions {
+    display: flex;
+    gap: 0.75rem;
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px solid #e5e7eb;
+}
+
+.editListingButton,
+.deleteListingButton,
+.createListingButton {
+    flex: 1;
+    padding: 0.5rem;
+    border: none;
+    border-radius: 6px;
+    font-size: 0.875rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+}
+
+.editListingButton {
+    background-color: #6AA6DA;
+    color: white;
+}
+
+.editListingButton:hover {
+    background-color: #5a96ca;
+}
+
+.deleteListingButton {
+    background-color: #ef4444;
+    color: white;
+}
+
+.deleteListingButton:hover {
+    background-color: #dc2626;
+}
+
+.createListingButton {
+    background-color: #6AA6DA;
+    color: white;
+    margin-top: 1rem;
+    padding: 0.75rem 1.5rem;
+    display: inline-flex;
+    width: auto;
+}
+
+.createListingButton:hover {
+    background-color: #5a96ca;
+}
+
+/* Edit Listing Form */
+.editListingForm {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.editInput,
+.editTextarea {
+    padding: 0.625rem;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    font-size: 0.875rem;
+    font-family: inherit;
+}
+
+.editInput:focus,
+.editTextarea:focus {
+    outline: none;
+    border-color: #6AA6DA;
+    box-shadow: 0 0 0 3px rgba(106, 166, 218, 0.1);
+}
+
+.listingCondition {
+    font-size: 0.875rem;
+    color: #6b7280;
+    margin: 0.5rem 0;
+}
+
+.listingCondition i {
+    margin-right: 0.25rem;
+    color: #6AA6DA;
+}
+
+/* Listing Card Wrapper */
+.listingCardWrapper {
+    position: relative;
+    background: white;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.listingCardWrapper:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+
+/* Listing Actions - Purple Delete Button */
+.listingActions {
+    display: flex;
+    gap: 0.75rem;
+    padding: 1rem;
+    border-top: 1px solid #e5e7eb;
+    background-color: #f9fafb;
+}
+
+.editListingButton,
+.deleteListingButton,
+.createListingButton {
+    flex: 1;
+    padding: 0.625rem;
+    border: none;
+    border-radius: 8px;
+    font-size: 0.875rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+}
+
+.editListingButton {
+    background-color: #6AA6DA;
+    color: white;
+}
+
+.editListingButton:hover {
+    background-color: #5a96ca;
+    transform: translateY(-1px);
+}
+
+.deleteListingButton {
+    background-color: #9b59b6; /* Nice purple color */
+    color: white;
+}
+
+.deleteListingButton:hover {
+    background-color: #8e44ad;
+    transform: translateY(-1px);
+}
+
+.createListingButton {
+    background-color: #6AA6DA;
+    color: white;
+    margin-top: 1rem;
+    padding: 0.75rem 1.5rem;
+    display: inline-flex;
+    width: auto;
+}
+
+.createListingButton:hover {
+    background-color: #5a96ca;
+    transform: translateY(-1px);
+}
+
+/* Edit Listing Form */
+.editListingForm {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    padding: 1rem;
+}
+
+.editInput,
+.editTextarea {
+    padding: 0.625rem;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    font-size: 0.875rem;
+    font-family: inherit;
+}
+
+.editInput:focus,
+.editTextarea:focus {
+    outline: none;
+    border-color: #6AA6DA;
+    box-shadow: 0 0 0 3px rgba(106, 166, 218, 0.1);
+}
+
+/* Listings Grid */
+.listingsGrid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 1.5rem;
+}
+
+/* Empty State */
+.emptyState {
+    text-align: center;
+    padding: 3rem;
+    color: #6b7280;
+}
+
+.emptyState i {
+    font-size: 3rem;
+    margin-bottom: 1rem;
+    color: #9ca3af;
+}
+
+/* Edit Actions */
+.editActions {
+    display: flex;
+    gap: 1rem;
+    margin-top: 0.5rem;
+}
+
+.saveButton {
+    background-color: #E1E5AC;
+    color: #333;
+    flex: 1;
+    padding: 0.625rem;
+    border: none;
+    border-radius: 8px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.saveButton:hover {
+    background-color: #d4d89e;
+}
+
+.cancelButton {
+    background-color: #e5e7eb;
+    color: #333;
+    flex: 1;
+    padding: 0.625rem;
+    border: none;
+    border-radius: 8px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.cancelButton:hover {
+    background-color: #d1d5db;
+}
