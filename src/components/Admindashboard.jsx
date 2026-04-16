@@ -165,24 +165,20 @@ export default function AdminDashboard() {
                         )}
                     </button>
 
-                    <div className={styles.avatarWrap} ref={dropdownRef}>
-                        <div
-                            className={styles.avatar}
+                    <div className={styles.menuWrap} ref={dropdownRef}>
+                        <button
+                            className={styles.iconButton}
                             onClick={() => !isLoggingOut && setDropdownOpen(v => !v)}
                             title={adminUser.name}
+                            
                         >
-                            {adminUser.photoURL
-                                ? <img src={adminUser.photoURL} alt={adminUser.name}
-                                       onError={e => { e.currentTarget.style.display = "none"; }} />
-                                : <span>{adminUser.initials}</span>
-                            }
-                        </div>
+                            <i className="fa-solid fa-bars"></i>
+                        </button>
 
                         {dropdownOpen && !isLoggingOut && (
                             <div className={styles.dropdown}>
                                 <div className={styles.ddHeader}>
                                     <span className={styles.ddName}>{adminUser.name}</span>
-                                    <span className={styles.ddEmail}>{adminUser.email}</span>
                                     <span className={styles.ddRole}>Administrator</span>
                                 </div>
                                 <div className={styles.ddDivider} />
