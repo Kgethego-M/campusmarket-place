@@ -1,5 +1,11 @@
 import { useEffect, useState } from "react";
-import { fetchListings } from "../api/listings.js";
+
+// --- MOCK IMPORTS (remove these when switching back to Firebase) ---
+import { mockListings } from "../mockData.js";
+
+// --- FIREBASE IMPORTS (uncomment these when switching back to Firebase) ---
+// import { db } from "../firebase.js";
+// import { collection, getDocs, orderBy, query } from "firebase/firestore";
 
 import { validateListingData } from "../utils/view-listing.utils.js";
 import ListingCard from "./ListingCard.jsx";
@@ -26,12 +32,12 @@ const CATEGORIES = [
 ];
 
 const PRICE_RANGES = [
-    { label: "All", min: 0, max: Infinity },
-    { label: "Under R100", min: 0, max: 100 },
-    { label: "R100 – R300", min: 100, max: 300 },
-    { label: "R300 – R500", min: 300, max: 500 },
-    { label: "R500 – R1000", min: 500, max: 1000 },
-    { label: "Over R1000", min: 1000, max: Infinity },
+    { label: "All",          min: 0,    max: Infinity },
+    { label: "Under R100",   min: 0,    max: 100 },
+    { label: "R100 – R300",  min: 100,  max: 300 },
+    { label: "R300 – R500",  min: 300,  max: 500 },
+    { label: "R500 – R1000", min: 500,  max: 1000 },
+    { label: "Over R1000",       min: 1000, max: Infinity },
 ];
 
 export default function ViewListings() {
@@ -44,25 +50,34 @@ export default function ViewListings() {
     const [priceFilter, setPriceFilter] = useState("All");
     const [showFilters, setShowFilters] = useState(false);
 
-    // ✅ FIXED: renamed local function to avoid recursion
+    // ── Fetch & merge listings ──────────────────────────────────────────────
     useEffect(() => {
-        async function loadListings() {
+        async function fetchListings() {
             try {
-                const data = await fetchListings();
+                const stored    = JSON.parse(sessionStorage.getItem("listings") || "[]");
+                const storedIds = new Set(stored.map((l) => l.id));
 
-                const normalise = (listing) => ({
-                    ...listing,
-                    imageUrl: listing.images || null,
-                    sellerName: listing.sellerName || "Student",
+                const normalise = (l) => ({
+                    ...l,
+                    imageUrl:   l.imageUrl || (l.photos && l.photos[0]) || null,
+                    sellerName: l.sellerName || "Student",
                 });
 
-                const valid = data
-                    .map(normalise)
-                    .filter((listing) => validateListingData(listing).valid);
+                const merged = [
+                    ...stored.map(normalise),
+                    ...mockListings.filter((l) => !storedIds.has(l.id)).map(normalise),
+                ];
 
+                // --- FIREBASE FETCH (uncomment when switching back) ---
+                // const q    = query(collection(db, "listings"), orderBy("timestamp", "desc"));
+                // const snap = await getDocs(q);
+                // const merged = snap.docs.map(d => normalise({ id: d.id, ...d.data() }));
+                // --- END FIREBASE FETCH ---
+
+                const valid = merged.filter((l) => validateListingData(l).valid);
                 setListings(valid);
             } catch (err) {
-                console.error("Failed to fetch listings:", err);
+                console.error("Failed to fetch listings from Firebase:", err);
             } finally {
                 setLoading(false);
             }
@@ -77,33 +92,14 @@ export default function ViewListings() {
 
     const filtered = listings.filter((listing) => {
         const matchSearch =
-            listing.title?.toLowerCase().includes(search.toLowerCase()) ||
-            listing.category?.toLowerCase().includes(search.toLowerCase());
-
-        const matchType =
-            typeFilter === "All" ||
-            listing.listingType === typeFilter;
-
-        const matchCond =
-            condFilter === "All" ||
-            listing.condition === condFilter;
-
-        const matchCat =
-            catFilter === "All" ||
-            listing.category === catFilter;
-
-        const matchPrice =
-            priceFilter === "All" ||
-            (listing.price >= activePriceRange.min &&
-                listing.price < activePriceRange.max);
-
-        return (
-            matchSearch &&
-            matchType &&
-            matchCond &&
-            matchCat &&
-            matchPrice
-        );
+            l.title?.toLowerCase().includes(search.toLowerCase()) ||
+            l.category?.toLowerCase().includes(search.toLowerCase());
+        const matchType  = typeFilter  === "All" || l.listingType === typeFilter;
+        const matchCond  = condFilter  === "All" || l.condition   === condFilter;
+        const matchCat   = catFilter   === "All" || l.category    === catFilter;
+        const matchPrice = priceFilter === "All" ||
+            (l.price >= activePriceRange.min && l.price < activePriceRange.max);
+        return matchSearch && matchType && matchCond && matchCat && matchPrice;
     });
 
     const activeFilterCount = [
