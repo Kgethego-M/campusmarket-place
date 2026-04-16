@@ -25,6 +25,9 @@ import Chat from './components/Chat';
 import ViewListingAzure from './pages/ViewListingAzure';
 import CreateListingAzure from './components/CreateListingAzure';
 import EditListingAzure from './pages/EditListingAzure';
+import Profile from './components/Profile';
+import ProfileListingCard from './components/ProfileListingCard';
+
 
 // Protects routes based on role
 function ProtectedRoute({ children, allowedRoles }) {
@@ -149,7 +152,6 @@ export function AppRoutes() {
       <Route path="/profile" element={<Profile />} />
       <Route path="/view-listing" element={<ViewListing />} />
       <Route path="/create-listing" element={<CreateListing />} />
-      <Route path="/profile" element={<Profile />} />
       <Route path="/view-rating" element={<ViewRating userId="sampleUserId" />} />
       <Route path="/chat" element={<Chat />} />
       <Route path="/chat/:transactionId" element={<Chat />} />
