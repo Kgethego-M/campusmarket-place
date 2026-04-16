@@ -73,23 +73,12 @@ export default function CreateListing() {
 
         const parsedPrice = parseFloat(price);
         const validationResult = validateListing({
-            title,
-            description,
-            price: parsedPrice,
-            category,
-            condition,
-            listingType,
+            title, description, price: parsedPrice, category, condition, listingType,
         });
-        if (!validationResult.valid) {
-            alert(validationResult.error);
-            return;
-        }
+        if (!validationResult.valid) { alert(validationResult.error); return; }
 
         const imageResult = validateImages(imageFiles);
-        if (!imageResult.valid) {
-            alert(imageResult.error);
-            return;
-        }
+        if (!imageResult.valid) { alert(imageResult.error); return; }
 
         let finalCategory = category;
         if (category === "other") {
@@ -173,17 +162,13 @@ export default function CreateListing() {
                     {imagePreviews.length > 0 ? (
                         <div className={styles.imagePreview}>
                             {imagePreviews.map((src, i) => (
-                                <img
-                                    key={i}
-                                    src={src}
-                                    alt={`preview-${i}`}
-                                    className={styles.previewImg}
-                                />
+                                <img key={i} src={src} alt={`preview-${i}`} className={styles.previewImg} />
                             ))}
                         </div>
                     ) : (
                         <div className={styles.dropZonePlaceholder}>
-                            <svg className={styles.dropZoneIcon} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                            <svg className={styles.dropZoneIcon} xmlns="http://www.w3.org/2000/svg"
+                                 viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
                                 <rect x="3" y="3" width="18" height="18" rx="2" />
                                 <circle cx="8.5" cy="8.5" r="1.5" />
                                 <path d="M21 15l-5-5L5 21" />
@@ -196,20 +181,15 @@ export default function CreateListing() {
                 {/* Title */}
                 <label className={styles.label}>Title</label>
                 <input
-                    className={styles.input}
-                    type="text"
-                    value={title}
+                    className={styles.input} type="text" value={title}
                     onChange={(e) => setTitle(e.target.value)}
-                    placeholder="E.g Calculus textbook"
-                    required
+                    placeholder="E.g Calculus textbook" required
                 />
 
                 {/* Description */}
                 <label className={styles.label}>Description</label>
                 <textarea
-                    className={styles.textarea}
-                    rows={4}
-                    value={description}
+                    className={styles.textarea} rows={4} value={description}
                     onChange={(e) => setDescription(e.target.value)}
                     placeholder="Describe the item condition, features and any relevant details"
                     required
@@ -218,23 +198,20 @@ export default function CreateListing() {
                 {/* Specification */}
                 <label className={styles.label}>Specification</label>
                 <textarea
-                    className={styles.textarea}
-                    rows={4}
-                    value={specification}
+                    className={styles.textarea} rows={4} value={specification}
                     onChange={(e) => setSpecification(e.target.value)}
                     placeholder="Enter product specifications and details..."
                 />
 
                 {/* Price + Listing Type */}
+                {/* Price + Listing Type */}
                 <div className={styles.row}>
                     <div>
                         <label className={styles.label}>Price</label>
                         <input
-                            className={styles.input}
-                            type="number"
-                            value={price}
+                            className={styles.input} type="number" value={price}
                             onChange={(e) => setPrice(e.target.value)}
-                            placeholder="R 0.00"
+                            placeholder="R Enter price"
                             min="0"
                             step="0.01"
                             required={listingType !== "trade"}
@@ -242,12 +219,8 @@ export default function CreateListing() {
                     </div>
                     <div>
                         <label className={styles.label}>Listing Type</label>
-                        <select
-                            className={styles.select}
-                            value={listingType}
-                            onChange={(e) => setListingType(e.target.value)}
-                            required
-                        >
+                        <select className={styles.select} value={listingType}
+                            onChange={(e) => setListingType(e.target.value)} required>
                             <option value="" disabled>Select</option>
                             <option value="sale">For Sale</option>
                             <option value="trade">For Trade</option>
@@ -260,12 +233,8 @@ export default function CreateListing() {
                 <div className={styles.row}>
                     <div>
                         <label className={styles.label}>Category</label>
-                        <select
-                            className={styles.select}
-                            value={category}
-                            onChange={(e) => setCategory(e.target.value)}
-                            required
-                        >
+                        <select className={styles.select} value={category}
+                            onChange={(e) => setCategory(e.target.value)} required>
                             <option value="" disabled>Select</option>
                             <option value="electronics">Electronics</option>
                             <option value="books">Books</option>
@@ -282,24 +251,15 @@ export default function CreateListing() {
                             <option value="other">Other</option>
                         </select>
                         {category === "other" && (
-                            <input
-                                className={styles.input}
-                                type="text"
-                                value={otherCategory}
+                            <input className={styles.input} type="text" value={otherCategory}
                                 onChange={(e) => setOtherCategory(e.target.value)}
-                                placeholder="Specify category"
-                                style={{ marginTop: "6px" }}
-                            />
+                                placeholder="Specify category" style={{ marginTop: "6px" }} />
                         )}
                     </div>
                     <div>
                         <label className={styles.label}>Condition</label>
-                        <select
-                            className={styles.select}
-                            value={condition}
-                            onChange={(e) => setCondition(e.target.value)}
-                            required
-                        >
+                        <select className={styles.select} value={condition}
+                            onChange={(e) => setCondition(e.target.value)} required>
                             <option value="" disabled>Select</option>
                             <option value="new">New</option>
                             <option value="like_new">Like New</option>

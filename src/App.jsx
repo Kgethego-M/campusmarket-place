@@ -18,8 +18,10 @@ import LandingPage from './components/LandingPage';
 import LoginForm from './components/LoginForm';
 import SignupForm from './components/SignupForm';
 import Dashboard from './components/Dashboard';
-import CreateListing from './components/CreateListing.jsx';
-import ViewRating from "./components/ViewRating.jsx";
+import Profile from './components/Profile';
+import CreateListing from './components/CreateListing';
+import ViewRating from './components/ViewRating';
+
 import ViewListingAzure from './pages/ViewListingAzure';
 import CreateListingAzure from './components/CreateListingAzure';
 import EditListingAzure from './pages/EditListingAzure';
@@ -148,6 +150,7 @@ export function AppRoutes() {
       <Route path="/view-rating" element={<ViewRating userId="sampleUserId" />} />
       <Route path="/edit-listing/:id" element={<EditListing />} />
       <Route path="/access-denied" element={<AccessDenied />} />
+      <Route path="/profile" element={<Profile />} />
       <Route
         path="/admin/users"
         element={
