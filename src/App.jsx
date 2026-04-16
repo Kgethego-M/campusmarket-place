@@ -1,4 +1,4 @@
-// src/App.jsx
+App.jsx
 import React, { useState, useEffect } from 'react';
 import {
   BrowserRouter,
@@ -18,10 +18,9 @@ import EditListing from './pages/EditListing';
 import LandingPage from './components/LandingPage';
 import LoginForm from './components/LoginForm';
 import SignupForm from './components/SignupForm';
+import AdminDashboard from './components/Admindashboard';
 import Dashboard from './components/Dashboard';
 import MockCreateListing from './components/MockCreateListing';
-import Profile from './components/Profile';
-
 import ViewListingAzure from './pages/ViewListingAzure';
 import CreateListingAzure from './components/CreateListingAzure';
 import EditListingAzure from './pages/EditListingAzure';
@@ -144,12 +143,12 @@ export function AppRoutes() {
       <Route path="/" element={<LandingPageWrapper />} />
       <Route path="/login" element={<LoginWrapper />} />
       <Route path="/signup" element={<SignupWrapper />} />
+      <Route path="/admin" element={<AdminDashboard />} />
       <Route path="/dashboard" element={<Dashboard />} />
       <Route path="/view-listing" element={<ViewListing />} />
       <Route path="/create-listing" element={<MockCreateListing />} />
       <Route path="/edit-listing/:id" element={<EditListing />} />
       <Route path="/access-denied" element={<AccessDenied />} />
-      <Route path="/profile" element={<Profile />} />
       <Route
         path="/admin/users"
         element={
