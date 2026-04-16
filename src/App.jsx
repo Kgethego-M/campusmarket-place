@@ -19,10 +19,9 @@ import LoginForm from './components/LoginForm';
 import SignupForm from './components/SignupForm';
 import AdminDashboard from './components/Admindashboard';
 import Dashboard from './components/Dashboard';
-import Profile from './components/Profile';
 import CreateListing from './components/CreateListing';
 import ViewRating from './components/ViewRating';
-
+import Chat from './components/Chat';
 import ViewListingAzure from './pages/ViewListingAzure';
 import CreateListingAzure from './components/CreateListingAzure';
 import EditListingAzure from './pages/EditListingAzure';
@@ -152,6 +151,8 @@ export function AppRoutes() {
       <Route path="/create-listing" element={<CreateListing />} />
       <Route path="/profile" element={<Profile />} />
       <Route path="/view-rating" element={<ViewRating userId="sampleUserId" />} />
+      <Route path="/chat" element={<Chat />} />
+      <Route path="/chat/:transactionId" element={<Chat />} />
       <Route path="/edit-listing/:id" element={<EditListing />} />
       <Route path="/access-denied" element={<AccessDenied />} />
       <Route
