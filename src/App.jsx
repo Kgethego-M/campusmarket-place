@@ -19,13 +19,12 @@ import LoginForm from './components/LoginForm';
 import SignupForm from './components/SignupForm';
 import AdminDashboard from './components/Admindashboard';
 import Dashboard from './components/Dashboard';
-import Profile from './components/Profile';
 import CreateListing from './components/CreateListing';
 import ViewRating from './components/ViewRating';
+import Chat from './components/Chat';
+import Profile from './components/Profile';
+import ProfileListingCard from './components/ProfileListingCard';
 
-import ViewListingAzure from './pages/ViewListingAzure';
-import CreateListingAzure from './components/CreateListingAzure';
-import EditListingAzure from './pages/EditListingAzure';
 
 // Protects routes based on role
 function ProtectedRoute({ children, allowedRoles }) {
@@ -150,8 +149,9 @@ export function AppRoutes() {
       <Route path="/profile" element={<Profile />} />
       <Route path="/view-listing" element={<ViewListing />} />
       <Route path="/create-listing" element={<CreateListing />} />
-      <Route path="/profile" element={<Profile />} />
       <Route path="/view-rating" element={<ViewRating userId="sampleUserId" />} />
+      <Route path="/chat" element={<Chat />} />
+      <Route path="/chat/:transactionId" element={<Chat />} />
       <Route path="/edit-listing/:id" element={<EditListing />} />
       <Route path="/access-denied" element={<AccessDenied />} />
       <Route
@@ -162,9 +162,6 @@ export function AppRoutes() {
           </ProtectedRoute>
         }
       />
-      <Route path="/azure/view-listing" element={<ViewListingAzure />} />
-      <Route path="/azure/create-listing" element={<CreateListingAzure />} />
-      <Route path="/azure/edit-listing/:id" element={<EditListingAzure />} />
     </Routes>
   );
 }
