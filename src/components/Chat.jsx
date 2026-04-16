@@ -327,9 +327,7 @@ export default function Chat() {
                 >
                   <i className="fa-solid fa-photo-film" />
                 </button>
-                <button className={styles.headerBtn} title="More options">
-                  <i className="fa-solid fa-ellipsis-vertical" />
-                </button>
+                
               </div>
             </header>
 
