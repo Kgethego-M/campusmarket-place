@@ -66,6 +66,7 @@
 }
 
 /* Active state — same for ALL active nav links (Browse, Messages, etc.) */
+/* Active state — same for ALL active nav links (Browse, Messages, etc.) */
 .navLinkActive {
     background-color: #6AA6DA;
     color: #ffffff !important;
@@ -284,10 +285,12 @@
     justify-content: center;
 }
 
-.iconButton:hover { box-shadow: 0 0 0 3px rgba(106,166,218,0.3); }
+.iconButton:hover {
+    background-color: #f3f4f6;
+    color: #6366f1;
+}
 
-
-/* ── Notification Badge ── */
+/* Notification Badge */
 .notificationBadge {
     position: absolute;
     top: -2px;
