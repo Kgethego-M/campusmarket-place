@@ -24,7 +24,6 @@ import CreateListing from './components/CreateListing';
 import ViewRating from './components/ViewRating';
 
 import ViewListingAzure from './pages/ViewListingAzure';
-import Profile from './components/Profile';
 import CreateListingAzure from './components/CreateListingAzure';
 import EditListingAzure from './pages/EditListingAzure';
 
