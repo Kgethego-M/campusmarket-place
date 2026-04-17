@@ -6,10 +6,10 @@ import { doc, getDoc } from "firebase/firestore";
 import styles from "./NavBar.module.css";
 
 const NAV_LINKS = [
-    { label: "Browse",         path: "/view-listing",  icon: "fas fa-search" },
-    { label: "Trade Facility", path: null,              icon: "fas fa-exchange-alt" },
-    { label: "Messages",       path: "/chat",           icon: "fas fa-comment" },
-    { label: "View Cart",      path: null,              icon: "fas fa-shopping-cart" },
+    { label: "Browse",         path: "/view-listing" },
+    { label: "Trade Facility", path: null },
+    { label: "Messages",       path: "/chat" },
+    { label: "View Cart",      path: null },
 ];
 
 export default function Navbar() {
