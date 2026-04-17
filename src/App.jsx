@@ -158,9 +158,6 @@ export function AppRoutes() {
       <Route path="/access-denied" element={<AccessDenied />} />
       <Route path="/staff" element={<ProtectedRoute allowedRoles={['staff']}><StaffDashboard /></ProtectedRoute>} />
       <Route path="/admin" element={<ProtectedRoute allowedRoles={['admin']}><AdminDashboard /></ProtectedRoute>}/>
-      <Route path="/azure/view-listing" element={<ViewListingAzure />} />
-      <Route path="/azure/create-listing" element={<CreateListingAzure />} />
-      <Route path="/azure/edit-listing/:id" element={<EditListingAzure />} />
 
     </Routes>
   );
