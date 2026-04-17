@@ -10,7 +10,6 @@ import { onAuthStateChanged } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import { auth, db } from './firebase';
 
-import AdminUsers from './pages/AdminUsers';
 import AccessDenied from './components/AccessDenied';
 import ViewListing from './components/ViewListing.jsx';
 import EditListing from './pages/EditListing';
@@ -158,6 +157,9 @@ export function AppRoutes() {
       <Route path="/access-denied" element={<AccessDenied />} />
       <Route path="/staff" element={<ProtectedRoute allowedRoles={['staff']}><StaffDashboard /></ProtectedRoute>} />
       <Route path="/admin" element={<ProtectedRoute allowedRoles={['admin']}><AdminDashboard /></ProtectedRoute>}/>
+      <Route path="/azure/view-listing" element={<ViewListing />} />
+      <Route path="/azure/create-listing" element={<CreateListing/>} />
+      <Route path="/azure/edit-listing/:id" element={<EditListing />} />
 
     </Routes>
   );
