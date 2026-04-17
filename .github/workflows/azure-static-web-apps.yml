@@ -22,6 +22,13 @@ jobs:
       - name: Run Vitest with coverage
         run: npm run test -- --coverage
 
+      - name: Show coverage summary in GitHub Actions
+        run: |
+          echo "## Frontend Coverage Summary" >> $GITHUB_STEP_SUMMARY
+          npx vitest --coverage --reporter=text-summary | tee coverage-summary.txt
+          cat coverage-summary.txt >> $GITHUB_STEP_SUMMARY
+
+
       - name: Upload frontend coverage to Codecov
         uses: codecov/codecov-action@v5
         with:

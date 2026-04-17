@@ -22,10 +22,12 @@ import Dashboard from './components/Dashboard';
 import Profile from './components/Profile';
 import CreateListing from './components/CreateListing';
 import ViewRating from './components/ViewRating';
+import ReviewOffer from './components/ReviewOffer';
 
 import ViewListingAzure from './pages/ViewListingAzure';
 import CreateListingAzure from './components/CreateListingAzure';
 import EditListingAzure from './pages/EditListingAzure';
+import ListingDetail from './components/ListingDetail';
 
 // Protects routes based on role
 function ProtectedRoute({ children, allowedRoles }) {
@@ -154,6 +156,7 @@ export function AppRoutes() {
       <Route path="/view-rating" element={<ViewRating userId="sampleUserId" />} />
       <Route path="/edit-listing/:id" element={<EditListing />} />
       <Route path="/access-denied" element={<AccessDenied />} />
+      <Route path="/profile/listings/:transactionId" element={<ReviewOffer />} />
       <Route
         path="/admin/users"
         element={
@@ -165,6 +168,7 @@ export function AppRoutes() {
       <Route path="/azure/view-listing" element={<ViewListingAzure />} />
       <Route path="/azure/create-listing" element={<CreateListingAzure />} />
       <Route path="/azure/edit-listing/:id" element={<EditListingAzure />} />
+      <Route path="/listing/:id" element={<ListingDetail />} />
     </Routes>
   );
 }

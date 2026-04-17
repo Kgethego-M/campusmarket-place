@@ -1,8 +1,9 @@
 import { useState, useRef, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { auth, db } from "../firebase";
+import { collection, query, where, onSnapshot } from "firebase/firestore";
 import { signOut, onAuthStateChanged } from "firebase/auth";
-import { doc, getDoc } from "firebase/firestore";
+import { doc, getDoc, updateDoc } from "firebase/firestore";
 import styles from "./NavBar.module.css";
 
 const NAV_LINKS = [
@@ -17,6 +18,8 @@ export default function Navbar() {
     const location  = useLocation();
     const [dropdownOpen, setDropdownOpen] = useState(false);
     const [isLoggingOut, setIsLoggingOut] = useState(false);
+    const [notifications, setNotifications] = useState([]);
+    const [currentUser, setCurrentUser] = useState(null);
     const [notificationsOpen, setNotificationsOpen] = useState(false);
     const dropdownRef = useRef(null);
     const notificationRef = useRef(null);
@@ -106,6 +109,30 @@ export default function Navbar() {
         }, 2000);
     };
 
+      useEffect(() => {
+    const unsubscribeAuth = auth.onAuthStateChanged((user) => {
+      setCurrentUser(user);
+    });
+    return () => unsubscribeAuth();
+  }, []);
+
+  useEffect(() => {
+    if (!currentUser) return;
+    const q = query(
+      collection(db, "notifications"),
+      where("userId", "==", currentUser.uid)
+    );
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const offers = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+      setNotifications((prev) => [
+        ...prev.filter((n) => n.type !== "new_offer"),
+        ...offers,
+      ]);
+    });
+    return () => unsubscribe();
+  }, [currentUser]);
+
+
     return (
         <header className={styles.navbar}>
             {/* Logo */}
@@ -143,7 +170,7 @@ export default function Navbar() {
                         title="Notifications"
                     >
                         <i className="fa-solid fa-bell"></i>
-                        <span className={styles.notificationBadge}>3</span>
+                        <span className={styles.notificationBadge}>{notifications.length}</span>
                     </button>
 
                     {notificationsOpen && (
@@ -153,28 +180,63 @@ export default function Navbar() {
                                 <button className={styles.markAllRead}>Mark all as read</button>
                             </div>
                             <div className={styles.notificationList}>
-                                <div className={styles.notificationItem}>
-                                    <i className="fas fa-tag"></i>
-                                    <div className={styles.notificationContent}>
-                                        <p>New message from John about Calculus textbook</p>
-                                        <span>5 minutes ago</span>
-                                    </div>
+                            {/* 🔔 Dynamic notifications from Firestore */}
+                            {notifications.map((n) => (
+                                <div key={n.id} className={styles.notificationItem}>
+                                <i className="fas fa-shopping-cart"></i>
+                                <div className={styles.notificationContent}>
+                                    <p>
+                                    {n.type === "new_offer"
+                                        ? `New purchase offer from buyer ${n.buyerId}`
+                                        : n.type === "offer_accepted"
+                                        ? "Your offer was accepted!"
+                                        : "Notification"}
+                                    </p>
+                                    <span>
+                                    {n.createdAt?.toDate
+                                        ? n.createdAt.toDate().toLocaleString()
+                                        : ""}
+                                    </span>
+
+                                    {/* 👇 Only show this button for new offers */}
+                                   {n.type === "new_offer" && (
+                                        <button
+                                            className={styles.viewOfferBtn}
+                                            onClick={async () => {
+                                                try {
+                                                    // 1. Mark as read in Firestore
+                                                    const notificationRef = doc(db, "notifications", n.id);
+                                                    await updateDoc(notificationRef, { read: true });
+
+                                                    // 2. Close the dropdown menu
+                                                    setNotificationsOpen(false);
+
+                                                    // 3. Navigate to the decision page
+                                                    navigate(`/profile/listings/${n.transactionId}`);
+                                                } catch (error) {
+                                                    console.error("Error updating notification:", error);
+                                                    // Even if Firestore fails, we should still let the user navigate
+                                                    navigate(`/profile/listings/${n.transactionId}`);
+                                                }
+                                            }}
+                                        >
+                                            View Offer
+                                        </button>
+                                    )}
                                 </div>
-                                <div className={styles.notificationItem}>
-                                    <i className="fas fa-shopping-cart"></i>
-                                    <div className={styles.notificationContent}>
-                                        <p>Your item "Python Book" was purchased</p>
-                                        <span>1 hour ago</span>
-                                    </div>
                                 </div>
-                                <div className={styles.notificationItem}>
-                                    <i className="fas fa-star"></i>
-                                    <div className={styles.notificationContent}>
-                                        <p>You received a 5-star rating!</p>
-                                        <span>2 hours ago</span>
-                                    </div>
+                            ))}
+
+                            {/* ✅ You can still keep your static notifications if you want */}
+                            <div className={styles.notificationItem}>
+                                <i className="fas fa-star"></i>
+                                <div className={styles.notificationContent}>
+                                <p>You received a 5-star rating!</p>
+                                <span>2 hours ago</span>
                                 </div>
                             </div>
+                            </div>
+
                             <div className={styles.notificationFooter}>
                                 <button onClick={() => navigate("/notifications")}>View all notifications</button>
                             </div>
