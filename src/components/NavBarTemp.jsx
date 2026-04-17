@@ -18,7 +18,6 @@ export default function Navbar() {
     const [dropdownOpen, setDropdownOpen] = useState(false);
     const [isLoggingOut, setIsLoggingOut] = useState(false);
     const [notificationsOpen, setNotificationsOpen] = useState(false);
-    const [mobileOpen, setMobileOpen] = useState(false);
     const dropdownRef = useRef(null);
     const notificationRef = useRef(null);
 
@@ -88,15 +87,8 @@ export default function Navbar() {
         return () => document.removeEventListener("mousedown", handleClickOutside);
     }, []);
 
-    // Lock body scroll when drawer is open
-    useEffect(() => {
-        document.body.style.overflow = mobileOpen ? "hidden" : "";
-        return () => { document.body.style.overflow = ""; };
-    }, [mobileOpen]);
-
     const handleLogout = async () => {
         setIsLoggingOut(true);
-        setMobileOpen(false);
         setTimeout(async () => {
             try {
                 localStorage.removeItem('loggedInUserId');
@@ -113,15 +105,7 @@ export default function Navbar() {
         }, 2000);
     };
 
-    const handleNavClick = (path) => {
-        if (path) {
-            navigate(path);
-            setMobileOpen(false);
-        }
-    };
-
     return (
-        <>
         <header className={styles.navbar}>
             {/* Logo */}
             <div className={styles.logo} onClick={() => navigate("/view-listing")}>
@@ -131,7 +115,7 @@ export default function Navbar() {
                 <span className={styles.logoText}>CampusMarket</span>
             </div>
 
-            {/* Desktop nav links - hidden on mobile */}
+            {/* Nav links */}
             <nav className={styles.navLinks}>
                 {NAV_LINKS.map((link) => {
                     const isActive = link.path && location.pathname === link.path;
@@ -202,16 +186,7 @@ export default function Navbar() {
                     )}
                 </div>
 
-                {/* Hamburger Button - visible only on mobile */}
-                <button 
-                    className={styles.hamburger}
-                    onClick={() => setMobileOpen(true)}
-                    aria-label="Open menu"
-                >
-                    <i className="fas fa-bars"></i>
-                </button>
-
-                {/* Menu Button (3 horizontal lines) - desktop dropdown */}
+                {/* Menu Button (3 horizontal lines) */}
                 <div className={styles.menuWrapper} ref={dropdownRef}>
                     <button 
                         className={styles.iconButton}
@@ -225,11 +200,9 @@ export default function Navbar() {
                         <div className={styles.dropdown}>
                             <div className={styles.dropdownHeader}>
                                 <div className={styles.dropdownAvatar}>
+
                                 </div>
-                                <div>
-                                    <span className={styles.dropdownName}>{userDisplay.name}</span>
-                                    <div className={styles.ddRole}>Student</div>
-                                </div>
+                                <div><span className={styles.dropdownName}>{userDisplay.name}</span></div>
                             </div>
                             <div className={styles.dropdownDivider} />
                             <button className={styles.dropdownItem} onClick={() => { navigate("/profile"); setDropdownOpen(false); }}>
@@ -257,93 +230,16 @@ export default function Navbar() {
                     )}
                 </div>
             </div>
+
+            {/* Global logout overlay */}
+            {isLoggingOut && (
+                <div className={styles.logoutOverlay}>
+                    <div className={styles.logoutLoader}>
+                        <i className="fas fa-spinner fa-spin" />
+                        <p>Logging out...</p>
+                    </div>
+                </div>
+            )}
         </header>
-
-        {/* Mobile Drawer - appears on small screens */}
-        {mobileOpen && (
-            <>
-                {/* Backdrop overlay */}
-                <div className={styles.mobileOverlay} onClick={() => setMobileOpen(false)} />
-                
-                {/* Drawer panel */}
-                <div className={styles.mobileDrawer}>
-                    <div className={styles.drawerHeader}>
-                        <span className={styles.drawerTitle}>Menu</span>
-                        <button className={styles.drawerClose} onClick={() => setMobileOpen(false)}>
-                            <i className="fas fa-times" />
-                        </button>
-                    </div>
-
-                    {/* User info in drawer */}
-                    <div className={styles.drawerUser}>
-                        <div className={styles.drawerAvatar}>
-                            {userDisplay.photoURL ? (
-                                <img src={userDisplay.photoURL} alt={userDisplay.name} />
-                            ) : (
-                                <span>{userDisplay.initials}</span>
-                            )}
-                        </div>
-                        <div className={styles.drawerUserInfo}>
-                            <span className={styles.drawerUserName}>{userDisplay.name}</span>
-                            <span className={styles.drawerUserEmail}>{userDisplay.email}</span>
-                        </div>
-                    </div>
-
-                    {/* Navigation Links moved inside drawer */}
-                    <div className={styles.drawerSection}>Navigation</div>
-                    {NAV_LINKS.map((link) => {
-                        const isActive = link.path && location.pathname === link.path;
-                        return (
-                            <button
-                                key={link.label}
-                                className={`${styles.drawerLink} ${isActive ? styles.drawerLinkActive : ""}`}
-                                onClick={() => handleNavClick(link.path)}
-                                disabled={!link.path}
-                            >
-                                <i className={link.icon}></i>
-                                {link.label}
-                            </button>
-                        );
-                    })}
-
-                    {/* Account links */}
-                    <div className={styles.drawerDivider} />
-                    <div className={styles.drawerSection}>Account</div>
-                    <button className={styles.drawerLink} onClick={() => handleNavClick("/profile")}>
-                        <i className="fas fa-user"></i> My Profile
-                    </button>
-                    <button className={styles.drawerLink} onClick={() => handleNavClick("/settings")}>
-                        <i className="fas fa-cog"></i> Settings
-                    </button>
-                    <button className={`${styles.drawerLink} ${styles.drawerLinkSell}`} onClick={() => handleNavClick("/create-listing")}>
-                        <i className="fas fa-plus"></i> Sell Item
-                    </button>
-
-                    <div className={styles.drawerDivider} />
-                    <button 
-                        className={`${styles.drawerLink} ${styles.drawerLogout}`}
-                        onClick={handleLogout}
-                        disabled={isLoggingOut}
-                    >
-                        {isLoggingOut ? (
-                            <><i className="fas fa-spinner fa-spin"></i> Logging out...</>
-                        ) : (
-                            <><i className="fas fa-right-from-bracket"></i> Logout</>
-                        )}
-                    </button>
-                </div>
-            </>
-        )}
-
-        {/* Global logout overlay */}
-        {isLoggingOut && (
-            <div className={styles.logoutOverlay}>
-                <div className={styles.logoutLoader}>
-                    <i className="fas fa-spinner fa-spin" />
-                    <p>Logging out...</p>
-                </div>
-            </div>
-        )}
-        </>
     );
 }

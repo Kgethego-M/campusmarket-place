@@ -36,7 +36,7 @@ async function uploadToCloudinary(file) {
     }
 
     const data = await res.json();
-    return data.secure_url; // permanent HTTPS URL, safe to store in Firestore
+    return data.secure_url;
 }
 
 export default function CreateListing() {
@@ -54,7 +54,6 @@ export default function CreateListing() {
     const [imageFiles, setImageFiles] = useState([]);
     const [imagePreviews, setImagePreviews] = useState([]);
     const [loading, setLoading] = useState(false);
-    const [uploadProgress, setUploadProgress] = useState("");
 
     function handleImageChange(e) {
         const files = Array.from(e.target.files);
@@ -105,15 +104,12 @@ export default function CreateListing() {
         setLoading(true);
 
         try {
-            // 1. Upload each photo to Cloudinary one by one, showing progress
+            // 1. Upload each photo to Cloudinary one by one
             const photoURLs = [];
             for (let i = 0; i < imageFiles.length; i++) {
-                setUploadProgress(`Uploading photo ${i + 1} of ${imageFiles.length}...`);
                 const url = await uploadToCloudinary(imageFiles[i]);
                 photoURLs.push(url);
             }
-
-            setUploadProgress("Saving listing...");
 
             // 2. Save listing to Firestore — photos array holds Cloudinary URLs
             const listingData = {
@@ -141,7 +137,6 @@ export default function CreateListing() {
             alert("Failed to create listing. Please try again.");
         } finally {
             setLoading(false);
-            setUploadProgress("");
         }
     }
 
@@ -226,7 +221,6 @@ export default function CreateListing() {
                 />
 
                 {/* Price + Listing Type */}
-                {/* Price + Listing Type */}
                 <div className={styles.row}>
                     <div>
                         <label className={styles.label}>Price</label>
@@ -252,7 +246,7 @@ export default function CreateListing() {
                             <option value="" disabled>Select</option>
                             <option value="sale">For Sale</option>
                             <option value="trade">For Trade</option>
-                            <option value="either">Either</option>
+                            <option value="either">For Sale or Trade</option>
                         </select>
                     </div>
                 </div>
@@ -311,13 +305,8 @@ export default function CreateListing() {
                     </div>
                 </div>
 
-                {/* Upload progress */}
-                {uploadProgress && (
-                    <p className={styles.uploadProgress}>{uploadProgress}</p>
-                )}
-
                 <button type="submit" className={styles.submitBtn} disabled={loading}>
-                    {loading ? uploadProgress || "Publishing..." : "Publish Listing"}
+                    {loading ? "Publishing..." : "Publish Listing"}
                 </button>
             </form>
         </div>

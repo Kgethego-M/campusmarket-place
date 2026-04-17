@@ -1,11 +1,22 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { auth, db, storage } from '../firebase';
+import { auth, db } from '../firebase';
 import { doc, getDoc, updateDoc, collection, query, where, getDocs, deleteDoc } from 'firebase/firestore';
 import { updateProfile } from 'firebase/auth';
-import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import ProfileListingCard from './ProfileListingCard';
 import styles from './Profile.module.css';
+
+// Convert display label back to raw Firestore value before saving
+const toRawListingType = (displayType) => {
+    if (!displayType) return displayType;
+    const t = displayType.toString().toLowerCase().trim();
+    if (t === "for sale")           return "sale";
+    if (t === "for trade")          return "trade";
+    if (t === "for sale or trade")  return "either";  // UPDATED
+    // Already raw
+    if (t === "sale" || t === "trade" || t === "either") return t;
+    return displayType;
+};
 
 const Profile = () => {
     const navigate = useNavigate();
@@ -56,7 +67,6 @@ const Profile = () => {
             }
 
             const userId = user.uid;
-            
             const docRef = doc(db, 'users', userId);
             const docSnap = await getDoc(docRef);
             
@@ -107,7 +117,7 @@ const Profile = () => {
             const userListings = querySnapshot.docs.map(doc => ({
                 id: doc.id,
                 ...doc.data(),
-                specification: doc.data().specification || '',  // FIXED: use specification (singular)
+                specification: doc.data().specification || '',
                 date: doc.data().timestamp?.toDate?.() || new Date(doc.data().timestamp),
                 views: doc.data().views || 0,
                 likes: doc.data().likes || 0
@@ -121,38 +131,36 @@ const Profile = () => {
 
     const handleInputChange = (e) => {
         const { name, value } = e.target;
-        setEditFormData(prev => ({
-            ...prev,
-            [name]: value
-        }));
+        setEditFormData(prev => ({ ...prev, [name]: value }));
     };
 
     const handlePhotoUpload = async (e) => {
         const file = e.target.files[0];
-        if (file) {
-            try {
-                const user = auth.currentUser;
-                if (!user) return;
-                
-                const storageRef = ref(storage, `profilePictures/${user.uid}`);
-                await uploadBytes(storageRef, file);
-                const photoURL = await getDownloadURL(storageRef);
-                
-                await updateProfile(user, { photoURL });
-                
-                const userDocRef = doc(db, 'users', user.uid);
-                await updateDoc(userDocRef, { photoURL });
-                
-                setProfileData(prev => ({
-                    ...prev,
-                    photoURL: photoURL
-                }));
-                
-                alert('Profile picture updated successfully!');
-            } catch (error) {
-                console.error("Error uploading photo:", error);
-                alert('Failed to upload photo. Please try again.');
-            }
+        if (!file) return;
+        try {
+            const user = auth.currentUser;
+            if (!user) return;
+
+            // Upload to Cloudinary
+            const formData = new FormData();
+            formData.append("file", file);
+            formData.append("upload_preset", import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET);
+            const res = await fetch(
+                `https://api.cloudinary.com/v1_1/${import.meta.env.VITE_CLOUDINARY_CLOUD_NAME}/image/upload`,
+                { method: "POST", body: formData }
+            );
+            if (!res.ok) throw new Error("Cloudinary upload failed");
+            const data = await res.json();
+            const photoURL = data.secure_url;
+
+            await updateProfile(user, { photoURL });
+            const userDocRef = doc(db, 'users', user.uid);
+            await updateDoc(userDocRef, { photoURL });
+            setProfileData(prev => ({ ...prev, photoURL }));
+            alert('Profile picture updated successfully!');
+        } catch (error) {
+            console.error("Error uploading photo:", error);
+            alert('Failed to upload photo. Please try again.');
         }
     };
 
@@ -196,26 +204,16 @@ const Profile = () => {
         setIsEditing(false);
     };
 
-    const handleDeleteListing = async (listingId, photoUrls = []) => {
+    const handleDeleteListing = async (listingId) => {
         if (!window.confirm('Are you sure you want to delete this listing? This action cannot be undone.')) {
             return;
         }
-        
         try {
-            for (const photoUrl of photoUrls) {
-                try {
-                    const photoRef = ref(storage, photoUrl);
-                    await deleteObject(photoRef);
-                } catch (error) {
-                    console.error("Error deleting image:", error);
-                }
-            }
-            
+            // Photos are on Cloudinary — deletion requires a signed server-side call,
+            // so we just remove the Firestore doc. Cloudinary cleanup can be done via dashboard.
             const listingRef = doc(db, 'listings', listingId);
             await deleteDoc(listingRef);
-            
             setListings(prev => prev.filter(listing => listing.id !== listingId));
-            
             alert('Listing deleted successfully!');
         } catch (error) {
             console.error("Error deleting listing:", error);
@@ -226,34 +224,39 @@ const Profile = () => {
     const handleEditListing = (listing) => {
         setEditingListingId(listing.id);
         setEditListingData({
-            title: listing.title || '',
-            price: listing.price || '',
-            condition: listing.condition || '',
-            listingType: listing.listingType || '',
-            specification: listing.specification || '',  // FIXED: use specification (singular)
-            description: listing.description || ''
+            title:        listing.title        || '',
+            price:        listing.price        || '',
+            condition:    listing.condition    || '',
+            listingType:  listing.listingType  || '',
+            specification: listing.specification || '',
+            description:  listing.description  || ''
         });
     };
 
     const handleSaveListing = async (listingId) => {
         try {
             const listingRef = doc(db, 'listings', listingId);
+
+            // Convert display label back to raw Firestore value before saving
+            const rawListingType = toRawListingType(editListingData.listingType);
+
             await updateDoc(listingRef, {
-                title: editListingData.title,
-                price: parseFloat(editListingData.price),
-                condition: editListingData.condition,
-                listingType: editListingData.listingType,
-                specification: editListingData.specification,  // FIXED: use specification (singular)
-                description: editListingData.description,
-                updatedAt: new Date()
+                title:         editListingData.title,
+                price:         parseFloat(editListingData.price),
+                condition:     editListingData.condition,
+                listingType:   rawListingType,
+                specification: editListingData.specification,
+                description:   editListingData.description,
+                updatedAt:     new Date()
             });
             
             setListings(prev => prev.map(listing => 
                 listing.id === listingId 
                     ? { 
                         ...listing, 
-                        ...editListingData, 
-                        price: parseFloat(editListingData.price) 
+                        ...editListingData,
+                        listingType: rawListingType,
+                        price: parseFloat(editListingData.price)
                     }
                     : listing
             ));
@@ -271,7 +274,6 @@ const Profile = () => {
         const fullStars = Math.floor(rating);
         const hasHalfStar = rating % 1 >= 0.5;
         const stars = [];
-        
         for (let i = 1; i <= 5; i++) {
             if (i <= fullStars) {
                 stars.push(<i key={i} className="fas fa-star"></i>);
@@ -297,7 +299,7 @@ const Profile = () => {
 
     return (
         <div className={styles.profileContainer}>
-            {/* Header with back button */}
+            {/* Header */}
             <div className={styles.header}>
                 <button className={styles.backButton} onClick={() => navigate(-1)}>
                     <i className="fas fa-arrow-left"></i>
@@ -315,6 +317,15 @@ const Profile = () => {
                                 alt="Profile" 
                                 className={styles.profilePicture}
                             />
+                            {isEditing && (
+                                <button
+                                    className={styles.editPhotoButton}
+                                    onClick={() => fileInputRef.current?.click()}
+                                    title="Change profile photo"
+                                >
+                                    <i className="fas fa-camera"></i>
+                                </button>
+                            )}
                             <input
                                 ref={fileInputRef}
                                 type="file"
@@ -384,9 +395,7 @@ const Profile = () => {
 
                 <div className={styles.statsSection}>
                     <div className={styles.rating}>
-                        <div className={styles.ratingStars}>
-                            {renderStars(profileData.rating)}
-                        </div>
+                        <div className={styles.ratingStars}>{renderStars(profileData.rating)}</div>
                         <span className={styles.ratingValue}>{profileData.rating}</span>
                         <span className={styles.totalRatings}>({profileData.totalRatings} ratings)</span>
                     </div>
@@ -449,7 +458,7 @@ const Profile = () => {
                     </button>
                 </div>
 
-                {/* History Tab Content */}
+                {/* History Tab */}
                 {activeTab === 'history' && (
                     <div className={styles.tabContent}>
                         {history.length === 0 ? (
@@ -463,16 +472,16 @@ const Profile = () => {
                                     <div key={item.id} className={styles.historyItem}>
                                         <div className={styles.historyIcon}>
                                             {item.type === 'purchase' && <i className="fas fa-shopping-cart"></i>}
-                                            {item.type === 'sale' && <i className="fas fa-tag"></i>}
-                                            {item.type === 'trade' && <i className="fas fa-exchange-alt"></i>}
+                                            {item.type === 'sale'     && <i className="fas fa-tag"></i>}
+                                            {item.type === 'trade'    && <i className="fas fa-exchange-alt"></i>}
                                         </div>
                                         <div className={styles.historyDetails}>
                                             <h4>{item.item}</h4>
                                             <div className={styles.historyMeta}>
                                                 <span><i className="fas fa-calendar"></i> {new Date(item.date).toLocaleDateString()}</span>
                                                 {item.type === 'purchase' && <span><i className="fas fa-user"></i> From: {item.seller}</span>}
-                                                {item.type === 'sale' && <span><i className="fas fa-user"></i> To: {item.buyer}</span>}
-                                                {item.type === 'trade' && <span><i className="fas fa-user"></i> With: {item.tradedWith}</span>}
+                                                {item.type === 'sale'     && <span><i className="fas fa-user"></i> To: {item.buyer}</span>}
+                                                {item.type === 'trade'    && <span><i className="fas fa-user"></i> With: {item.tradedWith}</span>}
                                                 {item.price && <span><i className="fas fa-dollar-sign"></i> {item.price}</span>}
                                             </div>
                                         </div>
@@ -485,7 +494,8 @@ const Profile = () => {
                         )}
                     </div>
                 )}
-                {/* My Listings Tab Content */}
+
+                {/* Listings Tab */}
                 {activeTab === 'listings' && (
                     <div className={styles.tabContent}>
                         {listings.length === 0 ? (
@@ -502,22 +512,24 @@ const Profile = () => {
                         ) : (
                             <div className={styles.listingsGridCompact}>
                                 {listings.map(listing => (
-                                    <ProfileListingCard
-                                        key={listing.id}
-                                        listing={listing}
-                                        isEditing={editingListingId === listing.id}
-                                        editData={editListingData}
-                                        onEdit={() => handleEditListing(listing)}
-                                        onDelete={() => handleDeleteListing(listing.id, listing.photos)}
-                                        onEditChange={(field, value) => 
-                                            setEditListingData(prev => ({ ...prev, [field]: value }))
-                                        }
-                                        onSave={() => handleSaveListing(listing.id)}
-                                        onCancel={() => {
-                                            setEditingListingId(null);
-                                            setEditListingData({});
-                                        }}
-                                    />
+                                    <div key={listing.id} className={styles.listingCardCompact}>
+                                        <ProfileListingCard
+                                            listing={listing}
+                                            isEditing={editingListingId === listing.id}
+                                            editData={editListingData}
+                                            onEdit={() => handleEditListing(listing)}
+                                            onDelete={() => handleDeleteListing(listing.id)}
+                                            onEditChange={(field, value) => 
+                                                setEditListingData(prev => ({ ...prev, [field]: value }))
+                                            }
+                                            onSave={() => handleSaveListing(listing.id)}
+                                            onCancel={() => {
+                                                setEditingListingId(null);
+                                                setEditListingData({});
+                                            }}
+                                            compact={true}
+                                        />
+                                    </div>
                                 ))}
                             </div>
                         )}
