@@ -42,13 +42,15 @@ describe("Field Validation", () => {
         const result = validateListing({ title: "Headphones", description: "test", price: 50, category: "electronics", condition: "new", listingType: "sale" });
         expect(result.valid).toBe(true);
     });
-    test("should fail if price is zero for sale listing", () => {
-    // zero is valid, should pass
-    const result = validateListing({ title: "Item", description: "test", price: 0, category: "electronics", condition: "new", listingType: "sale" });
-    expect(result.valid).toBe(true);
-});
 
-    test("should pass if listingType is either and price is provided", () => {
+    test("should pass if price is zero for sale listing", () => {
+        // zero is valid, should pass
+        const result = validateListing({ title: "Item", description: "test", price: 0, category: "electronics", condition: "new", listingType: "sale" });
+        expect(result.valid).toBe(true);
+    });
+
+    // UPDATED: Changed "either" to "For Sale or Trade" in test description
+    test("should pass if listingType is For Sale or Trade and price is provided", () => {
         const result = validateListing({ title: "Item", description: "test", price: 50, category: "electronics", condition: "new", listingType: "either" });
         expect(result.valid).toBe(true);
     });
@@ -161,8 +163,9 @@ describe("Listing Type Mapping", () => {
         expect(listingTypeMap["trade"]).toBe("For Trade");
     });
 
+    // UPDATED: Changed "Either" to "For Sale or Trade"
     test("should map either correctly", () => {
-        expect(listingTypeMap["either"]).toBe("Either");
+        expect(listingTypeMap["either"]).toBe("For Sale or Trade");
     });
 
 });
@@ -186,6 +189,14 @@ describe("Acceptance Tests", () => {
     test("empty required field fails validation", () => {
         const listing = { title: "", description: "Good condition", price: 50, category: "books", condition: "good", listingType: "sale" };
         expect(validateListing(listing).valid).toBe(false);
+    });
+
+    // UPDATED: New test for For Sale or Trade listing type
+    test("For Sale or Trade listing passes validation with price", () => {
+        const listing = { title: "Item for sale or trade", description: "test", price: 50, category: "electronics", condition: "new", listingType: "either" };
+        const images = [{ type: "image/jpeg", name: "photo.jpg" }];
+        expect(validateListing(listing).valid).toBe(true);
+        expect(validateImages(images).valid).toBe(true);
     });
 
 });
