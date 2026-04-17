@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { auth, db } from "../firebase";
 import { signOut, onAuthStateChanged } from "firebase/auth";
-import { doc, getDoc, collection, getDocs, query, orderBy, updateDoc, where } from "firebase/firestore";
+import { doc, getDoc, collection, getDocs, query, orderBy, updateDoc, where, deleteDoc } from "firebase/firestore";
 import styles from "./Admindashboard.module.css";
 
 export default function AdminDashboard() {
@@ -367,9 +367,21 @@ export default function AdminDashboard() {
                                                 <button
                                                     className={styles.btnReject}
                                                     onClick={async () => {
-                                                        await updateDoc(doc(db, "listings", l.id), { status: "removed" });
-                                                        setListings(prev => prev.map(x => x.id === l.id ? { ...x, status: "removed" } : x));
-                                                    }}
+                                                        const isConfirmed = window.confirm(
+                                                            "Are you sure you want to remove this Listing? "+
+                                                            "This action is PERMANENT and cannot be undone. "+
+                                                            "Click OK to delete this item or CANCEL to keep."
+                                                        );
+                                                        if (!isConfirmed) return;
+                                                        try{
+                                                            await deleteDoc(doc(db, "listings", l.id));
+                                                            setListings(prev => prev.filter(x => x.id !== l.id));
+                                                            console.log("Listing permanently deleted");
+                                                        } catch(error){
+                                                            console.error("Error deleting listing:", error);
+                                                            alert("Failed to delete listing. Please try again.")
+                                                        }
+                                                        }}
                                                     disabled={l.status === "removed"}
                                                 >
                                                     Remove

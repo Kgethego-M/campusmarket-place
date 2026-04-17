@@ -26,6 +26,7 @@ import ViewListingAzure from './pages/ViewListingAzure';
 import CreateListingAzure from './components/CreateListingAzure';
 import EditListingAzure from './pages/EditListingAzure';
 import Profile from './components/Profile';
+import StaffDashboard from './components/Staffdashboard.jsx';
 import ProfileListingCard from './components/ProfileListingCard';
 
 
@@ -106,12 +107,14 @@ function LoginWrapper() {
       <LoginForm
         onSwitchToSignup={() => navigate('/signup')}
         onLoginSuccess={(userData) => {
-          if (
-            userData.userType === 'admin' ||
-            userData.role === 'admin'
-          ) {
-            navigate('/admin/users');
-          } else {
+          const role = userData.role || userData.userType;
+          if (role === 'admin'){
+            navigate('/admin');
+          }
+          else if (role === 'staff'){
+            navigate('/staff');
+          }
+          else{
             navigate('/view-listing');
           }
         }}
@@ -157,14 +160,8 @@ export function AppRoutes() {
       <Route path="/chat/:transactionId" element={<Chat />} />
       <Route path="/edit-listing/:id" element={<EditListing />} />
       <Route path="/access-denied" element={<AccessDenied />} />
-      <Route
-        path="/admin/users"
-        element={
-          <ProtectedRoute allowedRoles={['admin']}>
-            <AdminUsers />
-          </ProtectedRoute>
-        }
-      />
+      <Route path="/staff" element={<ProtectedRoute allowedRoles={['staff']}><StaffDashboard /></ProtectedRoute>} />
+      <Route path="/admin" element={<ProtectedRoute allowedRoles={['admin']}><AdminUsers /></ProtectedRoute>}/>
       <Route path="/azure/view-listing" element={<ViewListingAzure />} />
       <Route path="/azure/create-listing" element={<CreateListingAzure />} />
       <Route path="/azure/edit-listing/:id" element={<EditListingAzure />} />
