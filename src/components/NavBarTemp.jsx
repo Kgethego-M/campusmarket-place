@@ -4,6 +4,7 @@ import { auth, db } from "../firebase";
 import { collection, query, where, onSnapshot } from "firebase/firestore";
 import { signOut, onAuthStateChanged } from "firebase/auth";
 import { doc, getDoc, updateDoc } from "firebase/firestore";
+import { markNotificationAsRead } from "../services/notificationService";
 import styles from "./NavBar.module.css";
 
 const NAV_LINKS = [
@@ -31,6 +32,14 @@ export default function Navbar() {
         photoURL: '',
         initials: 'S'
     });
+
+    const markAsRead = async (notificationId) => {
+    try {
+        await updateDoc(doc(db, 'notifications', notificationId), { read: true });
+    } catch (err) {
+        console.error('Failed to mark notification as read:', err);
+    }
+    };
 
     // Listen for auth changes and load the user's Firestore profile
     useEffect(() => {
@@ -109,28 +118,30 @@ export default function Navbar() {
         }, 2000);
     };
 
-      useEffect(() => {
-    const unsubscribeAuth = auth.onAuthStateChanged((user) => {
-      setCurrentUser(user);
+ useEffect(() => {
+    const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
+        setCurrentUser(user);
+        if (!user) setNotifications([]);
     });
     return () => unsubscribeAuth();
-  }, []);
+    }, []);
 
-  useEffect(() => {
-    if (!currentUser) return;
-    const q = query(
-      collection(db, "notifications"),
-      where("userId", "==", currentUser.uid)
-    );
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const offers = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
-      setNotifications((prev) => [
-        ...prev.filter((n) => n.type !== "new_offer"),
-        ...offers,
-      ]);
-    });
-    return () => unsubscribe();
-  }, [currentUser]);
+    useEffect(() => {
+        if (!currentUser) return;
+
+        const q = query(
+            collection(db, 'notifications'),
+            where('userId', '==', currentUser.uid),
+            where('read', '==', false)
+        );
+
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            const offers = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+            setNotifications(offers);
+        });
+
+        return () => unsubscribe();
+    }, [currentUser]);
 
 
     return (
@@ -180,52 +191,55 @@ export default function Navbar() {
                                 <button className={styles.markAllRead}>Mark all as read</button>
                             </div>
                             <div className={styles.notificationList}>
-                            {/* 🔔 Dynamic notifications from Firestore */}
+                            {/* Dynamic notifications from Firestore */}
+                            
                             {notifications.map((n) => (
                                 <div key={n.id} className={styles.notificationItem}>
-                                <i className="fas fa-shopping-cart"></i>
-                                <div className={styles.notificationContent}>
-                                    <p>
-                                    {n.type === "new_offer"
-                                        ? `New purchase offer from buyer ${n.buyerId}`
-                                        : n.type === "offer_accepted"
-                                        ? "Your offer was accepted!"
-                                        : "Notification"}
-                                    </p>
-                                    <span>
-                                    {n.createdAt?.toDate
-                                        ? n.createdAt.toDate().toLocaleString()
-                                        : ""}
-                                    </span>
-
-                                    {/* 👇 Only show this button for new offers */}
-                                   {n.type === "new_offer" && (
-                                        <button
-                                            className={styles.viewOfferBtn}
-                                            onClick={async () => {
-                                                try {
-                                                    // 1. Mark as read in Firestore
-                                                    const notificationRef = doc(db, "notifications", n.id);
-                                                    await updateDoc(notificationRef, { read: true });
-
-                                                    // 2. Close the dropdown menu
+                                    <i className="fas fa-shopping-cart"></i>
+                                    <div className={styles.notificationContent}>
+                                        <p>
+                                            {n.type === 'new_offer'
+                                                ? `You have a new offer on one of your listings`
+                                                : n.type === 'offer_accepted'
+                                                ? 'Your offer was accepted!'
+                                                : n.type === 'offer_declined'
+                                                ? 'Your offer was declined.'
+                                                : 'Notification'}
+                                        </p>
+                                        <span>
+                                            {n.createdAt?.toDate
+                                                ? n.createdAt.toDate().toLocaleString()
+                                                : ''}
+                                        </span>
+                                        {n.type === 'new_offer' && (
+                                            <button
+                                                className={styles.viewOfferButton}  // Added class for styling
+                                                onClick={async () => {
+                                                    await markAsRead(n.id);
                                                     setNotificationsOpen(false);
-
-                                                    // 3. Navigate to the decision page
-                                                    navigate(`/profile/listings/${n.transactionId}`);
-                                                } catch (error) {
-                                                    console.error("Error updating notification:", error);
-                                                    // Even if Firestore fails, we should still let the user navigate
-                                                    navigate(`/profile/listings/${n.transactionId}`);
-                                                }
-                                            }}
-                                        >
-                                            View Offer
-                                        </button>
-                                    )}
+                                                    // Navigate to profile with offers tab and listing highlight
+                                                    navigate('/profile?tab=offers&highlight=' + (n.transactionId || n.listingId));
+                                                }}
+                                            >
+                                                View Offer
+                                            </button>
+                                        )}
+                                        {n.type === 'offer_accepted' && (
+                                            <button
+                                                className={styles.viewOfferButton}  // Same style for consistency
+                                                onClick={async () => {
+                                                    await markAsRead(n.id);
+                                                    setNotificationsOpen(false);
+                                                    navigate('/profile?tab=history&highlight=' + (n.transactionId || n.listingId));
+                                                }}
+                                            >
+                                                View Details
+                                            </button>
+                                        )}
+                                    </div>
                                 </div>
-                                </div>
-                            ))}
+                            ))}                           
+                             
 
                             {/* ✅ You can still keep your static notifications if you want */}
                             <div className={styles.notificationItem}>

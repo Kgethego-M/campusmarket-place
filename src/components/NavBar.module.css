@@ -572,3 +572,19 @@
         right: -1rem;
     }
 }
+
+.viewOfferButton {
+    background-color: #e1e5Ac;
+    color: #000;
+    border: none;
+    padding: 4px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+    margin-top: 8px;
+    transition: background-color 0.2s;
+}
+
+.viewOfferButton:hover {
+    background-color: #dadb75;
+}

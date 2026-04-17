@@ -157,6 +157,7 @@ export function AppRoutes() {
       <Route path="/edit-listing/:id" element={<EditListing />} />
       <Route path="/access-denied" element={<AccessDenied />} />
       <Route path="/profile/listings/:transactionId" element={<ReviewOffer />} />
+      <Route path="/profile" element={<Profile />} />
       <Route
         path="/admin/users"
         element={

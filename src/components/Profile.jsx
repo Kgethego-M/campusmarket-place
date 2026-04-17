@@ -1,18 +1,23 @@
+import { onAuthStateChanged } from 'firebase/auth';
 import React, { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { auth, db, storage } from '../firebase';
-import { doc, getDoc, updateDoc, collection, query, where, getDocs, deleteDoc } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, collection, query, where, getDocs, deleteDoc, onSnapshot } from 'firebase/firestore';
 import { updateProfile } from 'firebase/auth';
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import ProfileListingCard from './ProfileListingCard';
+import OfferItem from './OfferItem'; 
 import styles from './Profile.module.css';
 
 const Profile = () => {
     const navigate = useNavigate();
+    const location = useLocation();
     const fileInputRef = useRef(null);
     
     const [loading, setLoading] = useState(true);
     const [isEditing, setIsEditing] = useState(false);
+    const [incomingOffers, setIncomingOffers] = useState([]);
+    const [highlightedOfferId, setHighlightedOfferId] = useState(null);
     const [profileData, setProfileData] = useState({
         firstName: '',
         lastName: '',
@@ -26,278 +31,152 @@ const Profile = () => {
         totalRatings: 0
     });
     
-    const [editFormData, setEditFormData] = useState({
-        firstName: '',
-        lastName: '',
-        bio: ''
-    });
-    
+    const [editFormData, setEditFormData] = useState({ firstName: '', lastName: '', bio: '' });
     const [history, setHistory] = useState([]);
     const [listings, setListings] = useState([]);
     const [activeTab, setActiveTab] = useState('history');
     const [editingListingId, setEditingListingId] = useState(null);
     const [editListingData, setEditListingData] = useState({});
 
+    // Parse URL parameters for tab and highlight
     useEffect(() => {
-        const loggedInUserId = localStorage.getItem('loggedInUserId');
-        if (!loggedInUserId) {
-            navigate('/login');
-            return;
+        const params = new URLSearchParams(location.search);
+        const tab = params.get('tab');
+        const highlight = params.get('highlight');
+        
+        if (tab && (tab === 'history' || tab === 'listings' || tab === 'offers')) {
+            setActiveTab(tab);
         }
-        fetchUserData();
-    }, [navigate]);
+        
+        if (highlight) {
+            setHighlightedOfferId(highlight);
+            // Clear highlight after 3 seconds
+            setTimeout(() => setHighlightedOfferId(null), 3000);
+        }
+    }, [location.search]);
 
-    const fetchUserData = async () => {
-        try {
-            const user = auth.currentUser;
+    // Logic for Initials Avatar
+    const getInitials = () => {
+        const first = profileData.firstName?.charAt(0) || '';
+        const last = profileData.lastName?.charAt(0) || '';
+        return (first + last).toUpperCase() || '?';
+    };
+
+    // Fix: Safe number conversion for stats
+    const safeNumber = (value) => {
+        const num = Number(value);
+        return isNaN(num) ? 0 : num;
+    };
+
+    useEffect(() => {
+        const unsubscribe = onAuthStateChanged(auth, (user) => {
             if (!user) {
                 navigate('/login');
                 return;
             }
 
+            fetchUserData(user); 
+
+            const q = query(
+                collection(db, 'transactions'),
+                where('sellerId', '==', user.uid),
+                where('status', '==', 'pending')
+            );
+
+            const unsubscribeOffers = onSnapshot(q, (snapshot) => {
+                setIncomingOffers(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+            });
+
+            return () => unsubscribeOffers();
+        });
+
+        return () => unsubscribe();
+    }, [navigate]);
+
+    const fetchUserData = async (user) => {
+        try {
             const userId = user.uid;
-            
             const docRef = doc(db, 'users', userId);
             const docSnap = await getDoc(docRef);
-            
             await fetchUserListings(userId);
-            
+
             if (docSnap.exists()) {
                 const userData = docSnap.data();
-                
                 setProfileData({
-                    firstName: userData.firstName || '',
-                    lastName: userData.lastName || '',
+                    ...userData,
                     email: userData.email || user.email,
-                    bio: userData.bio || '',
-                    photoURL: userData.photoURL || user.photoURL || '/default-avatar.png',
-                    memberSince: user.metadata.creationTime 
+                    photoURL: userData.photoURL || user.photoURL || '',
+                    memberSince: user.metadata.creationTime
                         ? new Date(user.metadata.creationTime).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
                         : 'Unknown',
-                    totalSales: userData.totalSales || 0,
-                    totalTrades: userData.totalTrades || 0,
-                    rating: userData.rating || 0,
-                    totalRatings: userData.totalRatings || 0
+                    // Ensure these are numbers
+                    totalSales: safeNumber(userData.totalSales),
+                    totalTrades: safeNumber(userData.totalTrades),
+                    rating: safeNumber(userData.rating),
+                    totalRatings: safeNumber(userData.totalRatings)
                 });
-                
                 setEditFormData({
                     firstName: userData.firstName || '',
                     lastName: userData.lastName || '',
-                    bio: userData.bio || ''
+                    bio: userData.bio || '',
                 });
-                
                 setHistory(userData.history || []);
-            } else {
-                console.log("No document found matching ID");
-                navigate('/login');
             }
         } catch (error) {
-            console.error("Error fetching user data:", error);
+            console.error('Error:', error);
         } finally {
             setLoading(false);
         }
     };
 
-    const fetchUserListings = async (userId) => {
-        try {
-            const listingsRef = collection(db, "listings");
-            const q = query(listingsRef, where("sellerUID", "==", userId));
-            const querySnapshot = await getDocs(q);
-            
-            const userListings = querySnapshot.docs.map(doc => ({
-                id: doc.id,
-                ...doc.data(),
-                specification: doc.data().specification || '',  // FIXED: use specification (singular)
-                date: doc.data().timestamp?.toDate?.() || new Date(doc.data().timestamp),
-                views: doc.data().views || 0,
-                likes: doc.data().likes || 0
-            }));
-            
-            setListings(userListings);
-        } catch (error) {
-            console.error("Error fetching user listings:", error);
-        }
-    };
-
     const handleInputChange = (e) => {
         const { name, value } = e.target;
-        setEditFormData(prev => ({
-            ...prev,
-            [name]: value
-        }));
+        setEditFormData(prev => ({ ...prev, [name]: value }));
+    };
+
+    const fetchUserListings = async (userId) => {
+        const q = query(collection(db, "listings"), where("sellerUID", "==", userId));
+        const querySnapshot = await getDocs(q);
+        setListings(querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
     };
 
     const handlePhotoUpload = async (e) => {
         const file = e.target.files[0];
         if (file) {
-            try {
-                const user = auth.currentUser;
-                if (!user) return;
-                
-                const storageRef = ref(storage, `profilePictures/${user.uid}`);
-                await uploadBytes(storageRef, file);
-                const photoURL = await getDownloadURL(storageRef);
-                
-                await updateProfile(user, { photoURL });
-                
-                const userDocRef = doc(db, 'users', user.uid);
-                await updateDoc(userDocRef, { photoURL });
-                
-                setProfileData(prev => ({
-                    ...prev,
-                    photoURL: photoURL
-                }));
-                
-                alert('Profile picture updated successfully!');
-            } catch (error) {
-                console.error("Error uploading photo:", error);
-                alert('Failed to upload photo. Please try again.');
-            }
-        }
-    };
-
-    const handleSave = async () => {
-        try {
             const user = auth.currentUser;
-            if (!user) return;
-            
-            const fullName = `${editFormData.firstName} ${editFormData.lastName}`;
-            await updateProfile(user, { displayName: fullName });
-            
-            const userDocRef = doc(db, 'users', user.uid);
-            await updateDoc(userDocRef, {
-                firstName: editFormData.firstName,
-                lastName: editFormData.lastName,
-                bio: editFormData.bio,
-                updatedAt: new Date()
-            });
-            
-            setProfileData(prev => ({
-                ...prev,
-                firstName: editFormData.firstName,
-                lastName: editFormData.lastName,
-                bio: editFormData.bio
-            }));
-            
-            setIsEditing(false);
-            alert('Profile updated successfully!');
-        } catch (error) {
-            console.error("Error saving profile:", error);
-            alert('Failed to save profile. Please try again.');
+            const storageRef = ref(storage, `profilePictures/${user.uid}`);
+            await uploadBytes(storageRef, file);
+            const photoURL = await getDownloadURL(storageRef);
+            await updateDoc(doc(db, 'users', user.uid), { photoURL });
+            setProfileData(prev => ({ ...prev, photoURL }));
         }
     };
 
-    const handleCancel = () => {
-        setEditFormData({
-            firstName: profileData.firstName,
-            lastName: profileData.lastName,
-            bio: profileData.bio
-        });
-        setIsEditing(false);
-    };
-
-    const handleDeleteListing = async (listingId, photoUrls = []) => {
-        if (!window.confirm('Are you sure you want to delete this listing? This action cannot be undone.')) {
-            return;
-        }
-        
-        try {
-            for (const photoUrl of photoUrls) {
-                try {
-                    const photoRef = ref(storage, photoUrl);
-                    await deleteObject(photoRef);
-                } catch (error) {
-                    console.error("Error deleting image:", error);
-                }
-            }
-            
-            const listingRef = doc(db, 'listings', listingId);
-            await deleteDoc(listingRef);
-            
-            setListings(prev => prev.filter(listing => listing.id !== listingId));
-            
-            alert('Listing deleted successfully!');
-        } catch (error) {
-            console.error("Error deleting listing:", error);
-            alert('Failed to delete listing. Please try again.');
-        }
-    };
-
-    const handleEditListing = (listing) => {
-        setEditingListingId(listing.id);
-        setEditListingData({
-            title: listing.title || '',
-            price: listing.price || '',
-            condition: listing.condition || '',
-            listingType: listing.listingType || '',
-            specification: listing.specification || '',  // FIXED: use specification (singular)
-            description: listing.description || ''
-        });
-    };
-
-    const handleSaveListing = async (listingId) => {
-        try {
-            const listingRef = doc(db, 'listings', listingId);
-            await updateDoc(listingRef, {
-                title: editListingData.title,
-                price: parseFloat(editListingData.price),
-                condition: editListingData.condition,
-                listingType: editListingData.listingType,
-                specification: editListingData.specification,  // FIXED: use specification (singular)
-                description: editListingData.description,
-                updatedAt: new Date()
-            });
-            
-            setListings(prev => prev.map(listing => 
-                listing.id === listingId 
-                    ? { 
-                        ...listing, 
-                        ...editListingData, 
-                        price: parseFloat(editListingData.price) 
-                    }
-                    : listing
-            ));
-            
-            setEditingListingId(null);
-            setEditListingData({});
-            alert('Listing updated successfully!');
-        } catch (error) {
-            console.error("Error updating listing:", error);
-            alert('Failed to update listing. Please try again.');
-        }
-    };
-    
     const renderStars = (rating) => {
-        const fullStars = Math.floor(rating);
-        const hasHalfStar = rating % 1 >= 0.5;
-        const stars = [];
-        
-        for (let i = 1; i <= 5; i++) {
-            if (i <= fullStars) {
-                stars.push(<i key={i} className="fas fa-star"></i>);
-            } else if (i === fullStars + 1 && hasHalfStar) {
-                stars.push(<i key={i} className="fas fa-star-half-alt"></i>);
-            } else {
-                stars.push(<i key={i} className="far fa-star"></i>);
-            }
-        }
-        return stars;
+        const safeRating = safeNumber(rating);
+        const fullStars = Math.floor(safeRating);
+        return [...Array(5)].map((_, i) => (
+            <i key={i} className={`${i < fullStars ? 'fas' : 'far'} fa-star`}></i>
+        ));
     };
 
-    if (loading) {
+    if (loading) 
         return (
             <div className={styles.loadingContainer}>
                 <div className={styles.loader}>
                     <i className="fas fa-spinner fa-spin"></i>
-                    <p>Loading profile...</p>
+                    <p>Loading Profile...</p>
                 </div>
             </div>
         );
-    }
+
+    // Calculate safe values for display
+    const totalSales = safeNumber(profileData.totalSales);
+    const totalTrades = safeNumber(profileData.totalTrades);
+    const totalTransactions = totalSales + totalTrades;
 
     return (
         <div className={styles.profileContainer}>
-            {/* Header with back button */}
             <div className={styles.header}>
                 <button className={styles.backButton} onClick={() => navigate(-1)}>
                     <i className="fas fa-arrow-left"></i>
@@ -305,15 +184,17 @@ const Profile = () => {
                 <h1>My Profile</h1>
             </div>
 
-            {/* Main Profile Card */}
             <div className={styles.profileCard}>
                 <div className={styles.profileLeft}>
                     <div className={styles.profilePictureSection}>
                         <div className={styles.profilePictureWrapper}>
                             <img 
-                                src={profileData.photoURL} 
+                                src={profileData.photoURL || '/default-avatar.png'} 
                                 alt="Profile" 
                                 className={styles.profilePicture}
+                                onError={(e) => {
+                                    e.target.src = '/default-avatar.png';
+                                }}
                             />
                             <input
                                 ref={fileInputRef}
@@ -384,145 +265,79 @@ const Profile = () => {
 
                 <div className={styles.statsSection}>
                     <div className={styles.rating}>
-                        <div className={styles.ratingStars}>
-                            {renderStars(profileData.rating)}
-                        </div>
-                        <span className={styles.ratingValue}>{profileData.rating}</span>
-                        <span className={styles.totalRatings}>({profileData.totalRatings} ratings)</span>
+                        <div className={styles.ratingStars}>{renderStars(profileData.rating)}</div>
+                        <span className={styles.ratingValue}>{safeNumber(profileData.rating).toFixed(1)}</span>
+                        <span className={styles.totalRatings}>({safeNumber(profileData.totalRatings)} ratings)</span>
                     </div>
                     
                     <div className={styles.statsGrid}>
                         <div className={styles.statItem}>
                             <i className="fas fa-tag"></i>
                             <div className={styles.statInfo}>
-                                <span className={styles.statValue}>{profileData.totalSales}</span>
+                                <span className={styles.statValue}>{totalSales}</span>
                                 <span className={styles.statLabel}>Sales</span>
                             </div>
                         </div>
                         <div className={styles.statItem}>
                             <i className="fas fa-exchange-alt"></i>
                             <div className={styles.statInfo}>
-                                <span className={styles.statValue}>{profileData.totalTrades}</span>
+                                <span className={styles.statValue}>{totalTrades}</span>
                                 <span className={styles.statLabel}>Trades</span>
                             </div>
                         </div>
                         <div className={styles.statItem}>
                             <i className="fas fa-chart-line"></i>
                             <div className={styles.statInfo}>
-                                <span className={styles.statValue}>{profileData.totalSales + profileData.totalTrades}</span>
+                                <span className={styles.statValue}>{totalTransactions}</span>
                                 <span className={styles.statLabel}>Total Transactions</span>
                             </div>
                         </div>
                     </div>
 
-                    {isEditing ? (
-                        <div className={styles.editActions}>
-                            <button className={styles.saveButton} onClick={handleSave}>
-                                <i className="fas fa-save"></i> Save Changes
-                            </button>
-                            <button className={styles.cancelButton} onClick={handleCancel}>
-                                Cancel
-                            </button>
-                        </div>
-                    ) : (
-                        <button className={styles.editButton} onClick={() => setIsEditing(true)}>
-                            <i className="fas fa-pen"></i> Edit Profile
-                        </button>
-                    )}
+                    <button className={styles.editButton} onClick={() => setIsEditing(!isEditing)}>
+                        <i className="fas fa-pen"></i> {isEditing ? "Save Profile" : "Edit Profile"}
+                    </button>
                 </div>
             </div>
 
-            {/* Tabs Section */}
             <div className={styles.tabsSection}>
                 <div className={styles.tabs}>
-                    <button 
-                        className={`${styles.tab} ${activeTab === 'history' ? styles.activeTab : ''}`}
-                        onClick={() => setActiveTab('history')}
-                    >
+                    <button className={`${styles.tab} ${activeTab === 'history' ? styles.activeTab : ''}`} onClick={() => setActiveTab('history')}>
                         <i className="fas fa-history"></i> History
                     </button>
-                    <button 
-                        className={`${styles.tab} ${activeTab === 'listings' ? styles.activeTab : ''}`}
-                        onClick={() => setActiveTab('listings')}
-                    >
+                    <button className={`${styles.tab} ${activeTab === 'listings' ? styles.activeTab : ''}`} onClick={() => setActiveTab('listings')}>
                         <i className="fas fa-list"></i> My Listings ({listings.length})
+                    </button>
+                    <button className={`${styles.tab} ${activeTab === 'offers' ? styles.activeTab : ''}`} onClick={() => setActiveTab('offers')}>
+                        <i className="fas fa-hand-holding-usd"></i> Offers ({incomingOffers.length})
                     </button>
                 </div>
 
-                {/* History Tab Content */}
-                {activeTab === 'history' && (
-                    <div className={styles.tabContent}>
-                        {history.length === 0 ? (
-                            <div className={styles.emptyState}>
-                                <i className="fas fa-shopping-bag"></i>
-                                <p>No transaction history yet</p>
-                            </div>
-                        ) : (
-                            <div className={styles.historyList}>
-                                {history.map(item => (
-                                    <div key={item.id} className={styles.historyItem}>
-                                        <div className={styles.historyIcon}>
-                                            {item.type === 'purchase' && <i className="fas fa-shopping-cart"></i>}
-                                            {item.type === 'sale' && <i className="fas fa-tag"></i>}
-                                            {item.type === 'trade' && <i className="fas fa-exchange-alt"></i>}
-                                        </div>
-                                        <div className={styles.historyDetails}>
-                                            <h4>{item.item}</h4>
-                                            <div className={styles.historyMeta}>
-                                                <span><i className="fas fa-calendar"></i> {new Date(item.date).toLocaleDateString()}</span>
-                                                {item.type === 'purchase' && <span><i className="fas fa-user"></i> From: {item.seller}</span>}
-                                                {item.type === 'sale' && <span><i className="fas fa-user"></i> To: {item.buyer}</span>}
-                                                {item.type === 'trade' && <span><i className="fas fa-user"></i> With: {item.tradedWith}</span>}
-                                                {item.price && <span><i className="fas fa-dollar-sign"></i> {item.price}</span>}
-                                            </div>
-                                        </div>
-                                        <div className={`${styles.historyStatus} ${styles[item.status]}`}>
-                                            {item.status}
-                                        </div>
+                <div className={styles.tabContent}>
+                    {activeTab === 'history' && (
+                        history.length === 0 ? <p className={styles.emptyState}>No history yet</p> : <div>History Items...</div>
+                    )}
+
+                    {activeTab === 'listings' && (
+                        <div className={styles.listingsGrid}>
+                            {listings.map(l => <ProfileListingCard key={l.id} listing={l} />)}
+                        </div>
+                    )}
+
+                    {activeTab === 'offers' && (
+                        <div className={styles.historyList}>
+                            {incomingOffers.length === 0 ? (
+                                <p className={styles.emptyState}>No pending offers</p>
+                            ) : (
+                                incomingOffers.map(offer => (
+                                    <div key={offer.id} className={`${styles.offerWrapper} ${highlightedOfferId === offer.id ? styles.highlightedOffer : ''}`}>
+                                        <OfferItem offer={offer} />
                                     </div>
-                                ))}
-                            </div>
-                        )}
-                    </div>
-                )}
-                {/* My Listings Tab Content */}
-                {activeTab === 'listings' && (
-                    <div className={styles.tabContent}>
-                        {listings.length === 0 ? (
-                            <div className={styles.emptyState}>
-                                <i className="fas fa-box-open"></i>
-                                <p>You haven't listed any items yet</p>
-                                <button 
-                                    className={styles.createListingButton}
-                                    onClick={() => navigate('/create-listing')}
-                                >
-                                    <i className="fas fa-plus"></i> Create Your First Listing
-                                </button>
-                            </div>
-                        ) : (
-                            <div className={styles.listingsGrid}>
-                                {listings.map(listing => (
-                                    <ProfileListingCard
-                                        key={listing.id}
-                                        listing={listing}
-                                        isEditing={editingListingId === listing.id}
-                                        editData={editListingData}
-                                        onEdit={() => handleEditListing(listing)}
-                                        onDelete={() => handleDeleteListing(listing.id, listing.photos)}
-                                        onEditChange={(field, value) => 
-                                            setEditListingData(prev => ({ ...prev, [field]: value }))
-                                        }
-                                        onSave={() => handleSaveListing(listing.id)}
-                                        onCancel={() => {
-                                            setEditingListingId(null);
-                                            setEditListingData({});
-                                        }}
-                                    />
-                                ))}
-                            </div>
-                        )}
-                    </div>
-                )}
+                                ))
+                            )}
+                        </div>
+                    )}
+                </div>
             </div>
         </div>
     );
