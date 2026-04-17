@@ -22,6 +22,7 @@ import CreateListing from './components/CreateListing';
 import ViewRating from './components/ViewRating';
 import Chat from './components/Chat';
 import Profile from './components/Profile';
+import StaffDashboard from './components/Staffdashboard.jsx';
 import ProfileListingCard from './components/ProfileListingCard';
 
 
@@ -161,16 +162,12 @@ export function AppRoutes() {
       <Route path="/chat" element={<Chat />} />
       <Route path="/chat/:transactionId" element={<Chat />} />
       <Route path="/edit-listing/:id" element={<EditListing />} />
-
       <Route path="/access-denied" element={<AccessDenied />} />
-      <Route
-        path="/admin/users"
-        element={
-          <ProtectedRoute allowedRoles={['admin']}>
-            <AdminUsers />
-          </ProtectedRoute>
-        }
-      />
+      <Route path="/staff" element={<ProtectedRoute allowedRoles={['staff']}><StaffDashboard /></ProtectedRoute>} />
+      <Route path="/admin" element={<ProtectedRoute allowedRoles={['admin']}><AdminDashboard /></ProtectedRoute>}/>
+      <Route path="/azure/view-listing" element={<ViewListing />} />
+      <Route path="/azure/create-listing" element={<CreateListing/>} />
+      <Route path="/azure/edit-listing/:id" element={<EditListing />} />
     </Routes>
   );
 }
