@@ -367,9 +367,21 @@ export default function AdminDashboard() {
                                                 <button
                                                     className={styles.btnReject}
                                                     onClick={async () => {
-                                                        await updateDoc(doc(db, "listings", l.id), { status: "removed" });
-                                                        setListings(prev => prev.map(x => x.id === l.id ? { ...x, status: "removed" } : x));
-                                                    }}
+                                                        const isConfirmed = window.confirm(
+                                                            "Are you sure you want to remove this Listing? "+
+                                                            "This action is PERMANENT and cannot be undone. "+
+                                                            "Click OK to delete this item or CANCEL to keep."
+                                                        );
+                                                        if (!isConfirmed) return;
+                                                        try{
+                                                            await deleteDoc(doc(db, "listings", l.id));
+                                                            setListings(prev => prev.filter(x => x.id !== l.id));
+                                                            console.log("Listing permanently deleted");
+                                                        } catch(error){
+                                                            console.error("Error deleting listing:", error);
+                                                            alert("Failed to delete listing. Please try again.")
+                                                        }
+                                                        }}
                                                     disabled={l.status === "removed"}
                                                 >
                                                     Remove

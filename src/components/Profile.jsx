@@ -500,7 +500,7 @@ const Profile = () => {
                                 </button>
                             </div>
                         ) : (
-                            <div className={styles.listingsGrid}>
+                            <div className={styles.listingsGridCompact}>
                                 {listings.map(listing => (
                                     <ProfileListingCard
                                         key={listing.id}

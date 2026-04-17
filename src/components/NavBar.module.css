@@ -39,7 +39,7 @@
     white-space: nowrap;
 }
 
-/* ── Nav links ── */
+/* ── Desktop nav links ── */
 .navLinks {
     display: flex;
     align-items: center;
@@ -188,59 +188,12 @@
     width: 100%;
     padding: 10px 16px;
     border: none;
-    background: transparent;
-    font-family: 'Franklin Gothic Medium', 'Arial Narrow', Arial, sans-serif;
-    font-size: 0.85rem;
-    color: #444;
+    font-size: 1.3rem;
     cursor: pointer;
-    text-align: left;
-    transition: background-color 0.12s, color 0.12s;
-}
-
-.dropdownItem:hover {
-    background-color: #f4f8fc;
-    color: #1a1a1a;
-}
-
-.dropdownItem i {
-    width: 14px;
-    color: #999;
-    font-size: 0.8rem;
-}
-
-.dropdownLogout {
-    color: #e53935;
-}
-
-.dropdownLogout:hover {
-    background-color: #fff5f5;
-    color: #c62828;
-}
-
-.dropdownLogout i {
-    color: #e53935;
-}
-
-.logoutOverlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background-color: rgba(0, 0, 0, 0.7);
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    z-index: 9999;
-    backdrop-filter: blur(4px);
-}
-
-.logoutLoader {
-    background-color: white;
-    padding: 2rem 3rem;
-    border-radius: 12px;
-    display: flex;
-    flex-direction: column;
+    color: #4b5563;
+    padding: 0.5rem;
+    border-radius: 8px;
+    transition: all 0.2s;
     align-items: center;
     gap: 1rem;
     box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
@@ -285,12 +238,11 @@
     justify-content: center;
 }
 
-.iconButton:hover {
-    background-color: #f3f4f6;
-    color: #6366f1;
+.iconButton:hover { 
+    background-color: #e8f0f8;
 }
 
-/* Notification Badge */
+/* ── Notification Badge ── */
 .notificationBadge {
     position: absolute;
     top: -2px;
@@ -425,11 +377,12 @@
     flex-shrink: 0;
 }
 
-.dropdownAvatarImg {
-    width: 48px;
-    height: 48px;
-    border-radius: 50%;
-    object-fit: cover;
+.ddRole   { font-size:0.7rem; color:#6AA6DA; font-weight:600; margin-top:2px; }
+
+.dropdownDivider {
+    height: 1px;
+    background-color: #f0f2f5;
+    margin: 2px 0;
 }
 
 .dropdownAvatarInitials {
@@ -440,9 +393,17 @@
     color: white;
     display: flex;
     align-items: center;
-    justify-content: center;
-    font-weight: 600;
-    font-size: 1.1rem;
+    gap: 10px;
+    width: 100%;
+    padding: 10px 16px;
+    border: none;
+    background: transparent;
+    font-family: 'Franklin Gothic Medium', 'Arial Narrow', Arial, sans-serif;
+    font-size: 0.85rem;
+    color: #444;
+    cursor: pointer;
+    text-align: left;
+    transition: background-color 0.12s, color 0.12s;
 }
 
 @keyframes slideDown {
@@ -452,8 +413,23 @@
 
 @media (max-width: 768px) {
     .notificationDropdown {
-        width: calc(100vw - 2rem);
-        right: -1rem;
+        width: calc(100vw - 32px);
+        right: -8px;
+    }
+}
+
+@media (max-width: 600px) {
+    .navbar { 
+        padding: 0 16px; 
+        gap: 8px; 
+    }
+
+    .navLinks { 
+        display: none; 
+    }
+
+    .menuWrapper { 
+        display: none; 
     }
     .dropdown {
         width: calc(100vw - 2rem);

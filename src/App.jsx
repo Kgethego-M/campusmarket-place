@@ -10,7 +10,6 @@ import { onAuthStateChanged } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import { auth, db } from './firebase';
 
-import AdminUsers from './pages/AdminUsers';
 import AccessDenied from './components/AccessDenied';
 import ViewListing from './components/ViewListing.jsx';
 import EditListing from './pages/EditListing';
@@ -103,12 +102,14 @@ function LoginWrapper() {
       <LoginForm
         onSwitchToSignup={() => navigate('/signup')}
         onLoginSuccess={(userData) => {
-          if (
-            userData.userType === 'admin' ||
-            userData.role === 'admin'
-          ) {
-            navigate('/admin/users');
-          } else {
+          const role = userData.role || userData.userType;
+          if (role === 'admin'){
+            navigate('/admin');
+          }
+          else if (role === 'staff'){
+            navigate('/staff');
+          }
+          else{
             navigate('/view-listing');
           }
         }}
@@ -144,7 +145,6 @@ export function AppRoutes() {
       <Route path="/" element={<LandingPageWrapper />} />
       <Route path="/login" element={<LoginWrapper />} />
       <Route path="/signup" element={<SignupWrapper />} />
-      <Route path="/admin" element={<AdminDashboard />} />
       <Route path="/dashboard" element={<Dashboard />} />
       <Route path="/profile" element={<Profile />} />
       <Route path="/view-listing" element={<ViewListing />} />
