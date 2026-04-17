@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { auth, db } from "../firebase";
 import { signOut, onAuthStateChanged } from "firebase/auth";
 import { doc, getDoc, collection, getDocs, query, orderBy, where } from "firebase/firestore";
-import styles from "./StaffDashboard.module.css";
+import styles from "./Staffdashboard.module.css";
 
 // ─── Mock Data ────────────────────────────────────────────────────────────────
 const MOCK_TRANSACTIONS = [
