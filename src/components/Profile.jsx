@@ -107,7 +107,7 @@ const Profile = () => {
             const userListings = querySnapshot.docs.map(doc => ({
                 id: doc.id,
                 ...doc.data(),
-                specification: doc.data().specification || '',
+                specification: doc.data().specification || '',  // FIXED: use specification (singular)
                 date: doc.data().timestamp?.toDate?.() || new Date(doc.data().timestamp),
                 views: doc.data().views || 0,
                 likes: doc.data().likes || 0
@@ -230,7 +230,7 @@ const Profile = () => {
             price: listing.price || '',
             condition: listing.condition || '',
             listingType: listing.listingType || '',
-            specification: listing.specification || '',
+            specification: listing.specification || '',  // FIXED: use specification (singular)
             description: listing.description || ''
         });
     };
@@ -243,7 +243,7 @@ const Profile = () => {
                 price: parseFloat(editListingData.price),
                 condition: editListingData.condition,
                 listingType: editListingData.listingType,
-                specification: editListingData.specification,
+                specification: editListingData.specification,  // FIXED: use specification (singular)
                 description: editListingData.description,
                 updatedAt: new Date()
             });
@@ -485,7 +485,7 @@ const Profile = () => {
                         )}
                     </div>
                 )}
-                {/* My Listings Tab Content - COMPACT GRID */}
+                {/* My Listings Tab Content */}
                 {activeTab === 'listings' && (
                     <div className={styles.tabContent}>
                         {listings.length === 0 ? (
@@ -502,24 +502,22 @@ const Profile = () => {
                         ) : (
                             <div className={styles.listingsGridCompact}>
                                 {listings.map(listing => (
-                                    <div key={listing.id} className={styles.listingCardCompact}>
-                                        <ProfileListingCard
-                                            listing={listing}
-                                            isEditing={editingListingId === listing.id}
-                                            editData={editListingData}
-                                            onEdit={() => handleEditListing(listing)}
-                                            onDelete={() => handleDeleteListing(listing.id, listing.photos)}
-                                            onEditChange={(field, value) => 
-                                                setEditListingData(prev => ({ ...prev, [field]: value }))
-                                            }
-                                            onSave={() => handleSaveListing(listing.id)}
-                                            onCancel={() => {
-                                                setEditingListingId(null);
-                                                setEditListingData({});
-                                            }}
-                                            compact={true}
-                                        />
-                                    </div>
+                                    <ProfileListingCard
+                                        key={listing.id}
+                                        listing={listing}
+                                        isEditing={editingListingId === listing.id}
+                                        editData={editListingData}
+                                        onEdit={() => handleEditListing(listing)}
+                                        onDelete={() => handleDeleteListing(listing.id, listing.photos)}
+                                        onEditChange={(field, value) => 
+                                            setEditListingData(prev => ({ ...prev, [field]: value }))
+                                        }
+                                        onSave={() => handleSaveListing(listing.id)}
+                                        onCancel={() => {
+                                            setEditingListingId(null);
+                                            setEditListingData({});
+                                        }}
+                                    />
                                 ))}
                             </div>
                         )}
