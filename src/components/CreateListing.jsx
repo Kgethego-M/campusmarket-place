@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { auth, db } from "../firebase.js";
@@ -11,6 +11,8 @@ import {
     categoryMap,
     listingTypeMap,
 } from "../utils/create-listing.utils.js";
+import { createListing } from "../api/listings.js";
+
 import NavBar from "./NavBarTemp.jsx";
 import styles from "./CreateListing.module.css";
 
@@ -43,6 +45,9 @@ export default function CreateListing() {
     const navigate = useNavigate();
     const fileInputRef = useRef(null);
 
+    const [user, setUser] = useState(null);
+    const [authLoading, setAuthLoading] = useState(true);
+
     const [title, setTitle] = useState("");
     const [description, setDescription] = useState("");
     const [specification, setSpecification] = useState("");
@@ -64,13 +69,16 @@ export default function CreateListing() {
     async function handleSubmit(e) {
         e.preventDefault();
 
-        const user = auth.currentUser;
+        // ✅ FIX: wait for auth state
+        if (authLoading) return;
+
         if (!user) {
             alert("Please log in to create a listing.");
             return;
         }
 
         const parsedPrice = parseFloat(price);
+
         const validationResult = validateListing({
             title,
             description,
@@ -79,6 +87,7 @@ export default function CreateListing() {
             condition,
             listingType,
         });
+
         if (!validationResult.valid) {
             alert(validationResult.error);
             return;
@@ -91,6 +100,7 @@ export default function CreateListing() {
         }
 
         let finalCategory = category;
+
         if (category === "other") {
             if (!otherCategory.trim()) {
                 alert("Please specify the category.");
@@ -130,8 +140,8 @@ export default function CreateListing() {
 
             await addDoc(collection(db, "listings"), listingData);
 
-            alert("Successfully created listing!");
-            navigate("/view-listing");
+        alert("Successfully created listing!");
+        navigate("/view-listing");
         } catch (err) {
             console.error("Failed to create listing:", err);
             alert("Failed to create listing. Please try again.");
@@ -142,12 +152,15 @@ export default function CreateListing() {
 
     return (
         <>
-        <NavBar />
-        <div className={styles.page}>
-            <div className={styles.headingWrapper}>
-                <h1 className={styles.heading}>Create Listing</h1>
-                <p className={styles.subheading}>List an item for sale or trade</p>
-            </div>
+            <NavBar />
+
+            <div className={styles.page}>
+                <div className={styles.headingWrapper}>
+                    <h1 className={styles.heading}>Create Listing</h1>
+                    <p className={styles.subheading}>
+                        List an item for sale or trade
+                    </p>
+                </div>
 
             <form className={styles.form} onSubmit={handleSubmit}>
 
@@ -188,16 +201,15 @@ export default function CreateListing() {
                     )}
                 </div>
 
-                {/* Title */}
-                <label className={styles.label}>Title</label>
-                <input
-                    className={styles.input}
-                    type="text"
-                    value={title}
-                    onChange={(e) => setTitle(e.target.value)}
-                    placeholder="E.g Calculus textbook"
-                    required
-                />
+                    {/* Title */}
+                    <label className={styles.label}>Title</label>
+                    <input
+                        className={styles.input}
+                        type="text"
+                        value={title}
+                        onChange={(e) => setTitle(e.target.value)}
+                        required
+                    />
 
                 {/* Description */}
                 <label className={styles.label}>Description</label>
@@ -210,15 +222,18 @@ export default function CreateListing() {
                     required
                 />
 
-                {/* Specification */}
-                <label className={styles.label}>Specification</label>
-                <textarea
-                    className={styles.textarea}
-                    rows={4}
-                    value={specification}
-                    onChange={(e) => setSpecification(e.target.value)}
-                    placeholder="Enter product specifications and details..."
-                />
+                    {/* Specification */}
+                    <label className={styles.label}>
+                        Specification
+                    </label>
+                    <textarea
+                        className={styles.textarea}
+                        rows={4}
+                        value={specification}
+                        onChange={(e) =>
+                            setSpecification(e.target.value)
+                        }
+                    />
 
                 {/* Price + Listing Type */}
                 <div className={styles.row}>
