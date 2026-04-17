@@ -20,13 +20,12 @@ export const storage = getStorage(app);
 export const googleProvider = new GoogleAuthProvider();
 
 export const isValidWitsEmail = (email) => {
-  return email.endsWith('@wits.ac.za') || email.endsWith('@students.wits.ac.za') || email === 'nontokozombatha797@gmail.com' ;
+  return email.endsWith('@wits.ac.za') || email.endsWith('@students.wits.ac.za') || email === 'nontokozombatha797@gmail.com' || email === 's08027456@gmail.com' || email === 'tshegomaphefo48@gmail.com'  || email === 'hyginusvictor11@gmail.com';
 };
 
 export const getUserType = (email) => {
-  if (email.endsWith('@wits.ac.za') || email === 'nontokozombatha797@gmail.com') return 'staff';
+  if (email.endsWith('@wits.ac.za') || email === 'nontokozombatha797@gmail.com' || email === 's08027456@gmail.com' || email === 'tshegomaphefo48@gmail.com' || email === 'hyginusvictor11@gmail.com' ) return 'staff';
   if (email === '2830236@students.wits.ac.za') return 'admin';
   if (email.endsWith('@students.wits.ac.za')) return 'student';
-  //if (email.endsWith('@wits.ac.za') || email === 'nontokozombatha797@gmail.com') return 'Trade facility member';
   return 'unknown';
 };

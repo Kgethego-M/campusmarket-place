@@ -9,69 +9,69 @@ import styles from "./StaffDashboard.module.css";
 const MOCK_TRANSACTIONS = [
     {
         id: "txn001",
-        item: "North Face Puffer Jacket (M)",
+        item: "Coach bag",
         itemImage: null,
-        seller: "Amara Okafor",
+        seller: "Mpeane Mphelane",
         buyer: "James van der Merwe",
         type: "Purchase",
-        price: 1200,
+        price: 3000,
         tradeFor: null,
         timeSlot: "09:00 - 10:00",
         status: "ready_to_release",
         campus: "Main Campus",
         checklist: [
-            { label: "Confirmed Drop-off by Sipho Ndaba", done: true },
-            { label: "Inspected Item by Sipho Ndaba", done: true },
-            { label: "Confirmed Payment by Sipho Ndaba", done: true },
+            { label: "Confirmed Drop-off by Nontokozo Mbatha", done: true },
+            { label: "Inspected Item by Nontokozo Mbatha", done: true },
+            { label: "Confirmed Payment by Nontokozo Mbatha", done: true },
         ],
         date: new Date(),
     },
     {
         id: "txn002",
-        item: "TI-84 Plus CE Calculator",
+        item: "Headphones",
         itemImage: null,
-        seller: "Thabo Molefe",
-        buyer: "James van der Merwe",
-        type: "Trade",
-        price: null,
-        tradeFor: "Casio FX-991EX Scientific Calculator",
+        seller: "Tshepang Legodi",
+        buyer: "Samkelisiwe Mofokeng",
+        type: "Purchase",
+        price: 1500,
+        tradeFor: null,
         timeSlot: "10:00 - 11:00",
         status: "ready_to_release",
         campus: "Main Campus",
         checklist: [
-            { label: "Confirmed Drop-off by Sipho Ndaba", done: true },
-            { label: "Inspected Item by Sipho Ndaba", done: true },
-            { label: "Confirmed Payment by Sipho Ndaba", done: false },
+            { label: "Confirmed Drop-off by Nontokozo Mbatha", done: true },
+            { label: "Inspected Item by Nontokozo Mbatha", done: true },
+            { label: "Confirmed Payment by Nontokozo Mbatha", done: false },
         ],
         date: new Date(),
     },
     {
         id: "txn003",
-        item: "Canon EOS R50 Camera",
+        item: "X-Ray Glasses",
         itemImage: null,
-        seller: "Kefilwe Dlamini",
-        buyer: "Ruan Pretorius",
+        seller: "Victor Hyginus",
+        buyer: "Wendy Khumalo",
         type: "Purchase",
-        price: 8500,
+        price: 200,
         tradeFor: null,
         timeSlot: "11:00 - 12:00",
         status: "in_facility",
         campus: "Education Campus",
         checklist: [
-            { label: "Confirmed Drop-off by Sipho Ndaba", done: true },
-            { label: "Inspected Item by Sipho Ndaba", done: false },
-            { label: "Confirmed Payment by Sipho Ndaba", done: false },
+            { label: "Confirmed Drop-off by Nontokozo Matha", done: true },
+            { label: "Inspected Item by Nontokozo Matha", done: false },
+            { label: "Confirmed Payment by Nontokozo Matha", done: false },
         ],
         date: new Date(),
     },
     {
         id: "txn004",
-        item: "Herman Miller Aeron Chair",
+        item: "ERD Textbook",
         itemImage: null,
-        seller: "Lungelo Nkosi",
-        buyer: "Cara Botha",
+        seller: "Tebogo sebopela",
+        buyer: "Sduduzo Mdlalose",
         type: "Purchase",
-        price: 3200,
+        price: 200,
         tradeFor: null,
         timeSlot: "14:00 - 15:00",
         status: "completed",
@@ -86,12 +86,12 @@ const MOCK_TRANSACTIONS = [
     },
     {
         id: "txn005",
-        item: "Mountain Bike (Trek Marlin 5)",
+        item: "Wired Earphones",
         itemImage: null,
-        seller: "Zanele Mokoena",
-        buyer: "Andre du Plessis",
+        seller: "Ikho Nxazonke",
+        buyer: "Zanenkosi Mbatha",
         type: "Purchase",
-        price: 5600,
+        price: 100,
         tradeFor: null,
         timeSlot: "15:00 - 16:00",
         status: "awaiting_collection",
@@ -137,9 +137,9 @@ function StaffNavbar({ staffName, staffInitials, staffPhoto }) {
     }, []);
 
     const STAFF_LINKS = [
-        { label: "Dashboard",     path: "/staff",  icon: "fa-gauge" },
-        { label: "Time Slots",    path: null,                 icon: "fa-clock" },
-        { label: "Reports",       path: null,                 icon: "fa-chart-bar" },
+        { label: "Dashboard", path: "/staff",  icon: "fa-gauge" },
+        { label: "Time Slots", path: null, icon: "fa-clock" },
+        { label: "Reports",  path: null, icon: "fa-chart-bar" },
     ];
 
     return (
@@ -355,21 +355,6 @@ function StaffProfilePanel({ staffName, staffEmail, staffInitials, staffPhoto, o
                     <p className={styles.profileHeroEmail}>{staffEmail}</p>
                 </div>
 
-                <div className={styles.profileStats}>
-                    <div className={styles.profileStat}>
-                        <span className={styles.profileStatVal}>47</span>
-                        <span className={styles.profileStatLbl}>Transactions Processed</span>
-                    </div>
-                    <div className={styles.profileStat}>
-                        <span className={styles.profileStatVal}>12</span>
-                        <span className={styles.profileStatLbl}>This Week</span>
-                    </div>
-                    <div className={styles.profileStat}>
-                        <span className={styles.profileStatVal}>4.9</span>
-                        <span className={styles.profileStatLbl}>Rating</span>
-                    </div>
-                </div>
-
                 <div className={styles.profileInfoList}>
                     <div className={styles.profileInfoRow}>
                         <i className="fa-solid fa-id-badge" />
@@ -382,7 +367,7 @@ function StaffProfilePanel({ staffName, staffEmail, staffInitials, staffPhoto, o
                         <i className="fa-solid fa-building" />
                         <div>
                             <span className={styles.profileInfoLbl}>Assigned Campus</span>
-                            <span className={styles.profileInfoVal}>Main Campus · South Campus</span>
+                            <span className={styles.profileInfoVal}>Main Campus</span>
                         </div>
                     </div>
                     <div className={styles.profileInfoRow}>
