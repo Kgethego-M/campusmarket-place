@@ -49,10 +49,6 @@ No critical bugs
 
 7. Tools and Technologies
 
-Firebase (Auth, Firestore, Storage, Hosting)
-GitHub (Version control and project management)
-
-
-Prepared by: Kgethego
-Date: 2026 March 30
-
+- Firebase (Auth, Firestore, Hosting)
+- Cloudinary (Image storage)
+- GitHub (Version control and project management)
