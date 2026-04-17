@@ -42,6 +42,7 @@ export default function LoginForm({ onSwitchToSignup, onLoginSuccess }) {
 
       await setDoc(docRef, {
         email: user.email, firstName, lastName, userType,
+        role: userType,
         photoURL: user.photoURL || "",
         lastLogin: new Date().toISOString(),
       }, { merge: true });

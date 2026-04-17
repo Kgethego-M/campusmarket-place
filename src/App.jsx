@@ -23,6 +23,7 @@ import CreateListing from './components/CreateListing';
 import ViewRating from './components/ViewRating';
 import Chat from './components/Chat';
 import Profile from './components/Profile';
+import StaffDashboard from './components/Staffdashboard.jsx';
 import ProfileListingCard from './components/ProfileListingCard';
 
 
@@ -103,12 +104,14 @@ function LoginWrapper() {
       <LoginForm
         onSwitchToSignup={() => navigate('/signup')}
         onLoginSuccess={(userData) => {
-          if (
-            userData.userType === 'admin' ||
-            userData.role === 'admin'
-          ) {
-            navigate('/admin/users');
-          } else {
+          const role = userData.role || userData.userType;
+          if (role === 'admin'){
+            navigate('/admin');
+          }
+          else if (role === 'staff'){
+            navigate('/staff');
+          }
+          else{
             navigate('/view-listing');
           }
         }}
@@ -144,24 +147,21 @@ export function AppRoutes() {
       <Route path="/" element={<LandingPageWrapper />} />
       <Route path="/login" element={<LoginWrapper />} />
       <Route path="/signup" element={<SignupWrapper />} />
-      <Route path="/admin" element={<AdminDashboard />} />
       <Route path="/dashboard" element={<Dashboard />} />
       <Route path="/profile" element={<Profile />} />
-      <Route path="/view-listing" element={<ViewListing />} />
-      <Route path="/create-listing" element={<CreateListing />} />
+      <Route path="/view-listing" element={<ProtectedRoute allowedRoles={['student']}><ViewListing /></ProtectedRoute>} />
+      <Route path="/create-listing" element={<ProtectedRoute allowedRoles={['student']}><CreateListing /></ProtectedRoute>} />
       <Route path="/view-rating" element={<ViewRating userId="sampleUserId" />} />
-      <Route path="/chat" element={<Chat />} />
+      <Route path="/chat" element={<ProtectedRoute allowedRoles={['student']}><Chat/></ProtectedRoute>} />
       <Route path="/chat/:transactionId" element={<Chat />} />
       <Route path="/edit-listing/:id" element={<EditListing />} />
       <Route path="/access-denied" element={<AccessDenied />} />
-      <Route
-        path="/admin/users"
-        element={
-          <ProtectedRoute allowedRoles={['admin']}>
-            <AdminUsers />
-          </ProtectedRoute>
-        }
-      />
+      <Route path="/staff" element={<ProtectedRoute allowedRoles={['staff']}><StaffDashboard /></ProtectedRoute>} />
+      <Route path="/admin" element={<ProtectedRoute allowedRoles={['admin']}><AdminDashboard /></ProtectedRoute>}/>
+      <Route path="/azure/view-listing" element={<ViewListingAzure />} />
+      <Route path="/azure/create-listing" element={<CreateListingAzure />} />
+      <Route path="/azure/edit-listing/:id" element={<EditListingAzure />} />
+
     </Routes>
   );
 }
