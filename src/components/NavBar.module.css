@@ -26,6 +26,9 @@
     height: 42px;
     background-color: #6AA6DA;
     border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .logoText {
@@ -36,7 +39,7 @@
     white-space: nowrap;
 }
 
-/* ── Nav links ── */
+/* ── Desktop nav links ── */
 .navLinks {
     display: flex;
     align-items: center;
@@ -62,6 +65,7 @@
     color: #1a1a1a;
 }
 
+/* Active state — same for ALL active nav links (Browse, Messages, etc.) */
 .navLinkActive {
     background-color: #6AA6DA;
     color: #ffffff !important;
@@ -86,36 +90,590 @@
     margin-left: auto;
 }
 
-.sellBtn {
-    padding: 7px 14px;
-    background-color: #6AA6DA;
-    color: #ffffff;
+/* ── Hamburger button (visible only on mobile) ── */
+.hamburger {
+    display: none;
+    background: none;
     border: none;
-    border-radius: 6px;
-    font-family: 'Franklin Gothic Medium', 'Arial Narrow', Arial, sans-serif;
-    font-size: 0.85rem;
-    font-weight: 600;
+    font-size: 1.3rem;
     cursor: pointer;
-    transition: background-color 0.15s;
-    white-space: nowrap;
+    color: #4b5563;
+    padding: 0.5rem;
+    border-radius: 8px;
+    transition: all 0.2s;
+    align-items: center;
+    justify-content: center;
 }
 
-.sellBtn:hover {
-    background-color: #5A95C8;
+.hamburger:hover {
+    background-color: #e8f0f8;
 }
 
-.avatar {
-    width: 34px;
-    height: 34px;
-    border-radius: 50%;
-    background-color: #dde3e9;
+/* ── Icon Buttons ── */
+.iconButton {
+    background: none;
+    border: none;
+    color: #4b5563;
+    font-size: 1.2rem;
+    cursor: pointer;
+    padding: 0.5rem;
+    border-radius: 8px;
+    transition: all 0.2s;
+    position: relative;
     display: flex;
     align-items: center;
     justify-content: center;
+}
+
+.iconButton:hover { 
+    background-color: #e8f0f8;
+}
+
+/* ── Notification Badge ── */
+.notificationBadge {
+    position: absolute;
+    top: -2px;
+    right: -2px;
+    background-color: #ef4444;
+    color: white;
+    font-size: 0.7rem;
+    font-weight: bold;
+    padding: 2px 6px;
+    border-radius: 10px;
+    min-width: 18px;
+    text-align: center;
+}
+
+/* ── Notification Wrapper ── */
+.notificationWrapper {
+    position: relative;
+    margin-right: 0.5rem;
+}
+
+/* ── Notification Dropdown ── */
+.notificationDropdown {
+    position: absolute;
+    top: calc(100% + 10px);
+    right: 0;
+    width: 380px;
+    background-color: white;
+    border-radius: 12px;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+    z-index: 1000;
+    overflow: hidden;
+    animation: slideDown 0.2s ease-out;
+}
+
+.notificationHeader {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem;
+    background-color: #f9fafb;
+    border-bottom: 1px solid #e5e7eb;
+}
+
+.notificationHeader span {
+    font-weight: 600;
+    color: #1f2937;
+}
+
+.markAllRead {
+    background: none;
+    border: none;
+    color: #6AA6DA;
+    font-size: 0.75rem;
+    cursor: pointer;
+    padding: 0.25rem 0.5rem;
+    border-radius: 6px;
+    transition: all 0.2s;
+}
+
+.markAllRead:hover {
+    background-color: #e8f4fc;
+}
+
+.notificationList {
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+.notificationItem {
+    display: flex;
+    gap: 1rem;
+    padding: 1rem;
+    border-bottom: 1px solid #f3f4f6;
+    transition: all 0.2s;
+    cursor: pointer;
+}
+
+.notificationItem:hover {
+    background-color: #f9fafb;
+}
+
+.notificationItem i {
+    color: #6AA6DA;
+    font-size: 1rem;
+    margin-top: 0.25rem;
+}
+
+.notificationContent {
+    flex: 1;
+}
+
+.notificationContent p {
+    margin: 0 0 0.25rem 0;
+    font-size: 0.875rem;
+    color: #374151;
+}
+
+.notificationContent span {
+    font-size: 0.75rem;
+    color: #9ca3af;
+}
+
+.notificationFooter {
+    padding: 0.75rem;
+    text-align: center;
+    border-top: 1px solid #e5e7eb;
+    background-color: #f9fafb;
+}
+
+.notificationFooter button {
+    background: none;
+    border: none;
+    color: #6AA6DA;
+    font-size: 0.875rem;
+    cursor: pointer;
+    padding: 0.5rem;
+    width: 100%;
+    border-radius: 6px;
+    transition: all 0.2s;
+}
+
+.notificationFooter button:hover {
+    background-color: #e8f4fc;
+}
+
+/* ── Menu Wrapper (desktop dropdown) ── */
+.menuWrapper {
+    position: relative;
+}
+
+.dropdownSell {
+    color: #2a7fd4;
+    font-weight: 600;
+}
+
+.dropdownSell:hover {
+    background-color: #eaf2fb;
+    color: #1a6bbf;
+}
+
+.dropdownSell i {
+    color: #2a7fd4;
+}
+
+/* ── Dropdown menu ── */
+.dropdown {
+    position: absolute;
+    top: calc(100% + 10px);
+    right: 0;
+    background: #fff;
+    border: 1.5px solid #e2e6ea;
+    border-radius: 10px;
+    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.12);
+    min-width: 280px;
+    z-index: 200;
+    overflow: hidden;
+    animation: dropdownFadeIn 0.15s ease;
+}
+
+@keyframes dropdownFadeIn {
+    from { opacity: 0; transform: translateY(-6px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+.dropdownHeader {
+    padding: 14px 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background-color: #f9fafb;
+}
+
+
+
+
+.dropdownName {
+    font-family: 'Franklin Gothic Medium', 'Arial Narrow', Arial, sans-serif;
+    font-size: 0.875rem;
+    font-weight: 700;
+    color: #1a1a1a;
+}
+
+.ddRole   { font-size:0.7rem; color:#6AA6DA; font-weight:600; margin-top:2px; }
+
+.dropdownDivider {
+    height: 1px;
+    background-color: #f0f2f5;
+    margin: 2px 0;
+}
+
+.dropdownItem {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 10px 16px;
+    border: none;
+    background: transparent;
     font-family: 'Franklin Gothic Medium', 'Arial Narrow', Arial, sans-serif;
     font-size: 0.85rem;
-    font-weight: 600;
-    color: #666;
+    color: #444;
     cursor: pointer;
+    text-align: left;
+    transition: background-color 0.12s, color 0.12s;
+}
+
+.dropdownItem:hover {
+    background-color: #f4f8fc;
+    color: #1a1a1a;
+}
+
+.dropdownItem i {
+    width: 14px;
+    color: #999;
+    font-size: 0.8rem;
+}
+
+.dropdownLogout {
+    color: #e53935;
+}
+
+.dropdownLogout:hover {
+    background-color: #fff5f5;
+    color: #c62828;
+}
+
+.dropdownLogout i {
+    color: #e53935;
+}
+
+.dropdownItem:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
+}
+
+/* ── Mobile Drawer Styles ── */
+.mobileOverlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.5);
+    z-index: 998;
+    animation: fadeIn 0.2s ease;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+.mobileDrawer {
+    position: fixed;
+    top: 0;
+    Right: 0;
+    width: 300px;
+    height: 100vh;
+    background-color: #F5F6F8;
+    z-index: 999;
+    box-shadow: -2px 0 10px rgba(0, 0, 0, 0.1);
+    animation: slideIn 0.3s ease;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+}
+
+@keyframes slideIn {
+    from {
+        transform: translateX(100%);
+    }
+    to {
+        transform: translateX(0);
+    }
+}
+
+.drawerHeader {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px;
+    border-bottom: 1px solid #e2e6ea;
+    background-color: #F5F6F8;
+}
+
+.drawerTitle {
+    font-family: 'Franklin Gothic Medium', 'Arial Narrow', Arial, sans-serif;
+    font-size: 1.2rem;
+    font-weight: 600;
+    color: #1a1a1a;
+}
+
+.drawerClose {
+    background: none;
+    border: none;
+    font-size: 1.2rem;
+    cursor: pointer;
+    color: #666;
+    padding: 8px;
+    border-radius: 6px;
+    transition: all 0.2s;
+}
+
+.drawerClose:hover {
+    background-color: #e8eaed;
+}
+
+.drawerUser {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 20px;
+    border-bottom: 1px solid #e2e6ea;
+    background-color: white;
+}
+
+.drawerAvatar {
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    background-color: #6AA6DA;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1rem;
+    font-weight: 700;
+    color: white;
     flex-shrink: 0;
+    overflow: hidden;
+}
+
+.drawerAvatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.drawerUserInfo {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    flex: 1;
+}
+
+.drawerUserName {
+    font-family: 'Franklin Gothic Medium', 'Arial Narrow', Arial, sans-serif;
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: #1a1a1a;
+}
+
+.drawerUserEmail {
+    font-family: 'Franklin Gothic Medium', 'Arial Narrow', Arial, sans-serif;
+    font-size: 0.75rem;
+    color: #888;
+}
+
+.drawerSection {
+    padding: 16px 20px 8px;
+    font-family: 'Franklin Gothic Medium', 'Arial Narrow', Arial, sans-serif;
+    font-size: 0.7rem;
+    font-weight: 700;
+    color: #999;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.drawerLink {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    padding: 12px 20px;
+    border: none;
+    background: transparent;
+    font-family: 'Franklin Gothic Medium', 'Arial Narrow', Arial, sans-serif;
+    font-size: 0.9rem;
+    color: #444;
+    cursor: pointer;
+    text-align: left;
+    transition: all 0.2s;
+}
+
+.drawerLink:hover:not(:disabled) {
+    background-color: #e8f0f8;
+    color: #1a1a1a;
+}
+
+.drawerLink i {
+    width: 20px;
+    color: #999;
+    font-size: 1rem;
+}
+
+.drawerLinkActive {
+    background-color: #6AA6DA;
+    color: white !important;
+}
+
+.drawerLinkActive i {
+    color: white !important;
+}
+
+.drawerLink:disabled {
+    color: #bbb;
+    cursor: default;
+}
+
+.drawerLinkSell {
+    color: #2a7fd4;
+    font-weight: 600;
+}
+
+.drawerLinkSell i {
+    color: #2a7fd4;
+}
+
+.drawerDivider {
+    height: 1px;
+    background-color: #e2e6ea;
+    margin: 8px 0;
+}
+
+.drawerLogout {
+    color: #e53935;
+}
+
+.drawerLogout:hover {
+    background-color: #fff5f5 !important;
+    color: #c62828 !important;
+}
+
+.drawerLogout i {
+    color: #e53935;
+}
+
+/* ── Logout Overlay ── */
+.logoutOverlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.7);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 9999;
+    backdrop-filter: blur(4px);
+}
+
+.logoutLoader {
+    background-color: white;
+    padding: 2rem 3rem;
+    border-radius: 12px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+    animation: scaleIn 0.3s ease-in-out;
+}
+
+.logoutLoader i {
+    font-size: 2.5rem;
+    color: #6AA6DA;
+}
+
+.logoutLoader p {
+    margin: 0;
+    font-size: 1.1rem;
+    font-weight: 500;
+    color: #374151;
+}
+
+@keyframes scaleIn {
+    from { opacity: 0; transform: scale(0.95); }
+    to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes slideDown {
+    from { opacity: 0; transform: translateY(-10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* 
+   RESPONSIVE BREAKPOINTS*/
+
+/* Tablet: compress links, shrink logo text */
+@media (max-width: 780px) {
+    .navbar { 
+        padding: 0 20px; 
+        gap: 12px; 
+    }
+    .logoText { 
+        font-size: 1.15rem; 
+    }
+    .navLink { 
+        padding: 6px 9px; 
+        font-size: 0.8rem; 
+    }
+}
+
+/* Mobile: hide desktop nav links, show hamburger */
+@media (max-width: 600px) {
+    .navbar { 
+        padding: 0 16px; 
+        gap: 8px; 
+    }
+
+    .navLinks { 
+        display: none; 
+    }
+
+    .hamburger { 
+        display: flex; 
+    }
+
+    .notificationDropdown {
+        width: calc(100vw - 32px);
+        right: -8px;
+    }
+}
+
+@media (max-width: 600px) {
+    .navbar { 
+        padding: 0 16px; 
+        gap: 8px; 
+    }
+
+    .navLinks { 
+        display: none; 
+    }
+
+    .menuWrapper { 
+        display: none; 
+    }
+
+    .hamburger { 
+        display: flex; 
+    }
+
+    .notificationDropdown {
+        width: calc(100vw - 32px);
+        right: -8px;
+    }
 }

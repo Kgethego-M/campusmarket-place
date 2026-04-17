@@ -42,12 +42,20 @@ export default function LoginForm({ onSwitchToSignup, onLoginSuccess }) {
 
       await setDoc(docRef, {
         email: user.email, firstName, lastName, userType,
+        role: userType,
         photoURL: user.photoURL || "",
         lastLogin: new Date().toISOString(),
       }, { merge: true });
 
       localStorage.setItem("loggedInUserId", user.uid);
-      onLoginSuccess(userData);
+
+      // ── Route admin users to the admin dashboard ──────────────────────
+      // onLoginSuccess handles navigation for student/staff.
+      // For admins we pass a special flag so App.jsx (or wherever
+      // onLoginSuccess is defined) can redirect to /admin.
+      const resolvedUserType = userData.userType || userType;
+      onLoginSuccess({ ...userData, userType: resolvedUserType });
+
     } catch (err) {
       if (!["auth/popup-closed-by-user", "auth/cancelled-popup-request"].includes(err.code))
         show("Sign-in failed: " + err.message, true);

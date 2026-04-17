@@ -1,16 +1,7 @@
 import { signOut } from "firebase/auth";
 import { auth } from "../firebase";
 
-export default function Dashboard({ user, onLogout }) {
-  async function handleLogout() {
-    try {
-      localStorage.removeItem("loggedInUserId");
-      await signOut(auth);
-    } catch (err) {
-      console.error("Logout error:", err);
-    }
-    onLogout();
-  }
+export default function Dashboard({ user}) {
 
   const rows = [
     ["User Type",  user.userType  || "—"],
@@ -22,17 +13,13 @@ export default function Dashboard({ user, onLogout }) {
   return (
     <div className="dashboard">
       <div className="dash-card">
-        <h1>Welcome to your Dashboard 🎉</h1>
+        <h1>Profile</h1>
 
         {rows.map(([label, value]) => (
           <div className="dash-row" key={label}>
             {label}: <span>{value}</span>
           </div>
         ))}
-
-        <button className="logout-btn" onClick={handleLogout}>
-          <i className="fas fa-right-from-bracket"></i> Logout
-        </button>
       </div>
     </div>
   );
