@@ -1,3 +1,4 @@
+//Chat.jsx
 import { useState, useRef, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import styles from "./Chat.module.css";
@@ -9,7 +10,7 @@ import {
 } from "firebase/firestore";
 import { uploadToCloudinary } from "../utils/cloudinaryUpload";
 
-// ── Avatar — shows photo or initials ────────────────────────────
+// ── Avatar ───────────────────────────────────────────────────────
 function Avatar({ name = "?", photoURL = null, size = 40, online = false }) {
   const initials = name
     .split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase();
@@ -54,8 +55,8 @@ export default function Chat() {
   const [userProfiles, setUserProfiles]   = useState({});
   const [convsLoading, setConvsLoading]   = useState(true);
 
-  const fileInputRef   = useRef(null);
-  const messagesEndRef = useRef(null);
+  const fileInputRef    = useRef(null);
+  const messagesEndRef  = useRef(null);
   const resolvedUidsRef = useRef(new Set());
 
   const activeConv = conversations.find((c) => c.id === activeId);
@@ -72,24 +73,24 @@ export default function Chat() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // Resolve user profile (name + photo) from Firestore
+  // Resolve user profile
   async function resolveUserProfile(uid) {
-  if (!uid || resolvedUidsRef.current.has(uid)) return;
-  resolvedUidsRef.current.add(uid);
-  try {
-    const snap = await getDoc(doc(db, "users", uid));
-    if (snap.exists()) {
-      const d = snap.data();
-      const name =
-        `${d.firstName || ""} ${d.lastName || ""}`.trim() ||
-        d.displayName || d.name || d.email || uid;
-      setUserProfiles((prev) => ({
-        ...prev,
-        [uid]: { name, photoURL: d.photoURL || null },
-      }));
-    }
-  } catch {}
-}
+    if (!uid || resolvedUidsRef.current.has(uid)) return;
+    resolvedUidsRef.current.add(uid);
+    try {
+      const snap = await getDoc(doc(db, "users", uid));
+      if (snap.exists()) {
+        const d = snap.data();
+        const name =
+          `${d.firstName || ""} ${d.lastName || ""}`.trim() ||
+          d.displayName || d.name || d.email || uid;
+        setUserProfiles((prev) => ({
+          ...prev,
+          [uid]: { name, photoURL: d.photoURL || null },
+        }));
+      }
+    } catch {}
+  }
 
   // Subscribe to conversations
   useEffect(() => {
@@ -97,15 +98,12 @@ export default function Chat() {
     const q = query(collection(db, "chats"), where("participants", "array-contains", me.uid));
     const unsub = onSnapshot(q, async (snap) => {
       const convs = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-      
-      // Fetch ALL profiles in parallel before showing conversations
       await Promise.all(
         convs.map((c) => {
           const otherId = (c.participants || []).find((p) => p !== me.uid);
           return otherId ? resolveUserProfile(otherId) : Promise.resolve();
         })
       );
-      
       setConversations(convs);
       setConvsLoading(false);
     });
@@ -259,14 +257,9 @@ export default function Chat() {
           {/* ── Chats tab ── */}
           {sidebarTab === "chats" && (
             convsLoading ? (
-              // Skeleton loader
               <ul className={styles.convList}>
                 {[...Array(5)].map((_, i) => (
-                  <li
-                    key={i}
-                    className={styles.skeletonItem}
-                    style={{ animationDelay: `${i * 80}ms` }}
-                  >
+                  <li key={i} className={styles.skeletonItem} style={{ animationDelay: `${i * 80}ms` }}>
                     <div className={styles.skeletonAvatar} />
                     <div className={styles.skeletonInfo}>
                       <div className={styles.skeletonLine} style={{ width: "55%" }} />
@@ -358,6 +351,7 @@ export default function Chat() {
             const otherProfile = getOtherProfile(activeConv);
             return (
               <>
+                {/* Header */}
                 <header className={styles.chatHeader}>
                   <button className={styles.chatBackBtn} onClick={goBackToList}>
                     <i className="fa-solid fa-arrow-left" />
@@ -379,10 +373,12 @@ export default function Chat() {
                   </button>
                 </header>
 
-                <div className={styles.body}>
+                {/* Messages */}
+                <div className={styles.messagesWrap}>
                   <div className={styles.messages}>
                     {messages.map((msg) => {
                       const isMe = msg.senderId === me?.uid;
+                      const time = formatTime(msg.timestamp);
                       return (
                         <div
                           key={msg.id}
@@ -397,23 +393,25 @@ export default function Chat() {
                           )}
                           <div className={`${styles.bubble} ${isMe ? styles.bubbleMe : styles.bubbleThem}`}>
                             {msg.type === "text" && (
-                              <p style={{ margin: 0 }}>{msg.content}</p>
+                              <span className={styles.bubbleText}>{msg.content}</span>
                             )}
                             {msg.type === "image" && (
                               <img
                                 src={msg.content}
                                 alt="attachment"
-                                style={{ maxWidth: "200px", borderRadius: "8px", display: "block" }}
+                                className={styles.bubbleImg}
                               />
                             )}
                             {msg.type === "video" && (
                               <video
                                 src={msg.content}
                                 controls
-                                style={{ maxWidth: "200px", borderRadius: "8px", display: "block" }}
+                                className={styles.bubbleVideo}
                               />
                             )}
-                            <span className={styles.msgTime}>{formatTime(msg.timestamp)}</span>
+                            {time && (
+                              <span className={styles.msgTime}>{time}</span>
+                            )}
                           </div>
                         </div>
                       );
@@ -422,7 +420,7 @@ export default function Chat() {
                   </div>
                 </div>
 
-                {/* ── Input bar ── */}
+                {/* Input bar */}
                 <div className={styles.inputBar}>
                   <input
                     type="file"
