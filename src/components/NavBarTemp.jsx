@@ -25,7 +25,6 @@ export default function Navbar() {
     const dropdownRef = useRef(null);
     const notificationRef = useRef(null);
 
-    // ── Real user state ────────────────────────────────────────────────────
     const [userDisplay, setUserDisplay] = useState({
         name: 'Student',
         email: '',
@@ -34,11 +33,27 @@ export default function Navbar() {
     });
 
     const markAsRead = async (notificationId) => {
-    try {
-        await updateDoc(doc(db, 'notifications', notificationId), { read: true });
-    } catch (err) {
-        console.error('Failed to mark notification as read:', err);
-    }
+        try {
+            await updateDoc(doc(db, 'notifications', notificationId), { read: true });
+        } catch (err) {
+            console.error('Failed to mark notification as read:', err);
+        }
+    };
+
+    // Handle clicking anywhere on a notification item
+    const handleNotificationClick = async (n) => {
+        await markAsRead(n.id);
+        setNotificationsOpen(false);
+
+        if (n.type === 'new_offer') {
+            // Takes seller to their offers tab, highlights the relevant listing
+            navigate('/profile?tab=offers&highlight=' + (n.transactionId || n.listingId));
+        } else if (n.type === 'offer_accepted') {
+            // Takes buyer to their transaction history, highlights the relevant entry
+            navigate('/profile?tab=history&highlight=' + (n.transactionId || n.listingId));
+        } else if (n.type === 'offer_declined') {
+            navigate('/profile?tab=history&highlight=' + (n.transactionId || n.listingId));
+        }
     };
 
     // Listen for auth changes and load the user's Firestore profile
@@ -49,7 +64,6 @@ export default function Navbar() {
                 return;
             }
 
-            // Start with what Firebase Auth already knows (instant)
             const nameParts = (firebaseUser.displayName || '').split(' ');
             const firstName = nameParts[0] || '';
             const lastName  = nameParts.slice(1).join(' ') || '';
@@ -62,7 +76,6 @@ export default function Navbar() {
                 initials
             });
 
-            // Then enrich with Firestore data (may have updated bio/photo)
             try {
                 const snap = await getDoc(doc(db, 'users', firebaseUser.uid));
                 if (snap.exists()) {
@@ -78,7 +91,6 @@ export default function Navbar() {
                     });
                 }
             } catch (err) {
-                // Firestore fetch failed — Auth data is still shown, no crash
                 console.warn('NavBar: could not load Firestore profile', err);
             }
         });
@@ -118,12 +130,12 @@ export default function Navbar() {
         }, 2000);
     };
 
- useEffect(() => {
-    const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
-        setCurrentUser(user);
-        if (!user) setNotifications([]);
-    });
-    return () => unsubscribeAuth();
+    useEffect(() => {
+        const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
+            setCurrentUser(user);
+            if (!user) setNotifications([]);
+        });
+        return () => unsubscribeAuth();
     }, []);
 
     useEffect(() => {
@@ -143,6 +155,20 @@ export default function Navbar() {
         return () => unsubscribe();
     }, [currentUser]);
 
+    // Notification icon label helper
+    const notificationIcon = (type) => {
+        if (type === 'new_offer') return 'fa-shopping-cart';
+        if (type === 'offer_accepted') return 'fa-circle-check';
+        if (type === 'offer_declined') return 'fa-circle-xmark';
+        return 'fa-bell';
+    };
+
+    const notificationMessage = (type) => {
+        if (type === 'new_offer') return 'You have a new offer on one of your listings';
+        if (type === 'offer_accepted') return 'Your offer was accepted!';
+        if (type === 'offer_declined') return 'Your offer was declined.';
+        return 'Notification';
+    };
 
     return (
         <header className={styles.navbar}>
@@ -175,13 +201,15 @@ export default function Navbar() {
             <div className={styles.navRight}>
                 {/* Notification Bell */}
                 <div className={styles.notificationWrapper} ref={notificationRef}>
-                    <button 
+                    <button
                         className={styles.iconButton}
                         onClick={() => setNotificationsOpen((v) => !v)}
                         title="Notifications"
                     >
                         <i className="fa-solid fa-bell"></i>
-                        <span className={styles.notificationBadge}>{notifications.length}</span>
+                        {notifications.length > 0 && (
+                            <span className={styles.notificationBadge}>{notifications.length}</span>
+                        )}
                     </button>
 
                     {notificationsOpen && (
@@ -190,65 +218,38 @@ export default function Navbar() {
                                 <span>Notifications</span>
                                 <button className={styles.markAllRead}>Mark all as read</button>
                             </div>
-                            <div className={styles.notificationList}>
-                            {/* Dynamic notifications from Firestore */}
-                            
-                            {notifications.map((n) => (
-                                <div key={n.id} className={styles.notificationItem}>
-                                    <i className="fas fa-shopping-cart"></i>
-                                    <div className={styles.notificationContent}>
-                                        <p>
-                                            {n.type === 'new_offer'
-                                                ? `You have a new offer on one of your listings`
-                                                : n.type === 'offer_accepted'
-                                                ? 'Your offer was accepted!'
-                                                : n.type === 'offer_declined'
-                                                ? 'Your offer was declined.'
-                                                : 'Notification'}
-                                        </p>
-                                        <span>
-                                            {n.createdAt?.toDate
-                                                ? n.createdAt.toDate().toLocaleString()
-                                                : ''}
-                                        </span>
-                                        {n.type === 'new_offer' && (
-                                            <button
-                                                className={styles.viewOfferButton}  // Added class for styling
-                                                onClick={async () => {
-                                                    await markAsRead(n.id);
-                                                    setNotificationsOpen(false);
-                                                    // Navigate to profile with offers tab and listing highlight
-                                                    navigate('/profile?tab=offers&highlight=' + (n.transactionId || n.listingId));
-                                                }}
-                                            >
-                                                View Offer
-                                            </button>
-                                        )}
-                                        {n.type === 'offer_accepted' && (
-                                            <button
-                                                className={styles.viewOfferButton}  // Same style for consistency
-                                                onClick={async () => {
-                                                    await markAsRead(n.id);
-                                                    setNotificationsOpen(false);
-                                                    navigate('/profile?tab=history&highlight=' + (n.transactionId || n.listingId));
-                                                }}
-                                            >
-                                                View Details
-                                            </button>
-                                        )}
-                                    </div>
-                                </div>
-                            ))}                           
-                             
 
-                            {/* ✅ You can still keep your static notifications if you want */}
-                            <div className={styles.notificationItem}>
-                                <i className="fas fa-star"></i>
-                                <div className={styles.notificationContent}>
-                                <p>You received a 5-star rating!</p>
-                                <span>2 hours ago</span>
-                                </div>
-                            </div>
+                            <div className={styles.notificationList}>
+                                {notifications.length === 0 ? (
+                                    <div className={styles.notificationItem} style={{ cursor: 'default' }}>
+                                        <div className={styles.notificationContent}>
+                                            <p style={{ color: '#888' }}>No new notifications</p>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    notifications.map((n) => (
+                                        <div
+                                            key={n.id}
+                                            className={styles.notificationItem}
+                                            onClick={() => handleNotificationClick(n)}
+                                            style={{ cursor: 'pointer' }}
+                                            role="button"
+                                            tabIndex={0}
+                                            onKeyDown={(e) => e.key === 'Enter' && handleNotificationClick(n)}
+                                            data-testid={`notification-item-${n.id}`}
+                                        >
+                                            <i className={`fas ${notificationIcon(n.type)}`}></i>
+                                            <div className={styles.notificationContent}>
+                                                <p>{notificationMessage(n.type)}</p>
+                                                <span>
+                                                    {n.createdAt?.toDate
+                                                        ? n.createdAt.toDate().toLocaleString()
+                                                        : ''}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    ))
+                                )}
                             </div>
 
                             <div className={styles.notificationFooter}>
@@ -258,9 +259,9 @@ export default function Navbar() {
                     )}
                 </div>
 
-                {/* Menu Button (3 horizontal lines) */}
+                {/* Menu Button */}
                 <div className={styles.menuWrapper} ref={dropdownRef}>
-                    <button 
+                    <button
                         className={styles.iconButton}
                         onClick={() => !isLoggingOut && setDropdownOpen((v) => !v)}
                         title="Menu"
@@ -271,9 +272,7 @@ export default function Navbar() {
                     {dropdownOpen && !isLoggingOut && (
                         <div className={styles.dropdown}>
                             <div className={styles.dropdownHeader}>
-                                <div className={styles.dropdownAvatar}>
-
-                                </div>
+                                <div className={styles.dropdownAvatar}></div>
                                 <div><span className={styles.dropdownName}>{userDisplay.name}</span></div>
                             </div>
                             <div className={styles.dropdownDivider} />
