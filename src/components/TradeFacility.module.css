@@ -1,0 +1,329 @@
+/* ── Page ─────────────────────────────────────────────────────── */
+.page {
+  max-width: 780px;
+  margin: 0 auto;
+  padding: 40px 24px 64px;
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+}
+
+/* ── Header ───────────────────────────────────────────────────── */
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 32px;
+  gap: 16px;
+}
+
+.heading {
+  font-size: 26px;
+  font-weight: 800;
+  color: #111827;
+  margin: 0 0 4px 0;
+  letter-spacing: -0.5px;
+}
+
+.subheading {
+  font-size: 14px;
+  color: #9ca3af;
+  margin: 0;
+}
+
+.countChip {
+  font-size: 12px;
+  font-weight: 600;
+  color: #6AA6DA;
+  background: rgba(106, 166, 218, 0.12);
+  padding: 5px 12px;
+  border-radius: 999px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* ── Card list ────────────────────────────────────────────────── */
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* ── Transaction card ─────────────────────────────────────────── */
+.card {
+  background: #ffffff;
+  border: 1px solid #e8eaed;
+  border-radius: 14px;
+  padding: 16px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05);
+  transition: box-shadow 0.18s ease, transform 0.18s ease, border-color 0.18s ease;
+  opacity: 0;
+  animation: cardIn 0.35s ease forwards;
+}
+
+.card:hover {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.09);
+  transform: translateY(-2px);
+  border-color: #d0d9e4;
+}
+
+@keyframes cardIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Image ────────────────────────────────────────────────────── */
+.imgWrap {
+  width: 80px;
+  height: 80px;
+  border-radius: 10px;
+  overflow: hidden;
+  flex-shrink: 0;
+  background: #f0f2f5;
+  border: 1px solid #e8eaed;
+}
+
+.img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.imgPlaceholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #f0f2f5, #e8ecf0);
+}
+
+/* ── Card body ────────────────────────────────────────────────── */
+.cardBody {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.itemTitle {
+  font-size: 15px;
+  font-weight: 700;
+  color: #111827;
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.metaRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.metaItem {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+  color: #6b7280;
+  font-weight: 500;
+}
+
+.metaItem svg {
+  flex-shrink: 0;
+  color: #9ca3af;
+}
+
+.metaDot {
+  color: #d1d5db;
+  font-size: 14px;
+}
+
+.metaPrice {
+  font-size: 13px;
+  font-weight: 700;
+  color: #6AA6DA;
+}
+
+.metaType {
+  font-size: 12px;
+  font-weight: 600;
+  color: #9ca3af;
+  background: #f3f4f6;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.dropOffDate {
+  font-size: 12px;
+  color: #6b7280;
+  margin: 0;
+}
+
+/* ── Drop-off button ──────────────────────────────────────────── */
+.dropOffBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+  padding: 6px 14px;
+  background: #6AA6DA;
+  color: #fff;
+  border: none;
+  border-radius: 7px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.15s, transform 0.15s;
+  width: fit-content;
+}
+
+.dropOffBtn:hover {
+  background: #5596ca;
+  transform: translateY(-1px);
+}
+
+/* ── Status badge ─────────────────────────────────────────────── */
+.badgeWrap {
+  flex-shrink: 0;
+}
+
+.badge {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* ── Empty state ──────────────────────────────────────────────── */
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 64px 24px;
+  background: #ffffff;
+  border: 1px solid #e8eaed;
+  border-radius: 16px;
+  gap: 10px;
+}
+
+.emptyIcon {
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background: #f3f4f6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 4px;
+  color: #9ca3af;
+}
+
+.emptyTitle {
+  font-size: 16px;
+  font-weight: 700;
+  color: #374151;
+  margin: 0;
+}
+
+.emptySub {
+  font-size: 13px;
+  color: #9ca3af;
+  margin: 0;
+  max-width: 300px;
+  line-height: 1.5;
+}
+
+/* ── Primary button ───────────────────────────────────────────── */
+.primaryBtn {
+  margin-top: 8px;
+  padding: 10px 22px;
+  background: #6AA6DA;
+  color: #fff;
+  border: none;
+  border-radius: 9px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.15s, transform 0.15s;
+}
+
+.primaryBtn:hover {
+  background: #5596ca;
+  transform: translateY(-1px);
+}
+
+/* ── Centred fallback ─────────────────────────────────────────── */
+.centred {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 60vh;
+  gap: 16px;
+  color: #6b7280;
+  font-family: 'Segoe UI', system-ui, sans-serif;
+}
+
+/* ── Skeleton shimmer ─────────────────────────────────────────── */
+@keyframes shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+.shimmer {
+  background: linear-gradient(90deg, #f0f2f5 25%, #e4e8ed 50%, #f0f2f5 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s infinite, cardIn 0.3s ease forwards;
+  border-radius: 6px;
+}
+
+.skeletonImg {
+  width: 80px;
+  height: 80px;
+  border-radius: 10px;
+  flex-shrink: 0;
+}
+
+.skeletonLine {
+  height: 12px;
+  border-radius: 6px;
+}
+
+.skeletonBadge {
+  width: 90px;
+  height: 26px;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+
+/* ── Responsive ───────────────────────────────────────────────── */
+@media (max-width: 540px) {
+  .page { padding: 24px 16px 48px; }
+  .heading { font-size: 22px; }
+
+  .card {
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .badgeWrap {
+    width: 100%;
+  }
+
+  .imgWrap {
+    width: 64px;
+    height: 64px;
+  }
+}
