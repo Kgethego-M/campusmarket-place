@@ -1,0 +1,224 @@
+/* ════════════════════════════════════════════
+   NOTIFICATIONS PAGE
+   Matches project style: Franklin Gothic, #6AA6DA, #1a1a2e, #efeae2 bg
+════════════════════════════════════════════ */
+
+.page {
+  min-height: calc(100vh - 64px);
+  background: #efeae2;
+  font-family: 'Franklin Gothic Medium', 'Arial Narrow', Arial, sans-serif;
+  padding: 32px 16px;
+}
+
+.container {
+  max-width: 640px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+/* ── Header ───────────────────────────────── */
+.header {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.backBtn {
+  background: none;
+  border: none;
+  color: #6AA6DA;
+  font-family: inherit;
+  font-size: 0.84rem;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+  transition: color 0.15s;
+}
+
+.backBtn:hover { color: #3d7cbf; }
+
+.headerRight {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.title {
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: #1a1a2e;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.unreadBadge {
+  background: #ef4444;
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 10px;
+  min-width: 20px;
+  text-align: center;
+}
+
+.markAllBtn {
+  background: none;
+  border: none;
+  color: #6AA6DA;
+  font-family: inherit;
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 4px 10px;
+  border-radius: 6px;
+  transition: background 0.15s;
+  white-space: nowrap;
+}
+
+.markAllBtn:hover { background: #e8f4fc; }
+
+/* ── Section ──────────────────────────────── */
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sectionLabel {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  margin: 0 0 4px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* ── Notification Card ────────────────────── */
+.card {
+  background: #fff;
+  border-radius: 12px;
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  cursor: pointer;
+  border: 1.5px solid transparent;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+  transition: box-shadow 0.15s, border-color 0.15s, background 0.15s;
+  position: relative;
+}
+
+.card:hover {
+  box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+  border-color: #6AA6DA;
+}
+
+.cardUnread {
+  background: #f0f7ff;
+  border-color: rgba(106,166,218,0.3);
+}
+
+/* ── Icon ─────────────────────────────────── */
+.iconWrap {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background: #e8f4fc;
+  color: #6AA6DA;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1rem;
+  flex-shrink: 0;
+}
+
+.iconStar {
+  background: #fff7e6;
+  color: #f5a623;
+}
+
+/* ── Content ──────────────────────────────── */
+.content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.cardTitle {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: #1a1a2e;
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cardMsg {
+  font-size: 0.78rem;
+  color: #64748b;
+  margin: 0;
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.time {
+  font-size: 0.7rem;
+  color: #94a3b8;
+  margin-top: 2px;
+}
+
+/* ── Unread dot ───────────────────────────── */
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #6AA6DA;
+  flex-shrink: 0;
+}
+
+/* ── Empty state ──────────────────────────── */
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 64px 16px;
+  color: #94a3b8;
+  text-align: center;
+}
+
+.empty i {
+  font-size: 2.5rem;
+  color: #cbd5e1;
+}
+
+.empty p {
+  margin: 0;
+  font-size: 0.88rem;
+}
+
+/* ── Responsive ───────────────────────────── */
+@media (max-width: 520px) {
+  .page { padding: 20px 12px; }
+  .cardTitle { font-size: 0.82rem; }
+  .cardMsg { font-size: 0.74rem; }
+}
