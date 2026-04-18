@@ -28,7 +28,6 @@ export default function TradeFacility() {
   async function fetchTransactions(uid) {
     setLoading(true);
     try {
-      // Get transactions where user is seller
       const q = query(
         collection(db, "transactions"),
         where("sellerId", "==", uid)
@@ -39,13 +38,11 @@ export default function TradeFacility() {
       for (const docSnap of snapshot.docs) {
         const txn = { id: docSnap.id, ...docSnap.data() };
 
-        // Get listing details
         const listingSnap = await getDoc(doc(db, "listings", txn.listingId));
         if (listingSnap.exists()) {
           txn.listing = listingSnap.data();
         }
 
-        // Get buyer name
         const buyerSnap = await getDoc(doc(db, "users", txn.buyerId));
         if (buyerSnap.exists()) {
           const buyer = buyerSnap.data();
@@ -143,6 +140,9 @@ export default function TradeFacility() {
           <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
             {transactions.map((txn) => {
               const badge = getStatusBadge(txn);
+              const imageUrl = txn.listing?.photos && txn.listing.photos.length > 0 
+                ? txn.listing.photos[0] 
+                : null;
               return (
                 <div key={txn.id} style={{
                   backgroundColor: "white",
@@ -154,7 +154,7 @@ export default function TradeFacility() {
                   gap: "16px",
                   boxShadow: "0 2px 8px rgba(0,0,0,0.05)"
                 }}>
-                  {/* Image placeholder */}
+                  {/* Listing image */}
                   <div style={{
                     width: "80px",
                     height: "80px",
@@ -164,10 +164,17 @@ export default function TradeFacility() {
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
-                    color: "#999",
-                    fontSize: "12px"
+                    overflow: "hidden"
                   }}>
-                    IMG
+                    {imageUrl ? (
+                      <img 
+                        src={imageUrl} 
+                        alt={txn.listing?.title || "Listing"}
+                        style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                      />
+                    ) : (
+                      <span style={{ color: "#999", fontSize: "12px" }}>No Image</span>
+                    )}
                   </div>
 
                   {/* Details */}
@@ -186,7 +193,6 @@ export default function TradeFacility() {
                           Buyer: {txn.buyerName}
                         </p>
                       </div>
-                      {/* Status badge */}
                       <span style={{
                         padding: "4px 12px",
                         backgroundColor: badge.bg,
@@ -200,7 +206,6 @@ export default function TradeFacility() {
                       </span>
                     </div>
 
-                    {/* Price */}
                     <div style={{ display: "flex", gap: "8px", marginBottom: "8px" }}>
                       <span style={{
                         padding: "2px 10px",
@@ -223,14 +228,12 @@ export default function TradeFacility() {
                       )}
                     </div>
 
-                    {/* Drop-off info */}
                     {txn.dropOffDate && (
                       <p style={{ margin: "4px 0", fontSize: "13px", color: "#555" }}>
                         📅 Drop-off: {txn.dropOffDate} {txn.dropOffTimeSlot}
                       </p>
                     )}
 
-                    {/* Action button */}
                     {txn.status === "accepted" && !txn.dropOffStatus && (
                       <button
                         onClick={() => navigate(`/book-dropoff/${txn.id}`)}

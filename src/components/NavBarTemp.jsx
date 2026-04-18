@@ -9,7 +9,7 @@ import styles from "./NavBar.module.css";
 
 const NAV_LINKS = [
     { label: "Browse",         path: "/view-listing" },
-    { label: "Trade Facility", path: null },
+    { label: "Trade Facility", path: "/trade-facility" },
     { label: "Messages",       path: "/chat" },
     { label: "View Cart",      path: null },
 ];
