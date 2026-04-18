@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import styles from "./Chat.module.css";
 import NavBar from "./NavBarTemp.jsx";
 import { db, auth } from "../firebase";
@@ -48,6 +48,7 @@ function formatTime(ts) {
 // ── Main ──────────────────────────────────────────────────────────────────────
 export default function Chat() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const me = auth.currentUser;
 
   const [conversations, setConversations] = useState([]);
@@ -72,6 +73,14 @@ export default function Chat() {
   const mediaItems = messages.filter(
     (m) => m.type === "image" || m.type === "video"
   );
+
+  // ── Auto-open conversation from ?open=chatId (set by Message Seller) ──────
+  useEffect(() => {
+    const openId = searchParams.get("open");
+    if (openId) {
+      setActiveId(openId);
+    }
+  }, [searchParams]);
 
   // ── Auto-scroll ───────────────────────────────────────────────────────────
   useEffect(() => {
@@ -132,7 +141,7 @@ export default function Chat() {
     updateDoc(doc(db, "chats", activeId), {
       [`unread_${me.uid}`]: 0,
     }).catch(() => {});
-  }, [activeId]);
+  }, [activeId, me]);
 
   function getOtherUid(conv) {
     return (conv?.participants || []).find((p) => p !== me?.uid);
@@ -227,9 +236,23 @@ export default function Chat() {
     return `${m}:${s}`;
   }
 
+  // Don't render until we have the user
+  if (!me) {
+    return (
+      <>
+        <NavBar />
+        <div className={styles.page}>
+          <div className={styles.noChat}>
+            <i className="fa-solid fa-comments" />
+            <h3>Please log in to view messages</h3>
+          </div>
+        </div>
+      </>
+    );
+  }
+
   return (
     <>
-      {/* ✅ NAVBAR ADDED */}
       <NavBar />
 
       <div className={styles.page}>
@@ -294,9 +317,43 @@ export default function Chat() {
                       {conv.lastMessage || ""}
                     </span>
                   </div>
+                  {getUnread(conv) > 0 && (
+                    <span className={styles.unreadBadge}>{getUnread(conv)}</span>
+                  )}
                 </li>
               ))}
+              {filteredConvs.length === 0 && (
+                <li className={styles.noConvs}>
+                  <p>No conversations yet</p>
+                  <p className={styles.noConvsSub}>
+                    Message a seller to start a chat
+                  </p>
+                </li>
+              )}
             </ul>
+          )}
+
+          {sidebarTab === "media" && (
+            <div className={styles.mediaPanel}>
+              {mediaItems.length === 0 ? (
+                <div className={styles.noMedia}>
+                  <i className="fa-solid fa-images" />
+                  <p>No shared media yet</p>
+                </div>
+              ) : (
+                <div className={styles.mediaGrid}>
+                  {mediaItems.map((item) => (
+                    <div key={item.id} className={styles.mediaItem}>
+                      {item.type === "image" ? (
+                        <img src={item.content} alt="Shared" />
+                      ) : (
+                        <video src={item.content} controls />
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           )}
         </aside>
 
@@ -310,39 +367,114 @@ export default function Chat() {
             <div className={styles.noChat}>
               <i className="fa-solid fa-comments" />
               <h3>Select a conversation</h3>
+              <p>Click on a chat from the sidebar to start messaging</p>
             </div>
           )}
 
           {activeId && activeConv && (
             <>
               <header className={styles.chatHeader}>
-                <button
-                  className={styles.chatBackBtn}
-                  onClick={goBackToList}
-                >
+                <button className={styles.chatBackBtn} onClick={goBackToList}>
                   <i className="fa-solid fa-arrow-left" />
                 </button>
 
                 <button
                   className={styles.headerProfile}
-                  onClick={() => navigate("/profile")}
+                  onClick={() => {
+                    const otherUid = getOtherUid(activeConv);
+                    if (otherUid) navigate(`/profile/${otherUid}`);
+                  }}
                 >
                   <Avatar name={getOtherName(activeConv)} size={40} />
+                  <span className={styles.headerName}>
+                    {getOtherName(activeConv)}
+                  </span>
                 </button>
               </header>
 
               <div className={styles.body}>
                 <div className={styles.messages}>
-                  {messages.map((msg, i) => (
-                    <div key={msg.id} className={styles.msgRow}>
-                      <div className={styles.bubble}>
-                        {msg.type === "text" && (
-                          <p>{msg.content}</p>
-                        )}
+                  {messages.map((msg) => {
+                    const isMe = msg.senderId === me?.uid;
+                    return (
+                      <div
+                        key={msg.id}
+                        className={`${styles.msgRow} ${
+                          isMe ? styles.msgRowMe : styles.msgRowThem
+                        }`}
+                      >
+                        <div
+                          className={`${styles.bubble} ${
+                            isMe ? styles.bubbleMe : styles.bubbleThem
+                          }`}
+                        >
+                          {msg.type === "text" && (
+                            <p style={{ margin: 0 }}>{msg.content}</p>
+                          )}
+                          {msg.type === "image" && (
+                            <img
+                              src={msg.content}
+                              alt="attachment"
+                              style={{
+                                maxWidth: "200px",
+                                borderRadius: "8px",
+                                display: "block",
+                              }}
+                            />
+                          )}
+                          {msg.type === "video" && (
+                            <video
+                              src={msg.content}
+                              controls
+                              style={{
+                                maxWidth: "200px",
+                                borderRadius: "8px",
+                                display: "block",
+                              }}
+                            />
+                          )}
+                          <span className={styles.msgTime}>
+                            {formatTime(msg.timestamp)}
+                          </span>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
+                  <div ref={messagesEndRef} />
                 </div>
+              </div>
+
+              {/* ── Input bar ── */}
+              <div className={styles.inputBar}>
+                <input
+                  type="file"
+                  accept="image/*,video/*"
+                  ref={fileInputRef}
+                  style={{ display: "none" }}
+                  onChange={handleFileSelect}
+                />
+                <button
+                  className={styles.attachBtn}
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={isUploading}
+                >
+                  <i className="fa-solid fa-paperclip" />
+                </button>
+                <input
+                  className={styles.textInput}
+                  placeholder={isUploading ? "Uploading…" : "Type a message…"}
+                  value={inputText}
+                  onChange={(e) => setInputText(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  disabled={isUploading}
+                />
+                <button
+                  className={styles.sendBtn}
+                  onClick={sendText}
+                  disabled={!inputText.trim() || isUploading}
+                >
+                  <i className="fa-solid fa-paper-plane" />
+                </button>
               </div>
             </>
           )}

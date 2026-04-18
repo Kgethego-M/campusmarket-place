@@ -863,6 +863,7 @@
     100% {
         background-color: rgba(225, 229, 28, 0);
     }
+}
 /* ── Compact Listings Grid (like ViewRating) ─────────────────── */
 .listingsGridCompact {
   display: grid;
