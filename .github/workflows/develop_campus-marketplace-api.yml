@@ -1,54 +1,79 @@
-name: Build and deploy Python app to Azure Web App - campus-marketplace-api
+name: Deploy to Azure App Service
 
 on:
   push:
     branches:
       - develop
-  workflow_dispatch:
 
 jobs:
-  # --- JOB 1: BACKEND TESTING ---
+  # --- JOB 1: VALIDATION ---
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v3
 
-      - name: Set up Python version
-        uses: actions/setup-python@v5
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
         with:
-          python-version: '3.11'
+          node-version: '20'
 
       - name: Install dependencies
-        run: |
-          cd backend
-          pip install -r requirements.txt
-          pip install pytest pytest-cov
+        run: npm install
 
-      - name: Run tests with coverage
-        run: |
-          cd backend
-          # Using 'python -m pytest' is the fix for "ModuleNotFoundError: No module named 'main'"
-          python -m pytest . --cov=. --cov-report=xml
+      - name: Run Vitest with coverage
+        run: npm run test -- --coverage
+        env:
+          VITE_FIREBASE_API_KEY: ${{ secrets.VITE_FIREBASE_API_KEY }}
+          VITE_FIREBASE_AUTH_DOMAIN: ${{ secrets.VITE_FIREBASE_AUTH_DOMAIN }}
+          VITE_FIREBASE_PROJECT_ID: ${{ secrets.VITE_FIREBASE_PROJECT_ID }}
+          VITE_FIREBASE_STORAGE_BUCKET: ${{ secrets.VITE_FIREBASE_STORAGE_BUCKET }}
+          VITE_FIREBASE_MESSAGING_SENDER_ID: ${{ secrets.VITE_FIREBASE_MESSAGING_SENDER_ID }}
+          VITE_FIREBASE_APP_ID: ${{ secrets.VITE_FIREBASE_APP_ID }}
 
-      - name: Upload backend coverage to Codecov
+      - name: Show coverage summary in GitHub Actions
+        run: |
+          echo "## Frontend Coverage Summary" >> $GITHUB_STEP_SUMMARY
+          npx vitest --coverage --reporter=text-summary | tee coverage-summary.txt
+          cat coverage-summary.txt >> $GITHUB_STEP_SUMMARY
+
+
+      - name: Upload frontend coverage to Codecov
         uses: codecov/codecov-action@v5
         with:
-          token: ${{ secrets.CODECOV_TOKEN }} # Ensure this secret exists
-          files: ./backend/coverage.xml
-          flags: backend
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./coverage/lcov.info
+          flags: frontend
           fail_ci_if_error: true
 
-  # --- JOB 2: BACKEND DEPLOYMENT ---
+  # --- JOB 2: DEPLOYMENT ---
   deploy:
     runs-on: ubuntu-latest
-    needs: test # <--- This makes the "Test" box appear before the "Deploy" box
+    needs: test # <--- This ensures deploy only runs if tests pass
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v3
 
-      - name: Deploy to Azure Web App
-        uses: azure/webapps-deploy@v3
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
         with:
-          app-name: 'campus-marketplace-api'
-          slot-name: 'Production'
-          publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_CBCB5A73852647FB8F6E6F18FFBE2C60 }}
-          package: backend
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build
+        run: npm run build
+        env:
+          VITE_FIREBASE_API_KEY: ${{ secrets.VITE_FIREBASE_API_KEY }}
+          VITE_FIREBASE_AUTH_DOMAIN: ${{ secrets.VITE_FIREBASE_AUTH_DOMAIN }}
+          VITE_FIREBASE_PROJECT_ID: ${{ secrets.VITE_FIREBASE_PROJECT_ID }}
+          VITE_FIREBASE_STORAGE_BUCKET: ${{ secrets.VITE_FIREBASE_STORAGE_BUCKET }}
+          VITE_FIREBASE_MESSAGING_SENDER_ID: ${{ secrets.VITE_FIREBASE_MESSAGING_SENDER_ID }}
+          VITE_FIREBASE_APP_ID: ${{ secrets.VITE_FIREBASE_APP_ID }}
+          VITE_API_URL: ${{ secrets.VITE_API_URL }}
+
+      - name: Deploy to Azure App Service
+        uses: azure/webapps-deploy@v2
+        with:
+          app-name: 'campus-market-place'
+          publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
+          package: .
