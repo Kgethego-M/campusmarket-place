@@ -22,6 +22,8 @@ import CreateListing from './components/CreateListing';
 import ViewRating from './components/ViewRating';
 import ReviewOffer from './components/ReviewOffer';
 import ListingDetail from './components/ListingDetail';
+import ReviewForm from './components/ReviewForm.jsx';
+import Notificationspage from './components/Notificationspage.jsx';
 
 import CreateListingAzure from './components/CreateListingAzure';
 //import EditListingAzure from './pages/EditListingAzure';
@@ -172,6 +174,9 @@ export function AppRoutes() {
       <Route path="/admin" element={<ProtectedRoute allowedRoles={['admin']}><AdminDashboard /></ProtectedRoute>}/>
       <Route path="/azure/create-listing" element={<CreateListingAzure/>} />
       <Route path="/listing/:id" element={<ListingDetail />} />
+
+      <Route path="/review/:transactionId" element={<ReviewForm />} />
+      <Route path="/notifications" element={<ProtectedRoute allowedRoles={['student']}><Notificationspage /></ProtectedRoute>} />
     </Routes>
   );
 }
