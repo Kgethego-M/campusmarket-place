@@ -9,7 +9,8 @@ import ListingCard from "./ListingCard.jsx";
 import NavBar from "./NavBarTemp.jsx";
 import styles from "./ViewListing.module.css";
 
-const LISTING_TYPES = ["All", "For Sale", "For Trade"];
+// UPDATED: Changed "Sale or Trade" to "For Sale or Trade"
+const LISTING_TYPES = ["All", "For Sale", "For Trade", "For Sale or Trade"];
 const CONDITIONS    = ["All", "New", "Like New", "Good", "Fair", "Poor"];
 const CATEGORIES    = [
     "All", "Books", "Electronics", "Clothing", "Furniture",
@@ -41,18 +42,25 @@ export default function ViewListings() {
         async function fetchListings() {
             setLoading(true);
             try {
-                // Query listings collection, ordered by newest first
                 const listingsRef = collection(db, "listings");
                 const q = query(listingsRef, orderBy("timestamp", "desc"));
                 const querySnapshot = await getDocs(q);
                 
-                // Transform Firebase data to match your listing structure
                 const firebaseListings = querySnapshot.docs.map(doc => {
                     const data = doc.data();
+                    // Convert listingType for display: "either" -> "For Sale or Trade"
+                    let displayListingType = data.listingType;
+                    if (data.listingType === "either") {
+                        displayListingType = "For Sale or Trade";
+                    } else if (data.listingType === "sale") {
+                        displayListingType = "For Sale";
+                    } else if (data.listingType === "trade") {
+                        displayListingType = "For Trade";
+                    }
+                    
                     return {
                         id: doc.id,
                         ...data,
-                        // FIXED: Use photos array for images
                         imageUrl: data.photos && data.photos.length > 0 ? data.photos[0] : null,
                         sellerName: data.sellerName || "Student",
                         sellerAvatar: data.sellerAvatar || null,
@@ -61,22 +69,26 @@ export default function ViewListings() {
                         price: data.price || data.Price,
                         condition: data.condition || data.Condition,
                         category: data.category || data.Category,
-                        listingType: data.listingType || data["Listing Type"],
+                        listingType: displayListingType,
+                        originalListingType: data.listingType,
                         description: data.description || data.Description,
                         status: data.status || data.Status,
                         timestamp: data.timestamp || data.Timestamp,
                     };
                 });
 
-                // Also get session storage listings (for user's own listings)
                 const stored = JSON.parse(sessionStorage.getItem("listings") || "[]");
                 const storedIds = new Set(stored.map((l) => l.id));
                 
-                // Merge stored listings (avoid duplicates)
                 const normalise = (l) => ({
                     ...l,
                     imageUrl: l.imageUrl || (l.photos && l.photos[0]) || null,
                     sellerName: l.sellerName || "Student",
+                    listingType: l.listingType === "either" ? "For Sale or Trade"
+                            : l.listingType === "sale"   ? "For Sale"
+                            : l.listingType === "trade"  ? "For Trade"
+                            : l.listingType,
+                    originalListingType: l.listingType,
                 });
 
                 const merged = [
@@ -84,7 +96,6 @@ export default function ViewListings() {
                     ...firebaseListings.filter((l) => !storedIds.has(l.id)),
                 ];
 
-                // Validate and set listings
                 const valid = merged.filter((l) => validateListingData(l).valid);
                 setListings(valid);
             } catch (err) {
@@ -105,13 +116,25 @@ export default function ViewListings() {
             l.category?.toLowerCase().includes(search.toLowerCase()) ||
             l.description?.toLowerCase().includes(search.toLowerCase());
         
-        const matchType  = typeFilter  === "All" || l.listingType === typeFilter;
+        let matchesType = true;
+        if (typeFilter === "For Sale") {
+            matchesType = l.originalListingType === "sale" || l.listingType === "For Sale";
+        } else if (typeFilter === "For Trade") {
+            matchesType = l.originalListingType === "trade" || l.listingType === "For Trade";
+        } else if (typeFilter === "For Sale or Trade") {
+            matchesType = l.originalListingType === "either" || l.listingType === "For Sale or Trade";
+        } else if (typeFilter === "All") {
+            matchesType = true;
+        } else {
+            matchesType = l.listingType === typeFilter;
+        }
+        
         const matchCond  = condFilter  === "All" || l.condition   === condFilter;
         const matchCat   = catFilter   === "All" || l.category    === catFilter;
         const matchPrice = priceFilter === "All" ||
             (l.price >= activePriceRange.min && l.price < activePriceRange.max);
         
-        return matchSearch && matchType && matchCond && matchCat && matchPrice;
+        return matchSearch && matchesType && matchCond && matchCat && matchPrice;
     });
 
     const activeFilterCount = [typeFilter, condFilter, catFilter, priceFilter].filter(v => v !== "All").length;
@@ -127,8 +150,6 @@ export default function ViewListings() {
         <>
         <NavBar />
         <div className={styles.page}>
-
-            {/* ── Page header ── */}
             <div className={styles.pageHeader}>
                 <h1 className={styles.heading}>Browse Listings</h1>
                 <p className={styles.subheading}>
@@ -136,7 +157,6 @@ export default function ViewListings() {
                 </p>
             </div>
 
-            {/* ── Search + filter toggle ── */}
             <div className={styles.searchRow}>
                 <input
                     className={styles.searchInput}
@@ -163,10 +183,8 @@ export default function ViewListings() {
                 </button>
             </div>
 
-            {/* ── Filter panel ── */}
             {showFilters && (
                 <div className={styles.filterPanel}>
-
                     <div className={styles.filterGroup}>
                         <span className={styles.filterLabel}>Listing type</span>
                         <div className={styles.pills}>
@@ -235,14 +253,12 @@ export default function ViewListings() {
                 </div>
             )}
 
-            {/* ── Results count ── */}
             {!loading && (
                 <p className={styles.resultsCount}>
                     {filtered.length} {filtered.length === 1 ? "listing" : "listings"} found
                 </p>
             )}
 
-            {/* ── Grid ── */}
             {loading ? (
                 <div className={styles.skeletonGrid}>
                     {Array.from({ length: 8 }).map((_, i) => (

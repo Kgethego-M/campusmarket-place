@@ -24,7 +24,7 @@ export const categoryMap = {
 export const listingTypeMap = {
     'sale': 'For Sale',
     'trade': 'For Trade',
-    'either': 'Either'
+    'either': 'For Sale or Trade'
 };
 
 export function validateListing({ title, description, price, category, condition, listingType }) {

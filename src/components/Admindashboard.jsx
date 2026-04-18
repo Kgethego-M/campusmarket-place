@@ -165,24 +165,20 @@ export default function AdminDashboard() {
                         )}
                     </button>
 
-                    <div className={styles.avatarWrap} ref={dropdownRef}>
-                        <div
-                            className={styles.avatar}
+                    <div className={styles.menuWrap} ref={dropdownRef}>
+                        <button
+                            className={styles.iconButton}
                             onClick={() => !isLoggingOut && setDropdownOpen(v => !v)}
                             title={adminUser.name}
+                            
                         >
-                            {adminUser.photoURL
-                                ? <img src={adminUser.photoURL} alt={adminUser.name}
-                                       onError={e => { e.currentTarget.style.display = "none"; }} />
-                                : <span>{adminUser.initials}</span>
-                            }
-                        </div>
+                            <i className="fa-solid fa-bars"></i>
+                        </button>
 
                         {dropdownOpen && !isLoggingOut && (
                             <div className={styles.dropdown}>
                                 <div className={styles.ddHeader}>
                                     <span className={styles.ddName}>{adminUser.name}</span>
-                                    <span className={styles.ddEmail}>{adminUser.email}</span>
                                     <span className={styles.ddRole}>Administrator</span>
                                 </div>
                                 <div className={styles.ddDivider} />
@@ -371,9 +367,21 @@ export default function AdminDashboard() {
                                                 <button
                                                     className={styles.btnReject}
                                                     onClick={async () => {
-                                                        await updateDoc(doc(db, "listings", l.id), { status: "removed" });
-                                                        setListings(prev => prev.map(x => x.id === l.id ? { ...x, status: "removed" } : x));
-                                                    }}
+                                                        const isConfirmed = window.confirm(
+                                                            "Are you sure you want to remove this Listing? "+
+                                                            "This action is PERMANENT and cannot be undone. "+
+                                                            "Click OK to delete this item or CANCEL to keep."
+                                                        );
+                                                        if (!isConfirmed) return;
+                                                        try{
+                                                            await deleteDoc(doc(db, "listings", l.id));
+                                                            setListings(prev => prev.filter(x => x.id !== l.id));
+                                                            console.log("Listing permanently deleted");
+                                                        } catch(error){
+                                                            console.error("Error deleting listing:", error);
+                                                            alert("Failed to delete listing. Please try again.")
+                                                        }
+                                                        }}
                                                     disabled={l.status === "removed"}
                                                 >
                                                     Remove

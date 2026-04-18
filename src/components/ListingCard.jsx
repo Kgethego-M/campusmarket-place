@@ -10,6 +10,15 @@ const conditionColor = {
     Poor:       "#F44336",
 };
 
+const formatListingType = (type) => {
+    if (!type) return null;
+    const t = type.toString().toLowerCase().trim();
+    if (t === "either" || t === "for sale or trade") return "For Sale or Trade";  // UPDATED
+    if (t === "sale"   || t === "for sale")          return "For Sale";
+    if (t === "trade"  || t === "for trade")         return "For Trade";
+    return type;
+};
+
 export default function ListingCard({ listing, visible = true }) {
     const navigate = useNavigate();
     const {
@@ -23,6 +32,7 @@ export default function ListingCard({ listing, visible = true }) {
 
     const imageUrl = listing.imageUrl || (listing.photos && listing.photos[0]) || null;
     const badgeColor = conditionColor[condition] || "#999";
+    const displayListingType = formatListingType(listingType);
 
     return (
         <div
@@ -50,13 +60,15 @@ export default function ListingCard({ listing, visible = true }) {
                         </svg>
                     </div>
                 )}
+
                 {condition && (
                     <span className={styles.conditionBadge} style={{ backgroundColor: badgeColor }}>
                         {condition}
                     </span>
                 )}
-                {listingType && (
-                    <span className={styles.typeBadge}>{listingType}</span>
+
+                {displayListingType && (
+                    <span className={styles.typeBadge}>{displayListingType}</span>
                 )}
             </div>
 
@@ -66,6 +78,7 @@ export default function ListingCard({ listing, visible = true }) {
                 <p className={styles.price}>
                     {price != null ? `R ${Number(price).toLocaleString()}` : "Free"}
                 </p>
+
                 <div className={styles.sellerRow}>
                     <div className={styles.avatar}>
                         {sellerAvatar

@@ -36,6 +36,7 @@ export default function SignupForm({ onSwitchToLogin, onLoginSuccess }) {
       const lastName = nameParts.slice(1).join(" ") || "";
       const userData = {
         email: user.email, firstName, lastName, userType,
+        role: userType,
         photoURL: user.photoURL || "",
         createdAt: new Date().toISOString(),
         isVerified: true,

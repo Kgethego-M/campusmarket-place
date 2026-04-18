@@ -10,7 +10,7 @@ import styles from "./NavBar.module.css";
 const NAV_LINKS = [
     { label: "Browse",         path: "/view-listing" },
     { label: "Trade Facility", path: null },
-    { label: "Messages",       path: null },
+    { label: "Messages",       path: "/chat" },
     { label: "View Cart",      path: null },
 ];
 
@@ -184,10 +184,15 @@ export default function Navbar() {
             <nav className={styles.navLinks}>
                 {NAV_LINKS.map((link) => {
                     const isActive = link.path && location.pathname === link.path;
+                    // Build className conditionally
+                    let buttonClassName = styles.navLink;
+                    if (isActive) buttonClassName += ` ${styles.navLinkActive}`;
+                    if (!link.path) buttonClassName += ` ${styles.navLinkDisabled}`;
+                    
                     return (
                         <button
                             key={link.label}
-                            className={`${styles.navLink} ${isActive ? styles.navLinkActive : ""} ${!link.path ? styles.navLinkDisabled : ""}`}
+                            className={buttonClassName}
                             onClick={() => link.path && navigate(link.path)}
                             disabled={!link.path}
                         >
