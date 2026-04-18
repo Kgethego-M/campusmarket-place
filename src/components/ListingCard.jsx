@@ -1,3 +1,5 @@
+// src/components/ListingCard.jsx
+import { useNavigate } from 'react-router-dom';
 import styles from "./ListingCard.module.css";
 
 const conditionColor = {
@@ -18,6 +20,7 @@ const formatListingType = (type) => {
 };
 
 export default function ListingCard({ listing, visible = true }) {
+    const navigate = useNavigate();
     const {
         title,
         price,
@@ -32,7 +35,11 @@ export default function ListingCard({ listing, visible = true }) {
     const displayListingType = formatListingType(listingType);
 
     return (
-        <div className={`${styles.card} ${visible ? styles.cardVisible : ""}`}>
+        <div
+            className={`${styles.card} ${visible ? styles.cardVisible : ""}`}
+            onClick={() => navigate(`/listing/${listing.id}`)}
+            style={{ cursor: 'pointer' }}
+        >
             {/* ── Image ── */}
             <div className={styles.imageWrapper}>
                 {imageUrl ? (

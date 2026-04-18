@@ -20,6 +20,12 @@ import AdminDashboard from './components/Admindashboard';
 import Dashboard from './components/Dashboard';
 import CreateListing from './components/CreateListing';
 import ViewRating from './components/ViewRating';
+import ReviewOffer from './components/ReviewOffer';
+
+import ViewListingAzure from './pages/ViewListingAzure';
+import CreateListingAzure from './components/CreateListingAzure';
+import EditListingAzure from './pages/EditListingAzure';
+import ListingDetail from './components/ListingDetail';
 import Chat from './components/Chat';
 import Profile from './components/Profile'
 import StaffDashboard from './components/Staffdashboard.jsx';

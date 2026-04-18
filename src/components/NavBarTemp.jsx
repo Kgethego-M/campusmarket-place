@@ -1,8 +1,10 @@
 import { useState, useRef, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { auth, db } from "../firebase";
+import { collection, query, where, onSnapshot } from "firebase/firestore";
 import { signOut, onAuthStateChanged } from "firebase/auth";
-import { doc, getDoc } from "firebase/firestore";
+import { doc, getDoc, updateDoc } from "firebase/firestore";
+import { markNotificationAsRead } from "../services/notificationService";
 import styles from "./NavBar.module.css";
 
 const NAV_LINKS = [
@@ -17,17 +19,42 @@ export default function Navbar() {
     const location  = useLocation();
     const [dropdownOpen, setDropdownOpen] = useState(false);
     const [isLoggingOut, setIsLoggingOut] = useState(false);
+    const [notifications, setNotifications] = useState([]);
+    const [currentUser, setCurrentUser] = useState(null);
     const [notificationsOpen, setNotificationsOpen] = useState(false);
     const dropdownRef = useRef(null);
     const notificationRef = useRef(null);
 
-    // ── Real user state ────────────────────────────────────────────────────
     const [userDisplay, setUserDisplay] = useState({
         name: 'Student',
         email: '',
         photoURL: '',
         initials: 'S'
     });
+
+    const markAsRead = async (notificationId) => {
+        try {
+            await updateDoc(doc(db, 'notifications', notificationId), { read: true });
+        } catch (err) {
+            console.error('Failed to mark notification as read:', err);
+        }
+    };
+
+    // Handle clicking anywhere on a notification item
+    const handleNotificationClick = async (n) => {
+        await markAsRead(n.id);
+        setNotificationsOpen(false);
+
+        if (n.type === 'new_offer') {
+            // Takes seller to their offers tab, highlights the relevant listing
+            navigate('/profile?tab=offers&highlight=' + (n.transactionId || n.listingId));
+        } else if (n.type === 'offer_accepted') {
+            // Takes buyer to their transaction history, highlights the relevant entry
+            navigate('/profile?tab=history&highlight=' + (n.transactionId || n.listingId));
+        } else if (n.type === 'offer_declined') {
+            navigate('/profile?tab=history&highlight=' + (n.transactionId || n.listingId));
+        }
+    };
 
     // Listen for auth changes and load the user's Firestore profile
     useEffect(() => {
@@ -37,7 +64,6 @@ export default function Navbar() {
                 return;
             }
 
-            // Start with what Firebase Auth already knows (instant)
             const nameParts = (firebaseUser.displayName || '').split(' ');
             const firstName = nameParts[0] || '';
             const lastName  = nameParts.slice(1).join(' ') || '';
@@ -50,7 +76,6 @@ export default function Navbar() {
                 initials
             });
 
-            // Then enrich with Firestore data (may have updated bio/photo)
             try {
                 const snap = await getDoc(doc(db, 'users', firebaseUser.uid));
                 if (snap.exists()) {
@@ -105,6 +130,46 @@ export default function Navbar() {
         }, 2000);
     };
 
+    useEffect(() => {
+        const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
+            setCurrentUser(user);
+            if (!user) setNotifications([]);
+        });
+        return () => unsubscribeAuth();
+    }, []);
+
+    useEffect(() => {
+        if (!currentUser) return;
+
+        const q = query(
+            collection(db, 'notifications'),
+            where('userId', '==', currentUser.uid),
+            where('read', '==', false)
+        );
+
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            const offers = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+            setNotifications(offers);
+        });
+
+        return () => unsubscribe();
+    }, [currentUser]);
+
+    // Notification icon label helper
+    const notificationIcon = (type) => {
+        if (type === 'new_offer') return 'fa-shopping-cart';
+        if (type === 'offer_accepted') return 'fa-circle-check';
+        if (type === 'offer_declined') return 'fa-circle-xmark';
+        return 'fa-bell';
+    };
+
+    const notificationMessage = (type) => {
+        if (type === 'new_offer') return 'You have a new offer on one of your listings';
+        if (type === 'offer_accepted') return 'Your offer was accepted!';
+        if (type === 'offer_declined') return 'Your offer was declined.';
+        return 'Notification';
+    };
+
     return (
         <header className={styles.navbar}>
             {/* Logo */}
@@ -141,13 +206,15 @@ export default function Navbar() {
             <div className={styles.navRight}>
                 {/* Notification Bell */}
                 <div className={styles.notificationWrapper} ref={notificationRef}>
-                    <button 
+                    <button
                         className={styles.iconButton}
                         onClick={() => setNotificationsOpen((v) => !v)}
                         title="Notifications"
                     >
                         <i className="fa-solid fa-bell"></i>
-                        <span className={styles.notificationBadge}>3</span>
+                        {notifications.length > 0 && (
+                            <span className={styles.notificationBadge}>{notifications.length}</span>
+                        )}
                     </button>
 
                     {notificationsOpen && (
@@ -156,29 +223,40 @@ export default function Navbar() {
                                 <span>Notifications</span>
                                 <button className={styles.markAllRead}>Mark all as read</button>
                             </div>
+
                             <div className={styles.notificationList}>
-                                <div className={styles.notificationItem}>
-                                    <i className="fas fa-tag"></i>
-                                    <div className={styles.notificationContent}>
-                                        <p>New message from John about Calculus textbook</p>
-                                        <span>5 minutes ago</span>
+                                {notifications.length === 0 ? (
+                                    <div className={styles.notificationItem} style={{ cursor: 'default' }}>
+                                        <div className={styles.notificationContent}>
+                                            <p style={{ color: '#888' }}>No new notifications</p>
+                                        </div>
                                     </div>
-                                </div>
-                                <div className={styles.notificationItem}>
-                                    <i className="fas fa-shopping-cart"></i>
-                                    <div className={styles.notificationContent}>
-                                        <p>Your item "Python Book" was purchased</p>
-                                        <span>1 hour ago</span>
-                                    </div>
-                                </div>
-                                <div className={styles.notificationItem}>
-                                    <i className="fas fa-star"></i>
-                                    <div className={styles.notificationContent}>
-                                        <p>You received a 5-star rating!</p>
-                                        <span>2 hours ago</span>
-                                    </div>
-                                </div>
+                                ) : (
+                                    notifications.map((n) => (
+                                        <div
+                                            key={n.id}
+                                            className={styles.notificationItem}
+                                            onClick={() => handleNotificationClick(n)}
+                                            style={{ cursor: 'pointer' }}
+                                            role="button"
+                                            tabIndex={0}
+                                            onKeyDown={(e) => e.key === 'Enter' && handleNotificationClick(n)}
+                                            data-testid={`notification-item-${n.id}`}
+                                        >
+                                            <i className={`fas ${notificationIcon(n.type)}`}></i>
+                                            <div className={styles.notificationContent}>
+                                                <p>{notificationMessage(n.type)}</p>
+                                                <span>
+                                                    {n.createdAt?.toDate
+                                                        ? n.createdAt.toDate().toLocaleString()
+                                                        : ''}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    ))
+                                )}
                             </div>
+
                             <div className={styles.notificationFooter}>
                                 <button onClick={() => navigate("/notifications")}>View all notifications</button>
                             </div>
@@ -186,9 +264,9 @@ export default function Navbar() {
                     )}
                 </div>
 
-                {/* Menu Button (3 horizontal lines) */}
+                {/* Menu Button */}
                 <div className={styles.menuWrapper} ref={dropdownRef}>
-                    <button 
+                    <button
                         className={styles.iconButton}
                         onClick={() => !isLoggingOut && setDropdownOpen((v) => !v)}
                         title="Menu"
@@ -199,9 +277,7 @@ export default function Navbar() {
                     {dropdownOpen && !isLoggingOut && (
                         <div className={styles.dropdown}>
                             <div className={styles.dropdownHeader}>
-                                <div className={styles.dropdownAvatar}>
-
-                                </div>
+                                <div className={styles.dropdownAvatar}></div>
                                 <div><span className={styles.dropdownName}>{userDisplay.name}</span></div>
                             </div>
                             <div className={styles.dropdownDivider} />
