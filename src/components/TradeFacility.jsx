@@ -25,40 +25,58 @@ export default function TradeFacility() {
     return () => unsubscribe();
   }, [navigate]);
 
-  async function fetchTransactions(uid) {
-    setLoading(true);
-    try {
-      const q = query(
-        collection(db, "transactions"),
-        where("sellerId", "==", uid)
-      );
-      const snapshot = await getDocs(q);
-      const txns = [];
+async function fetchTransactions(uid) {
+  setLoading(true);
+  try {
+    // Only fetch transactions that are accepted (declined ones are excluded)
+    const q = query(
+      collection(db, "transactions"),
+      where("sellerId", "==", uid),
+      where("status", "==", "accepted")
+    );
+    const snapshot = await getDocs(q);
+    const txns = [];
 
-      for (const docSnap of snapshot.docs) {
-        const txn = { id: docSnap.id, ...docSnap.data() };
+    for (const docSnap of snapshot.docs) {
+      const txn = { id: docSnap.id, ...docSnap.data() };
 
-        const listingSnap = await getDoc(doc(db, "listings", txn.listingId));
-        if (listingSnap.exists()) {
-          txn.listing = listingSnap.data();
-        }
-
-        const buyerSnap = await getDoc(doc(db, "users", txn.buyerId));
-        if (buyerSnap.exists()) {
-          const buyer = buyerSnap.data();
-          txn.buyerName = buyer.displayName || buyer.name || "Buyer";
-        }
-
-        txns.push(txn);
+      // Get listing details
+      const listingSnap = await getDoc(doc(db, "listings", txn.listingId));
+      if (listingSnap.exists()) {
+        txn.listing = listingSnap.data();
       }
 
-      setTransactions(txns);
-    } catch (err) {
-      console.error("Error fetching transactions:", err);
-    } finally {
-      setLoading(false);
+      // Get buyer name (using the improved logic from previous fix)
+      const buyerSnap = await getDoc(doc(db, "users", txn.buyerId));
+      if (buyerSnap.exists()) {
+        const buyer = buyerSnap.data();
+        let buyerName = "";
+        if (buyer.firstName && buyer.lastName) {
+          buyerName = `${buyer.firstName} ${buyer.lastName}`;
+        } else if (buyer.displayName) {
+          buyerName = buyer.displayName;
+        } else if (buyer.name) {
+          buyerName = buyer.name;
+        } else if (buyer.email) {
+          buyerName = buyer.email.split('@')[0];
+        } else {
+          buyerName = "Buyer";
+        }
+        txn.buyerName = buyerName;
+      } else {
+        txn.buyerName = "Unknown User";
+      }
+
+      txns.push(txn);
     }
+
+    setTransactions(txns);
+  } catch (err) {
+    console.error("Error fetching transactions:", err);
+  } finally {
+    setLoading(false);
   }
+}
 
   function getStatusBadge(txn) {
     if (txn.dropOffStatus === "dropped_off") {
