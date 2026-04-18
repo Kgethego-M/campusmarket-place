@@ -199,7 +199,7 @@ describe('ListingDetail - purchase modal', () => {
     render(<ListingDetail listing={saleListing} currentUser={mockBuyer} />);
     fireEvent.click(screen.getByRole('button', { name: /buy now/i }));
     expect(screen.getByText(/initiate purchase/i)).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: /×/i }));
+    fireEvent.click(screen.getByRole('button', { name: /close modal/i }));
     expect(screen.queryByText(/initiate purchase/i)).not.toBeInTheDocument();
   });
 
