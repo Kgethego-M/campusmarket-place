@@ -1,14 +1,26 @@
+// src/components/ListingCard.jsx
+import { useNavigate } from 'react-router-dom';
 import styles from "./ListingCard.module.css";
 
 const conditionColor = {
-    New:       "#4CAF50",
+    New:        "#4CAF50",
     "Like New": "#8BC34A",
-    Good:      "#FFC107",
-    Fair:      "#FF9800",
-    Poor:      "#F44336",
+    Good:       "#FFC107",
+    Fair:       "#FF9800",
+    Poor:       "#F44336",
+};
+
+const formatListingType = (type) => {
+    if (!type) return null;
+    const t = type.toString().toLowerCase().trim();
+    if (t === "either" || t === "for sale or trade") return "For Sale or Trade";  // UPDATED
+    if (t === "sale"   || t === "for sale")          return "For Sale";
+    if (t === "trade"  || t === "for trade")         return "For Trade";
+    return type;
 };
 
 export default function ListingCard({ listing, visible = true }) {
+    const navigate = useNavigate();
     const {
         title,
         price,
@@ -18,13 +30,16 @@ export default function ListingCard({ listing, visible = true }) {
         sellerAvatar,
     } = listing;
 
-    // Resolve image: prefer imageUrl, fall back to first photo
     const imageUrl = listing.imageUrl || (listing.photos && listing.photos[0]) || null;
-
     const badgeColor = conditionColor[condition] || "#999";
+    const displayListingType = formatListingType(listingType);
 
     return (
-        <div className={`${styles.card} ${visible ? styles.cardVisible : ""}`}>
+        <div
+            className={`${styles.card} ${visible ? styles.cardVisible : ""}`}
+            onClick={() => navigate(`/listing/${listing.id}`)}
+            style={{ cursor: 'pointer' }}
+        >
             {/* ── Image ── */}
             <div className={styles.imageWrapper}>
                 {imageUrl ? (
@@ -46,16 +61,14 @@ export default function ListingCard({ listing, visible = true }) {
                     </div>
                 )}
 
-                {/* Condition badge */}
                 {condition && (
                     <span className={styles.conditionBadge} style={{ backgroundColor: badgeColor }}>
                         {condition}
                     </span>
                 )}
 
-                {/* Listing type badge */}
-                {listingType && (
-                    <span className={styles.typeBadge}>{listingType}</span>
+                {displayListingType && (
+                    <span className={styles.typeBadge}>{displayListingType}</span>
                 )}
             </div>
 
@@ -66,7 +79,6 @@ export default function ListingCard({ listing, visible = true }) {
                     {price != null ? `R ${Number(price).toLocaleString()}` : "Free"}
                 </p>
 
-                {/* Seller row */}
                 <div className={styles.sellerRow}>
                     <div className={styles.avatar}>
                         {sellerAvatar

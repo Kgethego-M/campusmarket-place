@@ -165,7 +165,9 @@ export const sortReviewsByDate = (reviews) => {
  */
 export const filterReviewsByRating = (reviews, rating) => {
   if (!rating) return reviews;
-  return reviews.filter(review => Math.floor(review.rating) === rating);
+  // Floor the rating to handle decimals (e.g., 4.8 becomes 4)
+  const flooredRating = Math.floor(rating);
+  return reviews.filter(review => Math.floor(review.rating) === flooredRating);
 };
 
 /**
@@ -174,6 +176,17 @@ export const filterReviewsByRating = (reviews, rating) => {
  * @returns {Object} - Summary statistics
  */
 export const getReviewSummary = (reviews) => {
+  // FIXED: Handle null/undefined reviews
+  if (!reviews || reviews.length === 0) {
+    return {
+      totalReviews: 0,
+      averageRating: 0,
+      ratingDistribution: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 },
+      fiveStarPercentage: 0,
+      hasReviews: false
+    };
+  }
+  
   const total = reviews.length;
   const average = calculateAverageRating(reviews);
   const distribution = getRatingDistribution(reviews);

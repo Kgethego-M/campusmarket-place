@@ -10,7 +10,6 @@ import { onAuthStateChanged } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import { auth, db } from './firebase';
 
-import AdminUsers from './pages/AdminUsers';
 import AccessDenied from './components/AccessDenied';
 import ViewListing from './components/ViewListing.jsx';
 import EditListing from './pages/EditListing';
@@ -21,42 +20,56 @@ import AdminDashboard from './components/Admindashboard';
 import Dashboard from './components/Dashboard';
 import CreateListing from './components/CreateListing';
 import ViewRating from './components/ViewRating';
+import ReviewOffer from './components/ReviewOffer';
+import ListingDetail from './components/ListingDetail';
+
+import CreateListingAzure from './components/CreateListingAzure';
+//import EditListingAzure from './pages/EditListingAzure';
 import Chat from './components/Chat';
-import Profile from './components/Profile';
+import Profile from './components/Profile'
 import StaffDashboard from './components/Staffdashboard.jsx';
 import ProfileListingCard from './components/ProfileListingCard';
 // SPRINT 2 IMPORTS
 import TradeFacility from './components/TradeFacility';
 import BookDropOff from './components/BookDropOff';
 
-// Protects routes based on role
+// -------------------------
+// Protected Route (CLEAN)
+// -------------------------
 function ProtectedRoute({ children, allowedRoles }) {
   const [loading, setLoading] = useState(true);
-  const [accessGranted, setAccessGranted] = useState(false);
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [firebaseUser, setFirebaseUser] = useState(null);
+  const [roleAllowed, setRoleAllowed] = useState(false);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (!user) {
-        setIsLoggedIn(false);
+        setFirebaseUser(null);
+        setRoleAllowed(false);
         setLoading(false);
         return;
       }
 
-      setIsLoggedIn(true);
+      setFirebaseUser(user);
 
       try {
-        const userSnap = await getDoc(doc(db, 'users', user.uid));
+        const userRef = doc(db, 'users', user.uid);
+        const userSnap = await getDoc(userRef);
 
         if (!userSnap.exists()) {
+          setRoleAllowed(false);
           setLoading(false);
           return;
         }
 
         const userData = userSnap.data();
-        setAccessGranted(allowedRoles.includes(userData.role));
-      } catch (e) {
-        console.error(e);
+
+        setRoleAllowed(
+          allowedRoles.includes(userData.role)
+        );
+      } catch (err) {
+        console.error('Role check failed:', err);
+        setRoleAllowed(false);
       }
 
       setLoading(false);
@@ -67,25 +80,26 @@ function ProtectedRoute({ children, allowedRoles }) {
 
   if (loading) {
     return (
-      <div
-        style={{
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
-          minHeight: '100vh'
-        }}
-      >
-        Checking permissions...
+      <div style={{
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        minHeight: '100vh'
+      }}>
+        Loading...
       </div>
     );
   }
 
-  if (!isLoggedIn) return <Navigate to="/login" />;
-  if (!accessGranted) return <AccessDenied />;
+  if (!firebaseUser) return <Navigate to="/login" />;
+  if (!roleAllowed) return <AccessDenied />;
 
   return children;
 }
 
+// -------------------------
+// Wrappers
+// -------------------------
 function LandingPageWrapper() {
   const navigate = useNavigate();
   return <LandingPage onGetStarted={() => navigate('/login')} />;
@@ -95,14 +109,12 @@ function LoginWrapper() {
   const navigate = useNavigate();
 
   return (
-    <div
-      style={{
-        display: 'flex',
-        justifyContent: 'center',
-        alignItems: 'center',
-        minHeight: '100vh'
-      }}
-    >
+    <div style={{
+      display: 'flex',
+      justifyContent: 'center',
+      alignItems: 'center',
+      minHeight: '100vh'
+    }}>
       <LoginForm
         onSwitchToSignup={() => navigate('/signup')}
         onLoginSuccess={(userData) => {
@@ -126,14 +138,12 @@ function SignupWrapper() {
   const navigate = useNavigate();
 
   return (
-    <div
-      style={{
-        display: 'flex',
-        justifyContent: 'center',
-        alignItems: 'center',
-        minHeight: '100vh'
-      }}
-    >
+    <div style={{
+      display: 'flex',
+      justifyContent: 'center',
+      alignItems: 'center',
+      minHeight: '100vh'
+    }}>
       <SignupForm
         onSwitchToLogin={() => navigate('/login')}
         onLoginSuccess={() => navigate('/view-listing')}
@@ -142,7 +152,9 @@ function SignupWrapper() {
   );
 }
 
-// Exported separately so tests can wrap with MemoryRouter
+// -------------------------
+// Routes
+// -------------------------
 export function AppRoutes() {
   return (
     <Routes>
@@ -164,10 +176,15 @@ export function AppRoutes() {
       {/* SPRINT 2 ROUTES */}
       <Route path="/trade-facility" element={<ProtectedRoute allowedRoles={['student']}><TradeFacility /></ProtectedRoute>} />
       <Route path="/book-dropoff/:transactionId" element={<ProtectedRoute allowedRoles={['student']}><BookDropOff /></ProtectedRoute>} />
+      <Route path="/azure/create-listing" element={<CreateListingAzure/>} />
+      <Route path="/listing/:id" element={<ListingDetail />} />
     </Routes>
   );
 }
 
+// -------------------------
+// App entry
+// -------------------------
 function App() {
   return (
     <BrowserRouter>
