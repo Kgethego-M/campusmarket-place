@@ -172,6 +172,7 @@ export function AppRoutes() {
       <Route path="/admin" element={<ProtectedRoute allowedRoles={['admin']}><AdminDashboard /></ProtectedRoute>}/>
       <Route path="/azure/create-listing" element={<CreateListingAzure/>} />
       <Route path="/listing/:id" element={<ListingDetail />} />
+      <Route path="/profile/:userId" element={<ViewRating />} />
     </Routes>
   );
 }

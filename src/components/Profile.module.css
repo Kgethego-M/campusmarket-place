@@ -909,3 +909,9 @@
     grid-template-columns: 1fr;
   }
 }
+.offersList {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  animation: fadeIn 0.3s ease;
+}

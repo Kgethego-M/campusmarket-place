@@ -250,6 +250,7 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
         <h1 style={styles.title}>{listing.title}</h1>
         <p style={styles.price}>R {Number(listing.price).toLocaleString()}</p>
         <p style={styles.description}>{listing.description}</p>
+        <p style={styles.specfication}><listing className="specification">{listing.specification}</listing></p>
 
         {renderButton()}
 

@@ -471,3 +471,28 @@
     appearance: none;
     margin: 0;
 }
+
+/* Add to ProfileListingCard.module.css */
+
+/* Compact mode for smaller cards */
+.compact .body {
+    padding: 10px 10px 0 10px;
+}
+
+.compact .title {
+    font-size: 0.8rem;
+}
+
+.compact .price {
+    font-size: 0.75rem;
+}
+
+.compact .actionRow {
+    padding: 8px 10px;
+}
+
+.compact .editButton,
+.compact .deleteButton {
+    padding: 6px 0;
+    font-size: 0.7rem;
+}

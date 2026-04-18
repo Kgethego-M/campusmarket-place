@@ -10,20 +10,20 @@ const conditionColor = {
 };
 
 const statusConfig = {
-    active:   { label: "Active",   color: "#4CAF50", bg: "#e8f5e9" },
+    active:   { label: "Active",   color: "#2196F3", bg: "#e3f2fd" },
+    accepted: { label: "Accepted", color: "#4CAF50", bg: "#e8f5e9" },
     sold:     { label: "Sold",     color: "#f44336", bg: "#ffebee" },
     traded:   { label: "Traded",   color: "#FF9800", bg: "#fff3e0" },
     pending:  { label: "Pending",  color: "#FFC107", bg: "#fff8e1" },
     inactive: { label: "Inactive", color: "#9e9e9e", bg: "#f5f5f5" },
 };
 
-// UPDATED: Changed "Sale or Trade" to "For Sale or Trade"
 const listingTypeOptions = ["For Sale", "For Trade", "For Sale or Trade"];
 
 const normaliseListingType = (type) => {
     if (!type) return "";
     const t = type.toString().toLowerCase().trim();
-    if (t === "either" || t === "for sale or trade") return "For Sale or Trade";  // UPDATED
+    if (t === "either" || t === "for sale or trade") return "For Sale or Trade";
     if (t === "sale"   || t === "for sale")          return "For Sale";
     if (t === "trade"  || t === "for trade")         return "For Trade";
     return type;
@@ -38,6 +38,8 @@ export default function ProfileListingCard({
     onEditChange,
     onSave,
     onCancel,
+    compact = false,
+    readOnly = false,
 }) {
     const { title, price, condition, listingType, status = "active" } = listing;
     const imageUrl = listing.imageUrl || (listing.photos && listing.photos[0]) || null;
@@ -124,7 +126,6 @@ export default function ProfileListingCard({
                             </div>
                         </div>
 
-                        {/* Listing Type — 3-way toggle */}
                         <div className={styles.fieldGroup}>
                             <label className={styles.fieldLabel}>Listing Type</label>
                             <div className={styles.typeToggle}>
@@ -191,7 +192,7 @@ export default function ProfileListingCard({
     return (
         <>
             {drawer}
-            <div className={styles.card}>
+            <div className={`${styles.card} ${compact ? styles.compact : ''}`}>
                 <div className={styles.imageWrapper}>
                     {imageUrl ? (
                         <img src={imageUrl} alt={title} className={styles.image} loading="lazy"
@@ -229,14 +230,16 @@ export default function ProfileListingCard({
                     </p>
                 </div>
 
-                <div className={styles.actionRow}>
-                    <button className={styles.editButton} onClick={onEdit}>
-                        <i className="fas fa-edit"></i> Edit
-                    </button>
-                    <button className={styles.deleteButton} onClick={onDelete}>
-                        <i className="fas fa-trash"></i> Delete
-                    </button>
-                </div>
+                {!readOnly && (
+                    <div className={styles.actionRow}>
+                        <button className={styles.editButton} onClick={onEdit}>
+                            <i className="fas fa-edit"></i> Edit
+                        </button>
+                        <button className={styles.deleteButton} onClick={onDelete}>
+                            <i className="fas fa-trash"></i> Delete
+                        </button>
+                    </div>
+                )}
             </div>
         </>
     );

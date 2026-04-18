@@ -736,3 +736,17 @@
 .backButton:active {
   transform: scale(0.98);
 }
+/* Product image in review card */
+.txProductImage {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 10px;
+}
+.profileBio {
+  font-size: 13px;
+  color: #6b7a8d;
+  margin: 0 0 14px 0;
+  line-height: 1.5;
+  font-style: italic;
+}
