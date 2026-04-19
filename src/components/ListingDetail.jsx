@@ -11,6 +11,49 @@ import { notifySellerOfOffer } from '../services/notificationService';
 import NavBarTemp from './NavBarTemp';
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Simple inline SVG icons (no external dependency)
+// ─────────────────────────────────────────────────────────────────────────────
+const IconMessage = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+  </svg>
+);
+
+const IconTag = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+    <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z" />
+    <line x1="7" y1="7" x2="7.01" y2="7" />
+  </svg>
+);
+
+const IconClock = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+    <circle cx="12" cy="12" r="10" />
+    <polyline points="12 6 12 12 16 14" />
+  </svg>
+);
+
+const IconLoader = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, animation: 'spin 1s linear infinite' }}>
+    <line x1="12" y1="2" x2="12" y2="6" />
+    <line x1="12" y1="18" x2="12" y2="22" />
+    <line x1="4.93" y1="4.93" x2="7.76" y2="7.76" />
+    <line x1="16.24" y1="16.24" x2="19.07" y2="19.07" />
+    <line x1="2" y1="12" x2="6" y2="12" />
+    <line x1="18" y1="12" x2="22" y2="12" />
+    <line x1="4.93" y1="19.07" x2="7.76" y2="16.24" />
+    <line x1="16.24" y1="7.76" x2="19.07" y2="4.93" />
+  </svg>
+);
+
+const IconUser = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+    <circle cx="12" cy="7" r="4" />
+  </svg>
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Inner view (reusable / testable)
 // ─────────────────────────────────────────────────────────────────────────────
 export function ListingDetailView({ listing, currentUser, existingTransaction = null, navigate }) {
@@ -132,7 +175,7 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
     if ((existingTransaction?.status === 'pending') || offerSent) {
       return (
         <div style={styles.pendingBanner} data-testid="pending-offer-banner">
-          <span style={styles.pendingIcon}>⏳</span>
+          <IconClock />
           <div>
             <p style={styles.pendingTitle}>Offer Already Initiated</p>
             <p style={styles.pendingSubtitle}>We're waiting for the seller to approve your offer.</p>
@@ -160,116 +203,123 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
   const typeColor = { 'For Sale': '#e07b3a', 'For Trade': '#3a7be0', 'For Sale or Trade': '#7b3ae0', sale: '#e07b3a', trade: '#3a7be0' };
 
   return (
-    <div style={styles.page}>
-      <div style={styles.imageSection}>
-        <div style={styles.mainImageWrapper}>
-          {photos.length > 0
-            ? <img src={photos[mainImage]} alt={listing.title} style={styles.mainImage} />
-            : <div style={styles.imagePlaceholder}><p style={{ color: '#aaa' }}>No Image Available</p></div>
-          }
-        </div>
-        {photos.length > 1 && (
-          <div style={styles.thumbnailRow}>
-            {photos.map((photo, i) => (
-              <img key={i} src={photo} alt={`thumb-${i}`} onClick={() => setMainImage(i)}
-                style={{ ...styles.thumbnail, border: mainImage === i ? '2px solid #1d9e75' : '2px solid transparent' }}
-              />
-            ))}
-          </div>
-        )}
-      </div>
-
-      <div style={styles.detailSection}>
-        <div style={styles.badgeRow}>
-          {condition && <span style={{ ...styles.badge, backgroundColor: conditionColor[condition] || '#999', color: '#fff' }}>{condition}</span>}
-          {type && <span style={{ ...styles.badge, backgroundColor: typeColor[type] || '#555', color: '#fff' }}>{type}</span>}
-          {listing.category && <span style={{ ...styles.badge, backgroundColor: '#E1E5AC', color: '#fff' }}>{listing.category}</span>}
-        </div>
-        <h1 style={styles.title}>{listing.title}</h1>
-        <p style={styles.price}>R {Number(listing.price).toLocaleString()}</p>
-        <p style={styles.description}>{listing.description}</p>
-        {renderButton()}
-        {currentUser && !isOwnListing && (
-          <button style={styles.messageBtn} onClick={handleMessageSeller} disabled={chatLoading}>
-            {chatLoading ? 'Opening chat…' : '💬 Message Seller'}
-          </button>
-        )}
-        {isOwnListing && (
-          <div style={styles.ownerBanner} data-testid="owner-listing-banner">
-            <span style={styles.pendingIcon}>🏷️</span>
-            <div>
-              <p style={styles.ownerBannerTitle}>This is your listing</p>
-              <p style={styles.ownerBannerSubtitle}>You are viewing your own listing. Edit it from your profile.</p>
-            </div>
-          </div>
-        )}
-        <div onClick={handleSellerCardClick} onKeyDown={(e) => e.key === 'Enter' && handleSellerCardClick()} style={styles.sellerCard} role="button" tabIndex={0} title={isOwnListing ? 'Go to your profile' : 'View seller profile'}>
-          <div style={styles.sellerAvatar}>
-            {listing.sellerAvatar
-              ? <img src={listing.sellerAvatar} alt={listing.sellerName} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
-              : <span style={styles.sellerInitial}>{listing.sellerName?.[0]?.toUpperCase() ?? '?'}</span>
+    <>
+      <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
+      <div style={styles.page}>
+        <div style={styles.imageSection}>
+          <div style={styles.mainImageWrapper}>
+            {photos.length > 0
+              ? <img src={photos[mainImage]} alt={listing.title} style={styles.mainImage} />
+              : <div style={styles.imagePlaceholder}><p style={{ color: '#aaa' }}>No Image Available</p></div>
             }
           </div>
-          <div style={{ flex: 1 }}>
-            <p style={styles.sellerName}>{listing.sellerName ?? 'Student'}</p>
-            <p style={styles.sellerSub}>{isOwnListing ? 'View your profile →' : 'View profile & ratings →'}</p>
-          </div>
-          <span style={styles.sellerChevron}>›</span>
-        </div>
-      </div>
-
-      {isModalOpen && (
-        <div style={modalStyles.overlay}>
-          <div style={modalStyles.modal}>
-            <div style={modalStyles.header}>
-              <h2 style={{ margin: 0 }}>{purchaseType === 'trade' ? 'Initiate Trade' : 'Initiate Purchase'}</h2>
-             <button onClick={() => setIsModalOpen(false)} style={modalStyles.closeBtn} aria-label="Close modal">×</button>
+          {photos.length > 1 && (
+            <div style={styles.thumbnailRow}>
+              {photos.map((photo, i) => (
+                <img key={i} src={photo} alt={`thumb-${i}`} onClick={() => setMainImage(i)}
+                  style={{ ...styles.thumbnail, border: mainImage === i ? '2px solid #6AA6DA' : '2px solid transparent' }}
+                />
+              ))}
             </div>
-            <p style={{ color: '#666', fontSize: '14px' }}>Review and confirm your details for "{listing.title}"</p>
+          )}
+        </div>
 
-            {(() => { const lt = listing.listingType || listing.type; return lt === 'For Sale or Trade' && !purchaseType; })() && (
-              <div style={modalStyles.section}>
-                <label style={modalStyles.label}>Choose Transaction Type</label>
-                <div style={{ display: 'flex', gap: '10px' }}>
-                  <button onClick={() => setPurchaseType('sale')} style={modalStyles.choiceBtn}>Cash Purchase</button>
-                  <button onClick={() => setPurchaseType('trade')} style={modalStyles.choiceBtn}>Trade Item</button>
+        <div style={styles.detailSection}>
+          <div style={styles.badgeRow}>
+            {condition && <span style={{ ...styles.badge, backgroundColor: conditionColor[condition] || '#999', color: '#fff' }}>{condition}</span>}
+            {type && <span style={{ ...styles.badge, backgroundColor: typeColor[type] || '#555', color: '#fff' }}>{type}</span>}
+            {listing.category && <span style={{ ...styles.badge, backgroundColor: '#E1E5AC', color: '#fff' }}>{listing.category}</span>}
+          </div>
+          <h1 style={styles.title}>{listing.title}</h1>
+          <p style={styles.price}>R {Number(listing.price).toLocaleString()}</p>
+          <p style={styles.description}>{listing.description}</p>
+          {listing.specification && <p style={styles.description}>{listing.specification}</p>}
+          {renderButton()}
+          {currentUser && !isOwnListing && (
+            <button style={styles.messageBtn} onClick={handleMessageSeller} disabled={chatLoading}>
+              {chatLoading
+                ? <><IconLoader /><span>Opening chat…</span></>
+                : <><IconMessage /><span>Message Seller</span></>
+              }
+            </button>
+          )}
+          {isOwnListing && (
+            <div style={styles.ownerBanner} data-testid="owner-listing-banner">
+              <IconTag />
+              <div>
+                <p style={styles.ownerBannerTitle}>This is your listing</p>
+                <p style={styles.ownerBannerSubtitle}>You are viewing your own listing. Edit it from your profile.</p>
+              </div>
+            </div>
+          )}
+          <div onClick={handleSellerCardClick} onKeyDown={(e) => e.key === 'Enter' && handleSellerCardClick()} style={styles.sellerCard} role="button" tabIndex={0} title={isOwnListing ? 'Go to your profile' : 'View seller profile'}>
+            <div style={styles.sellerAvatar}>
+              {listing.sellerAvatar
+                ? <img src={listing.sellerAvatar} alt={listing.sellerName} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
+                : <span style={styles.sellerInitial}>{listing.sellerName?.[0]?.toUpperCase() ?? '?'}</span>
+              }
+            </div>
+            <div style={{ flex: 1 }}>
+              <p style={styles.sellerName}>{listing.sellerName ?? 'Student'}</p>
+              <p style={styles.sellerSub}>{isOwnListing ? 'View your profile →' : 'View profile & ratings →'}</p>
+            </div>
+            <span style={styles.sellerChevron}>›</span>
+          </div>
+        </div>
+
+        {isModalOpen && (
+          <div style={modalStyles.overlay}>
+            <div style={modalStyles.modal}>
+              <div style={modalStyles.header}>
+                <h2 style={{ margin: 0 }}>{purchaseType === 'trade' ? 'Initiate Trade' : 'Initiate Purchase'}</h2>
+                <button onClick={() => setIsModalOpen(false)} style={modalStyles.closeBtn} aria-label="Close modal">×</button>
+              </div>
+              <p style={{ color: '#666', fontSize: '14px' }}>Review and confirm your details for "{listing.title}"</p>
+
+              {(() => { const lt = listing.listingType || listing.type; return lt === 'For Sale or Trade' && !purchaseType; })() && (
+                <div style={modalStyles.section}>
+                  <label style={modalStyles.label}>Choose Transaction Type</label>
+                  <div style={{ display: 'flex', gap: '10px' }}>
+                    <button onClick={() => setPurchaseType('sale')} style={modalStyles.choiceBtn}>Cash Purchase</button>
+                    <button onClick={() => setPurchaseType('trade')} style={modalStyles.choiceBtn}>Trade Item</button>
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
 
-            {purchaseType === 'sale' && (
+              {purchaseType === 'sale' && (
+                <div style={modalStyles.section}>
+                  <label htmlFor="agreed-price" style={modalStyles.label}>Agreed Price (R)</label>
+                  <input id="agreed-price" type="number" value={agreedPrice} onChange={(e) => setAgreedPrice(e.target.value)} style={modalStyles.input} />
+                  <label htmlFor="payment-method" style={modalStyles.label}>Payment Method</label>
+                  <select id="payment-method" value={paymentType} onChange={(e) => setPaymentType(e.target.value)} style={modalStyles.input}>
+                    <option value="full_online">Fully Online</option>
+                    <option value="partial">Partial Online / Partial Cash</option>
+                    <option value="cash">Full Cash on Delivery</option>
+                  </select>
+                  {paymentType === 'partial' && (
+                    <input type="number" placeholder="Enter online payment amount" value={partialAmount} onChange={(e) => setPartialAmount(e.target.value)} style={modalStyles.input} />
+                  )}
+                </div>
+              )}
+
+              {purchaseType === 'trade' && (
+                <div style={modalStyles.section}>
+                  <label style={modalStyles.label}>What are you offering to trade?</label>
+                  <input type="text" placeholder="Describe your trade item..." value={tradeItem} onChange={(e) => setTradeItem(e.target.value)} style={modalStyles.input} />
+                </div>
+              )}
+
               <div style={modalStyles.section}>
-                <label htmlFor="agreed-price" style={modalStyles.label}>Agreed Price (R)</label>
-                <input id="agreed-price" type="number" value={agreedPrice} onChange={(e) => setAgreedPrice(e.target.value)} style={modalStyles.input} />
-                <label htmlFor="payment-method" style={modalStyles.label}>Payment Method</label>
-                <select id="payment-method" value={paymentType} onChange={(e) => setPaymentType(e.target.value)} style={modalStyles.input}>
-                  <option value="full_online">Fully Online</option>
-                  <option value="partial">Partial Online / Partial Cash</option>
-                  <option value="cash">Full Cash on Delivery</option>
-                </select>
-                {paymentType === 'partial' && (
-                  <input type="number" placeholder="Enter online payment amount" value={partialAmount} onChange={(e) => setPartialAmount(e.target.value)} style={modalStyles.input} />
-                )}
+                <label style={modalStyles.label}>Changes to terms (optional)</label>
+                <textarea placeholder="E.g. Seller agreed to include charger..." value={terms} onChange={(e) => setTerms(e.target.value)} style={modalStyles.textarea} />
               </div>
-            )}
 
-            {purchaseType === 'trade' && (
-              <div style={modalStyles.section}>
-                <label style={modalStyles.label}>What are you offering to trade?</label>
-                <input type="text" placeholder="Describe your trade item..." value={tradeItem} onChange={(e) => setTradeItem(e.target.value)} style={modalStyles.input} />
-              </div>
-            )}
-
-            <div style={modalStyles.section}>
-              <label style={modalStyles.label}>Changes to terms (optional)</label>
-              <textarea placeholder="E.g. Seller agreed to include charger..." value={terms} onChange={(e) => setTerms(e.target.value)} style={modalStyles.textarea} />
+              <button onClick={handleTransaction} style={styles.buyBtn}>Confirm & Send Offer</button>
             </div>
-
-            <button onClick={handleTransaction} style={styles.buyBtn}>Confirm & Send Offer</button>
           </div>
-        </div>
-      )}
-    </div>
+        )}
+      </div>
+    </>
   );
 }
 
@@ -336,7 +386,7 @@ export default function ListingDetail() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Styles (same as before, unchanged)
+// Styles
 // ─────────────────────────────────────────────────────────────────────────────
 const styles = {
   page: { display: 'flex', gap: '48px', padding: '40px 32px 48px', width: '100%', margin: '0 auto', flexWrap: 'wrap', backgroundColor: '#fbfbfb', minHeight: '100vh', borderRadius: '24px' },
@@ -353,9 +403,8 @@ const styles = {
   price: { fontSize: '1.6rem', fontWeight: '700', color: '#6AA6DA', margin: '0', fontFamily: 'Segoe UI, system-ui, sans-serif' },
   description: { fontSize: '0.95rem', color: '#444', lineHeight: '1.6', fontFamily: 'Segoe UI, system-ui, sans-serif', margin: '0' },
   buyBtn: { width: '100%', padding: '16px', backgroundColor: '#6AA6DA', color: '#fff', border: 'none', borderRadius: '10px', fontSize: '1rem', fontWeight: '700', cursor: 'pointer', fontFamily: 'Segoe UI, system-ui, sans-serif' },
-  messageBtn: { width: '100%', padding: '12px', backgroundColor: 'transparent', color: '#444', border: '1px solid #6aa6da57', borderRadius: '10px', fontSize: '0.95rem', fontWeight: '500', cursor: 'pointer', fontFamily: 'Segoe UI, system-ui, sans-serif' },
+  messageBtn: { width: '100%', padding: '12px', backgroundColor: 'transparent', color: '#444', border: '1px solid #6aa6da57', borderRadius: '10px', fontSize: '0.95rem', fontWeight: '500', cursor: 'pointer', fontFamily: 'Segoe UI, system-ui, sans-serif', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' },
   pendingBanner: { display: 'flex', alignItems: 'center', gap: '12px', padding: '16px', backgroundColor: '#fff8e1', border: '1px solid #ffe082', borderRadius: '10px', fontFamily: 'Segoe UI, system-ui, sans-serif' },
-  pendingIcon: { fontSize: '1.6rem', flexShrink: 0 },
   pendingTitle: { margin: '0 0 4px', fontWeight: '700', fontSize: '0.95rem', color: '#b45309' },
   pendingSubtitle: { margin: '0', fontSize: '0.85rem', color: '#92400e' },
   ownerBanner: { display: 'flex', alignItems: 'center', gap: '12px', padding: '16px', backgroundColor: '#e8f4fd', border: '1px solid #90caf9', borderRadius: '10px', fontFamily: 'Segoe UI, system-ui, sans-serif' },
