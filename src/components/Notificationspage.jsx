@@ -113,8 +113,6 @@ export default function NotificationsPage() {
           return tb - ta;
         });
 
-        // ✅ FIXED: Check by reviewerUserId + listingId + reviewedUserId
-        // This works regardless of purchaseId format issues
         const reviewChecks = await Promise.all(
           results.map(async (n) => {
             try {
@@ -150,20 +148,21 @@ export default function NotificationsPage() {
     const updated = [...new Set([...readIds, id])];
     setReadIds(updated);
     localStorage.setItem('readRatingNotifs', JSON.stringify(updated));
+    // Trigger navbar to re-sync
+    window.dispatchEvent(new Event('storage'));
   };
 
   const markAllRead = () => {
     const all = notifications.map((n) => n.id);
     setReadIds(all);
     localStorage.setItem('readRatingNotifs', JSON.stringify(all));
+    window.dispatchEvent(new Event('storage'));
   };
 
   const handleClick = (n) => {
     markRead(n.id);
     setNotifications((prev) => prev.filter((item) => item.id !== n.id));
-    navigate(
-      `/review/${n.listingId}?reviewedUserId=${n.reviewedUserId}&name=${encodeURIComponent(n.reviewedUserName)}&role=${n.role}&purchaseId=${n.purchaseId}`
-    );
+    navigate(`/review/${n.purchaseId}`);
   };
 
   return (

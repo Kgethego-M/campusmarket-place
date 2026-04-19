@@ -20,7 +20,6 @@ export async function submitReview({
   comment,
   role,
 }) {
-  // 1. Prevent duplicate reviews for the same purchase
   const duplicateCheck = query(
     collection(db, 'reviews'),
     where('PurchaseId', '==', purchaseId),
@@ -31,7 +30,6 @@ export async function submitReview({
     throw new Error('You have already reviewed this transaction.');
   }
 
-  // 2. Save the review document
   await addDoc(collection(db, 'reviews'), {
     reviewedUserId,
     reviewerUserId,
@@ -44,23 +42,41 @@ export async function submitReview({
     createdAt: serverTimestamp(),
   });
 
-  // 3. Recalculate average rating for the reviewed user
   const q = query(
     collection(db, 'reviews'),
     where('reviewedUserId', '==', reviewedUserId)
   );
   const snap = await getDocs(q);
-
   const ratings = snap.docs.map((d) => d.data().rating).filter(Boolean);
   const average =
     ratings.length > 0
       ? ratings.reduce((sum, r) => sum + r, 0) / ratings.length
       : 0;
 
-  // 4. Update the user's profile with new average
   const userRef = doc(db, 'users', reviewedUserId);
   await updateDoc(userRef, {
-  rating: parseFloat(average.toFixed(2)),
-  totalRatings: ratings.length,
-});
+    rating: parseFloat(average.toFixed(2)),
+    totalRatings: ratings.length,
+  });
+}
+
+export async function getUserReviews(reviewedUserId, role = null) {
+  try {
+    const constraints = [where('reviewedUserId', '==', reviewedUserId)];
+    if (role) {
+      constraints.push(where('role', '==', role));
+    }
+    const q = query(collection(db, 'reviews'), ...constraints);
+    const snap = await getDocs(q);
+    return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  } catch (error) {
+    console.error('Error fetching reviews:', error);
+    throw error;
+  }
+}
+
+export function getAverageRating(reviews) {
+  if (!reviews || reviews.length === 0) return '0.0';
+  const total = reviews.reduce((sum, r) => sum + r.rating, 0);
+  return (total / reviews.length).toFixed(1);
 }

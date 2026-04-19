@@ -24,18 +24,14 @@ import ReviewOffer from './components/ReviewOffer';
 import ListingDetail from './components/ListingDetail';
 import ReviewForm from './components/ReviewForm.jsx';
 import Notificationspage from './components/Notificationspage.jsx';
-
 import CreateListingAzure from './components/CreateListingAzure';
-//import EditListingAzure from './pages/EditListingAzure';
 import Chat from './components/Chat';
-import Profile from './components/Profile'
+import Profile from './components/Profile';
 import StaffDashboard from './components/Staffdashboard.jsx';
 import ProfileListingCard from './components/ProfileListingCard';
+import TradeFacility from './components/TradeFacility';
+import BookDropOff from './components/BookDropOff';
 
-
-// -------------------------
-// Protected Route (CLEAN)
-// -------------------------
 function ProtectedRoute({ children, allowedRoles }) {
   const [loading, setLoading] = useState(true);
   const [firebaseUser, setFirebaseUser] = useState(null);
@@ -49,57 +45,28 @@ function ProtectedRoute({ children, allowedRoles }) {
         setLoading(false);
         return;
       }
-
       setFirebaseUser(user);
-
       try {
         const userRef = doc(db, 'users', user.uid);
         const userSnap = await getDoc(userRef);
-
-        if (!userSnap.exists()) {
-          setRoleAllowed(false);
-          setLoading(false);
-          return;
-        }
-
+        if (!userSnap.exists()) { setRoleAllowed(false); setLoading(false); return; }
         const userData = userSnap.data();
-
-        setRoleAllowed(
-          allowedRoles.includes(userData.role)
-        );
+        setRoleAllowed(allowedRoles.includes(userData.role));
       } catch (err) {
         console.error('Role check failed:', err);
         setRoleAllowed(false);
       }
-
       setLoading(false);
     });
-
     return () => unsubscribe();
   }, [allowedRoles]);
 
-  if (loading) {
-    return (
-      <div style={{
-        display: 'flex',
-        justifyContent: 'center',
-        alignItems: 'center',
-        minHeight: '100vh'
-      }}>
-        Loading...
-      </div>
-    );
-  }
-
+  if (loading) return <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh' }}>Loading...</div>;
   if (!firebaseUser) return <Navigate to="/login" />;
   if (!roleAllowed) return <AccessDenied />;
-
   return children;
 }
 
-// -------------------------
-// Wrappers
-// -------------------------
 function LandingPageWrapper() {
   const navigate = useNavigate();
   return <LandingPage onGetStarted={() => navigate('/login')} />;
@@ -107,27 +74,15 @@ function LandingPageWrapper() {
 
 function LoginWrapper() {
   const navigate = useNavigate();
-
   return (
-    <div style={{
-      display: 'flex',
-      justifyContent: 'center',
-      alignItems: 'center',
-      minHeight: '100vh'
-    }}>
+    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh' }}>
       <LoginForm
         onSwitchToSignup={() => navigate('/signup')}
         onLoginSuccess={(userData) => {
           const role = userData.role || userData.userType;
-          if (role === 'admin'){
-            navigate('/admin');
-          }
-          else if (role === 'staff'){
-            navigate('/staff');
-          }
-          else{
-            navigate('/view-listing');
-          }
+          if (role === 'admin') navigate('/admin');
+          else if (role === 'staff') navigate('/staff');
+          else navigate('/view-listing');
         }}
       />
     </div>
@@ -136,14 +91,8 @@ function LoginWrapper() {
 
 function SignupWrapper() {
   const navigate = useNavigate();
-
   return (
-    <div style={{
-      display: 'flex',
-      justifyContent: 'center',
-      alignItems: 'center',
-      minHeight: '100vh'
-    }}>
+    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh' }}>
       <SignupForm
         onSwitchToLogin={() => navigate('/login')}
         onLoginSuccess={() => navigate('/view-listing')}
@@ -152,9 +101,6 @@ function SignupWrapper() {
   );
 }
 
-// -------------------------
-// Routes
-// -------------------------
 export function AppRoutes() {
   return (
     <Routes>
@@ -166,24 +112,23 @@ export function AppRoutes() {
       <Route path="/view-listing" element={<ProtectedRoute allowedRoles={['student']}><ViewListing /></ProtectedRoute>} />
       <Route path="/create-listing" element={<ProtectedRoute allowedRoles={['student']}><CreateListing /></ProtectedRoute>} />
       <Route path="/view-rating" element={<ViewRating userId="sampleUserId" />} />
-      <Route path="/chat" element={<ProtectedRoute allowedRoles={['student']}><Chat/></ProtectedRoute>} />
+      <Route path="/chat" element={<ProtectedRoute allowedRoles={['student']}><Chat /></ProtectedRoute>} />
       <Route path="/chat/:transactionId" element={<Chat />} />
       <Route path="/edit-listing/:id" element={<EditListing />} />
       <Route path="/access-denied" element={<AccessDenied />} />
       <Route path="/staff" element={<ProtectedRoute allowedRoles={['staff']}><StaffDashboard /></ProtectedRoute>} />
-      <Route path="/admin" element={<ProtectedRoute allowedRoles={['admin']}><AdminDashboard /></ProtectedRoute>}/>
-      <Route path="/azure/create-listing" element={<CreateListingAzure/>} />
+      <Route path="/admin" element={<ProtectedRoute allowedRoles={['admin']}><AdminDashboard /></ProtectedRoute>} />
+      <Route path="/trade-facility" element={<ProtectedRoute allowedRoles={['student']}><TradeFacility /></ProtectedRoute>} />
+      <Route path="/book-dropoff/:transactionId" element={<ProtectedRoute allowedRoles={['student']}><BookDropOff /></ProtectedRoute>} />
+      <Route path="/azure/create-listing" element={<CreateListingAzure />} />
       <Route path="/listing/:id" element={<ListingDetail />} />
-
+      <Route path="/profile/:userId" element={<ViewRating />} />
       <Route path="/review/:transactionId" element={<ReviewForm />} />
       <Route path="/notifications" element={<ProtectedRoute allowedRoles={['student']}><Notificationspage /></ProtectedRoute>} />
     </Routes>
   );
 }
 
-// -------------------------
-// App entry
-// -------------------------
 function App() {
   return (
     <BrowserRouter>

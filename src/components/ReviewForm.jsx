@@ -1,88 +1,145 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { auth } from '../firebase';
+import { auth, db } from '../firebase';
+import { doc, getDoc } from 'firebase/firestore';
 import { submitReview } from '../utils/review.utils';
 import styles from "../pages/ReviewForm.module.css";
 
 const LABELS = ['', 'Poor', 'Fair', 'Good', 'Very Good', 'Excellent'];
 
 const ReviewForm = () => {
-  const { listingId } = useParams();
+  const { transactionId } = useParams();
   const navigate = useNavigate();
 
-  const [rating, setRating] = useState(0);
-  const [hovered, setHovered] = useState(0);
-  const [comment, setComment] = useState('');
-  const [submitting, setSubmitting] = useState(false);
-  const [submitted, setSubmitted] = useState(false);
-  const [error, setError] = useState('');
+  const [rating, setRating]           = useState(0);
+  const [hovered, setHovered]         = useState(0);
+  const [comment, setComment]         = useState('');
+  const [submitting, setSubmitting]   = useState(false);
+  const [submitted, setSubmitted]     = useState(false);
+  const [error, setError]             = useState('');
+  const [purchase, setPurchase]       = useState(null);
+  const [loading, setLoading]         = useState(true);
 
-  const params = new URLSearchParams(window.location.search);
-  const reviewedUserId = params.get('reviewedUserId') || '';
-  const reviewedUserName = params.get('name') || 'this user';
-  const role = params.get('role') || 'seller';
-  const purchaseId = params.get('purchaseId') || '';
+  const currentUser = auth.currentUser;
+
+  useEffect(() => {
+    const fetchPurchase = async () => {
+      try {
+        const purchaseDoc = await getDoc(doc(db, 'Purchases', transactionId));
+        if (!purchaseDoc.exists()) {
+          setError('Purchase not found.');
+          return;
+        }
+        setPurchase({ id: purchaseDoc.id, ...purchaseDoc.data() });
+      } catch (err) {
+        console.error(err);
+        setError('Failed to load purchase.');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (transactionId) fetchPurchase();
+  }, [transactionId]);
+
+  const getReviewTarget = () => {
+    if (!purchase || !currentUser) return null;
+
+    const isBuyer  = currentUser.uid === purchase.buyerId;
+    const isSeller = currentUser.uid === purchase.sellerId;
+
+    if (isBuyer) {
+      return { reviewedUserId: purchase.sellerId, role: 'seller' };
+    } else if (isSeller) {
+      return { reviewedUserId: purchase.buyerId, role: 'buyer' };
+    }
+    return null;
+  };
 
   const handleSubmit = async () => {
     if (rating === 0) {
       setError('Please select a star rating before submitting.');
       return;
     }
+
+    const target = getReviewTarget();
+    if (!target) {
+      setError('You are not part of this purchase.');
+      return;
+    }
+
     setError('');
     setSubmitting(true);
+
     try {
-      const user = auth.currentUser;
       await submitReview({
-        reviewedUserId,
-        reviewerUserId: user?.uid || '',
-        reviewerName: user?.displayName || 'Anonymous',
-        listingId,
-        purchaseId, // stored in review so NotificationsPage can check it
+        reviewedUserId: target.reviewedUserId,
+        reviewerUserId: currentUser.uid,
+        reviewerName:   currentUser.displayName || 'Anonymous',
+        listingId:      purchase.listingId || '',
+        purchaseId:     transactionId,
         rating,
         comment,
-        role,
+        role:           target.role,
       });
       setSubmitted(true);
     } catch (err) {
       console.error(err);
-      setError('Something went wrong. Please try again.');
+      setError(err.message || 'Something went wrong. Please try again.');
     } finally {
       setSubmitting(false);
     }
   };
 
-  if (submitted) {
-    return (
-      <div className={styles.page}>
-        <div className={styles.card}>
-          <div className={styles.successIcon}>✓</div>
-          <h2 className={styles.successTitle}>Review Submitted!</h2>
-          <p className={styles.successSub}>
-            Thanks for helping the campus community make informed decisions.
-          </p>
-          <button className={styles.doneBtn} onClick={() => navigate('/view-listing')}>
-            Back to Listings
-          </button>
-        </div>
+  if (loading) return (
+    <div className={styles.page}>
+      <div className={styles.card}>
+        <p style={{ textAlign: 'center' }}>Loading...</p>
       </div>
-    );
-  }
+    </div>
+  );
+
+  if (submitted) return (
+    <div className={styles.page}>
+      <div className={styles.card}>
+        <div className={styles.successIcon}>✓</div>
+        <h2 className={styles.successTitle}>Review Submitted!</h2>
+        <p className={styles.successSub}>
+          Thanks for helping the campus community make informed decisions.
+        </p>
+        <button className={styles.doneBtn} onClick={() => navigate('/view-listing')}>
+          Back to Listings
+        </button>
+      </div>
+    </div>
+  );
+
+  const target = getReviewTarget();
+
+  if (!target) return (
+    <div className={styles.page}>
+      <div className={styles.card}>
+        <p style={{ textAlign: 'center', color: 'red' }}>
+          You are not part of this purchase or it no longer exists.
+        </p>
+        <button className={styles.doneBtn} onClick={() => navigate(-1)}>Go Back</button>
+      </div>
+    </div>
+  );
 
   return (
     <div className={styles.page}>
       <div className={styles.card}>
-        <button className={styles.backBtn} onClick={() => navigate(-1)}>
-          ← Back
-        </button>
+        <button className={styles.backBtn} onClick={() => navigate(-1)}>← Back</button>
 
         <div className={styles.heading}>
           <div className={styles.avatar}>
-            {reviewedUserName.charAt(0).toUpperCase()}
+            {target.role === 'seller' ? 'S' : 'B'}
           </div>
           <div>
             <h2 className={styles.title}>Rate your experience</h2>
             <p className={styles.sub}>
-              with <strong>{reviewedUserName}</strong> as a {role}
+              You are reviewing the <strong>{target.role}</strong> of this purchase
             </p>
           </div>
         </div>
