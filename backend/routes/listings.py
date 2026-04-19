@@ -1,7 +1,7 @@
 # listings.py
 
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException
-from database import get_db
+from backend.database import get_db
 from azure.storage.blob import BlobServiceClient
 import os, uuid
 
@@ -48,6 +48,9 @@ def get_listings():
             JOIN products ON listings.product_id = products.product_id
         """)
         return cursor.fetchall()
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
     finally:
         db.close()

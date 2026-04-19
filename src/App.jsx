@@ -29,6 +29,7 @@ import Chat from './components/Chat';
 import Profile from './components/Profile';
 import StaffDashboard from './components/Staffdashboard.jsx';
 import ProfileListingCard from './components/ProfileListingCard';
+// SPRINT 2 IMPORTS
 import TradeFacility from './components/TradeFacility';
 import BookDropOff from './components/BookDropOff';
 
@@ -117,12 +118,10 @@ export function AppRoutes() {
       <Route path="/edit-listing/:id" element={<EditListing />} />
       <Route path="/access-denied" element={<AccessDenied />} />
       <Route path="/staff" element={<ProtectedRoute allowedRoles={['staff']}><StaffDashboard /></ProtectedRoute>} />
-      <Route path="/admin" element={<ProtectedRoute allowedRoles={['admin']}><AdminDashboard /></ProtectedRoute>} />
-      <Route path="/trade-facility" element={<ProtectedRoute allowedRoles={['student']}><TradeFacility /></ProtectedRoute>} />
-      <Route path="/book-dropoff/:transactionId" element={<ProtectedRoute allowedRoles={['student']}><BookDropOff /></ProtectedRoute>} />
-      <Route path="/azure/create-listing" element={<CreateListingAzure />} />
+      <Route path="/admin" element={<ProtectedRoute allowedRoles={['admin']}><AdminDashboard /></ProtectedRoute>}/>
+      <Route path="/azure/create-listing" element={<CreateListingAzure/>} />
       <Route path="/listing/:id" element={<ListingDetail />} />
-      <Route path="/profile/:userId" element={<ViewRating />} />
+
       <Route path="/review/:transactionId" element={<ReviewForm />} />
       <Route path="/notifications" element={<ProtectedRoute allowedRoles={['student']}><Notificationspage /></ProtectedRoute>} />
     </Routes>

@@ -2,14 +2,13 @@ import { useEffect, useState } from "react";
 
 // --- FIREBASE IMPORTS ---
 import { db } from "../firebase.js";
-import { collection, getDocs, orderBy, query } from "firebase/firestore";
+import { collection, getDocs, orderBy, query, where } from "firebase/firestore";
 
 import { validateListingData } from "../utils/view-listing.utils.js";
 import ListingCard from "./ListingCard.jsx";
 import NavBar from "./NavBarTemp.jsx";
 import styles from "./ViewListing.module.css";
 
-// UPDATED: Changed "Sale or Trade" to "For Sale or Trade"
 const LISTING_TYPES = ["All", "For Sale", "For Trade", "For Sale or Trade"];
 const CONDITIONS    = ["All", "New", "Like New", "Good", "Fair", "Poor"];
 const CATEGORIES    = [
@@ -37,67 +36,93 @@ export default function ViewListings() {
     const [priceFilter, setPriceFilter] = useState("All");
     const [showFilters, setShowFilters] = useState(false);
 
-    // ── Fetch listings from Firebase ──────────────────────────────────────────────
+    // ── Fetch listings from Firebase ──────────────────────────
     useEffect(() => {
         async function fetchListings() {
             setLoading(true);
             try {
-                const listingsRef = collection(db, "listings");
-                const q = query(listingsRef, orderBy("timestamp", "desc"));
-                const querySnapshot = await getDocs(q);
-                
+                // 1. Fetch listing IDs that are tied to accepted/completed transactions
+                //    — these should no longer appear in the browse page
+                let hiddenListingIds = new Set();
+                try {
+                    const txSnap = await getDocs(
+                        query(
+                            collection(db, "transactions"),
+                            where("status", "in", ["accepted", "completed"])
+                        )
+                    );
+                    txSnap.docs.forEach(d => {
+                        const lid = d.data().listingId;
+                        if (lid) hiddenListingIds.add(lid);
+                    });
+                } catch (txErr) {
+                    // Non-fatal: if the transactions collection doesn't exist yet
+                    // just continue with no hidden IDs
+                    console.warn("Could not fetch transactions for filtering:", txErr);
+                }
+
+                // 2. Fetch all listings ordered by timestamp
+                const querySnapshot = await getDocs(
+                    query(collection(db, "listings"), orderBy("timestamp", "desc"))
+                );
+
+                const normaliseType = (t) => {
+                    if (!t) return t;
+                    if (t === "either") return "For Sale or Trade";
+                    if (t === "sale")   return "For Sale";
+                    if (t === "trade")  return "For Trade";
+                    return t;
+                };
+
                 const firebaseListings = querySnapshot.docs.map(doc => {
                     const data = doc.data();
-                    // Convert listingType for display: "either" -> "For Sale or Trade"
-                    let displayListingType = data.listingType;
-                    if (data.listingType === "either") {
-                        displayListingType = "For Sale or Trade";
-                    } else if (data.listingType === "sale") {
-                        displayListingType = "For Sale";
-                    } else if (data.listingType === "trade") {
-                        displayListingType = "For Trade";
-                    }
-                    
                     return {
                         id: doc.id,
                         ...data,
-                        imageUrl: data.photos && data.photos.length > 0 ? data.photos[0] : null,
-                        sellerName: data.sellerName || "Student",
-                        sellerAvatar: data.sellerAvatar || null,
-                        sellerUID: data.sellerUID || data.sellerUid,
-                        title: data.title || data.Title,
-                        price: data.price || data.Price,
-                        condition: data.condition || data.Condition,
-                        category: data.category || data.Category,
-                        listingType: displayListingType,
+                        imageUrl:            data.photos?.[0] ?? null,
+                        sellerName:          data.sellerName   || "Student",
+                        sellerAvatar:        data.sellerAvatar || null,
+                        sellerUID:           data.sellerUID    || data.sellerUid,
+                        title:               data.title        || data.Title,
+                        price:               data.price        || data.Price,
+                        condition:           data.condition    || data.Condition,
+                        category:            data.category     || data.Category,
+                        listingType:         normaliseType(data.listingType),
                         originalListingType: data.listingType,
-                        description: data.description || data.Description,
-                        status: data.status || data.Status,
-                        timestamp: data.timestamp || data.Timestamp,
+                        description:         data.description  || data.Description,
+                        status:              data.status       || data.Status,
+                        timestamp:           data.timestamp    || data.Timestamp,
                     };
                 });
 
-                const stored = JSON.parse(sessionStorage.getItem("listings") || "[]");
-                const storedIds = new Set(stored.map((l) => l.id));
-                
-                const normalise = (l) => ({
+                // 3. Merge with any sessionStorage listings (legacy/local)
+                const stored    = JSON.parse(sessionStorage.getItem("listings") || "[]");
+                const storedIds = new Set(stored.map(l => l.id));
+
+                const normaliseStored = (l) => ({
                     ...l,
-                    imageUrl: l.imageUrl || (l.photos && l.photos[0]) || null,
-                    sellerName: l.sellerName || "Student",
-                    listingType: l.listingType === "either" ? "For Sale or Trade"
-                            : l.listingType === "sale"   ? "For Sale"
-                            : l.listingType === "trade"  ? "For Trade"
-                            : l.listingType,
+                    imageUrl:            l.imageUrl || l.photos?.[0] || null,
+                    sellerName:          l.sellerName || "Student",
+                    listingType:         normaliseType(l.listingType),
                     originalListingType: l.listingType,
                 });
 
                 const merged = [
-                    ...stored.map(normalise),
-                    ...firebaseListings.filter((l) => !storedIds.has(l.id)),
+                    ...stored.map(normaliseStored),
+                    ...firebaseListings.filter(l => !storedIds.has(l.id)),
                 ];
 
-                const valid = merged.filter((l) => validateListingData(l).valid);
-                setListings(valid);
+                // 4. Remove listings whose ID appears in an accepted/completed transaction,
+                //    and also remove listings whose own status field marks them unavailable
+                const UNAVAILABLE = new Set(["accepted", "completed", "sold", "traded", "inactive"]);
+
+                const visible = merged.filter(l => {
+                    if (hiddenListingIds.has(l.id)) return false;
+                    if (l.status && UNAVAILABLE.has(l.status.toLowerCase())) return false;
+                    return validateListingData(l).valid;
+                });
+
+                setListings(visible);
             } catch (err) {
                 console.error("Failed to fetch listings from Firebase:", err);
             } finally {
@@ -107,15 +132,15 @@ export default function ViewListings() {
         fetchListings();
     }, []);
 
-    // ── Filter logic ────────────────────────────────────────────────────────
-    const activePriceRange = PRICE_RANGES.find((r) => r.label === priceFilter) || PRICE_RANGES[0];
+    // ── Filter logic ──────────────────────────────────────────
+    const activePriceRange = PRICE_RANGES.find(r => r.label === priceFilter) || PRICE_RANGES[0];
 
-    const filtered = listings.filter((l) => {
+    const filtered = listings.filter(l => {
         const matchSearch =
             l.title?.toLowerCase().includes(search.toLowerCase()) ||
             l.category?.toLowerCase().includes(search.toLowerCase()) ||
             l.description?.toLowerCase().includes(search.toLowerCase());
-        
+
         let matchesType = true;
         if (typeFilter === "For Sale") {
             matchesType = l.originalListingType === "sale" || l.listingType === "For Sale";
@@ -123,21 +148,18 @@ export default function ViewListings() {
             matchesType = l.originalListingType === "trade" || l.listingType === "For Trade";
         } else if (typeFilter === "For Sale or Trade") {
             matchesType = l.originalListingType === "either" || l.listingType === "For Sale or Trade";
-        } else if (typeFilter === "All") {
-            matchesType = true;
-        } else {
-            matchesType = l.listingType === typeFilter;
         }
-        
-        const matchCond  = condFilter  === "All" || l.condition   === condFilter;
-        const matchCat   = catFilter   === "All" || l.category    === catFilter;
+
+        const matchCond  = condFilter  === "All" || l.condition === condFilter;
+        const matchCat   = catFilter   === "All" || l.category  === catFilter;
         const matchPrice = priceFilter === "All" ||
             (l.price >= activePriceRange.min && l.price < activePriceRange.max);
-        
+
         return matchSearch && matchesType && matchCond && matchCat && matchPrice;
     });
 
-    const activeFilterCount = [typeFilter, condFilter, catFilter, priceFilter].filter(v => v !== "All").length;
+    const activeFilterCount = [typeFilter, condFilter, catFilter, priceFilter]
+        .filter(v => v !== "All").length;
 
     function clearFilters() {
         setTypeFilter("All");
@@ -167,7 +189,7 @@ export default function ViewListings() {
                 />
                 <button
                     className={`${styles.filterBtn} ${showFilters ? styles.filterBtnActive : ""}`}
-                    onClick={() => setShowFilters((v) => !v)}
+                    onClick={() => setShowFilters(v => !v)}
                 >
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
                          stroke="currentColor" strokeWidth="2.2"
@@ -188,7 +210,7 @@ export default function ViewListings() {
                     <div className={styles.filterGroup}>
                         <span className={styles.filterLabel}>Listing type</span>
                         <div className={styles.pills}>
-                            {LISTING_TYPES.map((t) => (
+                            {LISTING_TYPES.map(t => (
                                 <button
                                     key={t}
                                     className={`${styles.pill} ${typeFilter === t ? styles.pillActive : ""}`}
@@ -203,7 +225,7 @@ export default function ViewListings() {
                     <div className={styles.filterGroup}>
                         <span className={styles.filterLabel}>Price range</span>
                         <div className={styles.pills}>
-                            {PRICE_RANGES.map((r) => (
+                            {PRICE_RANGES.map(r => (
                                 <button
                                     key={r.label}
                                     className={`${styles.pill} ${priceFilter === r.label ? styles.pillActive : ""}`}
@@ -218,7 +240,7 @@ export default function ViewListings() {
                     <div className={styles.filterGroup}>
                         <span className={styles.filterLabel}>Condition</span>
                         <div className={styles.pills}>
-                            {CONDITIONS.map((c) => (
+                            {CONDITIONS.map(c => (
                                 <button
                                     key={c}
                                     className={`${styles.pill} ${condFilter === c ? styles.pillActive : ""}`}
@@ -233,7 +255,7 @@ export default function ViewListings() {
                     <div className={styles.filterGroup}>
                         <span className={styles.filterLabel}>Category</span>
                         <div className={styles.pills}>
-                            {CATEGORIES.map((c) => (
+                            {CATEGORIES.map(c => (
                                 <button
                                     key={c}
                                     className={`${styles.pill} ${catFilter === c ? styles.pillActive : ""}`}

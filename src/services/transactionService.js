@@ -1,36 +1,33 @@
 // src/services/transactionService.js
-import { collection, addDoc, updateDoc, doc } from 'firebase/firestore';
+import { collection, addDoc, updateDoc, doc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../firebase';
 
-export const createTransaction = async ({ type, listingId, buyerId, sellerId }) => {
+export const createTransaction = async (transactionData) => {
+  // Save ALL fields passed in — previously this dropped most of them
   const docRef = await addDoc(collection(db, 'transactions'), {
-    type,
-    status: 'pending',
-    listingId,
-    buyerId,
-    sellerId,
-    createdAt: new Date(),
+    ...transactionData,
+    status:    'pending',
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
   });
 
   return docRef.id;
 };
 
 export const acceptOffer = async ({ transactionId, sellerId }) => {
-  const transactionRef = doc(db, 'transactions', transactionId);
-
-  await updateDoc(transactionRef, {
-    status: 'accepted',
+  await updateDoc(doc(db, 'transactions', transactionId), {
+    status:     'accepted',
     acceptedBy: sellerId,
-    acceptedAt: new Date(),
+    acceptedAt: serverTimestamp(),
+    updatedAt:  serverTimestamp(),
   });
 };
 
 export const declineOffer = async ({ transactionId, sellerId }) => {
-  const transactionRef = doc(db, 'transactions', transactionId);
-
-  await updateDoc(transactionRef, {
-    status: 'declined',
+  await updateDoc(doc(db, 'transactions', transactionId), {
+    status:     'declined',
     declinedBy: sellerId,
-    declinedAt: new Date(),
+    declinedAt: serverTimestamp(),
+    updatedAt:  serverTimestamp(),
   });
 };
