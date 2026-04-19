@@ -24,6 +24,7 @@ import ReviewOffer from './components/ReviewOffer';
 import ListingDetail from './components/ListingDetail';
 import ReviewForm from './components/ReviewForm.jsx';
 import Notificationspage from './components/Notificationspage.jsx';
+import MyPurchases from './components/MyPurchases.jsx';
 
 import CreateListingAzure from './components/CreateListingAzure';
 //import EditListingAzure from './pages/EditListingAzure';
@@ -184,6 +185,7 @@ export function AppRoutes() {
 
       <Route path="/review/:transactionId" element={<ReviewForm />} />
       <Route path="/notifications" element={<ProtectedRoute allowedRoles={['student']}><Notificationspage /></ProtectedRoute>} />
+      <Route path="/my-purchases" element={<ProtectedRoute allowedRoles={['student']}><MyPurchases /></ProtectedRoute>} />
     </Routes>
   );
 }

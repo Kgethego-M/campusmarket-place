@@ -1,3 +1,5 @@
+Profile.jsx
+
 import { onAuthStateChanged } from 'firebase/auth';
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
@@ -24,7 +26,7 @@ const toRawListingType = (displayType) => {
 const HISTORY_STATUSES  = new Set(['sold', 'completed', 'traded']);
 const READONLY_STATUSES = new Set(['accepted']);
 
-const Profile = () => {
+function Profile() {
   const navigate     = useNavigate();
   const location     = useLocation();
   const fileInputRef = useRef(null);
@@ -82,13 +84,21 @@ const Profile = () => {
       setHistory(d.history || []);
 
       // Run all fetches in parallel
-      const [, , reviewSnap] = await Promise.all([
+      const [, , reviewSnap, allUserListingsSnap, completedTxAsSellerSnap] = await Promise.all([
         fetchUserListings(user.uid),
         fetchUserPurchases(user.uid),
         getDocs(query(collection(db, 'reviews'), where('reviewedUserId', '==', user.uid))),
+        // Get ALL of this user's listings — we'll filter by status in JS
+        getDocs(query(collection(db, 'listings'), where('sellerUID', '==', user.uid))),
+        // Get ALL completed/accepted transactions as seller — filter type in JS
+        getDocs(query(
+          collection(db, 'transactions'),
+          where('sellerId', '==', user.uid),
+          where('status', 'in', ['completed', 'accepted', 'traded', 'sold'])
+        )),
       ]);
 
-      // ── Rating aggregation — always recalculate, even if 0 reviews ──
+      // ── Rating aggregation ──
       let liveRating = 0;
       let liveTotalRatings = 0;
       if (!reviewSnap.empty) {
@@ -101,26 +111,57 @@ const Profile = () => {
           : 0;
       }
 
-      // Only write to Firestore if value changed
-      if (
-        liveRating !== safeNumber(d.rating) ||
-        liveTotalRatings !== safeNumber(d.totalRatings)
-      ) {
-        updateDoc(doc(db, 'users', user.uid), {
-          rating: liveRating,
-          totalRatings: liveTotalRatings,
-        }).catch(() => {});
+      // ── Sales aggregation ──
+      // Count listings whose status indicates a completed sale (any casing)
+      const SOLD_STATUSES = new Set(['sold', 'completed', 'traded']);
+      const TRADE_LISTING_TYPES = new Set(['trade']);
+
+      const soldListings = allUserListingsSnap.docs.filter(doc => {
+        const status = doc.data().status?.toLowerCase?.() ?? '';
+        return SOLD_STATUSES.has(status);
+      });
+
+      // Sales = sold listings that are NOT pure trade-type
+      const liveTotalSales = soldListings.filter(doc => {
+        const lt = doc.data().listingType?.toLowerCase?.() ?? '';
+        return lt !== 'trade'; // 'sale', 'either', or unset all count as sales
+      }).length;
+
+      // Trades = sold listings that are trade-type OR completed transactions of type trade
+      const tradedFromListings = soldListings.filter(doc => {
+        const lt = doc.data().listingType?.toLowerCase?.() ?? '';
+        return lt === 'trade' || doc.data().status?.toLowerCase?.() === 'traded';
+      }).length;
+
+      const tradedFromTransactions = completedTxAsSellerSnap.docs.filter(doc => {
+        const type = doc.data().type?.toLowerCase?.() ?? '';
+        const lt   = doc.data().listingType?.toLowerCase?.() ?? '';
+        return type === 'trade' || lt === 'trade';
+      }).length;
+
+      // Use whichever source gives a higher count (avoid double-counting by taking max)
+      const liveTotalTrades = Math.max(tradedFromListings, tradedFromTransactions);
+
+      // ── Sync to Firestore if changed ──
+      const updates = {};
+      if (liveRating       !== safeNumber(d.rating))       updates.rating       = liveRating;
+      if (liveTotalRatings !== safeNumber(d.totalRatings)) updates.totalRatings = liveTotalRatings;
+      if (liveTotalSales   !== safeNumber(d.totalSales))   updates.totalSales   = liveTotalSales;
+      if (liveTotalTrades  !== safeNumber(d.totalTrades))  updates.totalTrades  = liveTotalTrades;
+
+      if (Object.keys(updates).length > 0) {
+        updateDoc(doc(db, 'users', user.uid), updates).catch(() => {});
       }
 
       setProfileData({
         ...d,
-        email:       d.email    || user.email,
-        photoURL:    d.photoURL || user.photoURL || '',
-        memberSince: user.metadata.creationTime
+        email:        d.email    || user.email,
+        photoURL:     d.photoURL || user.photoURL || '',
+        memberSince:  user.metadata.creationTime
           ? new Date(user.metadata.creationTime).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
           : 'Unknown',
-        totalSales:   safeNumber(d.totalSales),
-        totalTrades:  safeNumber(d.totalTrades),
+        totalSales:   liveTotalSales,
+        totalTrades:  liveTotalTrades,
         rating:       liveRating,
         totalRatings: liveTotalRatings,
       });
@@ -581,6 +622,6 @@ const Profile = () => {
       </div>
     </div>
   );
-};
+}
 
 export default Profile;
