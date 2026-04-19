@@ -1,6 +1,5 @@
 // src/tests/transactionService.test.js
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { createTransaction, acceptOffer } from '../services/transactionService';
 import { createTransaction, acceptOffer, declineOffer } from '../services/transactionService';
 
 vi.mock('firebase/firestore', () => ({
@@ -9,6 +8,7 @@ vi.mock('firebase/firestore', () => ({
   addDoc: vi.fn(() => Promise.resolve({ id: 'mock-transaction-id' })),
   updateDoc: vi.fn(() => Promise.resolve()),
   doc: vi.fn(),
+  serverTimestamp: vi.fn(() => 'mock-timestamp'),  // ADD THIS
 }));
 
 vi.mock('../firebase', () => ({
@@ -22,7 +22,6 @@ beforeEach(() => {
 });
 
 describe('transactionService - createTransaction', () => {
-
   it('Test No.5 - creates a transaction document with correct fields for a Buy Now', async () => {
     const transactionData = {
       type: 'sale',
@@ -30,9 +29,7 @@ describe('transactionService - createTransaction', () => {
       buyerId: 'buyer-uid',
       sellerId: 'seller-uid',
     };
-
     const txId = await createTransaction(transactionData);
-
     expect(addDoc).toHaveBeenCalledTimes(1);
     expect(addDoc).toHaveBeenCalledWith(
       undefined,
@@ -54,9 +51,7 @@ describe('transactionService - createTransaction', () => {
       buyerId: 'buyer-uid',
       sellerId: 'seller-uid',
     };
-
     const txId = await createTransaction(transactionData);
-
     expect(addDoc).toHaveBeenCalledTimes(1);
     expect(addDoc).toHaveBeenCalledWith(
       undefined,
@@ -76,7 +71,6 @@ describe('transactionService - createTransaction', () => {
       transactionId: 'tx-123',
       sellerId: 'seller-uid',
     });
-
     expect(updateDoc).toHaveBeenCalledTimes(1);
     expect(updateDoc).toHaveBeenCalledWith(
       undefined,
@@ -91,7 +85,6 @@ describe('transactionService - createTransaction', () => {
       transactionId: 'tx-123',
       sellerId: 'seller-uid',
     });
-
     expect(updateDoc).toHaveBeenCalledTimes(1);
     expect(updateDoc).toHaveBeenCalledWith(
       undefined,
@@ -100,5 +93,4 @@ describe('transactionService - createTransaction', () => {
       })
     );
   });
-
 });

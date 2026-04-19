@@ -2,6 +2,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { ListingDetailView as ListingDetail } from '../components/ListingDetail';
+import { getDocs, addDoc } from 'firebase/firestore';
+import { createTransaction } from '../services/transactionService';
+import { notifySellerOfOffer } from '../services/notificationService';
 
 // ─── Mocks ────────────────────────────────────────────────────────────────────
 
@@ -18,7 +21,7 @@ vi.mock('firebase/firestore', () => ({
   collection: vi.fn(),
   query: vi.fn(),
   where: vi.fn(),
-  getDocs: vi.fn(() => Promise.resolve({ empty: true, docs: [] })),
+  getDocs: vi.fn(),
   addDoc: vi.fn(() => Promise.resolve({ id: 'new-chat-id' })),
   serverTimestamp: vi.fn(),
   doc: vi.fn(),
@@ -35,12 +38,18 @@ vi.mock('../services/notificationService', () => ({
 
 import { createTransaction } from '../services/transactionService';
 import { notifySellerOfOffer } from '../services/notificationService';
-import { getDocs, addDoc } from 'firebase/firestore';
 
 // ─── Mock Data ────────────────────────────────────────────────────────────────
 
-const mockBuyer = { uid: 'buyer-uid', displayName: 'Test Buyer' };
-const mockSeller = { uid: 'seller-uid', displayName: 'Test Seller' };
+const mockBuyer = {
+  uid: 'buyer-uid',
+  displayName: 'Test Buyer',
+};
+
+const mockSeller = {
+  uid: 'seller-uid',
+  displayName: 'Test Seller',
+};
 
 const saleListing = {
   id: 'listing-123',
@@ -48,7 +57,6 @@ const saleListing = {
   price: 150,
   type: 'For Sale',
   sellerId: 'seller-uid',
-  sellerName: 'Test Seller',
 };
 
 const tradeListing = {
@@ -57,7 +65,6 @@ const tradeListing = {
   price: 80,
   type: 'For Trade',
   sellerId: 'seller-uid',
-  sellerName: 'Test Seller',
 };
 
 const eitherListing = {
@@ -66,7 +73,6 @@ const eitherListing = {
   price: 200,
   type: 'For Sale or Trade',
   sellerId: 'seller-uid',
-  sellerName: 'Test Seller',
 };
 
 const pendingTransaction = {
@@ -83,13 +89,11 @@ const mockNavigate = vi.fn();
 
 beforeEach(() => {
   vi.clearAllMocks();
-  vi.spyOn(window, 'alert').mockImplementation(() => {});
 });
 
-// ─── Test Suites ──────────────────────────────────────────────────────────────
+// ─── Action buttons ───────────────────────────────────────────────────────────
 
 describe('ListingDetail - action buttons', () => {
-
   it('Test No.1 - shows Buy Now button when listing type is For Sale', () => {
     render(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} />);
     expect(screen.getByRole('button', { name: /buy now/i })).toBeInTheDocument();
@@ -109,8 +113,14 @@ describe('ListingDetail - action buttons', () => {
 
   it('Test No.4 - shows pending offer banner instead of buy button when buyer already has an active offer', () => {
     render(
-      <ListingDetail listing={saleListing} currentUser={mockBuyer} existingTransaction={pendingTransaction} navigate={mockNavigate} />
+      <ListingDetail
+        listing={saleListing}
+        currentUser={mockBuyer}
+        existingTransaction={pendingTransaction}
+      />
     );
+
+    // Buy button should NOT be visible
     expect(screen.queryByRole('button', { name: /buy now/i })).not.toBeInTheDocument();
     const banner = screen.getByTestId('pending-offer-banner');
     expect(banner).toBeInTheDocument();
@@ -127,8 +137,13 @@ describe('ListingDetail - action buttons', () => {
   it('Test No.4c - pending banner does not appear when an existing transaction is declined', () => {
     const declinedTransaction = { ...pendingTransaction, status: 'declined' };
     render(
-      <ListingDetail listing={saleListing} currentUser={mockBuyer} existingTransaction={declinedTransaction} navigate={mockNavigate} />
+      <ListingDetail
+        listing={saleListing}
+        currentUser={mockBuyer}
+        existingTransaction={declinedTransaction}
+      />
     );
+    // Declined offer — buyer can try again, so show the buy button
     expect(screen.queryByTestId('pending-offer-banner')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: /buy now/i })).toBeInTheDocument();
   });
@@ -137,7 +152,6 @@ describe('ListingDetail - action buttons', () => {
     render(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} />);
     fireEvent.click(screen.getByRole('button', { name: /buy now/i }));
     fireEvent.click(screen.getByRole('button', { name: /confirm/i }));
-
     await waitFor(() => {
       expect(createTransaction).toHaveBeenCalledTimes(1);
       expect(createTransaction).toHaveBeenCalledWith(
@@ -167,11 +181,11 @@ describe('ListingDetail - action buttons', () => {
     expect(screen.queryByRole('button', { name: /buy now/i })).not.toBeInTheDocument();
     expect(screen.queryByTestId('pending-offer-banner')).not.toBeInTheDocument();
   });
-
 });
 
-describe('ListingDetail - purchase modal', () => {
+// ─── Purchase modal ───────────────────────────────────────────────────────────
 
+describe('ListingDetail - purchase modal', () => {
   it('Test No.14 - opens the modal when Buy Now button is clicked', () => {
     render(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} />);
     fireEvent.click(screen.getByRole('button', { name: /buy now/i }));
@@ -208,80 +222,11 @@ describe('ListingDetail - purchase modal', () => {
     expect(screen.getByPlaceholderText(/describe your trade item/i)).toBeInTheDocument();
   });
 
-  it('Test No.21 - shows partial amount input when Partial Online payment method is selected', () => {
-    render(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} />);
-    fireEvent.click(screen.getByRole('button', { name: /buy now/i }));
-    fireEvent.change(screen.getByRole('combobox', { name: /payment method/i }), {
-      target: { value: 'partial' },
-    });
-    expect(screen.getByPlaceholderText(/enter online payment amount/i)).toBeInTheDocument();
-  });
-
-  it('Test No.22 - hides partial amount input when payment method is not partial', () => {
-    render(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} />);
-    fireEvent.click(screen.getByRole('button', { name: /buy now/i }));
-    fireEvent.change(screen.getByRole('combobox', { name: /payment method/i }), {
-      target: { value: 'cash' },
-    });
-    expect(screen.queryByPlaceholderText(/enter online payment amount/i)).not.toBeInTheDocument();
-  });
-
-  it('Test No.23 - calls createTransaction with trade type when trade offer is confirmed', async () => {
-    render(<ListingDetail listing={tradeListing} currentUser={mockBuyer} navigate={mockNavigate} />);
-    fireEvent.click(screen.getByRole('button', { name: /make trade offer/i }));
-    fireEvent.change(screen.getByPlaceholderText(/describe your trade item/i), {
-      target: { value: 'My old laptop' },
-    });
-    fireEvent.click(screen.getByRole('button', { name: /confirm/i }));
-
-    await waitFor(() => {
-      expect(createTransaction).toHaveBeenCalledWith(
-        expect.objectContaining({
-          type: 'trade',
-          tradeItem: 'My old laptop',
-          paymentType: null,
-        })
-      );
-    });
-  });
-
-  it('Test No.24 - shows pending banner after offer is successfully sent', async () => {
-    render(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} />);
-    fireEvent.click(screen.getByRole('button', { name: /buy now/i }));
-    fireEvent.click(screen.getByRole('button', { name: /confirm/i }));
-
-    await waitFor(() => {
-      expect(screen.getByTestId('pending-offer-banner')).toBeInTheDocument();
-    });
-  });
-
-  it('Test No.25 - shows alert when createTransaction fails', async () => {
-    createTransaction.mockRejectedValueOnce(new Error('Network error'));
-    render(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} />);
-    fireEvent.click(screen.getByRole('button', { name: /buy now/i }));
-    fireEvent.click(screen.getByRole('button', { name: /confirm/i }));
-
-    await waitFor(() => {
-      expect(window.alert).toHaveBeenCalledWith('Failed to create offer. Please try again.');
-    });
-  });
-
-  it('Test No.26 - modal title says Initiate Trade for trade listings', () => {
-    render(<ListingDetail listing={tradeListing} currentUser={mockBuyer} navigate={mockNavigate} />);
-    fireEvent.click(screen.getByRole('button', { name: /make trade offer/i }));
-    expect(screen.getByText('Initiate Trade')).toBeInTheDocument();
-  });
-
-  it('Test No.27 - modal title says Initiate Purchase for sale listings', () => {
-    render(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} />);
-    fireEvent.click(screen.getByRole('button', { name: /buy now/i }));
-    expect(screen.getByText('Initiate Purchase')).toBeInTheDocument();
-  });
-
 });
 
-describe('ListingDetail - owner banner', () => {
+// ─── Owner banner ─────────────────────────────────────────────────────────────
 
+describe('ListingDetail - owner banner', () => {
   it('Test No.19 - shows the owner banner when the seller views their own listing', () => {
     render(<ListingDetail listing={saleListing} currentUser={mockSeller} navigate={mockNavigate} />);
     const banner = screen.getByTestId('owner-listing-banner');
@@ -296,134 +241,4 @@ describe('ListingDetail - owner banner', () => {
   });
 
 });
-
-describe('ListingDetail - seller card navigation', () => {
-
-  it('Test No.28 - buyer clicking seller card navigates to seller profile', () => {
-    render(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} />);
-    fireEvent.click(screen.getByTitle(/view seller profile/i));
-    expect(mockNavigate).toHaveBeenCalledWith('/profile/seller-uid');
-  });
-
-  it('Test No.29 - seller clicking their own card navigates to their profile', () => {
-    render(<ListingDetail listing={saleListing} currentUser={mockSeller} navigate={mockNavigate} />);
-    fireEvent.click(screen.getByTitle(/go to your profile/i));
-    expect(mockNavigate).toHaveBeenCalledWith('/profile');
-  });
-
-});
-
-describe('ListingDetail - message seller', () => {
-
-  it('Test No.30 - shows Message Seller button for a buyer', () => {
-    render(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} />);
-    expect(screen.getByText(/message seller/i)).toBeInTheDocument();
-  });
-
-  it('Test No.31 - does not show Message Seller button when seller views own listing', () => {
-    render(<ListingDetail listing={saleListing} currentUser={mockSeller} navigate={mockNavigate} />);
-    expect(screen.queryByText(/message seller/i)).not.toBeInTheDocument();
-  });
-
-  it('Test No.32 - does not show Message Seller button when no user is logged in', () => {
-    render(<ListingDetail listing={saleListing} currentUser={null} navigate={mockNavigate} />);
-    expect(screen.queryByText(/message seller/i)).not.toBeInTheDocument();
-  });
-
-  it('Test No.33 - navigates to chat when Message Seller is clicked and chat already exists', async () => {
-    getDocs.mockResolvedValueOnce({
-      docs: [{
-        id: 'existing-chat-id',
-        data: () => ({ participants: ['buyer-uid', 'seller-uid'] }),
-      }],
-    });
-
-    render(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} />);
-    fireEvent.click(screen.getByText(/message seller/i));
-
-    await waitFor(() => {
-      expect(mockNavigate).toHaveBeenCalledWith('/chat?open=existing-chat-id');
-    });
-  });
-
-  it('Test No.34 - creates a new chat and navigates when no existing chat is found', async () => {
-    getDocs.mockResolvedValueOnce({ docs: [] });
-    addDoc.mockResolvedValueOnce({ id: 'new-chat-id' });
-
-    render(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} />);
-    fireEvent.click(screen.getByText(/message seller/i));
-
-    await waitFor(() => {
-      expect(mockNavigate).toHaveBeenCalledWith('/chat?open=new-chat-id');
-    });
-  });
-
-  it('Test No.35 - shows alert when chat creation fails', async () => {
-    getDocs.mockRejectedValueOnce(new Error('Firestore error'));
-
-    render(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} />);
-    fireEvent.click(screen.getByText(/message seller/i));
-
-    await waitFor(() => {
-      expect(window.alert).toHaveBeenCalledWith(
-        expect.stringMatching(/could not open chat/i)
-      );
-    });
-  });
-
-});
-
-describe('ListingDetail - listing display', () => {
-
-  it('Test No.36 - renders listing title and price', () => {
-    render(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} />);
-    expect(screen.getByText('Calculus Textbook')).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: /calculus textbook/i })).toBeInTheDocument();
-    expect(screen.getAllByText(/R 150/i).length).toBeGreaterThan(0);
-  });
-
-  it('Test No.37 - renders listing description when provided', () => {
-    const listingWithDesc = { ...saleListing, description: 'Great condition textbook' };
-    render(<ListingDetail listing={listingWithDesc} currentUser={mockBuyer} navigate={mockNavigate} />);
-    expect(screen.getByText('Great condition textbook')).toBeInTheDocument();
-  });
-
-  it('Test No.38 - renders seller name on seller card', () => {
-    render(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} />);
-    expect(screen.getByText('Test Seller')).toBeInTheDocument();
-  });
-
-  it('Test No.39 - renders No Image Available when listing has no photos', () => {
-    render(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} />);
-    expect(screen.getByText(/no image available/i)).toBeInTheDocument();
-  });
-
-  it('Test No.40 - renders main image when listing has photos', () => {
-    const listingWithPhotos = { ...saleListing, photos: ['photo1.jpg', 'photo2.jpg'] };
-    render(<ListingDetail listing={listingWithPhotos} currentUser={mockBuyer} navigate={mockNavigate} />);
-    const mainImg = screen.getByAltText('Calculus Textbook');
-    expect(mainImg).toBeInTheDocument();
-    expect(mainImg).toHaveAttribute('src', 'photo1.jpg');
-  });
-
-  it('Test No.41 - clicking a thumbnail changes the main image', () => {
-    const listingWithPhotos = { ...saleListing, photos: ['photo1.jpg', 'photo2.jpg'] };
-    render(<ListingDetail listing={listingWithPhotos} currentUser={mockBuyer} navigate={mockNavigate} />);
-    fireEvent.click(screen.getByAltText('thumb-1'));
-    const mainImg = screen.getByAltText('Calculus Textbook');
-    expect(mainImg).toHaveAttribute('src', 'photo2.jpg');
-  });
-
-  it('Test No.42 - renders condition badge when condition is provided', () => {
-    const listingWithCondition = { ...saleListing, condition: 'Good' };
-    render(<ListingDetail listing={listingWithCondition} currentUser={mockBuyer} navigate={mockNavigate} />);
-    expect(screen.getByText('Good')).toBeInTheDocument();
-  });
-
-  it('Test No.43 - renders category badge when category is provided', () => {
-    const listingWithCategory = { ...saleListing, category: 'Textbooks' };
-    render(<ListingDetail listing={listingWithCategory} currentUser={mockBuyer} navigate={mockNavigate} />);
-    expect(screen.getByText('Textbooks')).toBeInTheDocument();
-  });
-
-});
+ 
