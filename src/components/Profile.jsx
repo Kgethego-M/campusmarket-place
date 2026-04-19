@@ -21,8 +21,8 @@ const toRawListingType = (displayType) => {
   return displayType;
 };
 
-// Statuses that make a listing non-editable
-const INACTIVE_STATUSES = new Set(['accepted', 'sold', 'traded', 'inactive']);
+const HISTORY_STATUSES  = new Set(['sold', 'completed', 'traded']);
+const READONLY_STATUSES = new Set(['accepted']);
 
 const Profile = () => {
   const navigate     = useNavigate();
@@ -64,7 +64,6 @@ const Profile = () => {
       if (!user) { navigate('/login'); return; }
       fetchUserData(user);
 
-      // Only pending offers — accepted/declined disappear automatically
       const unsubOffers = onSnapshot(
         query(collection(db, 'transactions'), where('sellerId', '==', user.uid), where('status', '==', 'pending')),
         (snap) => setIncomingOffers(snap.docs.map(d => ({ id: d.id, ...d.data() })))
@@ -77,27 +76,72 @@ const Profile = () => {
   const fetchUserData = async (user) => {
     try {
       const docSnap = await getDoc(doc(db, 'users', user.uid));
-      await fetchUserListings(user.uid);
-      if (docSnap.exists()) {
-        const d = docSnap.data();
-        setProfileData({
-          ...d,
-          email:       d.email      || user.email,
-          photoURL:    d.photoURL   || user.photoURL || '',
-          memberSince: user.metadata.creationTime
-            ? new Date(user.metadata.creationTime).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
-            : 'Unknown',
-          totalSales:   safeNumber(d.totalSales),
-          totalTrades:  safeNumber(d.totalTrades),
-          rating:       safeNumber(d.rating),
-          totalRatings: safeNumber(d.totalRatings),
-        });
-        setEditFormData({ firstName: d.firstName || '', lastName: d.lastName || '', bio: d.bio || '' });
-        setHistory(d.history || []);
+      if (!docSnap.exists()) return;
+
+      const d = docSnap.data();
+      setHistory(d.history || []);
+
+      // Run all fetches in parallel
+      const [, , reviewSnap] = await Promise.all([
+        fetchUserListings(user.uid),
+        fetchUserPurchases(user.uid),
+        getDocs(query(collection(db, 'reviews'), where('reviewedUserId', '==', user.uid))),
+      ]);
+
+      // ── Rating aggregation — always recalculate, even if 0 reviews ──
+      let liveRating = 0;
+      let liveTotalRatings = 0;
+      if (!reviewSnap.empty) {
+        const ratings = reviewSnap.docs
+          .map(r => safeNumber(r.data().rating))
+          .filter(r => r > 0);
+        liveTotalRatings = ratings.length;
+        liveRating = liveTotalRatings > 0
+          ? Math.round((ratings.reduce((a, b) => a + b, 0) / liveTotalRatings) * 10) / 10
+          : 0;
       }
-    } catch (err) { console.error(err); }
-    finally { setLoading(false); }
+
+      // Only write to Firestore if value changed
+      if (
+        liveRating !== safeNumber(d.rating) ||
+        liveTotalRatings !== safeNumber(d.totalRatings)
+      ) {
+        updateDoc(doc(db, 'users', user.uid), {
+          rating: liveRating,
+          totalRatings: liveTotalRatings,
+        }).catch(() => {});
+      }
+
+      setProfileData({
+        ...d,
+        email:       d.email    || user.email,
+        photoURL:    d.photoURL || user.photoURL || '',
+        memberSince: user.metadata.creationTime
+          ? new Date(user.metadata.creationTime).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+          : 'Unknown',
+        totalSales:   safeNumber(d.totalSales),
+        totalTrades:  safeNumber(d.totalTrades),
+        rating:       liveRating,
+        totalRatings: liveTotalRatings,
+      });
+      setEditFormData({ firstName: d.firstName || '', lastName: d.lastName || '', bio: d.bio || '' });
+    } catch (err) {
+      console.error('fetchUserData error:', err);
+    } finally {
+      setLoading(false);
+    }
   };
+
+  // Helper: resolve a user's full name from Firestore
+  async function getUserName(uid) {
+    if (!uid) return null;
+    try {
+      const s = await getDoc(doc(db, 'users', uid));
+      if (!s.exists()) return null;
+      const sd = s.data();
+      return `${sd.firstName || ''} ${sd.lastName || ''}`.trim() || sd.displayName || null;
+    } catch { return null; }
+  }
 
   const fetchUserListings = async (uid) => {
     try {
@@ -110,20 +154,135 @@ const Profile = () => {
         likes: d.data().likes || 0,
       }));
 
-      // Auto-promote completed listings into history
-      const completedItems = all.filter(l => l.status?.toLowerCase() === 'completed');
-      if (completedItems.length) {
+      setListings(all);
+
+      // Only sold/completed/traded go to history
+      const doneItems = all.filter(l => {
+        const s = l.status?.toLowerCase();
+        return HISTORY_STATUSES.has(s);
+      });
+
+      if (doneItems.length) {
         setHistory(prev => {
           const existingIds = new Set(prev.map(h => h.id));
-          const newItems = completedItems
-            .filter(l => !existingIds.has(l.id))
-            .map(l => ({ id: l.id, item: l.title, type: 'sale', date: l.date, price: l.price ? `R${l.price}` : null, status: 'completed' }));
-          return [...prev, ...newItems];
+          const newItems = doneItems.filter(l => !existingIds.has(l.id));
+          return newItems.length ? [...prev, ...newItems.map(l => ({
+            id:     l.id,
+            item:   l.title,
+            type:   'sale',
+            side:   'seller',
+            date:   l.date,
+            price:  l.price != null ? `R${Number(l.price).toLocaleString()}` : null,
+            buyer:  null, // will be enriched below
+            status: 'sold',
+          }))] : prev;
+        });
+
+        // Enrich with buyer names in background
+       // Enrich with buyer names — query transactions by listingId
+        Promise.all(doneItems.map(async (l) => {
+          let buyerName = null;
+          let date = l.date;
+          try {
+            const txSnap = await getDocs(
+              query(collection(db, 'Purchases'), where('listingId', '==', l.id))
+            );
+            if (!txSnap.empty) {
+              const tx = txSnap.docs[0].data();
+              // buyerName stored directly on transaction
+              buyerName = tx.buyerName || null;
+              // If no name stored, resolve from users collection
+              if (!buyerName && tx.buyerId) {
+                buyerName = await getUserName(tx.buyerId);
+              }
+              const rawDate = tx.updatedAt || tx.createdAt;
+              if (rawDate) date = rawDate?.toDate ? rawDate.toDate() : new Date(rawDate);
+            }
+          } catch { /* non-fatal */ }
+          return { id: l.id, buyerName, date };
+        })).then(enriched => {
+          setHistory(prev => prev.map(h => {
+            const match = enriched.find(e => e.id === h.id);
+            if (!match) return h;
+            return { ...h, buyer: match.buyerName || h.buyer, date: match.date || h.date };
+          }));
         });
       }
+    } catch (err) { console.error('fetchUserListings:', err); }
+  };
 
-      setListings(all);
-    } catch (err) { console.error(err); }
+  const fetchUserPurchases = async (uid) => {
+    try {
+      // Try both 'transactions' and 'purchases' collections
+      const [txBuyerSnap, txSellerSnap, pBuyerSnap, pSellerSnap] = await Promise.all([
+        getDocs(query(collection(db, 'transactions'), where('buyerId',  '==', uid), where('status', 'in', ['accepted', 'completed']))),
+        getDocs(query(collection(db, 'transactions'), where('sellerId', '==', uid), where('status', 'in', ['accepted', 'completed']))),
+        getDocs(query(collection(db, 'purchases'),   where('buyerId',  '==', uid), where('status', '==', 'completed'))),
+        getDocs(query(collection(db, 'purchases'),   where('sellerId', '==', uid), where('status', '==', 'completed'))),
+      ]);
+
+      const allDocs = [
+        ...txBuyerSnap.docs.map(d  => ({ d, side: 'buyer',  collection: 'transactions' })),
+        ...txSellerSnap.docs.map(d => ({ d, side: 'seller', collection: 'transactions' })),
+        ...pBuyerSnap.docs.map(d   => ({ d, side: 'buyer',  collection: 'purchases' })),
+        ...pSellerSnap.docs.map(d  => ({ d, side: 'seller', collection: 'purchases' })),
+      ];
+
+      if (allDocs.length === 0) return;
+
+      const enriched = await Promise.all(
+        allDocs.map(async ({ d: purchaseDoc, side }) => {
+          const p = purchaseDoc.data();
+
+          let itemTitle = p.listingTitle || null;
+          let price     = p.price ?? p.amount ?? p.agreedPrice ?? null;
+          let otherName = null;
+
+          // Fetch listing title/price if missing
+          if (p.listingId && !itemTitle) {
+            try {
+              const ls = await getDoc(doc(db, 'listings', p.listingId));
+              if (ls.exists()) {
+                const ld = ls.data();
+                itemTitle = ld.title || null;
+                price = price ?? ld.price;
+              }
+            } catch { /* non-fatal */ }
+          }
+          itemTitle = itemTitle || (side === 'buyer' ? 'Purchase' : 'Sale');
+
+          // Resolve the other party's name
+          if (side === 'buyer') {
+            otherName = p.sellerName || await getUserName(p.sellerId);
+          } else {
+            otherName = p.buyerName  || await getUserName(p.buyerId);
+          }
+
+          const rawDate = p.completedAt || p.updatedAt || p.createdAt;
+          const date    = rawDate?.toDate ? rawDate.toDate() : rawDate ? new Date(rawDate) : new Date();
+
+          return {
+            id:        purchaseDoc.id,
+            item:      itemTitle,
+            type:      side === 'buyer' ? 'purchase' : 'sale',
+            side,
+            date,
+            price:     price != null ? `R${Number(price).toLocaleString()}` : null,
+            seller:    side === 'buyer'  ? otherName : null,
+            buyer:     side === 'seller' ? otherName : null,
+            status:    side === 'buyer'  ? 'bought'  : 'sold',
+          };
+        })
+      );
+
+      setHistory(prev => {
+        const existingIds = new Set(prev.map(h => h.id));
+        const newItems    = enriched.filter(e => !existingIds.has(e.id));
+        return newItems.length ? [...prev, ...newItems] : prev;
+      });
+    } catch (err) {
+      console.warn('fetchUserPurchases:', err);
+    }
   };
 
   const handleInputChange = (e) => {
@@ -171,7 +330,7 @@ const Profile = () => {
     try {
       await deleteDoc(doc(db, 'listings', listingId));
       setListings(prev => prev.filter(l => l.id !== listingId));
-    } catch (err) { alert('Failed to delete.'); }
+    } catch { alert('Failed to delete.'); }
   };
 
   const handleEditListing = (listing) => {
@@ -197,7 +356,7 @@ const Profile = () => {
       ));
       setEditingListingId(null);
       setEditListingData({});
-    } catch (err) { alert('Failed to update.'); }
+    } catch { alert('Failed to update.'); }
   };
 
   const renderStars = (rating) => {
@@ -222,10 +381,11 @@ const Profile = () => {
   const totalTrades       = safeNumber(profileData.totalTrades);
   const totalTransactions = totalSales + totalTrades;
 
-  // Split listings by status
-  const activeListings   = listings.filter(l => !INACTIVE_STATUSES.has(l.status?.toLowerCase?.()) && l.status?.toLowerCase() !== 'completed');
-  const inactiveListings = listings.filter(l => INACTIVE_STATUSES.has(l.status?.toLowerCase?.()));
-  // completed ones go to history; they don't render in the listings tab
+  const activeListings   = listings.filter(l => !HISTORY_STATUSES.has(l.status?.toLowerCase?.()) && !READONLY_STATUSES.has(l.status?.toLowerCase?.()));
+  const acceptedListings = listings.filter(l => READONLY_STATUSES.has(l.status?.toLowerCase?.()));
+
+  // Sort history newest first
+  const sortedHistory = [...history].sort((a, b) => new Date(b.date) - new Date(a.date));
 
   return (
     <div className={styles.profileContainer}>
@@ -287,51 +447,76 @@ const Profile = () => {
       <div className={styles.tabsSection}>
         <div className={styles.tabs}>
           <button className={`${styles.tab} ${activeTab === 'history'  ? styles.activeTab : ''}`} onClick={() => setActiveTab('history')}><i className="fas fa-history" /> History</button>
-          <button className={`${styles.tab} ${activeTab === 'listings' ? styles.activeTab : ''}`} onClick={() => setActiveTab('listings')}><i className="fas fa-list" /> My Listings ({listings.filter(l => l.status?.toLowerCase() !== 'completed').length})</button>
+          <button className={`${styles.tab} ${activeTab === 'listings' ? styles.activeTab : ''}`} onClick={() => setActiveTab('listings')}><i className="fas fa-list" /> My Listings ({activeListings.length + acceptedListings.length})</button>
           <button className={`${styles.tab} ${activeTab === 'offers'   ? styles.activeTab : ''}`} onClick={() => setActiveTab('offers')}><i className="fas fa-hand-holding-usd" /> Offers ({incomingOffers.length})</button>
         </div>
 
+        {/* ── History Tab ── */}
         {activeTab === 'history' && (
           <div className={styles.tabContent}>
-            {history.length === 0 ? (
+            {sortedHistory.length === 0 ? (
               <div className={styles.emptyState}><i className="fas fa-shopping-bag" /><p>No transaction history yet</p></div>
             ) : (
               <div className={styles.historyList}>
-                {history.map(item => (
-                  <div key={item.id} className={styles.historyItem}>
-                    <div className={styles.historyIcon}>
-                      {item.type === 'purchase' && <i className="fas fa-shopping-cart" />}
-                      {item.type === 'sale'     && <i className="fas fa-tag" />}
-                      {item.type === 'trade'    && <i className="fas fa-exchange-alt" />}
-                    </div>
-                    <div className={styles.historyDetails}>
-                      <h4>{item.item}</h4>
-                      <div className={styles.historyMeta}>
-                        <span><i className="fas fa-calendar" /> {new Date(item.date).toLocaleDateString()}</span>
-                        {item.type === 'purchase' && <span>From: {item.seller}</span>}
-                        {item.type === 'sale'     && <span>To: {item.buyer}</span>}
-                        {item.type === 'trade'    && <span>With: {item.tradedWith}</span>}
-                        {item.price && <span>{item.price}</span>}
+                {sortedHistory.map(item => {
+                  const isBuyer  = item.side === 'buyer' || item.type === 'purchase';
+                  const otherParty = isBuyer ? item.seller : item.buyer;
+                  const dateStr = item.date
+                    ? new Date(item.date).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric' })
+                    : null;
+
+                  return (
+                    <div key={item.id} className={styles.historyItem}>
+                      {/* Icon */}
+                      <div className={`${styles.historyIcon} ${isBuyer ? styles.historyIconBuyer : styles.historyIconSeller}`}>
+                        {item.type === 'purchase' && <i className="fas fa-shopping-cart" />}
+                        {item.type === 'sale'     && <i className="fas fa-tag" />}
+                        {item.type === 'trade'    && <i className="fas fa-exchange-alt" />}
                       </div>
+
+                      {/* Details */}
+                      <div className={styles.historyDetails}>
+                        <h4 className={styles.historyItemTitle}>{item.item}</h4>
+                        <div className={styles.historyMeta}>
+                          {dateStr && (
+                            <span className={styles.historyMetaChip}>
+                              <i className="fas fa-calendar-alt" /> {dateStr}
+                            </span>
+                          )}
+                          {otherParty && (
+                            <span className={styles.historyMetaChip}>
+                              <i className={`fas ${isBuyer ? 'fa-store' : 'fa-user'}`} />
+                              {isBuyer ? `From: ${otherParty}` : `To: ${otherParty}`}
+                            </span>
+                          )}
+                          {item.price && (
+                            <span className={styles.historyMetaPrice}>{item.price}</span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Badge */}
+                      <span className={`${styles.historyBadge} ${isBuyer ? styles.historyBadgeBought : styles.historyBadgeSold}`}>
+                        {isBuyer ? 'Bought' : 'Sold'}
+                      </span>
                     </div>
-                    <div className={`${styles.historyStatus} ${styles[item.status]}`}>{item.status}</div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
         )}
 
+        {/* ── Listings Tab ── */}
         {activeTab === 'listings' && (
           <div className={styles.tabContent}>
-            {listings.filter(l => l.status?.toLowerCase() !== 'completed').length === 0 ? (
+            {activeListings.length === 0 && acceptedListings.length === 0 ? (
               <div className={styles.emptyState}>
                 <i className="fas fa-box-open" /><p>No listings yet</p>
                 <button className={styles.createListingButton} onClick={() => navigate('/create-listing')}><i className="fas fa-plus" /> Create Your First Listing</button>
               </div>
             ) : (
               <div className={styles.listingsGridCompact}>
-                {/* Active — fully editable */}
                 {activeListings.map(listing => (
                   <div key={listing.id} className={styles.listingCardCompact}>
                     <ProfileListingCard
@@ -347,9 +532,9 @@ const Profile = () => {
                     />
                   </div>
                 ))}
-                {/* Inactive — read-only with badge */}
-                {inactiveListings.map(listing => (
-                  <div key={listing.id} className={`${styles.listingCardCompact} ${styles.listingCardInactive}`}>
+
+                {acceptedListings.map(listing => (
+                  <div key={listing.id} className={`${styles.listingCardCompact} ${styles.listingCardAccepted}`}>
                     <ProfileListingCard
                       listing={listing}
                       isEditing={false}
@@ -362,7 +547,10 @@ const Profile = () => {
                       compact={true}
                       readOnly={true}
                     />
-
+                    <div className={styles.acceptedBanner}>
+                      <i className="fas fa-handshake" />
+                      <span>Sale in progress</span>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -370,27 +558,25 @@ const Profile = () => {
           </div>
         )}
 
+        {/* ── Offers Tab ── */}
         {activeTab === 'offers' && (
-            <div className={styles.tabContent}>
-                {incomingOffers.length === 0 ? (
-                <div className={styles.emptyState}>
-                    <i className="fas fa-inbox" />
-                    <p>No pending offers</p>
-                </div>
-                ) : (
-                <div className={styles.offersGrid}>
-                    {incomingOffers.map((offer, i) => (
-                    <div
-                        key={offer.id}
-                        className={`${styles.offerCard} ${highlightedOfferId === offer.id ? styles.highlightedOffer : ''}`}
-                        style={{ animationDelay: `${i * 60}ms` }}
-                    >
-                        <OfferItem offer={offer} />
-                    </div>
-                    ))}
-                </div>
-                )}
-            </div>
+          <div className={styles.tabContent}>
+            {incomingOffers.length === 0 ? (
+              <div className={styles.emptyState}><i className="fas fa-inbox" /><p>No pending offers</p></div>
+            ) : (
+              <div className={styles.offersGrid}>
+                {incomingOffers.map((offer, i) => (
+                  <div
+                    key={offer.id}
+                    className={`${styles.offerCard} ${highlightedOfferId === offer.id ? styles.highlightedOffer : ''}`}
+                    style={{ animationDelay: `${i * 60}ms` }}
+                  >
+                    <OfferItem offer={offer} />
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         )}
       </div>
     </div>

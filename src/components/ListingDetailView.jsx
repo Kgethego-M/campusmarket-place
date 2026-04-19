@@ -38,6 +38,7 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
   const [terms, setTerms]               = useState('');
   const [offerSent, setOfferSent]       = useState(false);
   const [chatLoading, setChatLoading]   = useState(false);
+  const [submitting, setSubmitting]     = useState(false); // ✅ ADD THIS
 
   const sellerId    = listing.sellerUID || listing.sellerId;
   const isOwnListing = currentUser && currentUser.uid === sellerId;
@@ -86,11 +87,14 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
     navigate(isOwnListing ? '/profile' : `/profile/${sellerId}`);
   }
 
-  // ── Transaction ───────────────────────────────────────────────────────────
+  // ✅ FIXED: Properly structured handleTransaction function
   const handleTransaction = async () => {
-    if (!purchaseType)                        { alert('Please select a transaction type'); return; }
+    if (submitting) return;
+    if (!purchaseType)                           { alert('Please select a transaction type'); return; }
     if (purchaseType === 'sale' && !agreedPrice) { alert('Please enter an agreed price'); return; }
     if (purchaseType === 'trade' && !tradeItem)  { alert('Please describe what you want to trade'); return; }
+
+    setSubmitting(true);
 
     const transactionData = {
       type:          purchaseType,
@@ -112,8 +116,8 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
       const transactionId = await createTransaction(transactionData);
       await notifySellerOfOffer({
         transactionId, sellerId,
-        buyerId:   currentUser.uid,
-        buyerName: currentUser.displayName || 'Student',
+        buyerId:      currentUser.uid,
+        buyerName:    currentUser.displayName || 'Student',
         listingTitle: listing.title,
       });
       setIsModalOpen(false);
@@ -122,6 +126,7 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
     } catch (err) {
       console.error(err);
       alert('Failed to create offer. Please try again.');
+      setSubmitting(false); // only reset on error — success closes modal
     }
   };
 
@@ -357,10 +362,34 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
               <textarea placeholder="E.g. Seller agreed to include charger..."
                 value={terms} onChange={(e) => setTerms(e.target.value)} style={modalStyles.textarea} />
             </div>
-
-            <button onClick={handleTransaction} style={styles.buyBtn}>
-              Confirm & Send Offer
+            <button
+              onClick={handleTransaction}
+              disabled={submitting}
+              style={{
+                ...styles.buyBtn,
+                opacity:         submitting ? 0.6 : 1,
+                cursor:          submitting ? 'not-allowed' : 'pointer',
+                backgroundColor: submitting ? '#a0c4e8' : '#6AA6DA',
+                display:         'flex',
+                alignItems:      'center',
+                justifyContent:  'center',
+                gap:             '8px',
+              }}
+            >
+              {submitting && (
+                <svg
+                  width="16" height="16" viewBox="0 0 24 24"
+                  fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"
+                  style={{ animation: 'spin 0.8s linear infinite', flexShrink: 0 }}
+                >
+                  <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+                </svg>
+              )}
+              {submitting ? 'Sending offer…' : 'Confirm & Send Offer'}
             </button>
+
+            {/* Spinner keyframe */}
+            <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
           </div>
         </div>
       )}

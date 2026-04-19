@@ -333,6 +333,7 @@ export default function ListingDetail() {
   const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [existingTransaction, setExistingTransaction] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (user) => setCurrentUser(user));

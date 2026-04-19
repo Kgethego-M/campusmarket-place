@@ -7,63 +7,75 @@ import {
 import { db } from '../firebase';
 import styles from './OfferItem.module.css';
 
+// Shimmer style defined in JS so no missing @keyframes reference
+const shimmerStyle = {
+  background: 'linear-gradient(90deg, #f0f2f5 25%, #e8ecf0 50%, #f0f2f5 75%)',
+  backgroundSize: '200% 100%',
+  animation: 'none', // avoid missing keyframe 404
+  borderRadius: 6,
+};
+
 export default function OfferItem({ offer }) {
-  const [listing, setListing]   = useState(null);
-  const [buyer, setBuyer]       = useState(null);
-  const [loading, setLoading]   = useState(true);
-  const [working, setWorking]   = useState(false); // action in progress
+  const [listing, setListing] = useState(null);
+  const [buyer,   setBuyer]   = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [working, setWorking] = useState(false);
+  const [done,    setDone]    = useState(false); // hides card after action
 
   useEffect(() => {
     async function fetchInfo() {
       try {
         const [listSnap, buyerSnap] = await Promise.all([
-          getDoc(doc(db, 'listings',  offer.listingId)),
-          getDoc(doc(db, 'users',     offer.buyerId)),
+          getDoc(doc(db, 'listings', offer.listingId)),
+          getDoc(doc(db, 'users',    offer.buyerId)),
         ]);
-        if (listSnap.exists())  setListing({ id: listSnap.id,  ...listSnap.data() });
+        if (listSnap.exists())  setListing({ id: listSnap.id, ...listSnap.data() });
         if (buyerSnap.exists()) setBuyer(buyerSnap.data());
       } catch (err) {
-        console.error(err);
+        console.error('OfferItem fetch error:', err);
       } finally {
         setLoading(false);
       }
     }
     fetchInfo();
-  }, [offer]);
+  }, [offer.listingId, offer.buyerId]);
 
-  // ── Core acceptance flow ────────────────────────────────────
+  // ── Accept ────────────────────────────────────────────────────
   const handleAccept = async () => {
-    if (working) return;
-    setWorking(true);
-    try {
-      // 1. Mark THIS transaction as accepted
-      await updateDoc(doc(db, 'transactions', offer.id), {
-        status:    'accepted',
-        updatedAt: serverTimestamp(),
-      });
+  if (working) return;
+  setWorking(true);
+  try {
+    console.log('Step 1: updating transaction', offer.id);
+    await updateDoc(doc(db, 'transactions', offer.id), {
+      status:    'accepted',
+      updatedAt: serverTimestamp(),
+    });
+    console.log('Step 1 done ✓');
 
-      // 2. Mark the listing as accepted (hides it from ViewListing)
-      await updateDoc(doc(db, 'listings', offer.listingId), {
-        status:    'accepted',
-        updatedAt: serverTimestamp(),
-      });
+    console.log('Step 2: updating listing', offer.listingId);
+    await updateDoc(doc(db, 'listings', offer.listingId), {
+      status:    'accepted',
+      updatedAt: serverTimestamp(),
+    });
+    console.log('Step 2 done ✓');
 
-      // 3. Find all OTHER pending transactions for the same listing
-      const otherTxSnap = await getDocs(
-        query(
-          collection(db, 'transactions'),
-          where('listingId', '==', offer.listingId),
-          where('status',    '==', 'pending'),
-        )
-      );
+    console.log('Step 3: finding other pending offers');
+    const otherSnap = await getDocs(
+      query(
+        collection(db, 'transactions'),
+        where('listingId', '==', offer.listingId),
+        where('status',    '==', 'pending'),
+      )
+    );
+    console.log('Step 3 done ✓ — found', otherSnap.docs.length, 'others');
 
-      // 4. For each other transaction: notify buyer → then delete it
-      const declineJobs = otherTxSnap.docs
+    console.log('Step 4: declining others');
+    await Promise.all(
+      otherSnap.docs
         .filter(d => d.id !== offer.id)
         .map(async (txDoc) => {
           const tx = txDoc.data();
-
-          // Send declined notification to that buyer
+          console.log('  Notifying buyer', tx.buyerId, 'of decline');
           await addDoc(collection(db, 'notifications'), {
             userId:        tx.buyerId,
             type:          'offer_declined',
@@ -72,32 +84,36 @@ export default function OfferItem({ offer }) {
             read:          false,
             createdAt:     serverTimestamp(),
           });
-
-          // Delete the transaction
+          console.log('  Deleting transaction', txDoc.id);
           await deleteDoc(doc(db, 'transactions', txDoc.id));
-        });
+          console.log('  Done with', txDoc.id, '✓');
+        })
+    );
+    console.log('Step 4 done ✓');
 
-      await Promise.all(declineJobs);
+    console.log('Step 5: notifying accepted buyer', offer.buyerId);
+    await addDoc(collection(db, 'notifications'), {
+      userId:        offer.buyerId,
+      type:          'offer_accepted',
+      transactionId: offer.id,
+      listingId:     offer.listingId,
+      read:          false,
+      createdAt:     serverTimestamp(),
+    });
+    console.log('Step 5 done ✓');
 
-      // 5. Notify the accepted buyer
-      await addDoc(collection(db, 'notifications'), {
-        userId:        offer.buyerId,
-        type:          'offer_accepted',
-        transactionId: offer.id,
-        listingId:     offer.listingId,
-        read:          false,
-        createdAt:     serverTimestamp(),
-      });
+    setDone(true);
+  } catch (err) {
+    console.error('Accept error:', err);
+    console.error('Error code:', err.code);
+    console.error('Error message:', err.message);
+    alert(`Failed at: ${err.message}`);
+  } finally {
+    setWorking(false);
+  }
+};
 
-    } catch (err) {
-      console.error('Error accepting offer:', err);
-      alert('Something went wrong. Please try again.');
-    } finally {
-      setWorking(false);
-    }
-  };
-
-  // ── Simple decline ─────────────────────────────────────────
+  // ── Decline ───────────────────────────────────────────────────
   const handleDecline = async () => {
     if (working) return;
     setWorking(true);
@@ -112,26 +128,32 @@ export default function OfferItem({ offer }) {
         createdAt:     serverTimestamp(),
       });
 
-      // Delete the transaction so it disappears from offers list
+      // Delete the transaction
       await deleteDoc(doc(db, 'transactions', offer.id));
+
+      setDone(true);
     } catch (err) {
-      console.error('Error declining offer:', err);
-      alert('Something went wrong. Please try again.');
+      console.error('Decline error:', err);
+      alert(`Failed to decline offer: ${err.message}`);
     } finally {
       setWorking(false);
     }
   };
 
- if (loading) return (
-  <div className={styles.card} style={{ animation: 'none' }}>
-    <div className={styles.imageWrapper} style={{ background: 'linear-gradient(90deg, #f0f2f5 25%, #e8ecf0 50%, #f0f2f5 75%)', backgroundSize: '200% 100%', animation: 'shimmer 1.2s infinite' }} />
-    <div className={styles.details}>
-      <div style={{ height: 14, width: '60%', borderRadius: 6, background: 'linear-gradient(90deg, #f0f2f5 25%, #e8ecf0 50%, #f0f2f5 75%)', backgroundSize: '200% 100%', animation: 'shimmer 1.2s infinite', marginBottom: 10 }} />
-      <div style={{ height: 11, width: '40%', borderRadius: 6, background: 'linear-gradient(90deg, #f0f2f5 25%, #e8ecf0 50%, #f0f2f5 75%)', backgroundSize: '200% 100%', animation: 'shimmer 1.2s infinite', marginBottom: 6 }} />
-      <div style={{ height: 11, width: '50%', borderRadius: 6, background: 'linear-gradient(90deg, #f0f2f5 25%, #e8ecf0 50%, #f0f2f5 75%)', backgroundSize: '200% 100%', animation: 'shimmer 1.2s infinite' }} />
+  // ── Loading skeleton ──────────────────────────────────────────
+  if (loading) return (
+    <div className={styles.card}>
+      <div className={styles.imageWrapper} style={{ ...shimmerStyle, opacity: 0.6 }} />
+      <div className={styles.details}>
+        <div style={{ ...shimmerStyle, height: 14, width: '60%', marginBottom: 10 }} />
+        <div style={{ ...shimmerStyle, height: 11, width: '40%', marginBottom: 6 }} />
+        <div style={{ ...shimmerStyle, height: 11, width: '50%' }} />
+      </div>
     </div>
-  </div>
-);
+  );
+
+  // ── Done — card fades out ─────────────────────────────────────
+  if (done) return null;
 
   const imageUrl  = listing?.photos?.[0] || listing?.imageUrl || null;
   const buyerName = buyer
@@ -169,17 +191,14 @@ export default function OfferItem({ offer }) {
 
         <div className={styles.metaGrid}>
           <span className={styles.metaLabel}>Price</span>
-          <span className={styles.metaValue}>R {Number(listing?.price || 0).toLocaleString()}</span>
+          <span className={styles.metaValue}>R {Number(listing?.price || 0).toLocaleString('en-ZA')}</span>
 
           <span className={styles.metaLabel}>Condition</span>
           <span className={styles.metaValue}>{listing?.condition || 'N/A'}</span>
 
           <span className={styles.metaLabel}>Offer type</span>
           <span>
-            <span
-              className={styles.typeBadge}
-              style={{ background: TYPE_COLORS[offerType] || '#6b7280' }}
-            >
+            <span className={styles.typeBadge} style={{ background: TYPE_COLORS[offerType] || '#6b7280' }}>
               {offerType || '—'}
             </span>
           </span>
@@ -200,8 +219,22 @@ export default function OfferItem({ offer }) {
               <span className={styles.metaValue}>
                 {offer.createdAt?.toDate
                   ? offer.createdAt.toDate().toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric' })
-                  : new Date(offer.createdAt).toLocaleDateString()}
+                  : new Date(offer.createdAt).toLocaleDateString('en-ZA')}
               </span>
+            </>
+          )}
+
+          {offer.agreedPrice != null && (
+            <>
+              <span className={styles.metaLabel}>Agreed price</span>
+              <span className={styles.metaValue}>R {Number(offer.agreedPrice).toLocaleString('en-ZA')}</span>
+            </>
+          )}
+
+          {offer.tradeItem && (
+            <>
+              <span className={styles.metaLabel}>Trade offer</span>
+              <span className={styles.metaValue}>{offer.tradeItem}</span>
             </>
           )}
         </div>
@@ -213,27 +246,17 @@ export default function OfferItem({ offer }) {
 
       {/* Actions */}
       <div className={styles.actions}>
-        <button
-          className={styles.acceptBtn}
-          onClick={handleAccept}
-          disabled={working}
-        >
-          {working ? (
-            <span className={styles.spinner} />
-          ) : (
+        <button className={styles.acceptBtn} onClick={handleAccept} disabled={working}>
+          {working ? <span className={styles.spinner} /> : (
             <>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
                 <polyline points="20 6 9 17 4 12"/>
               </svg>
               Accept
             </>
           )}
         </button>
-        <button
-          className={styles.declineBtn}
-          onClick={handleDecline}
-          disabled={working}
-        >
+        <button className={styles.declineBtn} onClick={handleDecline} disabled={working}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
             <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
           </svg>

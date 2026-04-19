@@ -14,13 +14,9 @@ import {
 import NavBar from "./NavBarTemp.jsx";
 import styles from "./CreateListing.module.css";
 
-const CLOUDINARY_CLOUD_NAME = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME; 
+const CLOUDINARY_CLOUD_NAME   = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME;
 const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
 
-/**
- * Uploads a single image file to Cloudinary using an unsigned upload preset.
- * Returns the secure HTTPS URL of the uploaded image.
- */
 async function uploadToCloudinary(file) {
     const formData = new FormData();
     formData.append("file", file);
@@ -31,117 +27,104 @@ async function uploadToCloudinary(file) {
         { method: "POST", body: formData }
     );
 
-    if (!res.ok) {
-        throw new Error(`Cloudinary upload failed: ${res.statusText}`);
-    }
-
+    if (!res.ok) throw new Error(`Cloudinary upload failed: ${res.statusText}`);
     const data = await res.json();
-    return data.secure_url; // permanent HTTPS URL, safe to store in Firestore
+    return data.secure_url;
 }
 
 export default function CreateListing() {
-    const navigate = useNavigate();
+    const navigate    = useNavigate();
     const fileInputRef = useRef(null);
 
-    const [title, setTitle] = useState("");
-    const [description, setDescription] = useState("");
+    const [title, setTitle]               = useState("");
+    const [description, setDescription]   = useState("");
     const [specification, setSpecification] = useState("");
-    const [price, setPrice] = useState("");
-    const [category, setCategory] = useState("");
+    const [price, setPrice]               = useState("");
+    const [category, setCategory]         = useState("");
     const [otherCategory, setOtherCategory] = useState("");
-    const [condition, setCondition] = useState("");
-    const [listingType, setListingType] = useState("");
-    const [imageFiles, setImageFiles] = useState([]);
+    const [condition, setCondition]       = useState("");
+    const [listingType, setListingType]   = useState("");
+    const [imageFiles, setImageFiles]     = useState([]);
     const [imagePreviews, setImagePreviews] = useState([]);
-    const [loading, setLoading] = useState(false);
-    const [uploadProgress, setUploadProgress] = useState("");
+    const [loading, setLoading]           = useState(false);
+    const [uploadStep, setUploadStep]     = useState(0);   // 0 = idle, N = uploading photo N
+    const [totalPhotos, setTotalPhotos]   = useState(0);
 
     function handleImageChange(e) {
         const files = Array.from(e.target.files);
         setImageFiles(files);
-        setImagePreviews(files.map((file) => URL.createObjectURL(file)));
+        setImagePreviews(files.map((f) => URL.createObjectURL(f)));
+    }
+
+    // Derive button label from state
+    function buttonLabel() {
+        if (!loading) return "Publish Listing";
+        if (uploadStep > 0 && totalPhotos > 0) {
+            return `Uploading photo ${uploadStep} of ${totalPhotos}…`;
+        }
+        return "Saving listing…";
     }
 
     async function handleSubmit(e) {
         e.preventDefault();
+        if (loading) return; // prevent double-submit
 
         const user = auth.currentUser;
-        if (!user) {
-            alert("Please log in to create a listing.");
-            return;
-        }
+        if (!user) { alert("Please log in to create a listing."); return; }
 
         const parsedPrice = parseFloat(price);
-        const validationResult = validateListing({
-            title,
-            description,
-            price: parsedPrice,
-            category,
-            condition,
-            listingType,
-        });
-        if (!validationResult.valid) {
-            alert(validationResult.error);
-            return;
-        }
+        const validationResult = validateListing({ title, description, price: parsedPrice, category, condition, listingType });
+        if (!validationResult.valid) { alert(validationResult.error); return; }
 
         const imageResult = validateImages(imageFiles);
-        if (!imageResult.valid) {
-            alert(imageResult.error);
-            return;
-        }
+        if (!imageResult.valid) { alert(imageResult.error); return; }
 
         let finalCategory = category;
         if (category === "other") {
-            if (!otherCategory.trim()) {
-                alert("Please specify the category.");
-                return;
-            }
+            if (!otherCategory.trim()) { alert("Please specify the category."); return; }
             finalCategory = otherCategory.trim();
         } else {
             finalCategory = categoryMap[category] || category;
         }
 
         setLoading(true);
+        setTotalPhotos(imageFiles.length);
 
         try {
-            // 1. Upload each photo to Cloudinary one by one, showing progress
             const photoURLs = [];
             for (let i = 0; i < imageFiles.length; i++) {
-                setUploadProgress(`Uploading photo ${i + 1} of ${imageFiles.length}...`);
+                setUploadStep(i + 1);
                 const url = await uploadToCloudinary(imageFiles[i]);
                 photoURLs.push(url);
             }
 
-            setUploadProgress("Saving listing...");
+            setUploadStep(0); // switches label to "Saving listing…"
 
-            // 2. Save listing to Firestore — photos array holds Cloudinary URLs
             const listingData = {
                 title,
                 description,
                 specification,
-                price: Math.round(parsedPrice * 100) / 100,
-                category: finalCategory,
-                condition: conditionMap[condition],
-                listingType: listingTypeMap[listingType],
-                photos: photoURLs,
-                sellerUID: user.uid,
-                sellerName: user.displayName || "Anonymous",
+                price:        Math.round(parsedPrice * 100) / 100,
+                category:     finalCategory,
+                condition:    conditionMap[condition],
+                listingType:  listingTypeMap[listingType],
+                photos:       photoURLs,
+                sellerUID:    user.uid,
+                sellerName:   user.displayName || "Anonymous",
                 sellerAvatar: user.photoURL || "",
-                status: "active",
-                timestamp: serverTimestamp(),
+                status:       "active",
+                timestamp:    serverTimestamp(),
             };
 
             await addDoc(collection(db, "listings"), listingData);
-
             alert("Successfully created listing!");
             navigate("/view-listing");
         } catch (err) {
             console.error("Failed to create listing:", err);
             alert("Failed to create listing. Please try again.");
-        } finally {
             setLoading(false);
-            setUploadProgress("");
+            setUploadStep(0);
+            setTotalPhotos(0);
         }
     }
 
@@ -168,17 +151,12 @@ export default function CreateListing() {
                 />
                 <div
                     className={styles.dropZone}
-                    onClick={() => fileInputRef.current?.click()}
+                    onClick={() => !loading && fileInputRef.current?.click()}
                 >
                     {imagePreviews.length > 0 ? (
                         <div className={styles.imagePreview}>
                             {imagePreviews.map((src, i) => (
-                                <img
-                                    key={i}
-                                    src={src}
-                                    alt={`preview-${i}`}
-                                    className={styles.previewImg}
-                                />
+                                <img key={i} src={src} alt={`preview-${i}`} className={styles.previewImg} />
                             ))}
                         </div>
                     ) : (
@@ -202,6 +180,7 @@ export default function CreateListing() {
                     onChange={(e) => setTitle(e.target.value)}
                     placeholder="E.g Calculus textbook"
                     required
+                    disabled={loading}
                 />
 
                 {/* Description */}
@@ -213,6 +192,7 @@ export default function CreateListing() {
                     onChange={(e) => setDescription(e.target.value)}
                     placeholder="Describe the item condition, features and any relevant details"
                     required
+                    disabled={loading}
                 />
 
                 {/* Specification */}
@@ -223,9 +203,9 @@ export default function CreateListing() {
                     value={specification}
                     onChange={(e) => setSpecification(e.target.value)}
                     placeholder="Enter product specifications and details..."
+                    disabled={loading}
                 />
 
-                {/* Price + Listing Type */}
                 {/* Price + Listing Type */}
                 <div className={styles.row}>
                     <div>
@@ -239,6 +219,7 @@ export default function CreateListing() {
                             min="0"
                             step="0.01"
                             required={listingType !== "trade"}
+                            disabled={loading}
                         />
                     </div>
                     <div>
@@ -248,11 +229,12 @@ export default function CreateListing() {
                             value={listingType}
                             onChange={(e) => setListingType(e.target.value)}
                             required
+                            disabled={loading}
                         >
                             <option value="" disabled>Select</option>
                             <option value="sale">For Sale</option>
                             <option value="trade">For Trade</option>
-                            <option value="either">Either</option>
+                            <option value="either">For Sale or Trade</option>
                         </select>
                     </div>
                 </div>
@@ -266,6 +248,7 @@ export default function CreateListing() {
                             value={category}
                             onChange={(e) => setCategory(e.target.value)}
                             required
+                            disabled={loading}
                         >
                             <option value="" disabled>Select</option>
                             <option value="electronics">Electronics</option>
@@ -290,6 +273,7 @@ export default function CreateListing() {
                                 onChange={(e) => setOtherCategory(e.target.value)}
                                 placeholder="Specify category"
                                 style={{ marginTop: "6px" }}
+                                disabled={loading}
                             />
                         )}
                     </div>
@@ -300,6 +284,7 @@ export default function CreateListing() {
                             value={condition}
                             onChange={(e) => setCondition(e.target.value)}
                             required
+                            disabled={loading}
                         >
                             <option value="" disabled>Select</option>
                             <option value="new">New</option>
@@ -311,14 +296,38 @@ export default function CreateListing() {
                     </div>
                 </div>
 
-                {/* Upload progress */}
-                {uploadProgress && (
-                    <p className={styles.uploadProgress}>{uploadProgress}</p>
-                )}
-
-                <button type="submit" className={styles.submitBtn} disabled={loading}>
-                    {loading ? uploadProgress || "Publishing..." : "Publish Listing"}
+                <button
+                    type="submit"
+                    className={styles.submitBtn}
+                    disabled={loading}
+                    style={{
+                        opacity:          loading ? 0.65 : 1,
+                        cursor:           loading ? 'not-allowed' : 'pointer',
+                        backgroundColor:  loading ? '#a0c4e8' : undefined,
+                        display:          'flex',
+                        alignItems:       'center',
+                        justifyContent:   'center',
+                        gap:              '8px',
+                    }}
+                >
+                    {loading && (
+                        <svg
+                            width="16" height="16"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2.5"
+                            strokeLinecap="round"
+                            style={{ animation: 'spin 0.8s linear infinite', flexShrink: 0 }}
+                        >
+                            <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+                        </svg>
+                    )}
+                    {buttonLabel()}
                 </button>
+
+                {/* Inline spin keyframe */}
+                <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
             </form>
         </div>
         </>
