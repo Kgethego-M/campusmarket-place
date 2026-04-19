@@ -1,8 +1,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from routes.listings import router as listings_router
+from backend.routes.listings import router as listings_router
 
-app = FastAPI()
+app = FastAPI(title="Campus Marketplace API")
 
 app.add_middleware(
     CORSMiddleware,
@@ -19,6 +19,7 @@ app.add_middleware(
 )
 
 app.include_router(listings_router)
+
 
 @app.get("/")
 def root():
