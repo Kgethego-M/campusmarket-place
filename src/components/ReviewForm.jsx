@@ -7,7 +7,7 @@ import styles from "../pages/ReviewForm.module.css";
 const LABELS = ['', 'Poor', 'Fair', 'Good', 'Very Good', 'Excellent'];
 
 const ReviewForm = () => {
-  const { listingId } = useParams();
+  const { transactionId: listingId } = useParams(); // route param is :transactionId but value is the listingId
   const navigate = useNavigate();
 
   const [rating, setRating] = useState(0);
@@ -26,6 +26,10 @@ const ReviewForm = () => {
   const handleSubmit = async () => {
     if (rating === 0) {
       setError('Please select a star rating before submitting.');
+      return;
+    }
+    if (!listingId) {
+      setError('Missing listing information. Please go back and try again.');
       return;
     }
     setError('');
