@@ -12,7 +12,7 @@ const NAV_LINKS = [
     { label: "Browse",         path: "/view-listing" },
     { label: "Trade Facility", path: "/trade-facility" },
     { label: "Messages",       path: "/chat" },
-    { label: "View Cart",      path: null },
+    { label: "My Purchases",   path: "/my-purchases" },
 ];
 
 const formatTime = (ts) => {
