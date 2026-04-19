@@ -135,21 +135,29 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
       return;
     }
 
-    const transactionData = {
-      type: purchaseType,
-      listingId: listing.id,
-      listingTitle: listing.title || '',
-      buyerId: currentUser.uid,
-      buyerName: currentUser.displayName || 'Student',
-      sellerId: sellerId,
-      status: 'pending',
-      agreedPrice: Number(agreedPrice),
-      paymentType: purchaseType === 'sale' ? paymentType : null,
-      partialAmount: paymentType === 'partial' ? Number(partialAmount) : null,
-      tradeItem: purchaseType === 'trade' ? tradeItem : null,
-      terms: terms || null,
-      createdAt: new Date().toISOString(),
-    };
+ let paymentMethod = null;
+if (purchaseType === 'sale') {
+  if (paymentType === 'full_online') paymentMethod = 'online';
+  else if (paymentType === 'cash') paymentMethod = 'cash on delivery';
+  else if (paymentType === 'partial') paymentMethod = 'partial';
+}
+
+const transactionData = {
+  type: purchaseType,
+  listingId: listing.id,
+  listingTitle: listing.title || '',
+  buyerId: currentUser.uid,
+  buyerName: currentUser.displayName || 'Student',
+  sellerId: sellerId,
+  status: 'pending',
+  agreedPrice: Number(agreedPrice),
+  paymentType: purchaseType === 'sale' ? paymentType : null,
+  paymentMethod: paymentMethod,     
+  partialAmount: paymentType === 'partial' ? Number(partialAmount) : null,
+  tradeItem: purchaseType === 'trade' ? tradeItem : null,
+  terms: terms || null,
+  createdAt: new Date().toISOString(),
+};
 
     try {
       const transactionId = await createTransaction(transactionData);
