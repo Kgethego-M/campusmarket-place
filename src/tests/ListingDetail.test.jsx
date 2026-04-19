@@ -5,6 +5,29 @@ import { ListingDetailView as ListingDetail } from '../components/ListingDetail'
 
 // ─── Mocks ────────────────────────────────────────────────────────────────────
 
+// Prevents Firebase from crashing during import (no real credentials in CI).
+// The ListingDetailView component only uses `db` inside the chat handler,
+// which none of these tests exercise.
+vi.mock('../firebase', () => ({
+  auth: {},
+  db: {},
+  storage: {},
+  googleProvider: {},
+  isValidWitsEmail: vi.fn(),
+  getUserType: vi.fn(),
+}));
+
+vi.mock('firebase/firestore', () => ({
+  collection: vi.fn(),
+  query: vi.fn(),
+  where: vi.fn(),
+  getDocs: vi.fn(),
+  addDoc: vi.fn(),
+  serverTimestamp: vi.fn(),
+  doc: vi.fn(),
+  getDoc: vi.fn(),
+}));
+
 vi.mock('../services/transactionService', () => ({
   createTransaction: vi.fn(() => Promise.resolve('mock-transaction-id')),
 }));
@@ -176,7 +199,7 @@ describe('ListingDetail - purchase modal', () => {
     render(<ListingDetail listing={saleListing} currentUser={mockBuyer} />);
     fireEvent.click(screen.getByRole('button', { name: /buy now/i }));
     expect(screen.getByText(/initiate purchase/i)).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: /×/i }));
+    fireEvent.click(screen.getByRole('button', { name: /close modal/i }));
     expect(screen.queryByText(/initiate purchase/i)).not.toBeInTheDocument();
   });
 

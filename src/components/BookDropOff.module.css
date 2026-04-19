@@ -1,0 +1,336 @@
+/* ── Page ─────────────────────────────────────────────────────── */
+.page {
+  max-width: 560px;
+  margin: 0 auto;
+  padding: 36px 24px 64px;
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+}
+
+/* ── Page header ──────────────────────────────────────────────── */
+.pageHeader {
+  margin-bottom: 24px;
+}
+
+.backLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: none;
+  color: #9ca3af;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  padding: 0;
+  margin-bottom: 14px;
+  font-family: inherit;
+  transition: color 0.15s;
+}
+
+.backLink:hover { color: #6AA6DA; }
+.backLink:hover svg { transform: translateX(-2px); }
+.backLink svg { transition: transform 0.15s; }
+
+.heading {
+  font-size: 24px;
+  font-weight: 800;
+  color: #111827;
+  margin: 0 0 6px 0;
+  letter-spacing: -0.4px;
+}
+
+.subheading {
+  font-size: 14px;
+  color: #6b7280;
+  margin: 0;
+  line-height: 1.5;
+}
+
+/* ── Summary card ─────────────────────────────────────────────── */
+.summaryCard {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: #ffffff;
+  border: 1px solid #e8eaed;
+  border-radius: 14px;
+  padding: 14px 16px;
+  margin-bottom: 14px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05);
+}
+
+.summaryImgWrap {
+  width: 60px;
+  height: 60px;
+  border-radius: 9px;
+  overflow: hidden;
+  flex-shrink: 0;
+  background: #f0f2f5;
+  border: 1px solid #e8eaed;
+}
+
+.summaryImg {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.summaryImgPlaceholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #f0f2f5, #e8ecf0);
+}
+
+.summaryInfo {
+  flex: 1;
+  min-width: 0;
+}
+
+.summaryTitle {
+  font-size: 14px;
+  font-weight: 700;
+  color: #111827;
+  margin: 0 0 5px 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.summaryMeta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.summaryPrice {
+  font-size: 13px;
+  font-weight: 700;
+  color: #6AA6DA;
+}
+
+.summaryDot { color: #d1d5db; font-size: 14px; }
+
+.summaryBuyer {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: #6b7280;
+  font-weight: 500;
+}
+
+.summaryBuyer svg { color: #9ca3af; flex-shrink: 0; }
+
+.statusChip {
+  font-size: 11px;
+  font-weight: 700;
+  color: #2563eb;
+  background: #dbeafe;
+  padding: 4px 10px;
+  border-radius: 999px;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+/* ── Payment notice ───────────────────────────────────────────── */
+.paymentNotice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: 10px;
+  padding: 12px 14px;
+  margin-bottom: 28px;
+  font-size: 13px;
+  color: #15803d;
+  line-height: 1.4;
+}
+
+.paymentNotice svg { flex-shrink: 0; }
+
+/* ── Form ─────────────────────────────────────────────────────── */
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.fieldGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #374151;
+  letter-spacing: 0.01em;
+}
+
+.input {
+  width: 100%;
+  padding: 10px 14px;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 9px;
+  font-size: 14px;
+  font-family: inherit;
+  color: #111827;
+  background: #ffffff;
+  box-sizing: border-box;
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  appearance: auto;
+}
+
+.input:focus {
+  border-color: #6AA6DA;
+  box-shadow: 0 0 0 3px rgba(106, 166, 218, 0.15);
+}
+
+.input:disabled {
+  background: #f9fafb;
+  color: #9ca3af;
+  cursor: not-allowed;
+}
+
+.noSlots {
+  font-size: 12px;
+  color: #dc2626;
+  margin: 4px 0 0 0;
+}
+
+/* ── Inline error ─────────────────────────────────────────────── */
+.inlineError {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 9px;
+  padding: 11px 14px;
+  font-size: 13px;
+  color: #dc2626;
+}
+
+.inlineError svg { flex-shrink: 0; }
+
+/* ── Actions ──────────────────────────────────────────────────── */
+.actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.cancelBtn {
+  flex: 1;
+  padding: 11px;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 9px;
+  background: #ffffff;
+  color: #6b7280;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.cancelBtn:hover {
+  background: #f9fafb;
+  border-color: #cbd5e1;
+}
+
+.submitBtn {
+  flex: 2;
+  padding: 11px;
+  border: none;
+  border-radius: 9px;
+  background: #6AA6DA;
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: inherit;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  transition: background 0.15s, transform 0.15s;
+}
+
+.submitBtn:hover:not(:disabled) {
+  background: #5596ca;
+  transform: translateY(-1px);
+}
+
+.submitBtn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* ── Spinner ──────────────────────────────────────────────────── */
+.spinner {
+  width: 16px;
+  height: 16px;
+  border: 2.5px solid rgba(255, 255, 255, 0.35);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  display: inline-block;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ── Skeleton loading ─────────────────────────────────────────── */
+.skeletonHeader {
+  margin-bottom: 24px;
+}
+
+.skeletonBlock {
+  display: block;
+  border-radius: 8px;
+  width: 100%;
+}
+
+@keyframes shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+.shimmer {
+  background: linear-gradient(90deg, #f0f2f5 25%, #e4e8ed 50%, #f0f2f5 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s infinite;
+}
+
+/* ── Error box ────────────────────────────────────────────────── */
+.errorBox {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  text-align: center;
+  padding: 48px 24px;
+  background: #fff;
+  border: 1px solid #fecaca;
+  border-radius: 14px;
+  color: #dc2626;
+  font-size: 14px;
+}
+
+/* ── Responsive ───────────────────────────────────────────────── */
+@media (max-width: 480px) {
+  .page { padding: 24px 16px 48px; }
+  .heading { font-size: 20px; }
+  .actions { flex-direction: column; }
+  .submitBtn, .cancelBtn { flex: unset; width: 100%; }
+}

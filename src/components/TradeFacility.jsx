@@ -25,69 +25,53 @@ export default function TradeFacility() {
     return () => unsubscribe();
   }, [navigate]);
 
-async function fetchTransactions(uid) {
-  setLoading(true);
-  try {
-    // Only fetch transactions that are accepted (declined ones are excluded)
-    const q = query(
-      collection(db, "transactions"),
-      where("sellerId", "==", uid),
-      where("status", "==", "accepted")
-    );
-    const snapshot = await getDocs(q);
-    const txns = [];
+  async function fetchTransactions(uid) {
+    setLoading(true);
+    try {
+      const q = query(
+        collection(db, "transactions"),
+        where("sellerId", "==", uid),
+        where("status", "==", "accepted")
+      );
+      const snapshot = await getDocs(q);
+      const txns = [];
 
-    for (const docSnap of snapshot.docs) {
-      const txn = { id: docSnap.id, ...docSnap.data() };
+      for (const docSnap of snapshot.docs) {
+        const txn = { id: docSnap.id, ...docSnap.data() };
 
-      // Get listing details
-      const listingSnap = await getDoc(doc(db, "listings", txn.listingId));
-      if (listingSnap.exists()) {
-        txn.listing = listingSnap.data();
-      }
-
-      // Get buyer name (using the improved logic from previous fix)
-      const buyerSnap = await getDoc(doc(db, "users", txn.buyerId));
-      if (buyerSnap.exists()) {
-        const buyer = buyerSnap.data();
-        let buyerName = "";
-        if (buyer.firstName && buyer.lastName) {
-          buyerName = `${buyer.firstName} ${buyer.lastName}`;
-        } else if (buyer.displayName) {
-          buyerName = buyer.displayName;
-        } else if (buyer.name) {
-          buyerName = buyer.name;
-        } else if (buyer.email) {
-          buyerName = buyer.email.split('@')[0];
-        } else {
-          buyerName = "Buyer";
+        const listingSnap = await getDoc(doc(db, "listings", txn.listingId));
+        if (listingSnap.exists()) {
+          txn.listing = listingSnap.data();
         }
-        txn.buyerName = buyerName;
-      } else {
-        txn.buyerName = "Unknown User";
+
+        const buyerSnap = await getDoc(doc(db, "users", txn.buyerId));
+        if (buyerSnap.exists()) {
+          const buyer = buyerSnap.data();
+          let buyerName = "";
+          if (buyer.firstName && buyer.lastName) buyerName = `${buyer.firstName} ${buyer.lastName}`;
+          else if (buyer.displayName) buyerName = buyer.displayName;
+          else if (buyer.name) buyerName = buyer.name;
+          else if (buyer.email) buyerName = buyer.email.split('@')[0];
+          else buyerName = "Buyer";
+          txn.buyerName = buyerName;
+        } else {
+          txn.buyerName = "Unknown User";
+        }
+
+        txns.push(txn);
       }
-
-      txns.push(txn);
+      setTransactions(txns);
+    } catch (err) {
+      console.error("Error fetching transactions:", err);
+    } finally {
+      setLoading(false);
     }
-
-    setTransactions(txns);
-  } catch (err) {
-    console.error("Error fetching transactions:", err);
-  } finally {
-    setLoading(false);
   }
-}
 
   function getStatusBadge(txn) {
-    if (txn.dropOffStatus === "dropped_off") {
-      return { label: "Item Dropped Off", color: "#4caf50", bg: "#e8f5e9" };
-    }
-    if (txn.dropOffStatus === "scheduled") {
-      return { label: "Drop-off Scheduled", color: "#ff9800", bg: "#fff3e0" };
-    }
-    if (txn.status === "accepted") {
-      return { label: "Accepted - Book Drop-off", color: "#2196f3", bg: "#e3f2fd" };
-    }
+    if (txn.dropOffStatus === "dropped_off") return { label: "Item Dropped Off", color: "#4caf50", bg: "#e8f5e9" };
+    if (txn.dropOffStatus === "scheduled") return { label: "Drop-off Scheduled", color: "#ff9800", bg: "#fff3e0" };
+    if (txn.status === "accepted") return { label: "Accepted - Book Drop-off", color: "#2196f3", bg: "#e3f2fd" };
     return { label: txn.status, color: "#9e9e9e", bg: "#f5f5f5" };
   }
 
@@ -95,9 +79,7 @@ async function fetchTransactions(uid) {
     return (
       <>
         <NavBar />
-        <div style={{ padding: "40px", textAlign: "center" }}>
-          <p>Loading...</p>
-        </div>
+        <div style={{ padding: "40px", textAlign: "center" }}>Loading...</div>
       </>
     );
   }
@@ -117,157 +99,40 @@ async function fetchTransactions(uid) {
   return (
     <>
       <NavBar />
-      <div style={{
-        maxWidth: "800px",
-        margin: "0 auto",
-        padding: "40px 20px",
-        fontFamily: "'Segoe UI', sans-serif"
-      }}>
-        <h1 style={{ fontSize: "28px", fontWeight: "700", marginBottom: "8px" }}>
-          Trade Facility
-        </h1>
-        <p style={{ color: "#666", marginBottom: "32px" }}>
-          Track your transactions: drop-offs, collections, and trade exchanges
-        </p>
+      <div style={{ maxWidth: "800px", margin: "0 auto", padding: "40px 20px", fontFamily: "'Segoe UI', sans-serif" }}>
+        <h1 style={{ fontSize: "28px", fontWeight: "700", marginBottom: "8px" }}>Trade Facility</h1>
+        <p style={{ color: "#666", marginBottom: "32px" }}>Track your transactions: drop-offs, collections, and trade exchanges</p>
 
         {transactions.length === 0 ? (
-          <div style={{
-            textAlign: "center",
-            padding: "60px",
-            backgroundColor: "#f9f9f9",
-            borderRadius: "12px",
-            color: "#999"
-          }}>
+          <div style={{ textAlign: "center", padding: "60px", backgroundColor: "#f9f9f9", borderRadius: "12px", color: "#999" }}>
             <p>No transactions yet.</p>
-            <button
-              onClick={() => navigate("/view-listing")}
-              style={{
-                marginTop: "16px",
-                padding: "10px 20px",
-                backgroundColor: "#4a90d9",
-                color: "white",
-                border: "none",
-                borderRadius: "8px",
-                cursor: "pointer"
-              }}
-            >
-              Browse Listings
-            </button>
+            <button onClick={() => navigate("/view-listing")} style={{ marginTop: "16px", padding: "10px 20px", backgroundColor: "#4a90d9", color: "white", border: "none", borderRadius: "8px", cursor: "pointer" }}>Browse Listings</button>
           </div>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
             {transactions.map((txn) => {
               const badge = getStatusBadge(txn);
-              const imageUrl = txn.listing?.photos && txn.listing.photos.length > 0 
-                ? txn.listing.photos[0] 
-                : null;
+              const imageUrl = txn.listing?.photos?.[0] || null;
               return (
-                <div key={txn.id} style={{
-                  backgroundColor: "white",
-                  border: "1px solid #e0e0e0",
-                  borderRadius: "12px",
-                  padding: "20px",
-                  display: "flex",
-                  alignItems: "flex-start",
-                  gap: "16px",
-                  boxShadow: "0 2px 8px rgba(0,0,0,0.05)"
-                }}>
-                  {/* Listing image */}
-                  <div style={{
-                    width: "80px",
-                    height: "80px",
-                    backgroundColor: "#f0f0f0",
-                    borderRadius: "8px",
-                    flexShrink: 0,
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    overflow: "hidden"
-                  }}>
-                    {imageUrl ? (
-                      <img 
-                        src={imageUrl} 
-                        alt={txn.listing?.title || "Listing"}
-                        style={{ width: "100%", height: "100%", objectFit: "cover" }}
-                      />
-                    ) : (
-                      <span style={{ color: "#999", fontSize: "12px" }}>No Image</span>
-                    )}
+                <div key={txn.id} style={{ backgroundColor: "white", border: "1px solid #e0e0e0", borderRadius: "12px", padding: "20px", display: "flex", alignItems: "flex-start", gap: "16px", boxShadow: "0 2px 8px rgba(0,0,0,0.05)" }}>
+                  <div style={{ width: "80px", height: "80px", backgroundColor: "#f0f0f0", borderRadius: "8px", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
+                    {imageUrl ? <img src={imageUrl} alt={txn.listing?.title} style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <span style={{ color: "#999", fontSize: "12px" }}>No Image</span>}
                   </div>
-
-                  {/* Details */}
                   <div style={{ flex: 1 }}>
-                    <div style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "flex-start",
-                      marginBottom: "8px"
-                    }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "8px" }}>
                       <div>
-                        <h3 style={{ margin: 0, fontSize: "16px", fontWeight: "600" }}>
-                          {txn.listing?.title || "Item"}
-                        </h3>
-                        <p style={{ margin: "4px 0", color: "#666", fontSize: "14px" }}>
-                          Buyer: {txn.buyerName}
-                        </p>
+                        <h3 style={{ margin: 0, fontSize: "16px", fontWeight: "600" }}>{txn.listing?.title || "Item"}</h3>
+                        <p style={{ margin: "4px 0", color: "#666", fontSize: "14px" }}>Buyer: {txn.buyerName}</p>
                       </div>
-                      <span style={{
-                        padding: "4px 12px",
-                        backgroundColor: badge.bg,
-                        color: badge.color,
-                        borderRadius: "20px",
-                        fontSize: "13px",
-                        fontWeight: "500",
-                        whiteSpace: "nowrap"
-                      }}>
-                        {badge.label}
-                      </span>
+                      <span style={{ padding: "4px 12px", backgroundColor: badge.bg, color: badge.color, borderRadius: "20px", fontSize: "13px", fontWeight: "500", whiteSpace: "nowrap" }}>{badge.label}</span>
                     </div>
-
                     <div style={{ display: "flex", gap: "8px", marginBottom: "8px" }}>
-                      <span style={{
-                        padding: "2px 10px",
-                        border: "1px solid #ddd",
-                        borderRadius: "4px",
-                        fontSize: "13px"
-                      }}>
-                        R{txn.listing?.price || "0"}
-                      </span>
-                      {txn.status === "accepted" && (
-                        <span style={{
-                          padding: "2px 10px",
-                          backgroundColor: "#e8f5e9",
-                          color: "#4caf50",
-                          borderRadius: "4px",
-                          fontSize: "13px"
-                        }}>
-                          Paid
-                        </span>
-                      )}
+                      <span style={{ padding: "2px 10px", border: "1px solid #ddd", borderRadius: "4px", fontSize: "13px" }}>R{txn.listing?.price || "0"}</span>
+                      {txn.status === "accepted" && <span style={{ padding: "2px 10px", backgroundColor: "#e8f5e9", color: "#4caf50", borderRadius: "4px", fontSize: "13px" }}>Paid</span>}
                     </div>
-
-                    {txn.dropOffDate && (
-                      <p style={{ margin: "4px 0", fontSize: "13px", color: "#555" }}>
-                        📅 Drop-off: {txn.dropOffDate} {txn.dropOffTimeSlot}
-                      </p>
-                    )}
-
+                    {txn.dropOffDate && <p style={{ margin: "4px 0", fontSize: "13px", color: "#555" }}>📅 Drop-off: {txn.dropOffDate} {txn.dropOffTimeSlot}</p>}
                     {txn.status === "accepted" && !txn.dropOffStatus && (
-                      <button
-                        onClick={() => navigate(`/book-dropoff/${txn.id}`)}
-                        style={{
-                          marginTop: "12px",
-                          padding: "8px 16px",
-                          backgroundColor: "#4a90d9",
-                          color: "white",
-                          border: "none",
-                          borderRadius: "8px",
-                          cursor: "pointer",
-                          fontSize: "13px"
-                        }}
-                      >
-                        Book Drop-off
-                      </button>
+                      <button onClick={() => navigate(`/book-dropoff/${txn.id}`)} style={{ marginTop: "12px", padding: "8px 16px", backgroundColor: "#4a90d9", color: "white", border: "none", borderRadius: "8px", cursor: "pointer", fontSize: "13px" }}>Book Drop-off</button>
                     )}
                   </div>
                 </div>

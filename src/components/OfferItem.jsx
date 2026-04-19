@@ -1,23 +1,26 @@
 // src/components/OfferItem.jsx
 import React, { useEffect, useState } from 'react';
-import { doc, getDoc, updateDoc } from 'firebase/firestore';
+import {
+  doc, getDoc, updateDoc, deleteDoc,
+  collection, query, where, getDocs, addDoc, serverTimestamp,
+} from 'firebase/firestore';
 import { db } from '../firebase';
-import { notifyBuyerOfAcceptance } from '../services/notificationService';
+import styles from './OfferItem.module.css';
 
 export default function OfferItem({ offer }) {
-  const [listing, setListing] = useState(null);
-  const [buyer, setBuyer] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [listing, setListing]   = useState(null);
+  const [buyer, setBuyer]       = useState(null);
+  const [loading, setLoading]   = useState(true);
+  const [working, setWorking]   = useState(false); // action in progress
 
   useEffect(() => {
     async function fetchInfo() {
       try {
         const [listSnap, buyerSnap] = await Promise.all([
-          getDoc(doc(db, 'listings', offer.listingId)),
-          getDoc(doc(db, 'users', offer.buyerId)),
+          getDoc(doc(db, 'listings',  offer.listingId)),
+          getDoc(doc(db, 'users',     offer.buyerId)),
         ]);
-
-        if (listSnap.exists()) setListing({ id: listSnap.id, ...listSnap.data() });
+        if (listSnap.exists())  setListing({ id: listSnap.id,  ...listSnap.data() });
         if (buyerSnap.exists()) setBuyer(buyerSnap.data());
       } catch (err) {
         console.error(err);
@@ -28,224 +31,215 @@ export default function OfferItem({ offer }) {
     fetchInfo();
   }, [offer]);
 
-  const handleUpdate = async (status) => {
+  // ── Core acceptance flow ────────────────────────────────────
+  const handleAccept = async () => {
+    if (working) return;
+    setWorking(true);
     try {
+      // 1. Mark THIS transaction as accepted
       await updateDoc(doc(db, 'transactions', offer.id), {
-        status,
-        updatedAt: new Date(),
+        status:    'accepted',
+        updatedAt: serverTimestamp(),
       });
 
-      if (status === 'accepted') {
-        await notifyBuyerOfAcceptance({
-          transactionId: offer.id,
-          buyerId: offer.buyerId,
-        });
-      }
+      // 2. Mark the listing as accepted (hides it from ViewListing)
+      await updateDoc(doc(db, 'listings', offer.listingId), {
+        status:    'accepted',
+        updatedAt: serverTimestamp(),
+      });
 
-      alert(`Offer ${status}!`);
+      // 3. Find all OTHER pending transactions for the same listing
+      const otherTxSnap = await getDocs(
+        query(
+          collection(db, 'transactions'),
+          where('listingId', '==', offer.listingId),
+          where('status',    '==', 'pending'),
+        )
+      );
+
+      // 4. For each other transaction: notify buyer → then delete it
+      const declineJobs = otherTxSnap.docs
+        .filter(d => d.id !== offer.id)
+        .map(async (txDoc) => {
+          const tx = txDoc.data();
+
+          // Send declined notification to that buyer
+          await addDoc(collection(db, 'notifications'), {
+            userId:        tx.buyerId,
+            type:          'offer_declined',
+            transactionId: txDoc.id,
+            listingId:     offer.listingId,
+            read:          false,
+            createdAt:     serverTimestamp(),
+          });
+
+          // Delete the transaction
+          await deleteDoc(doc(db, 'transactions', txDoc.id));
+        });
+
+      await Promise.all(declineJobs);
+
+      // 5. Notify the accepted buyer
+      await addDoc(collection(db, 'notifications'), {
+        userId:        offer.buyerId,
+        type:          'offer_accepted',
+        transactionId: offer.id,
+        listingId:     offer.listingId,
+        read:          false,
+        createdAt:     serverTimestamp(),
+      });
+
     } catch (err) {
-      console.error('Error updating offer:', err);
-      alert('Something went wrong.');
+      console.error('Error accepting offer:', err);
+      alert('Something went wrong. Please try again.');
+    } finally {
+      setWorking(false);
     }
   };
 
-  if (loading) return <div style={styles.card}>Loading offer...</div>;
+  // ── Simple decline ─────────────────────────────────────────
+  const handleDecline = async () => {
+    if (working) return;
+    setWorking(true);
+    try {
+      // Notify buyer
+      await addDoc(collection(db, 'notifications'), {
+        userId:        offer.buyerId,
+        type:          'offer_declined',
+        transactionId: offer.id,
+        listingId:     offer.listingId,
+        read:          false,
+        createdAt:     serverTimestamp(),
+      });
 
-  const imageUrl = listing?.photos?.[0] || listing?.imageUrl || null;
-  const buyerName = buyer
-    ? `${buyer.firstName || ''} ${buyer.lastName || ''}`.trim()
-    : 'Unknown Buyer';
-
-  const typeColor = {
-    'For Sale': '#e07b3a',
-    sale: '#e07b3a',
-    'For Trade': '#3a7be0',
-    trade: '#3a7be0',
-    Both: '#7b3ae0',
-    Either: '#7b3ae0',
-    both: '#7b3ae0',
+      // Delete the transaction so it disappears from offers list
+      await deleteDoc(doc(db, 'transactions', offer.id));
+    } catch (err) {
+      console.error('Error declining offer:', err);
+      alert('Something went wrong. Please try again.');
+    } finally {
+      setWorking(false);
+    }
   };
 
+ if (loading) return (
+  <div className={styles.card} style={{ animation: 'none' }}>
+    <div className={styles.imageWrapper} style={{ background: 'linear-gradient(90deg, #f0f2f5 25%, #e8ecf0 50%, #f0f2f5 75%)', backgroundSize: '200% 100%', animation: 'shimmer 1.2s infinite' }} />
+    <div className={styles.details}>
+      <div style={{ height: 14, width: '60%', borderRadius: 6, background: 'linear-gradient(90deg, #f0f2f5 25%, #e8ecf0 50%, #f0f2f5 75%)', backgroundSize: '200% 100%', animation: 'shimmer 1.2s infinite', marginBottom: 10 }} />
+      <div style={{ height: 11, width: '40%', borderRadius: 6, background: 'linear-gradient(90deg, #f0f2f5 25%, #e8ecf0 50%, #f0f2f5 75%)', backgroundSize: '200% 100%', animation: 'shimmer 1.2s infinite', marginBottom: 6 }} />
+      <div style={{ height: 11, width: '50%', borderRadius: 6, background: 'linear-gradient(90deg, #f0f2f5 25%, #e8ecf0 50%, #f0f2f5 75%)', backgroundSize: '200% 100%', animation: 'shimmer 1.2s infinite' }} />
+    </div>
+  </div>
+);
+
+  const imageUrl  = listing?.photos?.[0] || listing?.imageUrl || null;
+  const buyerName = buyer
+    ? `${buyer.firstName || ''} ${buyer.lastName || ''}`.trim() || buyer.email || 'Unknown Buyer'
+    : 'Unknown Buyer';
+
+  const TYPE_COLORS = {
+    'For Sale': '#e07b3a', sale:  '#e07b3a',
+    'For Trade': '#3a7be0', trade: '#3a7be0',
+    Both: '#7b3ae0', Either: '#7b3ae0', either: '#7b3ae0',
+  };
   const offerType = offer.type || '';
 
   return (
-    <div style={styles.card}>
+    <div className={styles.card}>
 
-      {/* Left — listing image */}
-      <div style={styles.imageWrapper}>
+      {/* Image */}
+      <div className={styles.imageWrapper}>
         {imageUrl ? (
-          <img src={imageUrl} alt={listing?.title} style={styles.image} />
+          <img src={imageUrl} alt={listing?.title} className={styles.image} />
         ) : (
-          <div style={styles.imagePlaceholder}>
-            <span style={{ color: '#aaa', fontSize: '0.8rem' }}>No image</span>
+          <div className={styles.imagePlaceholder}>
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#ccc" strokeWidth="1.5">
+              <rect x="3" y="3" width="18" height="18" rx="2"/>
+              <circle cx="8.5" cy="8.5" r="1.5"/>
+              <path d="M21 15l-5-5L5 21"/>
+            </svg>
           </div>
         )}
       </div>
 
-      {/* Middle — details */}
-      <div style={styles.details}>
-        <p style={styles.itemTitle}>{listing?.title || 'Unknown Item'}</p>
+      {/* Details */}
+      <div className={styles.details}>
+        <p className={styles.itemTitle}>{listing?.title || 'Unknown Item'}</p>
 
-        <p style={styles.meta}>
-          <span style={styles.label}>Price:</span> R {Number(listing?.price || 0).toLocaleString()}
-        </p>
+        <div className={styles.metaGrid}>
+          <span className={styles.metaLabel}>Price</span>
+          <span className={styles.metaValue}>R {Number(listing?.price || 0).toLocaleString()}</span>
 
-        <p style={styles.meta}>
-          <span style={styles.label}>Condition:</span> {listing?.condition || 'N/A'}
-        </p>
+          <span className={styles.metaLabel}>Condition</span>
+          <span className={styles.metaValue}>{listing?.condition || 'N/A'}</span>
 
-        <p style={styles.meta}>
-          <span style={styles.label}>Offer type:</span>{' '}
-          <span style={{
-            backgroundColor: typeColor[offerType] || '#555',
-            color: '#fff',
-            padding: '2px 8px',
-            borderRadius: '12px',
-            fontSize: '0.75rem',
-            fontWeight: '600',
-          }}>
-            {offerType}
+          <span className={styles.metaLabel}>Offer type</span>
+          <span>
+            <span
+              className={styles.typeBadge}
+              style={{ background: TYPE_COLORS[offerType] || '#6b7280' }}
+            >
+              {offerType || '—'}
+            </span>
           </span>
-        </p>
 
-        <p style={styles.meta}>
-          <span style={styles.label}>From:</span> {buyerName}
-        </p>
+          <span className={styles.metaLabel}>From</span>
+          <span className={styles.metaValue}>{buyerName}</span>
 
-        {buyer?.email && (
-          <p style={styles.meta}>
-            <span style={styles.label}>Email:</span> {buyer.email}
-          </p>
-        )}
+          {buyer?.email && (
+            <>
+              <span className={styles.metaLabel}>Email</span>
+              <span className={styles.metaValue}>{buyer.email}</span>
+            </>
+          )}
 
-        {offer.createdAt && (
-          <p style={styles.meta}>
-            <span style={styles.label}>Received:</span>{' '}
-            {offer.createdAt?.toDate
-              ? offer.createdAt.toDate().toLocaleDateString()
-              : new Date(offer.createdAt).toLocaleDateString()}
-          </p>
-        )}
+          {offer.createdAt && (
+            <>
+              <span className={styles.metaLabel}>Received</span>
+              <span className={styles.metaValue}>
+                {offer.createdAt?.toDate
+                  ? offer.createdAt.toDate().toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric' })
+                  : new Date(offer.createdAt).toLocaleDateString()}
+              </span>
+            </>
+          )}
+        </div>
 
         {listing?.description && (
-          <p style={styles.description}>{listing.description}</p>
+          <p className={styles.description}>{listing.description}</p>
         )}
       </div>
 
-      {/* Right — actions */}
-      <div style={styles.actions}>
+      {/* Actions */}
+      <div className={styles.actions}>
         <button
-          onClick={() => handleUpdate('accepted')}
-          style={styles.acceptBtn}
+          className={styles.acceptBtn}
+          onClick={handleAccept}
+          disabled={working}
         >
-          ✓ Accept
+          {working ? (
+            <span className={styles.spinner} />
+          ) : (
+            <>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="20 6 9 17 4 12"/>
+              </svg>
+              Accept
+            </>
+          )}
         </button>
         <button
-          onClick={() => handleUpdate('declined')}
-          style={styles.declineBtn}
+          className={styles.declineBtn}
+          onClick={handleDecline}
+          disabled={working}
         >
-          ✕ Decline
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+          Decline
         </button>
       </div>
-
     </div>
   );
 }
-
-const styles = {
-  card: {
-    display: 'flex',
-    gap: '16px',
-    padding: '16px',
-    border: '1px solid #e8eaed',
-    borderRadius: '12px',
-    marginBottom: '12px',
-    backgroundColor: '#fff',
-    alignItems: 'flex-start',
-    flexWrap: 'wrap',
-  },
-  imageWrapper: {
-    width: '100px',
-    height: '100px',
-    borderRadius: '8px',
-    overflow: 'hidden',
-    backgroundColor: '#f0f2f5',
-    flexShrink: 0,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  image: {
-    width: '100%',
-    height: '100%',
-    objectFit: 'cover',
-  },
-  imagePlaceholder: {
-    width: '100%',
-    height: '100%',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  details: {
-    flex: 1,
-    minWidth: '200px',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '4px',
-  },
-  itemTitle: {
-    margin: '0 0 6px 0',
-    fontSize: '1rem',
-    fontWeight: '700',
-    color: '#1a1a1a',
-    fontFamily: 'Segoe UI, system-ui, sans-serif',
-  },
-  meta: {
-    margin: '0',
-    fontSize: '0.85rem',
-    color: '#555',
-    fontFamily: 'Segoe UI, system-ui, sans-serif',
-  },
-  label: {
-    fontWeight: '600',
-    color: '#333',
-  },
-  description: {
-    margin: '8px 0 0 0',
-    fontSize: '0.82rem',
-    color: '#777',
-    fontFamily: 'Segoe UI, system-ui, sans-serif',
-    lineHeight: '1.5',
-    borderTop: '1px solid #f0f0f0',
-    paddingTop: '8px',
-  },
-  actions: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '8px',
-    flexShrink: 0,
-  },
-  acceptBtn: {
-    padding: '8px 20px',
-    backgroundColor: '#1d9e75',
-    color: '#fff',
-    border: 'none',
-    borderRadius: '8px',
-    fontSize: '0.9rem',
-    fontWeight: '600',
-    cursor: 'pointer',
-    fontFamily: 'Segoe UI, system-ui, sans-serif',
-  },
-  declineBtn: {
-    padding: '8px 20px',
-    backgroundColor: '#fff',
-    color: '#dc3545',
-    border: '1px solid #dc3545',
-    borderRadius: '8px',
-    fontSize: '0.9rem',
-    fontWeight: '600',
-    cursor: 'pointer',
-    fontFamily: 'Segoe UI, system-ui, sans-serif',
-  },
-};

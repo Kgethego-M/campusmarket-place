@@ -86,14 +86,14 @@ export default function BookDropOff() {
 
       setTransaction(transactionData);
 
-      // Derive payment method from either paymentMethod or paymentType
-      let derived = transactionData.paymentMethod;
-      if (!derived && transactionData.paymentType) {
-        if (transactionData.paymentType === 'full_online') derived = 'online';
-        else if (transactionData.paymentType === 'cash') derived = 'cod';
-        else if (transactionData.paymentType === 'partial') derived = 'partial';
+      // Derive payment method from paymentMethod or paymentType
+      let pm = transactionData.paymentMethod;
+      if (!pm && transactionData.paymentType) {
+        if (transactionData.paymentType === 'full_online') pm = 'online';
+        else if (transactionData.paymentType === 'cash') pm = 'cod';
+        else if (transactionData.paymentType === 'partial') pm = 'partial';
       }
-      setPaymentMethod(derived || 'unknown');
+      setPaymentMethod(pm || 'unknown');
 
       const listingSnap = await getDoc(doc(db, "listings", transactionData.listingId));
       if (listingSnap.exists()) setListing({ id: listingSnap.id, ...listingSnap.data() });
@@ -104,6 +104,7 @@ export default function BookDropOff() {
         setBuyerName(buyer.displayName || buyer.name || buyer.firstName || "Buyer");
       }
     } catch (err) {
+      console.error(err);
       setError("Failed to load transaction: " + err.message);
     } finally {
       setLoading(false);
@@ -169,6 +170,7 @@ export default function BookDropOff() {
 
       navigate("/trade-facility");
     } catch (err) {
+      console.error(err);
       setError("Failed to book: " + err.message);
     } finally {
       setSubmitting(false);

@@ -1,4 +1,3 @@
-// src/components/ListingDetail.jsx
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
@@ -29,139 +28,81 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
   const sellerId = listing.sellerUID || listing.sellerId;
   const isOwnListing = currentUser && currentUser.uid === sellerId;
 
-  // ── Find or create chat ───────────────────────────────────────────────────
   async function findOrCreateChat() {
     const buyerId = currentUser.uid;
-    
-    // Add validation
-    if (!sellerId) {
-      console.error('No seller ID found in listing:', listing);
-      throw new Error('Seller information is missing from this listing');
-    }
-    
-    if (buyerId === sellerId) {
-      throw new Error('Cannot message yourself');
-    }
+    if (!sellerId) throw new Error('Seller information is missing from this listing');
+    if (buyerId === sellerId) throw new Error('Cannot message yourself');
 
-    try {
-      // Query for existing chat
-      const chatsRef = collection(db, 'chats');
-      const q = query(chatsRef, where('participants', 'array-contains', buyerId));
-      const snap = await getDocs(q);
+    const chatsRef = collection(db, 'chats');
+    const q = query(chatsRef, where('participants', 'array-contains', buyerId));
+    const snap = await getDocs(q);
+    const existing = snap.docs.find((doc) => doc.data().participants?.includes(sellerId));
+    if (existing) return existing.id;
 
-      // Find existing chat with this seller
-      const existing = snap.docs.find((doc) => {
-        const data = doc.data();
-        return data.participants && data.participants.includes(sellerId);
-      });
-
-      if (existing) {
-        return existing.id;
-      }
-
-      // Create new chat
-      const newChatRef = await addDoc(collection(db, 'chats'), {
-        participants: [buyerId, sellerId],
-        listingTitle: listing.title || '',
-        listingId: listing.id,
-        lastMessage: '',
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-        [`unread_${buyerId}`]: 0,
-        [`unread_${sellerId}`]: 0,
-      });
-      
-      return newChatRef.id;
-    } catch (error) {
-      console.error('Firestore error in findOrCreateChat:', error);
-      throw error;
-    }
+    const newChatRef = await addDoc(collection(db, 'chats'), {
+      participants: [buyerId, sellerId],
+      listingTitle: listing.title || '',
+      listingId: listing.id,
+      lastMessage: '',
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+      [`unread_${buyerId}`]: 0,
+      [`unread_${sellerId}`]: 0,
+    });
+    return newChatRef.id;
   }
 
   async function handleMessageSeller() {
-    if (!currentUser) {
-      alert('Please log in to message the seller');
-      return;
-    }
-    
-    if (!sellerId) {
-      alert('Seller information is missing. Please try again later.');
-      return;
-    }
-    
-    if (currentUser.uid === sellerId) {
-      alert('You cannot message yourself about your own listing');
-      return;
-    }
-    
+    if (!currentUser) return alert('Please log in to message the seller');
+    if (!sellerId) return alert('Seller information is missing');
+    if (currentUser.uid === sellerId) return alert('You cannot message yourself');
     setChatLoading(true);
     try {
-      console.log('Finding/creating chat for buyer:', currentUser.uid, 'seller:', sellerId);
       const chatId = await findOrCreateChat();
-      console.log('Chat found/created:', chatId);
       navigate(`/chat?open=${chatId}`);
     } catch (err) {
-      console.error('Detailed chat error:', err);
       alert(`Could not open chat: ${err.message || 'Please try again.'}`);
     } finally {
       setChatLoading(false);
     }
   }
 
-  // ── Seller card click ─────────────────────────────────────────────────────
   function handleSellerCardClick() {
-    if (isOwnListing) {
-      navigate('/profile');           // seller → their own full editable profile
-    } else {
-      navigate(`/profile/${sellerId}`); // buyer → seller's public profile
-    }
+    if (isOwnListing) navigate('/profile');
+    else navigate(`/profile/${sellerId}`);
   }
 
-  // ── Transaction ───────────────────────────────────────────────────────────
   const handleTransaction = async () => {
-    // Validate required fields
-    if (!purchaseType) {
-      alert('Please select a transaction type');
-      return;
+    if (!purchaseType) return alert('Please select a transaction type');
+    if (purchaseType === 'sale' && !agreedPrice) return alert('Please enter an agreed price');
+    if (purchaseType === 'trade' && !tradeItem) return alert('Please describe what you want to trade');
+
+    let paymentMethod = null;
+    if (purchaseType === 'sale') {
+      if (paymentType === 'full_online') paymentMethod = 'online';
+      else if (paymentType === 'cash') paymentMethod = 'cod';
+      else if (paymentType === 'partial') paymentMethod = 'partial';
     }
 
-    if (purchaseType === 'sale' && !agreedPrice) {
-      alert('Please enter an agreed price');
-      return;
-    }
-
-    if (purchaseType === 'trade' && !tradeItem) {
-      alert('Please describe what you want to trade');
-      return;
-    }
-
- let paymentMethod = null;
-if (purchaseType === 'sale') {
-  if (paymentType === 'full_online') paymentMethod = 'online';
-  else if (paymentType === 'cash') paymentMethod = 'cash on delivery';
-  else if (paymentType === 'partial') paymentMethod = 'partial';
-}
-
-const transactionData = {
-  type: purchaseType,
-  listingId: listing.id,
-  listingTitle: listing.title || '',
-  buyerId: currentUser.uid,
-  buyerName: currentUser.displayName || 'Student',
-  sellerId: sellerId,
-  status: 'pending',
-  agreedPrice: Number(agreedPrice),
-  paymentType: purchaseType === 'sale' ? paymentType : null,
-  paymentMethod: paymentMethod,     
-  partialAmount: paymentType === 'partial' ? Number(partialAmount) : null,
-  tradeItem: purchaseType === 'trade' ? tradeItem : null,
-  terms: terms || null,
-  createdAt: new Date().toISOString(),
-};
+    const transactionData = {
+      type: purchaseType,
+      listingId: listing.id,
+      listingTitle: listing.title || '',
+      buyerId: currentUser.uid,
+      buyerName: currentUser.displayName || 'Student',
+      sellerId: sellerId,
+      status: 'pending',
+      agreedPrice: Number(agreedPrice),
+      paymentType: purchaseType === 'sale' ? paymentType : null,
+      paymentMethod: paymentMethod,
+      partialAmount: paymentType === 'partial' ? Number(partialAmount) : null,
+      tradeItem: purchaseType === 'trade' ? tradeItem : null,
+      terms: terms || null,
+      createdAt: new Date().toISOString(),
+    };
 
     try {
       const transactionId = await createTransaction(transactionData);
-
       await notifySellerOfOffer({
         transactionId,
         sellerId: sellerId,
@@ -169,7 +110,6 @@ const transactionData = {
         buyerName: currentUser.displayName || 'Student',
         listingTitle: listing.title,
       });
-
       setIsModalOpen(false);
       setOfferSent(true);
       alert('Offer initiated! The seller will review your offer.');
@@ -187,10 +127,8 @@ const transactionData = {
     setIsModalOpen(true);
   };
 
-  // ── Buy / pending button ──────────────────────────────────────────────────
   const renderButton = () => {
     if (!currentUser || isOwnListing) return null;
-
     if ((existingTransaction?.status === 'pending') || offerSent) {
       return (
         <div style={styles.pendingBanner} data-testid="pending-offer-banner">
@@ -202,14 +140,12 @@ const transactionData = {
         </div>
       );
     }
-
     const type = listing.listingType || listing.type;
     let label = '';
     if (type === 'For Sale' || type === 'sale') label = 'Buy Now';
     else if (type === 'For Trade' || type === 'trade') label = 'Make Trade Offer';
     else if (type === 'For Sale or Trade') label = 'Buy Now / Make Trade Offer';
     else return null;
-
     return (
       <button onClick={openPurchaseModal} style={styles.buyBtn}>
         {label} — R {Number(listing.price).toLocaleString()}
@@ -220,14 +156,11 @@ const transactionData = {
   const photos = listing.photos?.length > 0 ? listing.photos : [];
   const type = listing.listingType || listing.type || '';
   const condition = listing.condition || '';
-
   const conditionColor = { New: '#4CAF50', 'Like New': '#8BC34A', Good: '#FFC107', Fair: '#FF9800', Poor: '#F44336' };
   const typeColor = { 'For Sale': '#e07b3a', 'For Trade': '#3a7be0', 'For Sale or Trade': '#7b3ae0', sale: '#e07b3a', trade: '#3a7be0' };
 
   return (
     <div style={styles.page}>
-
-      {/* ── Images ── */}
       <div style={styles.imageSection}>
         <div style={styles.mainImageWrapper}>
           {photos.length > 0
@@ -246,29 +179,21 @@ const transactionData = {
         )}
       </div>
 
-      {/* ── Details ── */}
       <div style={styles.detailSection}>
-
         <div style={styles.badgeRow}>
           {condition && <span style={{ ...styles.badge, backgroundColor: conditionColor[condition] || '#999', color: '#fff' }}>{condition}</span>}
           {type && <span style={{ ...styles.badge, backgroundColor: typeColor[type] || '#555', color: '#fff' }}>{type}</span>}
           {listing.category && <span style={{ ...styles.badge, backgroundColor: '#E1E5AC', color: '#fff' }}>{listing.category}</span>}
         </div>
-
         <h1 style={styles.title}>{listing.title}</h1>
         <p style={styles.price}>R {Number(listing.price).toLocaleString()}</p>
         <p style={styles.description}>{listing.description}</p>
-
         {renderButton()}
-
-        {/* Message Seller */}
         {currentUser && !isOwnListing && (
           <button style={styles.messageBtn} onClick={handleMessageSeller} disabled={chatLoading}>
             {chatLoading ? 'Opening chat…' : '💬 Message Seller'}
           </button>
         )}
-
-        {/* Owner banner */}
         {isOwnListing && (
           <div style={styles.ownerBanner} data-testid="owner-listing-banner">
             <span style={styles.pendingIcon}>🏷️</span>
@@ -278,35 +203,21 @@ const transactionData = {
             </div>
           </div>
         )}
-
-        {/* ── Seller card — entire block is clickable ── */}
-        <div
-          onClick={handleSellerCardClick}
-          onKeyDown={(e) => e.key === 'Enter' && handleSellerCardClick()}
-          style={styles.sellerCard}
-          role="button"
-          tabIndex={0}
-          title={isOwnListing ? 'Go to your profile' : 'View seller profile'}
-        >
+        <div onClick={handleSellerCardClick} onKeyDown={(e) => e.key === 'Enter' && handleSellerCardClick()} style={styles.sellerCard} role="button" tabIndex={0} title={isOwnListing ? 'Go to your profile' : 'View seller profile'}>
           <div style={styles.sellerAvatar}>
             {listing.sellerAvatar
-              ? <img src={listing.sellerAvatar} alt={listing.sellerName}
-                     style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
+              ? <img src={listing.sellerAvatar} alt={listing.sellerName} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
               : <span style={styles.sellerInitial}>{listing.sellerName?.[0]?.toUpperCase() ?? '?'}</span>
             }
           </div>
           <div style={{ flex: 1 }}>
             <p style={styles.sellerName}>{listing.sellerName ?? 'Student'}</p>
-            <p style={styles.sellerSub}>
-              {isOwnListing ? 'View your profile →' : 'View profile & ratings →'}
-            </p>
+            <p style={styles.sellerSub}>{isOwnListing ? 'View your profile →' : 'View profile & ratings →'}</p>
           </div>
           <span style={styles.sellerChevron}>›</span>
         </div>
-
       </div>
 
-      {/* ── Purchase modal ── */}
       {isModalOpen && (
         <div style={modalStyles.overlay}>
           <div style={modalStyles.modal}>
@@ -314,7 +225,6 @@ const transactionData = {
               <h2 style={{ margin: 0 }}>{purchaseType === 'trade' ? 'Initiate Trade' : 'Initiate Purchase'}</h2>
               <button onClick={() => setIsModalOpen(false)} style={modalStyles.closeBtn}>×</button>
             </div>
-
             <p style={{ color: '#666', fontSize: '14px' }}>Review and confirm your details for "{listing.title}"</p>
 
             {(() => { const lt = listing.listingType || listing.type; return lt === 'For Sale or Trade' && !purchaseType; })() && (
@@ -355,9 +265,7 @@ const transactionData = {
               <textarea placeholder="E.g. Seller agreed to include charger..." value={terms} onChange={(e) => setTerms(e.target.value)} style={modalStyles.textarea} />
             </div>
 
-            <button onClick={handleTransaction} style={styles.buyBtn}>
-              Confirm & Send Offer
-            </button>
+            <button onClick={handleTransaction} style={styles.buyBtn}>Confirm & Send Offer</button>
           </div>
         </div>
       )}
@@ -371,7 +279,6 @@ const transactionData = {
 export default function ListingDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
-
   const [listing, setListing] = useState(null);
   const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -429,7 +336,7 @@ export default function ListingDetail() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Styles
+// Styles (same as before, unchanged)
 // ─────────────────────────────────────────────────────────────────────────────
 const styles = {
   page: { display: 'flex', gap: '48px', padding: '40px 32px 48px', width: '100%', margin: '0 auto', flexWrap: 'wrap', backgroundColor: '#fbfbfb', minHeight: '100vh', borderRadius: '24px' },
@@ -454,14 +361,7 @@ const styles = {
   ownerBanner: { display: 'flex', alignItems: 'center', gap: '12px', padding: '16px', backgroundColor: '#e8f4fd', border: '1px solid #90caf9', borderRadius: '10px', fontFamily: 'Segoe UI, system-ui, sans-serif' },
   ownerBannerTitle: { margin: '0 0 4px', fontWeight: '700', fontSize: '0.95rem', color: '#0d47a1' },
   ownerBannerSubtitle: { margin: '0', fontSize: '0.85rem', color: '#1565c0' },
-  sellerCard: {
-    display: 'flex', alignItems: 'center', gap: '14px',
-    padding: '16px', border: '1px solid #dde3ea',
-    borderRadius: '14px', marginTop: '8px',
-    cursor: 'pointer', backgroundColor: '#fff',
-    transition: 'box-shadow 0.15s',
-    outline: 'none', userSelect: 'none',
-  },
+  sellerCard: { display: 'flex', alignItems: 'center', gap: '14px', padding: '16px', border: '1px solid #dde3ea', borderRadius: '14px', marginTop: '8px', cursor: 'pointer', backgroundColor: '#fff', transition: 'box-shadow 0.15s', outline: 'none', userSelect: 'none' },
   sellerAvatar: { width: '52px', height: '52px', borderRadius: '50%', backgroundColor: '#166bc0', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', flexShrink: 0 },
   sellerInitial: { fontSize: '1.2rem', fontWeight: '700', color: '#fff' },
   sellerName: { margin: '0 0 2px', fontWeight: '600', fontSize: '0.95rem', color: '#1a1a1a', fontFamily: 'Segoe UI, system-ui, sans-serif' },
