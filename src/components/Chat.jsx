@@ -1,3 +1,4 @@
+//Chat.jsx
 import { useState, useRef, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import styles from "./Chat.module.css";
