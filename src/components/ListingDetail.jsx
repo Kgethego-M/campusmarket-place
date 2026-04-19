@@ -223,7 +223,7 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
           <div style={modalStyles.modal}>
             <div style={modalStyles.header}>
               <h2 style={{ margin: 0 }}>{purchaseType === 'trade' ? 'Initiate Trade' : 'Initiate Purchase'}</h2>
-              <button onClick={() => setIsModalOpen(false)} style={modalStyles.closeBtn}>×</button>
+             <button onClick={() => setIsModalOpen(false)} style={modalStyles.closeBtn} aria-label="Close modal">×</button>
             </div>
             <p style={{ color: '#666', fontSize: '14px' }}>Review and confirm your details for "{listing.title}"</p>
 
