@@ -49,6 +49,9 @@ def get_listings():
         """)
         return cursor.fetchall()
 
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
     finally:
         db.close()
 
