@@ -15,6 +15,15 @@ export default defineConfig(({ mode }) => ({
     deps: {
       inline: ["firebase"],
     },
+    test: {
+    globals: true,
+    environment: 'jsdom',
+    setupFiles: './src/tests/setup.js',
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'lcov'],
+    },
+  },
     // Mocks only apply when running tests
     alias: {
       "@firebase/auth":      new URL("src/__mocks__/firebase.js", import.meta.url).pathname,

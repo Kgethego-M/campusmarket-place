@@ -1,3 +1,5 @@
+Profile.jsx
+
 import { onAuthStateChanged } from 'firebase/auth';
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
@@ -24,7 +26,7 @@ const toRawListingType = (displayType) => {
 const HISTORY_STATUSES  = new Set(['sold', 'completed', 'traded']);
 const READONLY_STATUSES = new Set(['accepted']);
 
-const Profile = () => {
+function Profile() {
   const navigate     = useNavigate();
   const location     = useLocation();
   const fileInputRef = useRef(null);
@@ -620,6 +622,6 @@ const Profile = () => {
       </div>
     </div>
   );
-};
+}
 
 export default Profile;

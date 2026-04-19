@@ -15,6 +15,51 @@ const shimmerStyle = {
   borderRadius: 6,
 };
 
+// ── Offer Details inline styles ──────────────────────────────────────────────
+const odStyles = {
+  box: {
+    marginTop: '12px',
+    padding: '12px 14px',
+    background: '#f0f7ff',
+    border: '1px solid #bfdbfe',
+    borderRadius: '10px',
+    fontFamily: 'Segoe UI, system-ui, sans-serif',
+  },
+  heading: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    margin: '0 0 10px',
+    fontSize: '0.78rem',
+    fontWeight: '700',
+    color: '#2563eb',
+    textTransform: 'uppercase',
+    letterSpacing: '0.04em',
+  },
+  grid: {
+    display: 'grid',
+    gridTemplateColumns: 'auto 1fr',
+    columnGap: '14px',
+    rowGap: '6px',
+    alignItems: 'start',
+  },
+  label: {
+    fontSize: '0.78rem',
+    fontWeight: '600',
+    color: '#64748b',
+    whiteSpace: 'nowrap',
+  },
+  value: {
+    fontSize: '0.82rem',
+    color: '#1a1a1a',
+  },
+  original: {
+    fontSize: '0.75rem',
+    color: '#94a3b8',
+    fontWeight: '400',
+  },
+};
+
 export default function OfferItem({ offer }) {
   const [listing, setListing] = useState(null);
   const [buyer,   setBuyer]   = useState(null);
@@ -224,24 +269,92 @@ export default function OfferItem({ offer }) {
             </>
           )}
 
-          {offer.agreedPrice != null && (
-            <>
-              <span className={styles.metaLabel}>Agreed price</span>
-              <span className={styles.metaValue}>R {Number(offer.agreedPrice).toLocaleString('en-ZA')}</span>
-            </>
-          )}
-
-          {offer.tradeItem && (
-            <>
-              <span className={styles.metaLabel}>Trade offer</span>
-              <span className={styles.metaValue}>{offer.tradeItem}</span>
-            </>
-          )}
         </div>
 
         {listing?.description && (
           <p className={styles.description}>{listing.description}</p>
         )}
+
+        {/* ── Buyer's Offer Details ── */}
+        {(() => {
+          const PAYMENT_LABELS = {
+            full_online: 'Fully Online',
+            partial:     'Partial Online / Partial Cash',
+            cash:        'Full Cash on Delivery',
+            online:      'Fully Online',
+            cod:         'Full Cash on Delivery',
+          };
+
+          const hasPriceChange = offer.agreedPrice != null && Number(offer.agreedPrice) !== Number(listing?.price);
+          const hasPayment     = (offer.paymentType || offer.paymentMethod) && offer.type !== 'trade';
+          const hasTrade       = !!offer.tradeItem;
+          const hasTerms       = !!offer.terms;
+          const hasPartial     = offer.paymentType === 'partial' && offer.partialAmount != null;
+
+          // Always show this panel for any offer that has details worth showing
+          const showPanel = hasPriceChange || hasPayment || hasTrade || hasTerms || offer.agreedPrice != null;
+          if (!showPanel) return null;
+
+          return (
+            <div style={odStyles.box}>
+              <p style={odStyles.heading}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#2563eb" strokeWidth="2.5" strokeLinecap="round" style={{ flexShrink: 0 }}>
+                  <path d="M9 12l2 2 4-4"/><path d="M21 12A9 9 0 1 1 3 12a9 9 0 0 1 18 0z"/>
+                </svg>
+                Buyer's Offer Details
+              </p>
+              <div style={odStyles.grid}>
+
+                {offer.agreedPrice != null && (
+                  <>
+                    <span style={odStyles.label}>Offered price</span>
+                    <span style={{ ...odStyles.value, color: hasPriceChange ? '#16a34a' : '#1a1a1a', fontWeight: 600 }}>
+                      R {Number(offer.agreedPrice).toLocaleString('en-ZA')}
+                      {hasPriceChange && (
+                        <span style={odStyles.original}> (listed: R {Number(listing.price).toLocaleString('en-ZA')})</span>
+                      )}
+                    </span>
+                  </>
+                )}
+
+                {hasPayment && (
+                  <>
+                    <span style={odStyles.label}>Payment method</span>
+                    <span style={odStyles.value}>
+                      {PAYMENT_LABELS[offer.paymentType] || PAYMENT_LABELS[offer.paymentMethod] || offer.paymentType || offer.paymentMethod}
+                    </span>
+                  </>
+                )}
+
+                {hasPartial && (
+                  <>
+                    <span style={odStyles.label}>Online portion</span>
+                    <span style={{ ...odStyles.value, color: '#2563eb' }}>R {Number(offer.partialAmount).toLocaleString('en-ZA')}</span>
+                    <span style={odStyles.label}>Cash portion</span>
+                    <span style={{ ...odStyles.value, color: '#b45309' }}>
+                      R {Math.max(0, Number(offer.agreedPrice ?? listing?.price ?? 0) - Number(offer.partialAmount)).toLocaleString('en-ZA')}
+                    </span>
+                  </>
+                )}
+
+                {hasTrade && (
+                  <>
+                    <span style={odStyles.label}>Trade offer</span>
+                    <span style={odStyles.value}>{offer.tradeItem}</span>
+                  </>
+                )}
+
+                {hasTerms && (
+                  <>
+                    <span style={odStyles.label}>Terms note</span>
+                    <span style={{ ...odStyles.value, fontStyle: 'italic', color: '#555' }}>{offer.terms}</span>
+                  </>
+                )}
+
+              </div>
+            </div>
+          );
+        })()}
       </div>
 
       {/* Actions */}
