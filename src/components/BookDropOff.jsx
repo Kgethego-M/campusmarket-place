@@ -27,6 +27,7 @@ export default function BookDropOff() {
   const [transaction, setTransaction] = useState(null);
   const [listing, setListing] = useState(null);
   const [buyerName, setBuyerName] = useState("");
+  const [paymentMethod, setPaymentMethod] = useState(null);
 
   const [selectedDate, setSelectedDate] = useState("");
   const [selectedTimeSlot, setSelectedTimeSlot] = useState("");
@@ -104,6 +105,7 @@ export default function BookDropOff() {
       }
 
       setTransaction(transactionData);
+      setPaymentMethod(transactionData.paymentMethod || "unknown");
 
       // Get listing details
       const listingSnap = await getDoc(doc(db, "listings", transactionData.listingId));
@@ -215,6 +217,20 @@ export default function BookDropOff() {
     }
   }
 
+  // Helper to get payment message
+  const getPaymentMessage = () => {
+    const price = listing?.price || "0";
+    if (paymentMethod === "online") {
+      return `✅ The buyer has paid R${price} online.`;
+    } else if (paymentMethod === "cod") {
+      return `💰 The buyer will pay R${price} cash on delivery.`;
+    } else if (paymentMethod === "partial") {
+      return `💳 The buyer will pay partially online and partially cash on delivery. Please confirm details with the buyer.`;
+    } else {
+      return `💵 Transaction amount: R${price}. Please confirm payment method with the buyer before proceeding.`;
+    }
+  };
+
   if (loading) {
     return (
       <>
@@ -270,9 +286,12 @@ export default function BookDropOff() {
           <p style={{ margin: "4px 0" }}><strong>Item:</strong> {listing?.title || "Loading..."}</p>
           <p style={{ margin: "4px 0" }}><strong>Price:</strong> R{listing?.price || "0"}</p>
           <p style={{ margin: "4px 0" }}><strong>Status:</strong> {transaction?.status}</p>
+          {paymentMethod && (
+            <p style={{ margin: "4px 0" }}><strong>Payment method:</strong> {paymentMethod}</p>
+          )}
         </div>
 
-        {/* Payment confirmation */}
+        {/* Payment confirmation - dynamic based on paymentMethod */}
         <div style={{
           backgroundColor: "#e8f5e9",
           padding: "14px 16px",
@@ -281,7 +300,9 @@ export default function BookDropOff() {
           border: "1px solid #4caf50",
           color: "#2d6a4f"
         }}>
-           The buyer has paid R{listing?.price || "0"} online. Please confirm this amount is correct before proceeding.
+          {getPaymentMessage()}
+          <br />
+          <small>Please confirm this is correct before proceeding.</small>
         </div>
 
         {/* Date picker */}
