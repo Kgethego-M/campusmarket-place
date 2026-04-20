@@ -16,3 +16,6 @@ As a student, I want to book a trade facility drop-off slot so that I can secure
 
 ## US16 — Leave Rating and Review
 As a student, I want to leave a rating and review after a transaction so that others can evaluate trustworthiness.
+
+## US23 - Build Role-Based Dashboards and Profile Views
+As a user, I want role-based dashboards and profile views so that students, staff, and admins can manage their marketplace activities efficiently.

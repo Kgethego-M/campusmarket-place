@@ -2,7 +2,7 @@
 
 ## Sprint 2
 
-### US-D1 — Student Dashboard & Profile
+### US23-D1 — Student Dashboard & Profile
 
 **Test 1: Student dashboard loads**
 - **Given** a logged-in student opens their dashboard
@@ -14,7 +14,7 @@
 - **When** they click the seller's name
 - **Then** the seller's public profile opens showing rating and listings
 
-### US-D2 — Staff Dashboard & Profile
+### US23-D2 — Staff Dashboard & Profile
 
 **Test 1: Staff dashboard loads**
 - **Given** a logged-in staff member opens their dashboard
@@ -26,7 +26,7 @@
 - **When** they navigate to the URL
 - **Then** they are shown the AccessDenied page
 
-### US-D3 — Admin Dashboard & Profile
+### US23-D3 — Admin Dashboard & Profile
 
 **Test 1: Admin dashboard loads**
 - **Given** a logged-in admin opens their dashboard
