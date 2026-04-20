@@ -1,42 +1,49 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { db, auth } from "../firebase.js";
-import { doc, getDoc, addDoc, collection, query, where, getDocs, updateDoc, serverTimestamp } from "firebase/firestore";
+import {
+  doc, getDoc, addDoc, collection,
+  query, where, getDocs, updateDoc, serverTimestamp,
+} from "firebase/firestore";
 import NavBar from "./NavBarTemp.jsx";
+import styles from "./BookDropOff.module.css";
 
 const TIME_SLOTS = [
-  "09:00 - 10:00",
-  "10:00 - 11:00",
-  "11:00 - 12:00",
-  "12:00 - 13:00",
-  "13:00 - 14:00",
-  "14:00 - 15:00",
-  "15:00 - 16:00",
+  "09:00 - 10:00","10:00 - 11:00","11:00 - 12:00","12:00 - 13:00",
+  "13:00 - 14:00","14:00 - 15:00","15:00 - 16:00",
 ];
+
+function formatPrice(value) {
+  const num = Number(String(value ?? "0").replace(/\s/g, ""));
+  if (isNaN(num)) return "0";
+  return num.toLocaleString("en-ZA", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  });
+}
 
 export default function BookDropOff() {
   const { transactionId } = useParams();
-  const navigate = useNavigate();
+  const navigate          = useNavigate();
 
-  const [loading, setLoading] = useState(true);
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState("");
-  const [currentUser, setCurrentUser] = useState(null);
+  const [loading,          setLoading]          = useState(true);
+  const [submitting,       setSubmitting]        = useState(false);
+  const [error,            setError]             = useState("");
+  const [transaction,      setTransaction]       = useState(null);
+  const [listing,          setListing]           = useState(null);
+  const [buyerName,        setBuyerName]         = useState("");
+  const [paymentMethod,    setPaymentMethod]     = useState(null);
+  const [selectedDate,     setSelectedDate]      = useState("");
+  const [selectedTimeSlot, setSelectedTimeSlot]  = useState("");
+  const [availableSlots,   setAvailableSlots]    = useState(TIME_SLOTS);
+  const [minDate,          setMinDate]           = useState("");
 
-  const [transaction, setTransaction] = useState(null);
-  const [listing, setListing] = useState(null);
-  const [buyerName, setBuyerName] = useState("");
-  const [paymentMethod, setPaymentMethod] = useState(null);
-
-  const [selectedDate, setSelectedDate] = useState("");
-  const [selectedTimeSlot, setSelectedTimeSlot] = useState("");
-  const [availableSlots, setAvailableSlots] = useState(TIME_SLOTS);
-  const [minDate, setMinDate] = useState("");
+  const fetchedRef = useRef(false);
 
   useEffect(() => {
-    const unsubscribe = auth.onAuthStateChanged((user) => setCurrentUser(user));
-    return () => unsubscribe();
-  }, []);
+  document.body.style.background = "#f5f7fa";
+  return () => { document.body.style.background = ""; };
+}, []);
 
   useEffect(() => {
     const tomorrow = new Date();
@@ -44,64 +51,47 @@ export default function BookDropOff() {
     setMinDate(tomorrow.toISOString().split("T")[0]);
   }, []);
 
-  useEffect(() => {
-    if (currentUser && transactionId) fetchTransaction();
-    else if (currentUser === null && !loading) setError("Please log in to book a drop-off");
-  }, [currentUser, transactionId]);
-
-  useEffect(() => {
-    if (selectedDate) checkAvailableSlots(selectedDate);
-  }, [selectedDate]);
-
-  async function fetchTransaction() {
+  const fetchTransaction = useCallback(async (uid) => {
+    if (fetchedRef.current) return;
+    fetchedRef.current = true;
     setLoading(true);
     setError("");
 
     try {
-      const transactionRef = doc(db, "transactions", transactionId);
-      const transactionSnap = await getDoc(transactionRef);
-      if (!transactionSnap.exists()) {
-        setError("Transaction not found");
-        setLoading(false);
-        return;
-      }
+      const transSnap = await getDoc(doc(db, "transactions", transactionId));
 
-      const transactionData = { id: transactionSnap.id, ...transactionSnap.data() };
+      if (!transSnap.exists())
+        return setError("Transaction not found");
 
-      if (transactionData.sellerId !== currentUser.uid) {
-        setError("You can only book drop-off for your own sales");
-        setLoading(false);
-        return;
-      }
-      if (transactionData.status !== "accepted") {
-        setError(`Transaction must be accepted. Current status: ${transactionData.status}`);
-        setLoading(false);
-        return;
-      }
-      if (transactionData.bookingId) {
-        setError("A drop-off has already been booked for this transaction.");
-        setLoading(false);
-        return;
-      }
+      const txn = { id: transSnap.id, ...transSnap.data() };
 
-      setTransaction(transactionData);
+      if (txn.sellerId !== uid)
+        return setError("You can only book drop-off for your own sales");
+      if (txn.status !== "accepted")
+        return setError(`Transaction must be accepted. Current status: ${txn.status}`);
+      if (txn.bookingId)
+        return setError("A drop-off has already been booked for this transaction.");
 
-      // Derive payment method from paymentMethod or paymentType
-      let pm = transactionData.paymentMethod;
-      if (!pm && transactionData.paymentType) {
-        if (transactionData.paymentType === 'full_online') pm = 'online';
-        else if (transactionData.paymentType === 'cash') pm = 'cod';
-        else if (transactionData.paymentType === 'partial') pm = 'partial';
+      setTransaction(txn);
+
+      let pm = txn.paymentMethod;
+      if (!pm && txn.paymentType) {
+        pm = txn.paymentType === "full_online" ? "online"
+           : txn.paymentType === "cash"        ? "cod"
+           : txn.paymentType === "partial"     ? "partial"
+           : "unknown";
       }
-      setPaymentMethod(pm || 'unknown');
+      setPaymentMethod(pm ?? "unknown");
 
-      const listingSnap = await getDoc(doc(db, "listings", transactionData.listingId));
+      const [listingSnap, buyerSnap] = await Promise.all([
+        getDoc(doc(db, "listings", txn.listingId)),
+        getDoc(doc(db, "users",    txn.buyerId)),
+      ]);
+
       if (listingSnap.exists()) setListing({ id: listingSnap.id, ...listingSnap.data() });
-
-      const buyerSnap = await getDoc(doc(db, "users", transactionData.buyerId));
       if (buyerSnap.exists()) {
-        const buyer = buyerSnap.data();
-        setBuyerName(buyer.displayName || buyer.name || buyer.firstName || "Buyer");
+        const b = buyerSnap.data();
+        setBuyerName(b.displayName || b.name || b.firstName || "Buyer");
       }
     } catch (err) {
       console.error(err);
@@ -109,64 +99,73 @@ export default function BookDropOff() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [transactionId]);
 
-  async function checkAvailableSlots(date) {
-    try {
-      const q = query(collection(db, "bookings"), where("date", "==", date));
-      const snapshot = await getDocs(q);
-      const booked = snapshot.docs.map(d => d.data().timeSlot);
-      const available = TIME_SLOTS.filter(slot => !booked.includes(slot));
-      setAvailableSlots(available);
-      if (selectedTimeSlot && !available.includes(selectedTimeSlot)) setSelectedTimeSlot("");
-    } catch (err) {
-      console.error("Error checking slots:", err);
-    }
-  }
+  useEffect(() => {
+    const unsub = auth.onAuthStateChanged((user) => {
+      if (user) fetchTransaction(user.uid);
+      else { setLoading(false); setError("Please log in to book a drop-off"); }
+    });
+    return () => unsub();
+  }, [fetchTransaction]);
+
+  useEffect(() => {
+    if (!selectedDate) return;
+    (async () => {
+      try {
+        const snap   = await getDocs(query(
+          collection(db, "bookings"), where("date", "==", selectedDate)
+        ));
+        const booked = snap.docs.map(d => d.data().timeSlot);
+        const avail  = TIME_SLOTS.filter(s => !booked.includes(s));
+        setAvailableSlots(avail);
+        if (selectedTimeSlot && !avail.includes(selectedTimeSlot)) setSelectedTimeSlot("");
+      } catch (err) {
+        console.error("Slot check failed:", err);
+      }
+    })();
+  }, [selectedDate]);
 
   async function handleSubmit(e) {
     e.preventDefault();
-    if (!selectedDate) return setError("Please select a date");
+    if (!selectedDate)     return setError("Please select a date");
     if (!selectedTimeSlot) return setError("Please select a time slot");
 
     setSubmitting(true);
     setError("");
 
     try {
-      const latestSnap = await getDoc(doc(db, "transactions", transaction.id));
-      if (latestSnap.data().bookingId) {
-        setError("This transaction has already been booked by someone else.");
-        setSubmitting(false);
-        return;
-      }
+      const latest = await getDoc(doc(db, "transactions", transaction.id));
+      if (latest.data().bookingId)
+        return setError("This transaction was already booked by someone else.");
 
-      const bookingData = {
+      const bookingRef = await addDoc(collection(db, "bookings"), {
         transactionId: transaction.id,
-        listingId: transaction.listingId,
-        sellerId: transaction.sellerId,
-        buyerId: transaction.buyerId,
-        date: selectedDate,
-        timeSlot: selectedTimeSlot,
-        status: "scheduled",
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      };
-      const bookingRef = await addDoc(collection(db, "bookings"), bookingData);
-
-      await updateDoc(doc(db, "transactions", transaction.id), {
-        bookingId: bookingRef.id,
-        dropOffStatus: "scheduled",
-        dropOffDate: selectedDate,
-        dropOffTimeSlot: selectedTimeSlot,
+        listingId:     transaction.listingId,
+        sellerId:      transaction.sellerId,
+        buyerId:       transaction.buyerId,
+        date:          selectedDate,
+        timeSlot:      selectedTimeSlot,
+        status:        "scheduled",
+        createdAt:     serverTimestamp(),
+        updatedAt:     serverTimestamp(),
       });
 
-      await addDoc(collection(db, "notifications"), {
-        userId: transaction.sellerId,
-        title: "Drop-off Booked",
-        message: `Your drop-off for ${listing?.title} is scheduled on ${selectedDate} at ${selectedTimeSlot}.`,
-        read: false,
-        createdAt: serverTimestamp(),
-      });
+      await Promise.all([
+        updateDoc(doc(db, "transactions", transaction.id), {
+          bookingId:       bookingRef.id,
+          dropOffStatus:   "scheduled",
+          dropOffDate:     selectedDate,
+          dropOffTimeSlot: selectedTimeSlot,
+        }),
+        addDoc(collection(db, "notifications"), {
+          userId:    transaction.sellerId,
+          title:     "Drop-off booked",
+          message:   `Your drop-off for ${listing?.title} is scheduled on ${selectedDate} at ${selectedTimeSlot}.`,
+          read:      false,
+          createdAt: serverTimestamp(),
+        }),
+      ]);
 
       navigate("/trade-facility");
     } catch (err) {
@@ -177,68 +176,194 @@ export default function BookDropOff() {
     }
   }
 
-  const getPaymentMessage = () => {
-    const price = listing?.price || "0";
+  function getPaymentMessage() {
+    const price = formatPrice(listing?.price);
     switch (paymentMethod) {
-      case "online": return `✅ The buyer has paid R${price} online.`;
-      case "cod": return `💰 The buyer will pay R${price} cash on delivery.`;
-      case "partial": return `💳 The buyer will pay partially online and partially cash on delivery. Please confirm details with the buyer.`;
-      default: return `💵 Transaction amount: R${price}. Please confirm payment method with the buyer before proceeding.`;
+      case "online":  return `Buyer paid R${price} online — no cash needed at drop-off.`;
+      case "cod":     return `Buyer pays R${price} cash on delivery. Collect at the facility.`;
+      case "partial": return `Partial online + cash payment. Confirm the split with the buyer before dropping off.`;
+      default:        return `Transaction amount: R${price}. Confirm payment details with the buyer.`;
     }
-  };
+  }
 
-  if (loading) return <><NavBar /><div style={{ padding: "40px", textAlign: "center" }}>Loading transaction details...</div></>;
-  if (error) return (
-    <>
-      <NavBar />
-      <div style={{ padding: "40px", textAlign: "center" }}>
-        <h1>Book Drop-Off</h1>
-        <p style={{ color: "red" }}>{error}</p>
-        <button onClick={() => navigate("/trade-facility")} style={{ padding: "10px 20px", marginTop: "16px", backgroundColor: "#4a90d9", color: "white", border: "none", borderRadius: "8px", cursor: "pointer" }}>Back to Trade Facility</button>
-      </div>
-    </>
-  );
+  // ── Skeleton ─────────────────────────────────────────────────
+  if (loading) {
+    return (
+      <>
+        <NavBar />
+        <div className={styles.page}>
+          <div className={styles.skeletonHeader}>
+            <div className={`${styles.shimmer} ${styles.skeletonBlock}`}
+                 style={{ height: 28, marginBottom: 10, maxWidth: 280 }} />
+            <div className={`${styles.shimmer} ${styles.skeletonBlock}`}
+                 style={{ height: 14, maxWidth: 340 }} />
+          </div>
+          <div className={`${styles.shimmer} ${styles.skeletonBlock}`}
+               style={{ height: 110, marginBottom: 14, borderRadius: 14 }} />
+          <div className={`${styles.shimmer} ${styles.skeletonBlock}`}
+               style={{ height: 50,  marginBottom: 24, borderRadius: 10 }} />
+          <div className={`${styles.shimmer} ${styles.skeletonBlock}`}
+               style={{ height: 44,  marginBottom: 16, borderRadius: 9 }} />
+          <div className={`${styles.shimmer} ${styles.skeletonBlock}`}
+               style={{ height: 44,  marginBottom: 24, borderRadius: 9 }} />
+          <div className={`${styles.shimmer} ${styles.skeletonBlock}`}
+               style={{ height: 44,  borderRadius: 9 }} />
+        </div>
+      </>
+    );
+  }
 
+  // ── Error state ───────────────────────────────────────────────
+  if (error && !transaction) {
+    return (
+      <>
+        <NavBar />
+        <div className={styles.page}>
+          <div className={styles.errorBox}>
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none"
+                 stroke="currentColor" strokeWidth="1.5">
+              <circle cx="12" cy="12" r="10"/>
+              <line x1="12" y1="8" x2="12" y2="12"/>
+              <line x1="12" y1="16" x2="12.01" y2="16"/>
+            </svg>
+            <p style={{ margin: 0 }}>{error}</p>
+            <button className={styles.cancelBtn}
+                    style={{ maxWidth: 200 }}
+                    onClick={() => navigate("/trade-facility")}>
+              Back to Trade Facility
+            </button>
+          </div>
+        </div>
+      </>
+    );
+  }
+
+  // ── Main form ─────────────────────────────────────────────────
   return (
     <>
       <NavBar />
-      <div style={{ maxWidth: "600px", margin: "0 auto", padding: "40px 20px", fontFamily: "'Segoe UI', sans-serif" }}>
-        <h1 style={{ fontSize: "26px", fontWeight: "700", marginBottom: "6px" }}>Accept Offer & Book Drop-Off</h1>
-        <p style={{ color: "#666", marginBottom: "24px" }}>Accept {buyerName}'s offer and schedule when you'll drop off the item.</p>
-
-        <div style={{ backgroundColor: "#f8f9fa", padding: "16px", borderRadius: "12px", marginBottom: "20px", border: "1px solid #e0e0e0" }}>
-          <p><strong>Buyer:</strong> {buyerName}</p>
-          <p><strong>Item:</strong> {listing?.title || "Loading..."}</p>
-          <p><strong>Price:</strong> R{listing?.price || "0"}</p>
-          <p><strong>Status:</strong> {transaction?.status}</p>
-          <p><strong>Payment method:</strong> {paymentMethod}</p>
+      <div className={styles.page}>
+        <div className={styles.pageHeader}>
+          <button className={styles.backLink}
+                  onClick={() => navigate("/trade-facility")}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+                 stroke="currentColor" strokeWidth="2">
+              <polyline points="15 18 9 12 15 6"/>
+            </svg>
+            Trade Facility
+          </button>
+          <h1 className={styles.heading}>Accept offer &amp; book drop-off</h1>
+          <p className={styles.subheading}>
+            Schedule when you'll drop off the item for {buyerName}.
+          </p>
         </div>
 
-        <div style={{ backgroundColor: "#e8f5e9", padding: "14px 16px", borderRadius: "12px", marginBottom: "24px", border: "1px solid #4caf50", color: "#2d6a4f" }}>
+        <div className={styles.summaryCard}>
+          <div className={styles.summaryImgWrap}>
+            {listing?.photos?.[0]
+              ? <img src={listing.photos[0]} alt={listing.title}
+                     className={styles.summaryImg} />
+              : <div className={styles.summaryImgPlaceholder}>
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none"
+                       stroke="#9ca3af" strokeWidth="1.5">
+                    <rect x="3" y="3" width="18" height="18" rx="2"/>
+                    <circle cx="8.5" cy="8.5" r="1.5"/>
+                    <polyline points="21 15 16 10 5 21"/>
+                  </svg>
+                </div>
+            }
+          </div>
+          <div className={styles.summaryInfo}>
+            <p className={styles.summaryTitle}>{listing?.title ?? "Loading…"}</p>
+            <div className={styles.summaryMeta}>
+              <span className={styles.summaryPrice}>
+                R{formatPrice(listing?.price)}
+              </span>
+              <span className={styles.summaryDot}>·</span>
+              <span className={styles.summaryBuyer}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
+                     stroke="currentColor" strokeWidth="2">
+                  <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/>
+                  <circle cx="12" cy="7" r="4"/>
+                </svg>
+                {buyerName}
+              </span>
+            </div>
+          </div>
+          <span className={styles.statusChip}>{transaction?.status}</span>
+        </div>
+
+        <div className={styles.paymentNotice}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+               stroke="currentColor" strokeWidth="2">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+          </svg>
           {getPaymentMessage()}
-          <br /><small>Please confirm this is correct before proceeding.</small>
         </div>
 
-        <div style={{ marginBottom: "18px" }}>
-          <label style={{ fontWeight: "600", display: "block", marginBottom: "6px" }}>Select Drop-off Date</label>
-          <input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} min={minDate} required style={{ width: "100%", padding: "10px 14px", borderRadius: "8px", border: "1px solid #ccd6e0", fontSize: "14px", boxSizing: "border-box" }} />
-        </div>
+        <form className={styles.form} onSubmit={handleSubmit}>
+          <div className={styles.fieldGroup}>
+            <label className={styles.label}>Drop-off date</label>
+            <input
+              type="date"
+              className={styles.input}
+              value={selectedDate}
+              onChange={e => setSelectedDate(e.target.value)}
+              min={minDate}
+              required
+            />
+          </div>
 
-        <div style={{ marginBottom: "24px" }}>
-          <label style={{ fontWeight: "600", display: "block", marginBottom: "6px" }}>Select Time Slot</label>
-          <select value={selectedTimeSlot} onChange={(e) => setSelectedTimeSlot(e.target.value)} disabled={!selectedDate} required style={{ width: "100%", padding: "10px 14px", borderRadius: "8px", border: "1px solid #ccd6e0", fontSize: "14px", backgroundColor: "white", boxSizing: "border-box" }}>
-            <option value="">Select a time slot</option>
-            {availableSlots.map(slot => <option key={slot} value={slot}>{slot}</option>)}
-          </select>
-          {selectedDate && availableSlots.length === 0 && <p style={{ color: "red", marginTop: "6px", fontSize: "13px" }}>No available slots for this date. Please choose another date.</p>}
-        </div>
+          <div className={styles.fieldGroup}>
+            <label className={styles.label}>Time slot</label>
+            <select
+              className={styles.input}
+              value={selectedTimeSlot}
+              onChange={e => setSelectedTimeSlot(e.target.value)}
+              disabled={!selectedDate}
+              required
+            >
+              <option value="">Select a time slot</option>
+              {availableSlots.map(s => (
+                <option key={s} value={s}>{s}</option>
+              ))}
+            </select>
+            {selectedDate && availableSlots.length === 0 && (
+              <p className={styles.noSlots}>
+                No slots available for this date — please choose another.
+              </p>
+            )}
+          </div>
 
-        {error && <div style={{ backgroundColor: "#fdecea", border: "1px solid #f5c6c6", borderRadius: "8px", padding: "12px", marginBottom: "16px", color: "#c0392b", fontSize: "14px" }}>⚠️ {error}</div>}
+          {error && (
+            <div className={styles.inlineError}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+                   stroke="currentColor" strokeWidth="2">
+                <circle cx="12" cy="12" r="10"/>
+                <line x1="12" y1="8" x2="12" y2="12"/>
+                <line x1="12" y1="16" x2="12.01" y2="16"/>
+              </svg>
+              {error}
+            </div>
+          )}
 
-        <div style={{ display: "flex", gap: "12px" }}>
-          <button type="button" onClick={() => navigate("/trade-facility")} style={{ flex: 1, padding: "12px", backgroundColor: "#6c757d", color: "white", border: "none", borderRadius: "8px", cursor: "pointer", fontWeight: "600" }}>Cancel</button>
-          <button onClick={handleSubmit} disabled={submitting || !selectedDate || !selectedTimeSlot} style={{ flex: 2, padding: "12px", backgroundColor: submitting ? "#aaa" : "#27ae60", color: "white", border: "none", borderRadius: "8px", cursor: submitting ? "not-allowed" : "pointer", fontWeight: "600" }}>{submitting ? "Booking..." : "Accept & Book Drop-off"}</button>
-        </div>
+          <div className={styles.actions}>
+            <button type="button" className={styles.cancelBtn}
+                    onClick={() => navigate("/trade-facility")}>
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className={styles.submitBtn}
+              disabled={submitting || !selectedDate || !selectedTimeSlot}
+            >
+              {submitting
+                ? <><span className={styles.spinner} /> Booking…</>
+                : "Accept & book drop-off"
+              }
+            </button>
+          </div>
+        </form>
       </div>
     </>
   );
