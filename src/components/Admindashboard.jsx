@@ -2,42 +2,45 @@ import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { auth, db } from "../firebase";
 import { signOut, onAuthStateChanged } from "firebase/auth";
-import { doc, getDoc, collection, getDocs, query, orderBy, updateDoc, where, setDoc, deleteDoc } from "firebase/firestore";
+import {
+    doc, getDoc, collection, getDocs, query,
+    orderBy, updateDoc, where, setDoc, deleteDoc,
+} from "firebase/firestore";
 import styles from "./Admindashboard.module.css";
 import { validateFacilityConfig, generateTimeSlots, getTotalCapacity } from "../utils/facilityConfig.utils";
+import UtilisationReport from "./UtilisationReport.jsx";
 
 export default function AdminDashboard() {
-    const navigate = useNavigate();
-    const dropdownRef = useRef(null);
+    const navigate     = useNavigate();
+    const dropdownRef  = useRef(null);
 
-    const [activeTab, setActiveTab] = useState("users");
-    const [dropdownOpen, setDropdownOpen] = useState(false);
-    const [isLoggingOut, setIsLoggingOut] = useState(false);
-    const [userSearch, setUserSearch] = useState("");
+    const [activeTab,     setActiveTab]     = useState("users");
+    const [dropdownOpen,  setDropdownOpen]  = useState(false);
+    const [isLoggingOut,  setIsLoggingOut]  = useState(false);
+    const [userSearch,    setUserSearch]    = useState("");
 
-    const [adminUser, setAdminUser] = useState({ name: "Admin", email: "", photoURL: "", initials: "A" });
-    const [stats, setStats] = useState({ totalUsers: 0, openReports: 0, transactions: 0, revenue: 0 });
-    const [pendingStaff, setPendingStaff] = useState([]);
-    const [allUsers, setAllUsers] = useState([]);
-    const [listings, setListings] = useState([]);
-    const [loading, setLoading] = useState(true);
+    const [adminUser,     setAdminUser]     = useState({ name: "Admin", email: "", photoURL: "", initials: "A" });
+    const [stats,         setStats]         = useState({ totalUsers: 0, openReports: 0, transactions: 0, revenue: 0 });
+    const [pendingStaff,  setPendingStaff]  = useState([]);
+    const [allUsers,      setAllUsers]      = useState([]);
+    const [listings,      setListings]      = useState([]);
+    const [loading,       setLoading]       = useState(true);
 
-    // ── Facility config state ───────────────────────────────────────────────
+    // ── Facility config state ──────────────────────────────────────
     const [facilityConfig, setFacilityConfig] = useState({
-        openTime: "09:00",
-        closeTime: "16:00",
+        openTime:     "09:00",
+        closeTime:    "16:00",
         slotsPerHour: 1,
     });
-    const [configLoading, setConfigLoading]   = useState(false);
-    const [configSaving,  setConfigSaving]    = useState(false);
-    const [configError,   setConfigError]     = useState("");
-    const [configSuccess, setConfigSuccess]   = useState("");
+    const [configLoading,  setConfigLoading]  = useState(false);
+    const [configSaving,   setConfigSaving]   = useState(false);
+    const [configError,    setConfigError]    = useState("");
+    const [configSuccess,  setConfigSuccess]  = useState("");
 
-    // ── Auth guard + load admin profile ────────────────────────────────────
+    // ── Auth guard + load admin profile ───────────────────────────
     useEffect(() => {
         const unsub = onAuthStateChanged(auth, async (user) => {
             if (!user) { navigate("/login"); return; }
-
             try {
                 const snap = await getDoc(doc(db, "users", user.uid));
                 const data = snap.exists() ? snap.data() : {};
@@ -46,22 +49,22 @@ export default function AdminDashboard() {
                 const fn = data.firstName || user.displayName?.split(" ")[0] || "Admin";
                 const ln = data.lastName  || user.displayName?.split(" ").slice(1).join(" ") || "";
                 setAdminUser({
-                    name: `${fn} ${ln}`.trim(),
-                    email: data.email || user.email,
+                    name:     `${fn} ${ln}`.trim(),
+                    email:    data.email || user.email,
                     photoURL: data.photoURL || user.photoURL || "",
-                    initials: `${fn[0] || "A"}${ln[0] || ""}`.toUpperCase()
+                    initials: `${fn[0] || "A"}${ln[0] || ""}`.toUpperCase(),
                 });
             } catch (e) { console.error(e); }
         });
         return () => unsub();
     }, [navigate]);
 
-    // ── Fetch dashboard data ────────────────────────────────────────────────
+    // ── Fetch dashboard data ───────────────────────────────────────
     useEffect(() => {
         async function load() {
             try {
                 const usersSnap = await getDocs(collection(db, "users"));
-                const users = usersSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+                const users     = usersSnap.docs.map(d => ({ id: d.id, ...d.data() }));
                 setAllUsers(users);
 
                 const pending = users.filter(u => u.userType === "staff" && !u.approved);
@@ -71,15 +74,15 @@ export default function AdminDashboard() {
                 const listData = listSnap.docs.map(d => ({ id: d.id, ...d.data() }));
                 setListings(listData);
 
-                const sold = listData.filter(l => l.status === "sold");
+                const sold    = listData.filter(l => l.status === "sold");
                 const revenue = sold.reduce((sum, l) => sum + (Number(l.price) || 0), 0);
                 const reports = users.filter(u => u.suspended).length;
 
                 setStats({
-                    totalUsers: users.length,
-                    openReports: reports,
+                    totalUsers:   users.length,
+                    openReports:  reports,
                     transactions: sold.length,
-                    revenue: revenue
+                    revenue,
                 });
             } catch (e) {
                 console.error("Dashboard load error:", e);
@@ -90,7 +93,7 @@ export default function AdminDashboard() {
         load();
     }, []);
 
-    // ── Load facility config from Firestore when settings tab opens ─────────
+    // ── Load facility config when settings tab opens ───────────────
     useEffect(() => {
         if (activeTab !== "settings") return;
         (async () => {
@@ -115,17 +118,13 @@ export default function AdminDashboard() {
         })();
     }, [activeTab]);
 
-    // ── Save facility config to Firestore ───────────────────────────────────
+    // ── Save facility config ───────────────────────────────────────
     async function handleSaveConfig(e) {
         e.preventDefault();
         setConfigError("");
         setConfigSuccess("");
 
-        const parsed = {
-            ...facilityConfig,
-            slotsPerHour: Number(facilityConfig.slotsPerHour),
-        };
-
+        const parsed = { ...facilityConfig, slotsPerHour: Number(facilityConfig.slotsPerHour) };
         const { valid, error } = validateFacilityConfig(parsed);
         if (!valid) { setConfigError(error); return; }
 
@@ -146,7 +145,7 @@ export default function AdminDashboard() {
         }
     }
 
-    // ── Actions ─────────────────────────────────────────────────────────────
+    // ── Actions ────────────────────────────────────────────────────
     const approveStaff = async (userId) => {
         await updateDoc(doc(db, "users", userId), { approved: true });
         setPendingStaff(prev => prev.filter(u => u.id !== userId));
@@ -164,7 +163,7 @@ export default function AdminDashboard() {
         setAllUsers(prev => prev.map(u => u.id === userId ? { ...u, suspended: !suspended } : u));
         setStats(prev => ({
             ...prev,
-            openReports: !suspended ? prev.openReports + 1 : Math.max(0, prev.openReports - 1)
+            openReports: !suspended ? prev.openReports + 1 : Math.max(0, prev.openReports - 1),
         }));
     };
 
@@ -189,11 +188,9 @@ export default function AdminDashboard() {
         return () => document.removeEventListener("mousedown", handler);
     }, []);
 
-    const filteredUsers = allUsers.filter(u =>
+    const filteredUsers   = allUsers.filter(u =>
         `${u.firstName} ${u.lastName} ${u.email}`.toLowerCase().includes(userSearch.toLowerCase())
     );
-
-    // Derived preview values for the settings UI
     const previewSlots    = generateTimeSlots(facilityConfig.openTime, facilityConfig.closeTime);
     const previewCapacity = getTotalCapacity({ ...facilityConfig, slotsPerHour: Number(facilityConfig.slotsPerHour) });
 
@@ -218,9 +215,15 @@ export default function AdminDashboard() {
                 </div>
 
                 <div className={styles.navCenter}>
-                    <span className={styles.navBreadcrumb}>
+                    <span className={styles.navActive}>
                         <i className="fas fa-th-large" /> Dashboard
                     </span>
+                    <button
+                        className={styles.navAnalyticsLink}
+                        onClick={() => navigate("/admin/analytics")}
+                    >
+                        <i className="fas fa-chart-bar" /> Analytics
+                    </button>
                     <span className={styles.navHandle}>@{adminUser.name.split(" ")[0] || "Admin"}</span>
                 </div>
 
@@ -238,7 +241,7 @@ export default function AdminDashboard() {
                             onClick={() => !isLoggingOut && setDropdownOpen(v => !v)}
                             title={adminUser.name}
                         >
-                            <i className="fa-solid fa-bars"></i>
+                            <i className="fa-solid fa-bars" />
                         </button>
 
                         {dropdownOpen && !isLoggingOut && (
@@ -257,8 +260,7 @@ export default function AdminDashboard() {
                                     <i className="fas fa-cog" /> Settings
                                 </button>
                                 <div className={styles.ddDivider} />
-                                <button className={`${styles.ddItem} ${styles.ddLogout}`}
-                                    onClick={handleLogout}>
+                                <button className={`${styles.ddItem} ${styles.ddLogout}`} onClick={handleLogout}>
                                     <i className="fas fa-right-from-bracket" /> Logout
                                 </button>
                             </div>
@@ -271,17 +273,17 @@ export default function AdminDashboard() {
             <main className={styles.main}>
 
                 <div className={styles.pageTitle}>
-                    <h1>Admin DashBoard</h1>
+                    <h1>Admin Dashboard</h1>
                     <p>System management, moderation &amp; oversight</p>
                 </div>
 
-                {/* Stat cards */}
+                {/* ── Stat cards ── */}
                 <div className={styles.statsRow}>
                     {[
-                        { label: "Total Users",     value: stats.totalUsers,    icon: "fas fa-users" },
-                        { label: "Open Reports",    value: stats.openReports,   icon: "fas fa-flag" },
-                        { label: "Transactions",    value: stats.transactions,  icon: "fas fa-exchange-alt" },
-                        { label: "Revenue (Paid)",  value: `R ${stats.revenue.toLocaleString()}`, icon: "fas fa-wallet" },
+                        { label: "Total Users",    value: stats.totalUsers,                            icon: "fas fa-users" },
+                        { label: "Open Reports",   value: stats.openReports,                           icon: "fas fa-flag" },
+                        { label: "Transactions",   value: stats.transactions,                          icon: "fas fa-exchange-alt" },
+                        { label: "Revenue (Paid)", value: `R ${stats.revenue.toLocaleString()}`,       icon: "fas fa-wallet" },
                     ].map(({ label, value, icon }) => (
                         <div key={label} className={styles.statCard}>
                             <span className={styles.statLabel}>{label}</span>
@@ -291,12 +293,13 @@ export default function AdminDashboard() {
                     ))}
                 </div>
 
-                {/* Tabs */}
+                {/* ── Tabs ── */}
                 <div className={styles.tabs}>
                     {[
                         { id: "users",      icon: "fas fa-users",         label: "Users" },
                         { id: "moderation", icon: "fas fa-shield-alt",    label: "Moderation" },
                         { id: "payments",   icon: "fas fa-credit-card",   label: "Payments" },
+                        { id: "reports",    icon: "fas fa-calendar-alt",  label: "Reports" },
                         { id: "settings",   icon: "fas fa-cog",           label: "Settings" },
                     ].map(t => (
                         <button
@@ -371,13 +374,14 @@ export default function AdminDashboard() {
                                             }
                                         </div>
                                         <div className={styles.userInfo}>
-                                            <span className={styles.userName}>
-                                                {u.firstName} {u.lastName}
-                                            </span>
-                                            <span className={styles.userMeta}>
-                                                <i className="fas fa-star" style={{ color: "#fbbf24", fontSize: "0.65rem" }} />
-                                                {" "}{u.rating || 0} ({u.totalRatings || 0} Trades)
-                                            </span>
+                                            <span className={styles.userName}>{u.firstName} {u.lastName}</span>
+                                            {/* Only show rating for students, not for admin or staff */}
+                                            {(u.userType === "student" || !u.userType) && (
+                                                <span className={styles.userMeta}>
+                                                    <i className="fas fa-star" style={{ color: "#fbbf24", fontSize: "0.65rem" }} />
+                                                    {" "}{u.rating || 0} ({u.totalRatings || 0} Trades)
+                                                </span>
+                                            )}
                                         </div>
                                         <span className={styles.userType}>{u.userType || "Student"}</span>
                                         <button
@@ -422,17 +426,16 @@ export default function AdminDashboard() {
                                                 <button
                                                     className={styles.btnReject}
                                                     onClick={async () => {
-                                                        const isConfirmed = window.confirm(
-                                                            "Are you sure you want to remove this Listing? " +
-                                                            "This action is PERMANENT and cannot be undone. " +
-                                                            "Click OK to delete this item or CANCEL to keep."
+                                                        const ok = window.confirm(
+                                                            "Are you sure you want to remove this listing? " +
+                                                            "This action is PERMANENT and cannot be undone."
                                                         );
-                                                        if (!isConfirmed) return;
+                                                        if (!ok) return;
                                                         try {
                                                             await deleteDoc(doc(db, "listings", l.id));
                                                             setListings(prev => prev.filter(x => x.id !== l.id));
-                                                        } catch (error) {
-                                                            console.error("Error deleting listing:", error);
+                                                        } catch (err) {
+                                                            console.error("Error deleting listing:", err);
                                                             alert("Failed to delete listing. Please try again.");
                                                         }
                                                     }}
@@ -486,11 +489,18 @@ export default function AdminDashboard() {
                     </div>
                 )}
 
+                {/* ── REPORTS TAB (US20 — Utilisation Report) ── */}
+                {activeTab === "reports" && (
+                    <div className={styles.tabContent}>
+                        <div className={styles.card}>
+                            <UtilisationReport />
+                        </div>
+                    </div>
+                )}
+
                 {/* ── SETTINGS TAB ── */}
                 {activeTab === "settings" && (
                     <div className={styles.tabContent}>
-
-                        {/* ── Facility Hours & Capacity ── */}
                         <div className={styles.card}>
                             <h3 className={styles.cardTitle}>
                                 <i className="fas fa-clock" style={{ marginRight: 8, color: "#6AA6DA" }} />
@@ -504,9 +514,7 @@ export default function AdminDashboard() {
                                 </div>
                             ) : (
                                 <form className={styles.configForm} onSubmit={handleSaveConfig}>
-
                                     <div className={styles.configRow}>
-                                        {/* Open time */}
                                         <div className={styles.configField}>
                                             <label className={styles.configLabel}>
                                                 <i className="fas fa-door-open" /> Opening time
@@ -515,14 +523,11 @@ export default function AdminDashboard() {
                                                 type="time"
                                                 className={styles.configInput}
                                                 value={facilityConfig.openTime}
-                                                onChange={e => setFacilityConfig(prev => ({
-                                                    ...prev, openTime: e.target.value
-                                                }))}
+                                                onChange={e => setFacilityConfig(prev => ({ ...prev, openTime: e.target.value }))}
                                                 required
                                             />
                                         </div>
 
-                                        {/* Close time */}
                                         <div className={styles.configField}>
                                             <label className={styles.configLabel}>
                                                 <i className="fas fa-door-closed" /> Closing time
@@ -531,14 +536,11 @@ export default function AdminDashboard() {
                                                 type="time"
                                                 className={styles.configInput}
                                                 value={facilityConfig.closeTime}
-                                                onChange={e => setFacilityConfig(prev => ({
-                                                    ...prev, closeTime: e.target.value
-                                                }))}
+                                                onChange={e => setFacilityConfig(prev => ({ ...prev, closeTime: e.target.value }))}
                                                 required
                                             />
                                         </div>
 
-                                        {/* Slots per hour */}
                                         <div className={styles.configField}>
                                             <label className={styles.configLabel}>
                                                 <i className="fas fa-layer-group" /> Slots per hour
@@ -546,9 +548,7 @@ export default function AdminDashboard() {
                                             <select
                                                 className={styles.configInput}
                                                 value={facilityConfig.slotsPerHour}
-                                                onChange={e => setFacilityConfig(prev => ({
-                                                    ...prev, slotsPerHour: Number(e.target.value)
-                                                }))}
+                                                onChange={e => setFacilityConfig(prev => ({ ...prev, slotsPerHour: Number(e.target.value) }))}
                                             >
                                                 {[1, 2, 3, 4].map(n => (
                                                     <option key={n} value={n}>{n}</option>
@@ -557,7 +557,6 @@ export default function AdminDashboard() {
                                         </div>
                                     </div>
 
-                                    {/* Live preview */}
                                     {previewSlots.length > 0 && (
                                         <div className={styles.configPreview}>
                                             <p className={styles.configPreviewTitle}>
@@ -572,7 +571,6 @@ export default function AdminDashboard() {
                                         </div>
                                     )}
 
-                                    {/* Error / success feedback */}
                                     {configError && (
                                         <div className={styles.configError}>
                                             <i className="fas fa-exclamation-circle" /> {configError}
@@ -599,7 +597,6 @@ export default function AdminDashboard() {
                             )}
                         </div>
 
-                        {/* Placeholder for future settings */}
                         <div className={styles.card}>
                             <h3 className={styles.cardTitle}>
                                 <i className="fas fa-sliders-h" style={{ marginRight: 8, color: "#6AA6DA" }} />
@@ -609,13 +606,12 @@ export default function AdminDashboard() {
                                 Coming soon — configure allowed email domains, listing categories, and moderation rules.
                             </p>
                         </div>
-
                     </div>
                 )}
 
             </main>
 
-            {/* Logout overlay */}
+            {/* ── Logout overlay ── */}
             {isLoggingOut && (
                 <div className={styles.logoutOverlay}>
                     <div className={styles.logoutBox}>
