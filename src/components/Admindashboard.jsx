@@ -299,7 +299,7 @@ export default function AdminDashboard() {
                         { id: "users",      icon: "fas fa-users",         label: "Users" },
                         { id: "moderation", icon: "fas fa-shield-alt",    label: "Moderation" },
                         { id: "payments",   icon: "fas fa-credit-card",   label: "Payments" },
-                        { id: "reports",    icon: "fas fa-calendar-alt",  label: "Reports" },
+                        { id: "reports",    icon: "fas fa-calendar-alt",  label: " Utilisation Reports" },
                         { id: "settings",   icon: "fas fa-cog",           label: "Settings" },
                     ].map(t => (
                         <button

@@ -1,7 +1,6 @@
 /**
  * UtilisationReport.jsx
  * US20 — Trade Facility Utilisation Report
- * Renders inside the Admin Dashboard "Reports" tab.
  */
 
 import { useState, useEffect } from "react";
