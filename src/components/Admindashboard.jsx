@@ -11,21 +11,20 @@ export default function AdminDashboard() {
     const navigate     = useNavigate();
     const dropdownRef  = useRef(null);
 
-    const [activeTab,     setActiveTab]     = useState("users");
-    const [dropdownOpen,  setDropdownOpen]  = useState(false);
-    const [isLoggingOut,  setIsLoggingOut]  = useState(false);
-    const [userSearch,    setUserSearch]    = useState("");
+    const [activeTab, setActiveTab] = useState("users");
+    const [dropdownOpen, setDropdownOpen] = useState(false);
+    const [isLoggingOut, setIsLoggingOut] = useState(false);
+    const [userSearch, setUserSearch]       = useState("");
     const [listingSearch, setListingSearch] = useState("");
     const [reportSearch, setReportSearch]   = useState("");
 
-
-    const [adminUser,     setAdminUser]     = useState({ name: "Admin", email: "", photoURL: "", initials: "A" });
-    const [stats,         setStats]         = useState({ totalUsers: 0, openReports: 0, transactions: 0, revenue: 0 });
-    const [pendingStaff,  setPendingStaff]  = useState([]);
-    const [allUsers,      setAllUsers]      = useState([]);
-    const [listings,      setListings]      = useState([]);
+    const [adminUser, setAdminUser] = useState({ name: "Admin", email: "", photoURL: "", initials: "A" });
+    const [stats, setStats] = useState({ totalUsers: 0, openReports: 0, transactions: 0, revenue: 0 });
+    const [pendingStaff, setPendingStaff] = useState([]);
+    const [allUsers, setAllUsers] = useState([]);
+    const [listings, setListings]   = useState([]);
     const [reports, setReports]     = useState([]);
-    const [loading,       setLoading]       = useState(true);
+    const [loading, setLoading]     = useState(true);
 
     // ── Facility config state ──────────────────────────────────────
     const [facilityConfig, setFacilityConfig] = useState({
@@ -104,6 +103,7 @@ export default function AdminDashboard() {
     }, []);
 
     // ── Actions ─────────────────────────────────────────────────────────────
+
     // ── Load facility config when settings tab opens ───────────────
     useEffect(() => {
         if (activeTab !== "settings") return;
@@ -318,10 +318,13 @@ export default function AdminDashboard() {
                 <div className={styles.tabs}>
                     {[
                         { id: "users",      icon: "fas fa-users",       label: "Users" },
+                        { id: "suspended",  icon: "fas fa-ban",         label: "Suspended" },
                         { id: "moderation", icon: "fas fa-shield-alt",  label: "Moderation" },
                         { id: "reports",    icon: "fas fa-flag",        label: "Reports" },
                         { id: "payments",   icon: "fas fa-credit-card", label: "Payments" },
-                        { id: "suspended",  icon: "fas fa-ban",         label: "Suspended" },
+                        //{ id: "suspended",  icon: "fas fa-ban",         label: "Suspended" },
+                        { id: "utilisation",    icon: "fas fa-calendar-alt",  label: " Utilisation Reports" },
+                        { id: "settings",   icon: "fas fa-cog",           label: "Settings" },
                     ].map(t => (
                         <button
                             key={t.id}
@@ -679,6 +682,125 @@ export default function AdminDashboard() {
                                     ))}
                                 </div>
                             )}
+                        </div>
+                    </div>
+                )}
+                {/* ── REPORTS TAB (US20 — Utilisation Report) ── */}
+                {activeTab === "utilisation" && (
+                    <div className={styles.tabContent}>
+                        <div className={styles.card}>
+                            <UtilisationReport />
+                        </div>
+                    </div>
+                )}
+
+                {/* ── SETTINGS TAB ── */}
+                {activeTab === "settings" && (
+                    <div className={styles.tabContent}>
+                        <div className={styles.card}>
+                            <h3 className={styles.cardTitle}>
+                                <i className="fas fa-clock" style={{ marginRight: 8, color: "#6AA6DA" }} />
+                                Trade Facility Operating Hours &amp; Capacity
+                            </h3>
+
+                            {configLoading ? (
+                                <div className={styles.configLoading}>
+                                    <div className={styles.spinner} />
+                                    <span>Loading facility settings…</span>
+                                </div>
+                            ) : (
+                                <form className={styles.configForm} onSubmit={handleSaveConfig}>
+                                    <div className={styles.configRow}>
+                                        <div className={styles.configField}>
+                                            <label className={styles.configLabel}>
+                                                <i className="fas fa-door-open" /> Opening time
+                                            </label>
+                                            <input
+                                                type="time"
+                                                className={styles.configInput}
+                                                value={facilityConfig.openTime}
+                                                onChange={e => setFacilityConfig(prev => ({ ...prev, openTime: e.target.value }))}
+                                                required
+                                            />
+                                        </div>
+
+                                        <div className={styles.configField}>
+                                            <label className={styles.configLabel}>
+                                                <i className="fas fa-door-closed" /> Closing time
+                                            </label>
+                                            <input
+                                                type="time"
+                                                className={styles.configInput}
+                                                value={facilityConfig.closeTime}
+                                                onChange={e => setFacilityConfig(prev => ({ ...prev, closeTime: e.target.value }))}
+                                                required
+                                            />
+                                        </div>
+
+                                        <div className={styles.configField}>
+                                            <label className={styles.configLabel}>
+                                                <i className="fas fa-layer-group" /> Slots per hour
+                                            </label>
+                                            <select
+                                                className={styles.configInput}
+                                                value={facilityConfig.slotsPerHour}
+                                                onChange={e => setFacilityConfig(prev => ({ ...prev, slotsPerHour: Number(e.target.value) }))}
+                                            >
+                                                {[1, 2, 3, 4].map(n => (
+                                                    <option key={n} value={n}>{n}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                    </div>
+
+                                    {previewSlots.length > 0 && (
+                                        <div className={styles.configPreview}>
+                                            <p className={styles.configPreviewTitle}>
+                                                Preview — {previewSlots.length} slot{previewSlots.length !== 1 ? "s" : ""},&nbsp;
+                                                {previewCapacity} booking{previewCapacity !== 1 ? "s" : ""} max per day
+                                            </p>
+                                            <div className={styles.slotGrid}>
+                                                {previewSlots.map(s => (
+                                                    <span key={s} className={styles.slotChip}>{s}</span>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {configError && (
+                                        <div className={styles.configError}>
+                                            <i className="fas fa-exclamation-circle" /> {configError}
+                                        </div>
+                                    )}
+                                    {configSuccess && (
+                                        <div className={styles.configSuccess}>
+                                            <i className="fas fa-check-circle" /> {configSuccess}
+                                        </div>
+                                    )}
+
+                                    <button
+                                        type="submit"
+                                        className={styles.btnApprove}
+                                        disabled={configSaving}
+                                        style={{ marginTop: 4, width: "fit-content" }}
+                                    >
+                                        {configSaving
+                                            ? <><i className="fas fa-spinner fa-spin" /> Saving…</>
+                                            : <><i className="fas fa-save" /> Save facility settings</>
+                                        }
+                                    </button>
+                                </form>
+                            )}
+                        </div>
+
+                        <div className={styles.card}>
+                            <h3 className={styles.cardTitle}>
+                                <i className="fas fa-sliders-h" style={{ marginRight: 8, color: "#6AA6DA" }} />
+                                Platform Settings
+                            </h3>
+                            <p className={styles.emptyNote}>
+                                Coming soon — configure allowed email domains, listing categories, and moderation rules.
+                            </p>
                         </div>
                     </div>
                 )}
