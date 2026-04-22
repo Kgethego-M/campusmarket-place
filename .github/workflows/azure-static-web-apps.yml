@@ -65,6 +65,7 @@ jobs:
           VITE_API_URL: ${{ secrets.VITE_API_URL }}
           VITE_CLOUDINARY_CLOUD_NAME: ${{ secrets.VITE_CLOUDINARY_CLOUD_NAME }}
           VITE_CLOUDINARY_UPLOAD_PRESET: ${{ secrets.VITE_CLOUDINARY_UPLOAD_PRESET }}
+          PAYSTACK_TEST_PUBLIC_KEY: ${{ secrets.PAYSTACK_TEST_PUBLIC_KEY }}
 
       - name: Deploy to Azure App Service
         uses: azure/webapps-deploy@v2

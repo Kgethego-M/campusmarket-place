@@ -112,8 +112,78 @@
   color: #64748b;
 }
 
-/* ── Loading / Empty ── */
-.loadingState,
+/* ── Skeleton loading ── */
+.skeletonList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.875rem;
+}
+
+.skeletonCard {
+  display: flex;
+  align-items: stretch;
+  background: white;
+  border-radius: 12px;
+  border: 1.5px solid #e2e8f0;
+  overflow: hidden;
+  height: 100px;
+}
+
+.skeletonImg {
+  width: 100px;
+  min-width: 100px;
+  background: #e2e8f0;
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+.skeletonBody {
+  flex: 1;
+  padding: 0.875rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  justify-content: center;
+}
+
+.skeletonLine {
+  height: 13px;
+  background: #e2e8f0;
+  border-radius: 6px;
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+.skeletonChips {
+  display: flex;
+  gap: 0.4rem;
+  margin-top: 0.1rem;
+}
+
+.skeletonChip {
+  width: 64px;
+  height: 22px;
+  background: #e2e8f0;
+  border-radius: 6px;
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+.skeletonCard:nth-child(2) .skeletonLine,
+.skeletonCard:nth-child(2) .skeletonImg,
+.skeletonCard:nth-child(2) .skeletonChip {
+  animation-delay: 0.2s;
+}
+
+.skeletonCard:nth-child(3) .skeletonLine,
+.skeletonCard:nth-child(3) .skeletonImg,
+.skeletonCard:nth-child(3) .skeletonChip {
+  animation-delay: 0.4s;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.4; }
+}
+
+/* ── Empty ── */
 .emptyState {
   display: flex;
   flex-direction: column;
@@ -124,16 +194,8 @@
   color: #94a3b8;
 }
 
-.loadingState i,
-.emptyState i {
-  font-size: 2.5rem;
-}
-
-.loadingState p,
-.emptyState p {
-  margin: 0;
-  font-size: 1rem;
-}
+.emptyState i { font-size: 2.5rem; }
+.emptyState p { margin: 0; font-size: 1rem; }
 
 .browseBtn {
   margin-top: 0.5rem;
@@ -175,6 +237,12 @@
 
 .cardActive {
   border-color: #6AA6DA;
+}
+
+/* Accepted cards get a stronger call-to-action highlight */
+.cardAccepted {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 1px #bfdbfe;
 }
 
 /* Image */
@@ -265,14 +333,6 @@
   font-size: 0.7rem;
 }
 
-/* Trade item */
-.tradeItem {
-  margin: 0;
-  font-size: 0.78rem;
-  color: #64748b;
-  font-style: italic;
-}
-
 /* Status message */
 .statusMsg {
   display: flex;
@@ -285,7 +345,7 @@
   color: #374151;
 }
 
-/* View button */
+/* View / Pay button */
 .viewBtn {
   display: flex;
   align-items: center;
@@ -304,6 +364,19 @@
 .viewBtn:hover {
   background: #f8fafc;
   color: #6AA6DA;
+}
+
+/* Payment button — highlighted for accepted transactions */
+.viewBtnPay {
+  background: #eff6ff;
+  border-left-color: #bfdbfe;
+  color: #3b82f6;
+  font-size: 0.85rem;
+}
+
+.viewBtnPay:hover {
+  background: #dbeafe;
+  color: #1d4ed8;
 }
 
 /* ── Responsive ── */

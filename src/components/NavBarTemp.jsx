@@ -85,7 +85,11 @@ export default function Navbar() {
             if (n.type === 'new_offer') {
                 navigate('/profile?tab=offers&highlight=' + (n.transactionId || n.listingId));
             } else if (n.type === 'offer_accepted') {
-                navigate('/profile?tab=history&highlight=' + (n.transactionId || n.listingId));
+                if (n.transactionId) {
+                    navigate(`/payment/${n.transactionId}`);
+                } else {
+                    navigate('/my-purchases');
+                }
             } else if (n.type === 'offer_declined') {
                 navigate('/view-listing');
             }

@@ -25,6 +25,7 @@ import ListingDetail from './components/ListingDetail';
 import ReviewForm from './components/ReviewForm.jsx';
 import Notificationspage from './components/Notificationspage.jsx';
 import MyPurchases from './components/MyPurchases.jsx';
+import Payment from './components/Payment.jsx';
 
 import CreateListingAzure from './components/CreateListingAzure';
 //import EditListingAzure from './pages/EditListingAzure';
@@ -179,6 +180,8 @@ export function AppRoutes() {
       {/* SPRINT 2 ROUTES */}
       <Route path="/trade-facility" element={<ProtectedRoute allowedRoles={['student']}><TradeFacility /></ProtectedRoute>} />
       <Route path="/book-dropoff/:transactionId" element={<ProtectedRoute allowedRoles={['student']}><BookDropOff /></ProtectedRoute>} />
+      <Route path="/payment/:txId" element={<ProtectedRoute allowedRoles={['student']}><Payment /></ProtectedRoute>} />
+
       <Route path="/azure/create-listing" element={<CreateListingAzure/>} />
       <Route path="/listing/:id" element={<ListingDetail />} />
       <Route path="/profile/:userId" element={<ViewRating />} />

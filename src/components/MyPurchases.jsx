@@ -12,6 +12,7 @@ import styles from './MyPurchases.module.css';
 const STATUS_CONFIG = {
   pending:   { label: 'Pending',    color: '#f59e0b', bg: '#fef3c7', icon: 'fa-clock' },
   accepted:  { label: 'Accepted',   color: '#3b82f6', bg: '#dbeafe', icon: 'fa-circle-check' },
+  waiting:   { label: 'Waiting',    color: '#8b5cf6', bg: '#ede9fe', icon: 'fa-hourglass-half' },
   completed: { label: 'Completed',  color: '#22c55e', bg: '#dcfce7', icon: 'fa-check-double' },
   declined:  { label: 'Declined',   color: '#ef4444', bg: '#fee2e2', icon: 'fa-circle-xmark' },
   cancelled: { label: 'Cancelled',  color: '#94a3b8', bg: '#f1f5f9', icon: 'fa-ban' },
@@ -35,6 +36,7 @@ export default function MyPurchases() {
   const [transactions, setTransactions] = useState([]);
   const [enriched, setEnriched] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [snapshotReceived, setSnapshotReceived] = useState(false);
   const [activeFilter, setActiveFilter] = useState('all');
 
   // Auth
@@ -57,6 +59,7 @@ export default function MyPurchases() {
     const unsub = onSnapshot(q, (snap) => {
       const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       setTransactions(docs);
+      setSnapshotReceived(true);
     });
 
     return () => unsub();
@@ -64,6 +67,7 @@ export default function MyPurchases() {
 
   // Enrich transactions with listing + seller details
   useEffect(() => {
+    if (!snapshotReceived) return;
     if (transactions.length === 0) {
       setEnriched([]);
       setLoading(false);
@@ -112,8 +116,8 @@ export default function MyPurchases() {
 
       // Sort: pending/accepted first, then by date descending
       results.sort((a, b) => {
-        const order = { pending: 0, accepted: 1, completed: 2, declined: 3, cancelled: 4 };
-        const diff = (order[a.status] ?? 5) - (order[b.status] ?? 5);
+        const order = { pending: 0, accepted: 1, waiting: 2, completed: 3, declined: 4, cancelled: 5 };
+        const diff = (order[a.status] ?? 6) - (order[b.status] ?? 6);
         if (diff !== 0) return diff;
         const ta = a.updatedAt?.toDate?.() || a.createdAt?.toDate?.() || new Date(0);
         const tb = b.updatedAt?.toDate?.() || b.createdAt?.toDate?.() || new Date(0);
@@ -131,6 +135,7 @@ export default function MyPurchases() {
     { key: 'all',       label: 'All' },
     { key: 'pending',   label: 'Pending' },
     { key: 'accepted',  label: 'Accepted' },
+    { key: 'waiting',   label: 'Waiting' },
     { key: 'completed', label: 'Completed' },
     { key: 'declined',  label: 'Declined' },
   ];
@@ -144,7 +149,20 @@ export default function MyPurchases() {
     return acc;
   }, {});
 
-  const activeCount  = enriched.filter(tx => tx.status === 'pending' || tx.status === 'accepted').length;
+  const activeCount = enriched.filter(tx =>
+    tx.status === 'pending' || tx.status === 'accepted' || tx.status === 'waiting'
+  ).length;
+
+  // ── Arrow click handler ─────────────────────────────────────────────────────
+  // accepted → go to payment page
+  // all others → go to listing
+  const handleArrowClick = (tx) => {
+    if (tx.status === 'accepted') {
+      navigate(`/payment/${tx.id}`);
+    } else if (tx.listingId) {
+      navigate(`/listing/${tx.listingId}`);
+    }
+  };
 
   return (
     <>
@@ -183,9 +201,21 @@ export default function MyPurchases() {
 
           {/* ── Content ── */}
           {loading ? (
-            <div className={styles.loadingState}>
-              <i className="fas fa-spinner fa-spin" />
-              <p>Loading your purchases...</p>
+            <div className={styles.skeletonList}>
+              {[1, 2, 3].map(n => (
+                <div key={n} className={styles.skeletonCard}>
+                  <div className={styles.skeletonImg} />
+                  <div className={styles.skeletonBody}>
+                    <div className={styles.skeletonLine} style={{ width: '55%' }} />
+                    <div className={styles.skeletonLine} style={{ width: '35%', height: '10px' }} />
+                    <div className={styles.skeletonChips}>
+                      <div className={styles.skeletonChip} />
+                      <div className={styles.skeletonChip} />
+                      <div className={styles.skeletonChip} />
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
           ) : filtered.length === 0 ? (
             <div className={styles.emptyState}>
@@ -202,12 +232,13 @@ export default function MyPurchases() {
               {filtered.map(tx => {
                 const status  = STATUS_CONFIG[tx.status] || STATUS_CONFIG.pending;
                 const type    = TYPE_CONFIG[tx.type]     || TYPE_CONFIG.sale;
-                const isActive = tx.status === 'pending' || tx.status === 'accepted';
+                const isActive = tx.status === 'pending' || tx.status === 'accepted' || tx.status === 'waiting';
+                const isAccepted = tx.status === 'accepted';
 
                 return (
                   <div
                     key={tx.id}
-                    className={`${styles.card} ${isActive ? styles.cardActive : ''}`}
+                    className={`${styles.card} ${isActive ? styles.cardActive : ''} ${isAccepted ? styles.cardAccepted : ''}`}
                   >
                     {/* Image */}
                     <div className={styles.cardImage}>
@@ -340,9 +371,33 @@ export default function MyPurchases() {
                       {tx.status === 'accepted' && (
                         <div className={styles.statusMsg} style={{ borderColor: '#3b82f6', background: '#eff6ff' }}>
                           <i className="fas fa-circle-check" style={{ color: '#3b82f6' }} />
-                          <span>Your offer was accepted! Proceed to complete the transaction.</span>
+                          <span>Your offer was accepted! Tap the arrow to complete payment.</span>
                         </div>
                       )}
+                      {tx.status === 'waiting' && (() => {
+                        const payType = tx.paymentType || tx.paymentMethod || 'cash';
+                        const isCash = payType === 'cash' || payType === 'cod';
+                        const isPartialTx = payType === 'partial';
+                        const total = Number(tx.agreedPrice ?? tx.listingPrice ?? 0);
+                        const cashDue = isCash
+                          ? total
+                          : isPartialTx
+                            ? Math.max(0, total - Number(tx.partialAmount ?? 0))
+                            : 0;
+                        return (
+                          <div className={styles.statusMsg} style={{ borderColor: '#8b5cf6', background: '#f5f3ff' }}>
+                            <i className="fas fa-hourglass-half" style={{ color: '#8b5cf6' }} />
+                            <span>
+                              {tx.paystackRef && !isCash
+                                ? cashDue > 0
+                                  ? <>Online payment received. Bring <strong style={{ color: '#7c3aed' }}>R {cashDue.toLocaleString('en-ZA')}</strong> cash at drop-off.</>
+                                  : 'Online payment received. Awaiting drop-off and collection confirmation.'
+                                : <>Cash due at drop-off: <strong style={{ color: '#7c3aed' }}>R {cashDue.toLocaleString('en-ZA')}</strong></>
+                              }
+                            </span>
+                          </div>
+                        );
+                      })()}
                       {tx.status === 'completed' && (
                         <div className={styles.statusMsg} style={{ borderColor: '#22c55e', background: '#f0fdf4' }}>
                           <i className="fas fa-check-double" style={{ color: '#22c55e' }} />
@@ -357,14 +412,14 @@ export default function MyPurchases() {
                       )}
                     </div>
 
-                    {/* Arrow */}
-                    {tx.listingId && (
+                    {/* Payment button — only on accepted */}
+                    {isAccepted && (
                       <button
-                        className={styles.viewBtn}
-                        onClick={() => navigate(`/listing/${tx.listingId}`)}
-                        title="View listing"
+                        className={`${styles.viewBtn} ${styles.viewBtnPay}`}
+                        onClick={() => navigate(`/payment/${tx.id}`)}
+                        title="Complete payment"
                       >
-                        <i className="fas fa-chevron-right" />
+                        <i className="fas fa-credit-card" />
                       </button>
                     )}
                   </div>
