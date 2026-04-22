@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import { db } from '../firebase.js';
+import { auth } from '../firebase.js';
+import ReportModal from './ReportModal.jsx';
 import {
   doc, getDoc, collection, query,
   where, getDocs, orderBy,
@@ -58,7 +60,7 @@ function Stars({ rating, size = 13 }) {
   );
 }
 
-function ReviewCard({ review, animate = false, delay = 0 }) {
+function ReviewCard({ review, animate = false, delay = 0, onReport = null }) {
   const formattedDate = review.createdAt
     ? (review.createdAt.toDate
         ? review.createdAt.toDate()
@@ -93,6 +95,30 @@ function ReviewCard({ review, animate = false, delay = 0 }) {
         </div>
         {review.comment && <p className={styles.reviewComment}>{review.comment}</p>}
         {formattedDate && <div className={styles.reviewDate}>{formattedDate}</div>}
+        {onReport && (
+          <button
+            onClick={() => onReport(review)}
+            style={{
+              marginTop: 8,
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 5,
+              fontSize: '0.75rem',
+              color: '#94a3b8',
+              padding: '2px 0',
+              fontFamily: 'inherit',
+            }}
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/>
+              <line x1="4" y1="22" x2="4" y2="15"/>
+            </svg>
+            Report review
+          </button>
+        )}
       </div>
     </div>
   );
@@ -124,6 +150,7 @@ export default function ViewSellerRatings({ userId: propUserId, onBack }) {
   const [error, setError]                       = useState(null);
   const [reviewDrawerOpen, setReviewDrawerOpen] = useState(false);
   const [listingDrawerOpen, setListingDrawerOpen] = useState(false);
+  const [reportReview, setReportReview]         = useState(null); // review being reported
 
   useEffect(() => {
     if (!userId) { setError('No user ID provided.'); setLoading(false); return; }
@@ -274,9 +301,23 @@ export default function ViewSellerRatings({ userId: propUserId, onBack }) {
   const activeCount = totalReviews;
   const activeLabel = activeTab === 'seller' ? 'reviews as seller' : 'reviews as buyer';
 
+  const currentUid = auth.currentUser?.uid;
+  // Owner of this profile page can report reviews left on them
+  const isOwnProfile = currentUid === userId;
+  const handleReportReview = (review) => setReportReview(review);
+
   return (
     <>
       <NavBar />
+
+      {/* Report review modal */}
+      <ReportModal
+        open={!!reportReview}
+        onClose={() => setReportReview(null)}
+        reportType="review"
+        reportedId={reportReview?.id || ''}
+        reportedName={`Review by ${reportReview?.reviewerName || 'user'} on "${reportReview?.listingTitle || 'listing'}"`}
+      />
       <div className={styles.page}>
         <div className={styles.bgAccent} />
         <div className={styles.backRow}><BackButton onClick={handleBack} /></div>
@@ -383,7 +424,7 @@ export default function ViewSellerRatings({ userId: propUserId, onBack }) {
               <>
                 <div className={styles.transactionsList}>
                   {previewReviews.map((review, i) => (
-                    <ReviewCard key={review.id} review={review} animate delay={i * 60} />
+                    <ReviewCard key={review.id} review={review} animate delay={i * 60} onReport={isOwnProfile ? handleReportReview : null} />
                   ))}
                 </div>
                 {hasMore && (
@@ -436,7 +477,7 @@ export default function ViewSellerRatings({ userId: propUserId, onBack }) {
 
       <Drawer open={reviewDrawerOpen} onClose={() => setReviewDrawerOpen(false)} title={`All ${activeTab} reviews (${totalReviews})`}>
         <div className={styles.drawerReviewList}>
-          {reviews.map((review, i) => <ReviewCard key={review.id} review={review} animate delay={i * 40} />)}
+          {reviews.map((review, i) => <ReviewCard key={review.id} review={review} animate delay={i * 40} onReport={isOwnProfile ? handleReportReview : null} />)}
         </div>
       </Drawer>
 

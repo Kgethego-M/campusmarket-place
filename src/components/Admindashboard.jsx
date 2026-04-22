@@ -4,15 +4,17 @@ import { auth, db } from "../firebase";
 import { signOut, onAuthStateChanged } from "firebase/auth";
 import {
   doc, getDoc, collection, getDocs, query, orderBy,
-  updateDoc, where, deleteDoc, onSnapshot, writeBatch,
+  updateDoc, where, deleteDoc, onSnapshot, writeBatch, setDoc,
 } from "firebase/firestore";
 import styles from "./Admindashboard.module.css";
 import ConfirmModal from "./ConfirmModal";
 import ReportCard from "./ReportCard";
 import useExportReport from "../hooks/useExportReport";
+import { validateFacilityConfig, generateTimeSlots, getTotalCapacity } from "../utils/facilityConfig.utils";
+import UtilisationReport from "./UtilisationReport.jsx";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Small inline toast (replaces alert())
+// Small inline toast
 // ─────────────────────────────────────────────────────────────────────────────
 function Toast({ message, type = "success", onDismiss }) {
   useEffect(() => {
@@ -38,23 +40,38 @@ export default function AdminDashboard() {
   const navigate = useNavigate();
   const dropdownRef = useRef(null);
 
-  const [activeTab, setActiveTab]     = useState("users");
+  // ── UI state ─────────────────────────────────────────────────────────────
+  const [activeTab, setActiveTab] = useState("users");
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
-  const [userSearch, setUserSearch]   = useState("");
+  const [userSearch, setUserSearch] = useState("");
+  const [listingSearch, setListingSearch] = useState("");
+  const [reportSearch, setReportSearch] = useState("");
 
+  // ── Data state ───────────────────────────────────────────────────────────
   const [adminUser, setAdminUser] = useState({ name: "Admin", email: "", photoURL: "", initials: "A" });
-  const [stats, setStats]         = useState({ totalUsers: 0, openReports: 0, transactions: 0, revenue: 0 });
+  const [stats, setStats] = useState({ totalUsers: 0, openReports: 0, transactions: 0, revenue: 0 });
   const [pendingStaff, setPendingStaff] = useState([]);
-  const [allUsers, setAllUsers]   = useState([]);
-  const [listings, setListings]   = useState([]);
-  const [reports, setReports]     = useState([]);
-  const [loading, setLoading]     = useState(true);
+  const [allUsers, setAllUsers] = useState([]);
+  const [listings, setListings] = useState([]);
+  const [reports, setReports] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [unreadReports, setUnreadReports] = useState(0);
 
-  // ── Confirm modal state ──────────────────────────────────────────────────
+  // ── Facility config state (settings tab) ─────────────────────────────────
+  const [facilityConfig, setFacilityConfig] = useState({
+    openTime: "09:00",
+    closeTime: "16:00",
+    slotsPerHour: 1,
+  });
+  const [configLoading, setConfigLoading] = useState(false);
+  const [configSaving, setConfigSaving] = useState(false);
+  const [configError, setConfigError] = useState("");
+  const [configSuccess, setConfigSuccess] = useState("");
+
+  // ── Confirm modal & toast ────────────────────────────────────────────────
   const [confirm, setConfirm] = useState({ open: false, title: "", message: "", onConfirm: null, variant: "danger" });
-  const [toast, setToast]     = useState(null);
+  const [toast, setToast] = useState(null);
 
   const showToast = (message, type = "success") => setToast({ message, type });
   const hideToast = () => setToast(null);
@@ -63,7 +80,7 @@ export default function AdminDashboard() {
     setConfirm({ open: true, title, message, variant, onConfirm });
   const closeConfirm = () => setConfirm(c => ({ ...c, open: false }));
 
-  // ── Summary export ────────────────────────────────────────────────────────
+  // ── Export (CSV/PDF) hooks – your modular export ─────────────────────────
   const summaryHeaders = ["Metric", "Value"];
   const summaryRows = [
     { Metric: "Total Users", Value: stats.totalUsers },
@@ -75,6 +92,68 @@ export default function AdminDashboard() {
     "Admin_Summary", summaryHeaders, summaryRows
   );
 
+  // Prepare data for ReportCard components (exportable datasets)
+  const filteredUsers = allUsers.filter(u =>
+    `${u.firstName} ${u.lastName} ${u.email}`.toLowerCase().includes(userSearch.toLowerCase())
+  );
+  const userExportData = filteredUsers.map(u => ({
+    Name: `${u.firstName || ""} ${u.lastName || ""}`.trim(),
+    Email: u.email || "",
+    Role: u.userType || "student",
+    Rating: u.rating || 0,
+    Trades: u.totalRatings || 0,
+    Suspended: u.suspended ? "Yes" : "No",
+  }));
+  const userHeaders = ["Name", "Email", "Role", "Rating", "Trades", "Suspended"];
+
+  const filteredListings = listings.filter(l =>
+    `${l.title || ""} ${l.category || ""} ${l.status || ""}`.toLowerCase().includes(listingSearch.toLowerCase())
+  );
+  const listingsExportData = filteredListings.map(l => ({
+    Title: l.title || "",
+    Category: l.category || "",
+    Price: l.price || 0,
+    Status: l.status || "active",
+    Condition: l.condition || "",
+    ListingType: l.listingType || "",
+  }));
+  const listingsHeaders = ["Title", "Category", "Price", "Status", "Condition", "ListingType"];
+
+  const paymentsExportData = listings
+    .filter(l => l.status === "sold" || l.status === "traded")
+    .map(l => ({
+      Item: l.title || "",
+      Type: l.listingType || "—",
+      Amount: l.price || 0,
+      Status: l.status || "",
+    }));
+  const paymentsHeaders = ["Item", "Type", "Amount", "Status"];
+
+  const filteredReports = reports.filter(r =>
+    (r.reportedName || "").toLowerCase().includes(reportSearch.toLowerCase())
+  );
+  const reportsExportData = filteredReports.map(r => ({
+    Type: r.reportType || "",
+    ReportedItem: r.reportedName || r.reportedId,
+    Reason: r.reason || "",
+    Details: r.details || "",
+    ReportedBy: r.reporterName || "",
+    Status: r.status || "pending",
+    Resolution: r.resolution || "",
+    Date: r.createdAt?.toDate ? r.createdAt.toDate().toLocaleDateString() : "",
+  }));
+  const reportsHeaders = ["Type", "ReportedItem", "Reason", "Details", "ReportedBy", "Status", "Resolution", "Date"];
+
+  const suspendedUsers = allUsers.filter(u => u.suspended);
+  const pendingReports = reports.filter(r => r.status === "pending");
+  const resolvedReports = reports.filter(r => r.status !== "pending");
+
+  const reportTypeIcon = (type) => {
+    if (type === "listing") return "🛍️";
+    if (type === "review") return "⭐";
+    return "👤";
+  };
+
   // ── Auth guard ───────────────────────────────────────────────────────────
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (user) => {
@@ -84,7 +163,7 @@ export default function AdminDashboard() {
         const data = snap.exists() ? snap.data() : {};
         if (data.userType !== "admin") { navigate("/"); return; }
         const fn = data.firstName || user.displayName?.split(" ")[0] || "Admin";
-        const ln = data.lastName  || user.displayName?.split(" ").slice(1).join(" ") || "";
+        const ln = data.lastName || user.displayName?.split(" ").slice(1).join(" ") || "";
         setAdminUser({
           name: `${fn} ${ln}`.trim(),
           email: data.email || user.email,
@@ -96,7 +175,7 @@ export default function AdminDashboard() {
     return () => unsub();
   }, [navigate]);
 
-  // ── Fetch dashboard data ─────────────────────────────────────────────────
+  // ── Fetch dashboard data (users, listings, stats) ─────────────────────────
   useEffect(() => {
     async function load() {
       try {
@@ -109,15 +188,15 @@ export default function AdminDashboard() {
         const listData = listSnap.docs.map(d => ({ id: d.id, ...d.data() }));
         setListings(listData);
 
-        const sold    = listData.filter(l => l.status === "sold");
+        const sold = listData.filter(l => l.status === "sold");
         const revenue = sold.reduce((sum, l) => sum + (Number(l.price) || 0), 0);
 
-        setStats({
-          totalUsers:  users.length,
-          openReports: 0,
+        setStats(prev => ({
+          ...prev,
+          totalUsers: users.length,
           transactions: sold.length,
           revenue,
-        });
+        }));
       } catch (e) {
         console.error("Dashboard load error:", e);
       } finally {
@@ -140,17 +219,59 @@ export default function AdminDashboard() {
     return () => unsub();
   }, []);
 
-  // ── Close dropdown on outside click ──────────────────────────────────────
+  // ── Load facility config when settings tab opens ─────────────────────────
   useEffect(() => {
-    const handler = (e) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target))
-        setDropdownOpen(false);
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, []);
+    if (activeTab !== "settings") return;
+    (async () => {
+      setConfigLoading(true);
+      setConfigError("");
+      try {
+        const snap = await getDoc(doc(db, "facilityConfig", "default"));
+        if (snap.exists()) {
+          const data = snap.data();
+          setFacilityConfig({
+            openTime: data.openTime ?? "09:00",
+            closeTime: data.closeTime ?? "16:00",
+            slotsPerHour: data.slotsPerHour ?? 1,
+          });
+        }
+      } catch (e) {
+        setConfigError("Failed to load facility config.");
+        console.error(e);
+      } finally {
+        setConfigLoading(false);
+      }
+    })();
+  }, [activeTab]);
 
-  // ── Actions ──────────────────────────────────────────────────────────────
+  // ── Save facility config ─────────────────────────────────────────────────
+  async function handleSaveConfig(e) {
+    e.preventDefault();
+    setConfigError("");
+    setConfigSuccess("");
+
+    const parsed = { ...facilityConfig, slotsPerHour: Number(facilityConfig.slotsPerHour) };
+    const { valid, error } = validateFacilityConfig(parsed);
+    if (!valid) { setConfigError(error); return; }
+
+    setConfigSaving(true);
+    try {
+      await setDoc(doc(db, "facilityConfig", "default"), {
+        openTime: parsed.openTime,
+        closeTime: parsed.closeTime,
+        slotsPerHour: parsed.slotsPerHour,
+      });
+      setConfigSuccess("Facility settings saved successfully.");
+      setTimeout(() => setConfigSuccess(""), 3500);
+    } catch (e) {
+      setConfigError("Failed to save. Please try again.");
+      console.error(e);
+    } finally {
+      setConfigSaving(false);
+    }
+  }
+
+  // ── Actions (staff approval, suspend, remove listing, resolve reports) ───
   const approveStaff = async (userId) => {
     await updateDoc(doc(db, "users", userId), { approved: true });
     setPendingStaff(prev => prev.filter(u => u.id !== userId));
@@ -283,61 +404,18 @@ export default function AdminDashboard() {
     }, 1500);
   };
 
-  const filteredUsers = allUsers.filter(u =>
-    `${u.firstName} ${u.lastName} ${u.email}`.toLowerCase().includes(userSearch.toLowerCase())
-  );
+  // ── Close dropdown on outside click ──────────────────────────────────────
+  useEffect(() => {
+    const handler = (e) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target))
+        setDropdownOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
 
-  const pendingReports  = reports.filter(r => r.status === "pending");
-  const resolvedReports = reports.filter(r => r.status !== "pending");
-
-  const reportTypeIcon = (type) => {
-    if (type === "listing") return "🛍️";
-    if (type === "review")  return "⭐";
-    return "👤";
-  };
-
-  // Prepare data for export
-  const userExportData = filteredUsers.map(u => ({
-    Name: `${u.firstName || ""} ${u.lastName || ""}`.trim(),
-    Email: u.email || "",
-    Role: u.userType || "student",
-    Rating: u.rating || 0,
-    Trades: u.totalRatings || 0,
-    Suspended: u.suspended ? "Yes" : "No",
-  }));
-  const userHeaders = ["Name", "Email", "Role", "Rating", "Trades", "Suspended"];
-
-  const listingsExportData = listings.map(l => ({
-    Title: l.title || "",
-    Category: l.category || "",
-    Price: l.price || 0,
-    Status: l.status || "active",
-    Condition: l.condition || "",
-    ListingType: l.listingType || "",
-  }));
-  const listingsHeaders = ["Title", "Category", "Price", "Status", "Condition", "ListingType"];
-
-  const paymentsExportData = listings
-    .filter(l => l.status === "sold" || l.status === "traded")
-    .map(l => ({
-      Item: l.title || "",
-      Type: l.listingType || "—",
-      Amount: l.price || 0,
-      Status: l.status || "",
-    }));
-  const paymentsHeaders = ["Item", "Type", "Amount", "Status"];
-
-  const reportsExportData = reports.map(r => ({
-    Type: r.reportType || "",
-    ReportedItem: r.reportedName || r.reportedId,
-    Reason: r.reason || "",
-    Details: r.details || "",
-    ReportedBy: r.reporterName || "",
-    Status: r.status || "pending",
-    Resolution: r.resolution || "",
-    Date: r.createdAt?.toDate ? r.createdAt.toDate().toLocaleDateString() : "",
-  }));
-  const reportsHeaders = ["Type", "ReportedItem", "Reason", "Details", "ReportedBy", "Status", "Resolution", "Date"];
+  const previewSlots = generateTimeSlots(facilityConfig.openTime, facilityConfig.closeTime);
+  const previewCapacity = getTotalCapacity({ ...facilityConfig, slotsPerHour: Number(facilityConfig.slotsPerHour) });
 
   if (loading) return (
     <div className={styles.loadingScreen}>
@@ -359,7 +437,7 @@ export default function AdminDashboard() {
       />
       {toast && <Toast message={toast.message} type={toast.type} onDismiss={hideToast} />}
 
-      {/* Navbar (unchanged) */}
+      {/* ── Navbar ── */}
       <header className={styles.navbar}>
         <div className={styles.navLeft}>
           <div className={styles.logoBox}><i className="fa-solid fa-shop" /></div>
@@ -367,7 +445,10 @@ export default function AdminDashboard() {
           <span className={styles.adminPill}>Admin</span>
         </div>
         <div className={styles.navCenter}>
-          <span className={styles.navBreadcrumb}><i className="fas fa-th-large" /> Dashboard</span>
+          <span className={styles.navActive}><i className="fas fa-th-large" /> Dashboard</span>
+          <button className={styles.navAnalyticsLink} onClick={() => navigate("/admin/analytics")}>
+            <i className="fas fa-chart-bar" /> Analytics
+          </button>
           <span className={styles.navHandle}>@{adminUser.name.split(" ")[0] || "Admin"}</span>
         </div>
         <div className={styles.navRight}>
@@ -416,12 +497,12 @@ export default function AdminDashboard() {
           </div>
         </div>
 
-        {/* Stat cards (unchanged) */}
+        {/* Stat cards */}
         <div className={styles.statsRow}>
           {[
-            { label: "Total Users",    value: stats.totalUsers,   icon: "fas fa-users" },
-            { label: "Open Reports",   value: stats.openReports,  icon: "fas fa-flag",  highlight: stats.openReports > 0 },
-            { label: "Transactions",   value: stats.transactions, icon: "fas fa-exchange-alt" },
+            { label: "Total Users", value: stats.totalUsers, icon: "fas fa-users" },
+            { label: "Open Reports", value: stats.openReports, icon: "fas fa-flag", highlight: stats.openReports > 0 },
+            { label: "Transactions", value: stats.transactions, icon: "fas fa-exchange-alt" },
             { label: "Revenue (Paid)", value: `R ${stats.revenue.toLocaleString()}`, icon: "fas fa-wallet" },
           ].map(({ label, value, icon, highlight }) => (
             <div key={label} className={`${styles.statCard} ${highlight ? styles.statCardAlert : ""}`}>
@@ -432,14 +513,16 @@ export default function AdminDashboard() {
           ))}
         </div>
 
-        {/* Tabs (unchanged) */}
+        {/* Tabs */}
         <div className={styles.tabs}>
           {[
-            { id: "users",      icon: "fas fa-users",       label: "Users" },
-            { id: "moderation", icon: "fas fa-shield-alt",  label: "Moderation" },
-            { id: "reports",    icon: "fas fa-flag",        label: "Reports", badge: unreadReports > 0 ? unreadReports : null },
-            { id: "payments",   icon: "fas fa-credit-card", label: "Payments" },
-            { id: "settings",   icon: "fas fa-cog",         label: "Settings" },
+            { id: "users", icon: "fas fa-users", label: "Users" },
+            { id: "suspended", icon: "fas fa-ban", label: "Suspended" },
+            { id: "moderation", icon: "fas fa-shield-alt", label: "Moderation" },
+            { id: "reports", icon: "fas fa-flag", label: "Reports", badge: unreadReports > 0 ? unreadReports : null },
+            { id: "payments", icon: "fas fa-credit-card", label: "Payments" },
+            { id: "utilisation", icon: "fas fa-calendar-alt", label: "Utilisation Reports" },
+            { id: "settings", icon: "fas fa-cog", label: "Settings" },
           ].map(t => (
             <button
               key={t.id}
@@ -448,12 +531,20 @@ export default function AdminDashboard() {
               style={{ position: "relative" }}
             >
               <i className={t.icon} /> {t.label}
-              {t.badge && <span style={{ position: "absolute", top: 4, right: 4, background: "#dc2626", color: "#fff", borderRadius: "50%", width: 17, height: 17, fontSize: "0.65rem", fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" }}>{t.badge}</span>}
+              {t.badge && (
+                <span style={{
+                  position: "absolute", top: 4, right: 4,
+                  background: "#dc2626", color: "#fff",
+                  borderRadius: "50%", width: 17, height: 17,
+                  fontSize: "0.65rem", fontWeight: 700,
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                }}>{t.badge}</span>
+              )}
             </button>
           ))}
         </div>
 
-        {/* USERS TAB with ReportCard */}
+        {/* ── USERS TAB ── */}
         {activeTab === "users" && (
           <div className={styles.tabContent}>
             {pendingStaff.length > 0 && (
@@ -471,7 +562,7 @@ export default function AdminDashboard() {
                       </div>
                       <div className={styles.approvalActions}>
                         <button className={styles.btnApprove} onClick={() => approveStaff(u.id)}>Approve</button>
-                        <button className={styles.btnReject}  onClick={() => rejectStaff(u.id)}>Reject</button>
+                        <button className={styles.btnReject} onClick={() => rejectStaff(u.id)}>Reject</button>
                       </div>
                     </div>
                   ))}
@@ -495,11 +586,20 @@ export default function AdminDashboard() {
                     </div>
                     <div className={styles.userInfo}>
                       <span className={styles.userName}>{u.firstName} {u.lastName}</span>
-                      <span className={styles.userMeta}><i className="fas fa-star" style={{ color: "#fbbf24", fontSize: "0.65rem" }} /> {u.rating || 0} ({u.totalRatings || 0} Trades)</span>
+                      {(u.userType === "student" || !u.userType) && (
+                        <span className={styles.userMeta}>
+                          <i className="fas fa-star" style={{ color: "#fbbf24", fontSize: "0.65rem" }} />
+                          {" "}{u.rating || 0} ({u.totalRatings || 0} Trades)
+                        </span>
+                      )}
                     </div>
                     <span className={styles.userType}>{u.userType || "Student"}</span>
-                    {u.suspended && <span style={{ fontSize: "0.7rem", color: "#dc2626", fontWeight: 600, marginRight: 4 }}>SUSPENDED</span>}
-                    <button className={u.suspended ? styles.btnUnsuspend : styles.btnSuspend} onClick={() => handleToggleSuspend(u)}>{u.suspended ? "Unsuspend" : "Suspend"}</button>
+                    <button
+                      className={u.suspended ? styles.btnUnsuspend : styles.btnSuspend}
+                      onClick={() => handleToggleSuspend(u)}
+                    >
+                      {u.suspended ? "Unsuspend" : "Suspend"}
+                    </button>
                   </div>
                 ))}
               </div>
@@ -507,15 +607,59 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* MODERATION TAB with ReportCard */}
+        {/* ── SUSPENDED USERS TAB ── */}
+        {activeTab === "suspended" && (
+          <div className={styles.tabContent}>
+            <div className={styles.card}>
+              <h3 className={styles.cardTitle}>
+                Suspended Users
+                {suspendedUsers.length > 0 && (
+                  <span style={{ marginLeft: 10, background: "#dc2626", color: "#fff", borderRadius: 20, padding: "2px 10px", fontSize: "0.72rem", fontWeight: 700 }}>
+                    {suspendedUsers.length}
+                  </span>
+                )}
+              </h3>
+              {suspendedUsers.length === 0 ? (
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, padding: "32px 0" }}>
+                  <i className="fas fa-check-circle" style={{ fontSize: "2rem", color: "#16a34a" }} />
+                  <p className={styles.emptyNote}>No suspended users.</p>
+                </div>
+              ) : (
+                <div className={styles.userList}>
+                  {suspendedUsers.map(u => (
+                    <div key={u.id} className={styles.userRow} style={{ opacity: 0.85 }}>
+                      <div className={styles.userAvatar}>
+                        {u.photoURL ? <img src={u.photoURL} alt="" /> : <span>{(u.firstName?.[0] || "?").toUpperCase()}</span>}
+                      </div>
+                      <div className={styles.userInfo}>
+                        <span className={styles.userName}>{u.firstName} {u.lastName}</span>
+                        <span className={styles.userMeta}>{u.email}</span>
+                      </div>
+                      <span style={{ fontSize: "0.72rem", color: "#dc2626", fontWeight: 700, background: "#fef2f2", padding: "3px 10px", borderRadius: 20 }}>SUSPENDED</span>
+                      <button className={styles.btnUnsuspend} onClick={() => handleToggleSuspend(u)}>Unsuspend</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ── MODERATION TAB ── */}
         {activeTab === "moderation" && (
           <div className={styles.tabContent}>
             <ReportCard title="Listing Moderation" headers={listingsHeaders} data={listingsExportData}>
-              {listings.length === 0 ? (
-                <p className={styles.emptyNote}>No listings to moderate.</p>
+              <div className={styles.cardHeader}>
+                <div className={styles.searchWrap}>
+                  <i className="fas fa-search" />
+                  <input className={styles.searchInput} type="text" placeholder="Search listings…" value={listingSearch} onChange={e => setListingSearch(e.target.value)} />
+                </div>
+              </div>
+              {filteredListings.length === 0 ? (
+                <p className={styles.emptyNote}>{listingSearch ? "No listings match your search." : "No listings to moderate."}</p>
               ) : (
                 <div className={styles.modList}>
-                  {listings.map(l => (
+                  {filteredListings.map(l => (
                     <div key={l.id} className={styles.modRow}>
                       <div className={styles.modThumb}>
                         {(l.imageUrl || l.photos?.[0]) ? <img src={l.imageUrl || l.photos[0]} alt="" /> : <i className="fas fa-image" />}
@@ -534,53 +678,81 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* REPORTS TAB with ReportCard */}
+        {/* ── REPORTS TAB ── */}
         {activeTab === "reports" && (
           <div className={styles.tabContent}>
             <ReportCard title="Reports" headers={reportsHeaders} data={reportsExportData}>
-              {/* Pending reports */}
-              <h3 className={styles.cardTitle} style={{ marginTop: 12 }}>Pending Reports {pendingReports.length > 0 && <span style={{ marginLeft: 10, background: "#dc2626", color: "#fff", borderRadius: 20, padding: "2px 10px", fontSize: "0.72rem", fontWeight: 700 }}>{pendingReports.length}</span>}</h3>
+              <div className={styles.cardHeader}>
+                <div className={styles.searchWrap}>
+                  <i className="fas fa-search" />
+                  <input className={styles.searchInput} type="text" placeholder="Search reported names…" value={reportSearch} onChange={e => setReportSearch(e.target.value)} />
+                </div>
+              </div>
+
+              <h3 className={styles.cardTitle} style={{ marginTop: 12 }}>
+                Pending Reports
+                {pendingReports.length > 0 && (
+                  <span style={{ marginLeft: 10, background: "#dc2626", color: "#fff", borderRadius: 20, padding: "2px 10px", fontSize: "0.72rem", fontWeight: 700 }}>
+                    {pendingReports.length}
+                  </span>
+                )}
+              </h3>
+
               {pendingReports.length === 0 ? (
                 <div className={styles.emptyNote} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, padding: "32px 0" }}>
                   <i className="fas fa-check-circle" style={{ fontSize: "2rem", color: "#16a34a" }} />
                   <p>No pending reports — all clear!</p>
                 </div>
               ) : (
-                <div className={styles.reportList}>
-                  {pendingReports.map(r => (
-                    <div key={r.id} className={styles.reportRow}>
-                      <div className={styles.reportIcon}>{reportTypeIcon(r.reportType)}</div>
-                      <div className={styles.reportInfo}>
-                        <span className={styles.reportTitle}><strong>{r.reportedName || r.reportedId}</strong> <span className={styles.reportTypePill}>{r.reportType}</span></span>
-                        <span className={styles.reportReason}>{r.reason}</span>
-                        {r.details && <span className={styles.reportDetails}>"{r.details}"</span>}
-                        <span className={styles.reportMeta}>Reported by {r.reporterName} · {r.createdAt?.toDate ? r.createdAt.toDate().toLocaleDateString("en-ZA", { day: "numeric", month: "short" }) : "Recently"}</span>
+                <div className={styles.modList}>
+                  {filteredReports.filter(r => r.status === "pending").map(r => (
+                    <div key={r.id} className={styles.modRow} style={{ alignItems: "flex-start", gap: 14 }}>
+                      <div style={{ fontSize: "1.4rem", flexShrink: 0, width: 36, textAlign: "center" }}>{reportTypeIcon(r.reportType)}</div>
+                      <div className={styles.modInfo} style={{ flex: 1 }}>
+                        <span className={styles.modTitle}>
+                          {r.reportedName || r.reportedId}
+                          <span style={{ marginLeft: 8, fontSize: "0.68rem", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", background: "#eff6ff", color: "#2563eb", padding: "2px 8px", borderRadius: 20 }}>
+                            {r.reportType}
+                          </span>
+                        </span>
+                        <span className={styles.modMeta}>{r.reason}</span>
+                        {r.details && <span style={{ fontSize: "0.78rem", color: "#94a3b8", fontStyle: "italic" }}>"{r.details}"</span>}
+                        <span style={{ fontSize: "0.73rem", color: "#94a3b8", marginTop: 2 }}>
+                          Reported by {r.reporterName} ·{" "}
+                          {r.createdAt?.toDate ? r.createdAt.toDate().toLocaleDateString("en-ZA", { day: "numeric", month: "short" }) : "Recently"}
+                        </span>
                       </div>
-                      <div className={styles.reportActions}>
-                        <button className={styles.btnDismiss} onClick={() => handleResolveReport(r, "dismiss")}>Dismiss</button>
-                        {r.reportType === "user" && <button className={styles.btnSuspend} onClick={() => handleResolveReport(r, "suspend_user")}>Suspend User</button>}
-                        {r.reportType === "listing" && <button className={styles.btnReject} onClick={() => handleResolveReport(r, "remove_listing")}>Remove Listing</button>}
-                        {r.reportType === "review" && <button className={styles.btnReject} onClick={() => handleResolveReport(r, "remove_review")}>Remove Review</button>}
+                      <div style={{ display: "flex", flexDirection: "column", gap: 6, flexShrink: 0 }}>
+                        <button className={styles.btnApprove} onClick={() => handleResolveReport(r, "dismiss")}>Dismiss</button>
+                        {r.reportType === "user" && (
+                          <button className={styles.btnSuspend} onClick={() => handleResolveReport(r, "suspend_user")}>Suspend User</button>
+                        )}
+                        {r.reportType === "listing" && (
+                          <button className={styles.btnReject} onClick={() => handleResolveReport(r, "remove_listing")}>Remove Listing</button>
+                        )}
+                        {r.reportType === "review" && (
+                          <button className={styles.btnReject} onClick={() => handleResolveReport(r, "remove_review")}>Remove Review</button>
+                        )}
                       </div>
                     </div>
                   ))}
                 </div>
               )}
 
-              {/* Resolved reports */}
               {resolvedReports.length > 0 && (
                 <>
                   <h3 className={styles.cardTitle} style={{ marginTop: 24 }}>Resolved Reports</h3>
-                  <div className={styles.reportList}>
-                    {resolvedReports.map(r => (
-                      <div key={r.id} className={`${styles.reportRow} ${styles.reportRowResolved}`}>
-                        <div className={styles.reportIcon}>{reportTypeIcon(r.reportType)}</div>
-                        <div className={styles.reportInfo}>
-                          <span className={styles.reportTitle}><strong>{r.reportedName || r.reportedId}</strong> <span className={styles.reportTypePill}>{r.reportType}</span></span>
-                          <span className={styles.reportReason}>{r.reason}</span>
-                          <span className={styles.reportMeta}>Resolution: <strong>{r.resolution || "resolved"}</strong></span>
+                  <div className={styles.modList}>
+                    {filteredReports.filter(r => r.status !== "pending").map(r => (
+                      <div key={r.id} className={styles.modRow} style={{ opacity: 0.6 }}>
+                        <div style={{ fontSize: "1.2rem", flexShrink: 0 }}>{reportTypeIcon(r.reportType)}</div>
+                        <div className={styles.modInfo}>
+                          <span className={styles.modTitle}>{r.reportedName || r.reportedId}</span>
+                          <span className={styles.modMeta}>{r.reason}</span>
                         </div>
-                        <span className={styles.resolvedBadge}>✓ Resolved</span>
+                        <span style={{ fontSize: "0.75rem", fontWeight: 700, color: "#16a34a", background: "#f0fdf4", padding: "4px 10px", borderRadius: 20 }}>
+                          ✓ {r.resolution || "resolved"}
+                        </span>
                       </div>
                     ))}
                   </div>
@@ -590,7 +762,7 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* PAYMENTS TAB with ReportCard */}
+        {/* ── PAYMENTS TAB ── */}
         {activeTab === "payments" && (
           <div className={styles.tabContent}>
             <ReportCard title="Completed Transactions" headers={paymentsHeaders} data={paymentsExportData}>
@@ -598,7 +770,9 @@ export default function AdminDashboard() {
                 <p className={styles.emptyNote}>No completed transactions yet.</p>
               ) : (
                 <div className={styles.payTable}>
-                  <div className={styles.payHeader}><span>Item</span><span>Type</span><span>Amount</span><span>Status</span></div>
+                  <div className={styles.payHeader}>
+                    <span>Item</span><span>Type</span><span>Amount</span><span>Status</span>
+                  </div>
                   {listings.filter(l => l.status === "sold" || l.status === "traded").map(l => (
                     <div key={l.id} className={styles.payRow}>
                       <span className={styles.payTitle}>{l.title}</span>
@@ -613,12 +787,86 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* SETTINGS TAB (unchanged) */}
+        {/* ── UTILISATION REPORTS TAB ── */}
+        {activeTab === "utilisation" && (
+          <div className={styles.tabContent}>
+            <div className={styles.card}>
+              <UtilisationReport />
+            </div>
+          </div>
+        )}
+
+        {/* ── SETTINGS TAB ── */}
         {activeTab === "settings" && (
           <div className={styles.tabContent}>
             <div className={styles.card}>
-              <h3 className={styles.cardTitle}>Platform Settings</h3>
-              <p className={styles.emptyNote}>Settings panel coming soon. Here you'll be able to configure allowed email domains, listing categories, and moderation rules.</p>
+              <h3 className={styles.cardTitle}>
+                <i className="fas fa-clock" style={{ marginRight: 8, color: "#6AA6DA" }} />
+                Trade Facility Operating Hours &amp; Capacity
+              </h3>
+
+              {configLoading ? (
+                <div className={styles.configLoading}>
+                  <div className={styles.spinner} />
+                  <span>Loading facility settings…</span>
+                </div>
+              ) : (
+                <form className={styles.configForm} onSubmit={handleSaveConfig}>
+                  <div className={styles.configRow}>
+                    <div className={styles.configField}>
+                      <label className={styles.configLabel}><i className="fas fa-door-open" /> Opening time</label>
+                      <input type="time" className={styles.configInput} value={facilityConfig.openTime} onChange={e => setFacilityConfig(prev => ({ ...prev, openTime: e.target.value }))} required />
+                    </div>
+                    <div className={styles.configField}>
+                      <label className={styles.configLabel}><i className="fas fa-door-closed" /> Closing time</label>
+                      <input type="time" className={styles.configInput} value={facilityConfig.closeTime} onChange={e => setFacilityConfig(prev => ({ ...prev, closeTime: e.target.value }))} required />
+                    </div>
+                    <div className={styles.configField}>
+                      <label className={styles.configLabel}><i className="fas fa-layer-group" /> Slots per hour</label>
+                      <select className={styles.configInput} value={facilityConfig.slotsPerHour} onChange={e => setFacilityConfig(prev => ({ ...prev, slotsPerHour: Number(e.target.value) }))}>
+                        {[1, 2, 3, 4].map(n => <option key={n} value={n}>{n}</option>)}
+                      </select>
+                    </div>
+                  </div>
+
+                  {previewSlots.length > 0 && (
+                    <div className={styles.configPreview}>
+                      <p className={styles.configPreviewTitle}>
+                        Preview — {previewSlots.length} slot{previewSlots.length !== 1 ? "s" : ""},&nbsp;
+                        {previewCapacity} booking{previewCapacity !== 1 ? "s" : ""} max per day
+                      </p>
+                      <div className={styles.slotGrid}>
+                        {previewSlots.map(s => <span key={s} className={styles.slotChip}>{s}</span>)}
+                      </div>
+                    </div>
+                  )}
+
+                  {configError && (
+                    <div className={styles.configError}>
+                      <i className="fas fa-exclamation-circle" /> {configError}
+                    </div>
+                  )}
+                  {configSuccess && (
+                    <div className={styles.configSuccess}>
+                      <i className="fas fa-check-circle" /> {configSuccess}
+                    </div>
+                  )}
+
+                  <button type="submit" className={styles.btnApprove} disabled={configSaving} style={{ marginTop: 4, width: "fit-content" }}>
+                    {configSaving ? <><i className="fas fa-spinner fa-spin" /> Saving…</> : <><i className="fas fa-save" /> Save facility settings</>}
+                  </button>
+                </form>
+              )}
+            </div>
+
+            <div className={styles.card}>
+              <h3 className={styles.cardTitle}>
+                <i className="fas fa-sliders-h" style={{ marginRight: 8, color: "#6AA6DA" }} />
+                Platform Settings
+              </h3>
+              <p className={styles.emptyNote}>
+                Coming soon — configure allowed email domains, listing categories, and moderation rules.
+              </p>
             </div>
           </div>
         )}
