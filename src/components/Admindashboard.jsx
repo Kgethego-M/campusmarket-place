@@ -2,10 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { auth, db } from "../firebase";
 import { signOut, onAuthStateChanged } from "firebase/auth";
-import {
-    doc, getDoc, collection, getDocs, query,
-    orderBy, updateDoc, where, setDoc, deleteDoc,
-} from "firebase/firestore";
+import { doc, getDoc, collection, getDocs, query, orderBy, updateDoc, where, setDoc, deleteDoc, onSnapshot, writeBatch } from "firebase/firestore";
 import styles from "./Admindashboard.module.css";
 import { validateFacilityConfig, generateTimeSlots, getTotalCapacity } from "../utils/facilityConfig.utils";
 import UtilisationReport from "./UtilisationReport.jsx";
@@ -18,12 +15,16 @@ export default function AdminDashboard() {
     const [dropdownOpen,  setDropdownOpen]  = useState(false);
     const [isLoggingOut,  setIsLoggingOut]  = useState(false);
     const [userSearch,    setUserSearch]    = useState("");
+    const [listingSearch, setListingSearch] = useState("");
+    const [reportSearch, setReportSearch]   = useState("");
+
 
     const [adminUser,     setAdminUser]     = useState({ name: "Admin", email: "", photoURL: "", initials: "A" });
     const [stats,         setStats]         = useState({ totalUsers: 0, openReports: 0, transactions: 0, revenue: 0 });
     const [pendingStaff,  setPendingStaff]  = useState([]);
     const [allUsers,      setAllUsers]      = useState([]);
     const [listings,      setListings]      = useState([]);
+    const [reports, setReports]     = useState([]);
     const [loading,       setLoading]       = useState(true);
 
     // ── Facility config state ──────────────────────────────────────
@@ -93,6 +94,16 @@ export default function AdminDashboard() {
         load();
     }, []);
 
+    // ── Real-time reports listener ───────────────────────────────────────────
+    useEffect(() => {
+        const q = query(collection(db, "reports"), orderBy("createdAt", "desc"));
+        const unsub = onSnapshot(q, (snap) => {
+            setReports(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+        });
+        return () => unsub();
+    }, []);
+
+    // ── Actions ─────────────────────────────────────────────────────────────
     // ── Load facility config when settings tab opens ───────────────
     useEffect(() => {
         if (activeTab !== "settings") return;
@@ -193,6 +204,16 @@ export default function AdminDashboard() {
     );
     const previewSlots    = generateTimeSlots(facilityConfig.openTime, facilityConfig.closeTime);
     const previewCapacity = getTotalCapacity({ ...facilityConfig, slotsPerHour: Number(facilityConfig.slotsPerHour) });
+
+    const suspendedUsers = allUsers.filter(u => u.suspended);
+
+    const filteredListings = listings.filter(l =>
+        `${l.title || ""} ${l.category || ""} ${l.status || ""}`.toLowerCase().includes(listingSearch.toLowerCase())
+    );
+
+    const filteredReports = reports.filter(r =>
+        (r.reportedName || "").toLowerCase().includes(reportSearch.toLowerCase())
+    );
 
     if (loading) return (
         <div className={styles.loadingScreen}>
@@ -296,11 +317,11 @@ export default function AdminDashboard() {
                 {/* ── Tabs ── */}
                 <div className={styles.tabs}>
                     {[
-                        { id: "users",      icon: "fas fa-users",         label: "Users" },
-                        { id: "moderation", icon: "fas fa-shield-alt",    label: "Moderation" },
-                        { id: "payments",   icon: "fas fa-credit-card",   label: "Payments" },
-                        { id: "reports",    icon: "fas fa-calendar-alt",  label: " Utilisation Reports" },
-                        { id: "settings",   icon: "fas fa-cog",           label: "Settings" },
+                        { id: "users",      icon: "fas fa-users",       label: "Users" },
+                        { id: "moderation", icon: "fas fa-shield-alt",  label: "Moderation" },
+                        { id: "reports",    icon: "fas fa-flag",        label: "Reports" },
+                        { id: "payments",   icon: "fas fa-credit-card", label: "Payments" },
+                        { id: "suspended",  icon: "fas fa-ban",         label: "Suspended" },
                     ].map(t => (
                         <button
                             key={t.id}
@@ -401,12 +422,24 @@ export default function AdminDashboard() {
                 {activeTab === "moderation" && (
                     <div className={styles.tabContent}>
                         <div className={styles.card}>
-                            <h3 className={styles.cardTitle}>Listing Moderation</h3>
-                            {listings.length === 0
-                                ? <p className={styles.emptyNote}>No listings to moderate.</p>
+                            <div className={styles.cardHeader}>
+                                <h3 className={styles.cardTitle}>Listing Moderation</h3>
+                                <div className={styles.searchWrap}>
+                                    <i className="fas fa-search" />
+                                    <input
+                                        className={styles.searchInput}
+                                        type="text"
+                                        placeholder="Search listings…"
+                                        value={listingSearch}
+                                        onChange={e => setListingSearch(e.target.value)}
+                                    />
+                                </div>
+                            </div>
+                            {filteredListings.length === 0
+                                ? <p className={styles.emptyNote}>{listingSearch ? "No listings match your search." : "No listings to moderate."}</p>
                                 : (
                                     <div className={styles.modList}>
-                                        {listings.map(l => (
+                                        {filteredListings.map(l => (
                                             <div key={l.id} className={styles.modRow}>
                                                 <div className={styles.modThumb}>
                                                     {(l.imageUrl || l.photos?.[0])
@@ -489,122 +522,163 @@ export default function AdminDashboard() {
                     </div>
                 )}
 
-                {/* ── REPORTS TAB (US20 — Utilisation Report) ── */}
+                {/* ── REPORTS TAB ── */}
                 {activeTab === "reports" && (
                     <div className={styles.tabContent}>
                         <div className={styles.card}>
-                            <UtilisationReport />
-                        </div>
-                    </div>
-                )}
+                            <div className={styles.cardHeader}>
+                                <h3 className={styles.cardTitle}>
+                                    Pending Reports
+                                    {reports.filter(r => r.status === "pending").length > 0 && (
+                                        <span style={{ marginLeft: 10, background: "#dc2626", color: "#fff", borderRadius: 20, padding: "2px 10px", fontSize: "0.72rem", fontWeight: 700 }}>
+                                            {reports.filter(r => r.status === "pending").length}
+                                        </span>
+                                    )}
+                                </h3>
+                                <div className={styles.searchWrap}>
+                                    <i className="fas fa-search" />
+                                    <input
+                                        className={styles.searchInput}
+                                        type="text"
+                                        placeholder="Search reported names…"
+                                        value={reportSearch}
+                                        onChange={e => setReportSearch(e.target.value)}
+                                    />
+                                </div>
+                            </div>
 
-                {/* ── SETTINGS TAB ── */}
-                {activeTab === "settings" && (
-                    <div className={styles.tabContent}>
-                        <div className={styles.card}>
-                            <h3 className={styles.cardTitle}>
-                                <i className="fas fa-clock" style={{ marginRight: 8, color: "#6AA6DA" }} />
-                                Trade Facility Operating Hours &amp; Capacity
-                            </h3>
-
-                            {configLoading ? (
-                                <div className={styles.configLoading}>
-                                    <div className={styles.spinner} />
-                                    <span>Loading facility settings…</span>
+                            {filteredReports.filter(r => r.status === "pending").length === 0 ? (
+                                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, padding: "32px 0" }}>
+                                    <i className="fas fa-check-circle" style={{ fontSize: "2rem", color: "#16a34a" }} />
+                                    <p className={styles.emptyNote}>{reportSearch ? "No reports match your search." : "No pending reports — all clear!"}</p>
                                 </div>
                             ) : (
-                                <form className={styles.configForm} onSubmit={handleSaveConfig}>
-                                    <div className={styles.configRow}>
-                                        <div className={styles.configField}>
-                                            <label className={styles.configLabel}>
-                                                <i className="fas fa-door-open" /> Opening time
-                                            </label>
-                                            <input
-                                                type="time"
-                                                className={styles.configInput}
-                                                value={facilityConfig.openTime}
-                                                onChange={e => setFacilityConfig(prev => ({ ...prev, openTime: e.target.value }))}
-                                                required
-                                            />
-                                        </div>
-
-                                        <div className={styles.configField}>
-                                            <label className={styles.configLabel}>
-                                                <i className="fas fa-door-closed" /> Closing time
-                                            </label>
-                                            <input
-                                                type="time"
-                                                className={styles.configInput}
-                                                value={facilityConfig.closeTime}
-                                                onChange={e => setFacilityConfig(prev => ({ ...prev, closeTime: e.target.value }))}
-                                                required
-                                            />
-                                        </div>
-
-                                        <div className={styles.configField}>
-                                            <label className={styles.configLabel}>
-                                                <i className="fas fa-layer-group" /> Slots per hour
-                                            </label>
-                                            <select
-                                                className={styles.configInput}
-                                                value={facilityConfig.slotsPerHour}
-                                                onChange={e => setFacilityConfig(prev => ({ ...prev, slotsPerHour: Number(e.target.value) }))}
-                                            >
-                                                {[1, 2, 3, 4].map(n => (
-                                                    <option key={n} value={n}>{n}</option>
-                                                ))}
-                                            </select>
-                                        </div>
-                                    </div>
-
-                                    {previewSlots.length > 0 && (
-                                        <div className={styles.configPreview}>
-                                            <p className={styles.configPreviewTitle}>
-                                                Preview — {previewSlots.length} slot{previewSlots.length !== 1 ? "s" : ""},&nbsp;
-                                                {previewCapacity} booking{previewCapacity !== 1 ? "s" : ""} max per day
-                                            </p>
-                                            <div className={styles.slotGrid}>
-                                                {previewSlots.map(s => (
-                                                    <span key={s} className={styles.slotChip}>{s}</span>
-                                                ))}
+                                <div className={styles.modList}>
+                                    {filteredReports.filter(r => r.status === "pending").map(r => (
+                                        <div key={r.id} className={styles.modRow} style={{ alignItems: "flex-start", gap: 14 }}>
+                                            <div style={{ fontSize: "1.4rem", flexShrink: 0, width: 36, textAlign: "center" }}>
+                                                {r.reportType === "listing" ? "🛍️" : r.reportType === "review" ? "⭐" : "👤"}
+                                            </div>
+                                            <div className={styles.modInfo} style={{ flex: 1 }}>
+                                                <span className={styles.modTitle}>
+                                                    {r.reportedName || r.reportedId}
+                                                    <span style={{ marginLeft: 8, fontSize: "0.68rem", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", background: "#eff6ff", color: "#2563eb", padding: "2px 8px", borderRadius: 20 }}>
+                                                        {r.reportType}
+                                                    </span>
+                                                </span>
+                                                <span className={styles.modMeta}>{r.reason}</span>
+                                                {r.details && <span style={{ fontSize: "0.78rem", color: "#94a3b8", fontStyle: "italic" }}>"{r.details}"</span>}
+                                                <span style={{ fontSize: "0.73rem", color: "#94a3b8", marginTop: 2 }}>
+                                                    Reported by {r.reporterName} ·{" "}
+                                                    {r.createdAt?.toDate
+                                                        ? r.createdAt.toDate().toLocaleDateString("en-ZA", { day: "numeric", month: "short" })
+                                                        : "Recently"}
+                                                </span>
+                                            </div>
+                                            <div style={{ display: "flex", flexDirection: "column", gap: 6, flexShrink: 0 }}>
+                                                <button className={styles.btnApprove} onClick={async () => {
+                                                    await updateDoc(doc(db, "reports", r.id), { status: "resolved", resolution: "dismiss", resolvedAt: new Date() });
+                                                }}>Dismiss</button>
+                                                {r.reportType === "user" && (
+                                                    <button className={styles.btnSuspend} onClick={async () => {
+                                                        const batch = writeBatch(db);
+                                                        batch.update(doc(db, "users", r.reportedId), { suspended: true });
+                                                        batch.update(doc(db, "reports", r.id), { status: "resolved", resolution: "suspend_user", resolvedAt: new Date() });
+                                                        await batch.commit();
+                                                        setAllUsers(prev => prev.map(u => u.id === r.reportedId ? { ...u, suspended: true } : u));
+                                                    }}>Suspend User</button>
+                                                )}
+                                                {r.reportType === "listing" && (
+                                                    <button className={styles.btnReject} onClick={async () => {
+                                                        const batch = writeBatch(db);
+                                                        batch.delete(doc(db, "listings", r.reportedId));
+                                                        batch.update(doc(db, "reports", r.id), { status: "resolved", resolution: "remove_listing", resolvedAt: new Date() });
+                                                        await batch.commit();
+                                                        setListings(prev => prev.filter(x => x.id !== r.reportedId));
+                                                    }}>Remove Listing</button>
+                                                )}
+                                                {r.reportType === "review" && (
+                                                    <button className={styles.btnReject} onClick={async () => {
+                                                        const batch = writeBatch(db);
+                                                        batch.delete(doc(db, "reviews", r.reportedId));
+                                                        batch.update(doc(db, "reports", r.id), { status: "resolved", resolution: "remove_review", resolvedAt: new Date() });
+                                                        await batch.commit();
+                                                    }}>Remove Review</button>
+                                                )}
                                             </div>
                                         </div>
-                                    )}
-
-                                    {configError && (
-                                        <div className={styles.configError}>
-                                            <i className="fas fa-exclamation-circle" /> {configError}
-                                        </div>
-                                    )}
-                                    {configSuccess && (
-                                        <div className={styles.configSuccess}>
-                                            <i className="fas fa-check-circle" /> {configSuccess}
-                                        </div>
-                                    )}
-
-                                    <button
-                                        type="submit"
-                                        className={styles.btnApprove}
-                                        disabled={configSaving}
-                                        style={{ marginTop: 4, width: "fit-content" }}
-                                    >
-                                        {configSaving
-                                            ? <><i className="fas fa-spinner fa-spin" /> Saving…</>
-                                            : <><i className="fas fa-save" /> Save facility settings</>
-                                        }
-                                    </button>
-                                </form>
+                                    ))}
+                                </div>
                             )}
                         </div>
 
+                        {/* Resolved reports */}
+                        {filteredReports.filter(r => r.status !== "pending").length > 0 && (
+                            <div className={styles.card}>
+                                <h3 className={styles.cardTitle}>Resolved Reports</h3>
+                                <div className={styles.modList}>
+                                    {filteredReports.filter(r => r.status !== "pending").map(r => (
+                                        <div key={r.id} className={styles.modRow} style={{ opacity: 0.6 }}>
+                                            <div style={{ fontSize: "1.2rem", flexShrink: 0 }}>
+                                                {r.reportType === "listing" ? "🛍️" : r.reportType === "review" ? "⭐" : "👤"}
+                                            </div>
+                                            <div className={styles.modInfo}>
+                                                <span className={styles.modTitle}>{r.reportedName || r.reportedId}</span>
+                                                <span className={styles.modMeta}>{r.reason}</span>
+                                            </div>
+                                            <span style={{ fontSize: "0.75rem", fontWeight: 700, color: "#16a34a", background: "#f0fdf4", padding: "4px 10px", borderRadius: 20 }}>
+                                                ✓ {r.resolution || "resolved"}
+                                            </span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                )}
+
+                {/* ── SUSPENDED USERS TAB ── */}
+                {activeTab === "suspended" && (
+                    <div className={styles.tabContent}>
                         <div className={styles.card}>
                             <h3 className={styles.cardTitle}>
-                                <i className="fas fa-sliders-h" style={{ marginRight: 8, color: "#6AA6DA" }} />
-                                Platform Settings
+                                Suspended Users
+                                {suspendedUsers.length > 0 && (
+                                    <span style={{ marginLeft: 10, background: "#dc2626", color: "#fff", borderRadius: 20, padding: "2px 10px", fontSize: "0.72rem", fontWeight: 700 }}>
+                                        {suspendedUsers.length}
+                                    </span>
+                                )}
                             </h3>
-                            <p className={styles.emptyNote}>
-                                Coming soon — configure allowed email domains, listing categories, and moderation rules.
-                            </p>
+                            {suspendedUsers.length === 0 ? (
+                                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, padding: "32px 0" }}>
+                                    <i className="fas fa-check-circle" style={{ fontSize: "2rem", color: "#16a34a" }} />
+                                    <p className={styles.emptyNote}>No suspended users.</p>
+                                </div>
+                            ) : (
+                                <div className={styles.userList}>
+                                    {suspendedUsers.map(u => (
+                                        <div key={u.id} className={styles.userRow} style={{ opacity: 0.85 }}>
+                                            <div className={styles.userAvatar}>
+                                                {u.photoURL
+                                                    ? <img src={u.photoURL} alt="" />
+                                                    : <span>{(u.firstName?.[0] || "?").toUpperCase()}</span>
+                                                }
+                                            </div>
+                                            <div className={styles.userInfo}>
+                                                <span className={styles.userName}>{u.firstName} {u.lastName}</span>
+                                                <span className={styles.userMeta}>{u.email}</span>
+                                            </div>
+                                            <span style={{ fontSize: "0.72rem", color: "#dc2626", fontWeight: 700, background: "#fef2f2", padding: "3px 10px", borderRadius: 20 }}>SUSPENDED</span>
+                                            <button
+                                                className={styles.btnUnsuspend}
+                                                onClick={() => toggleSuspend(u.id, true)}
+                                            >
+                                                Unsuspend
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
                         </div>
                     </div>
                 )}

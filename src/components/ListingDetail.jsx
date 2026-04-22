@@ -10,6 +10,7 @@ import { onAuthStateChanged } from 'firebase/auth';
 import { createTransaction } from '../services/transactionService';
 import { notifySellerOfOffer } from '../services/notificationService';
 import NavBarTemp from './NavBarTemp';
+import ReportModal from './ReportModal';
 
 // ── Icons ─────────────────────────────────────────────────────────────────────
 const IconMessage = () => (
@@ -58,6 +59,7 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
   const [offerSent, setOfferSent]         = useState(false);
   const [chatLoading, setChatLoading]     = useState(false);
   const [submitting, setSubmitting]       = useState(false);
+  const [reportOpen, setReportOpen]       = useState(false);
 
   const sellerId     = listing.sellerUID || listing.sellerId;
   const isOwnListing = currentUser && currentUser.uid === sellerId;
@@ -197,6 +199,14 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
   return (
     <>
       <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
+
+      <ReportModal
+        open={reportOpen}
+        onClose={() => setReportOpen(false)}
+        reportType="listing"
+        reportedId={listing.id}
+        reportedName={listing.title}
+      />
       <div style={styles.page}>
 
         {/* ── Images ── */}
@@ -275,6 +285,17 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
                 ? <><IconLoader /><span>Opening chat…</span></>
                 : <><IconMessage /><span>Message Seller</span></>
               }
+            </button>
+          )}
+
+          {/* ── Report Listing ── */}
+          {currentUser && !isOwnListing && (
+            <button style={styles.reportBtn} onClick={() => setReportOpen(true)}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+                <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/>
+                <line x1="4" y1="22" x2="4" y2="15"/>
+              </svg>
+              <span>Report Listing</span>
             </button>
           )}
 
@@ -490,6 +511,7 @@ const styles = {
   price:            { fontSize: '1.6rem', fontWeight: '700', color: '#6AA6DA', margin: '0', fontFamily: 'Segoe UI, system-ui, sans-serif' },
   buyBtn:           { width: '100%', padding: '16px', backgroundColor: '#6AA6DA', color: '#fff', border: 'none', borderRadius: '10px', fontSize: '1rem', fontWeight: '700', cursor: 'pointer', fontFamily: 'Segoe UI, system-ui, sans-serif' },
   messageBtn:       { width: '100%', padding: '12px', backgroundColor: 'transparent', color: '#444', border: '1px solid #6aa6da57', borderRadius: '10px', fontSize: '0.95rem', fontWeight: '500', cursor: 'pointer', fontFamily: 'Segoe UI, system-ui, sans-serif', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' },
+  reportBtn:        { width: '100%', padding: '11px', backgroundColor: 'transparent', color: '#dc2626', border: '1.5px solid #fca5a5', borderRadius: '10px', fontSize: '0.85rem', fontWeight: '500', cursor: 'pointer', fontFamily: 'Segoe UI, system-ui, sans-serif', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '7px' },
 
   pendingBanner:       { display: 'flex', alignItems: 'center', gap: '12px', padding: '16px', backgroundColor: '#fff8e1', border: '1px solid #ffe082', borderRadius: '10px', fontFamily: 'Segoe UI, system-ui, sans-serif' },
   pendingTitle:        { margin: '0 0 4px', fontWeight: '700', fontSize: '0.95rem', color: '#b45309' },
