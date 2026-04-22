@@ -1036,3 +1036,31 @@
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
   transform: translateY(-2px);
 }
+/* ── ADD THIS TO THE BOTTOM OF Profile.module.css ── */
+
+.viewRatingsLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  background: none;
+  border: none;
+  color: #6AA6DA;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0.2rem 0.5rem;
+  border-radius: 6px;
+  transition: background 0.15s, color 0.15s;
+  font-family: inherit;
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+.viewRatingsLink:hover {
+  background: #e8f4fc;
+  color: #4094d4;
+}
+
+.viewRatingsLink i {
+  font-size: 0.65rem;
+}
