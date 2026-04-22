@@ -1,0 +1,283 @@
+/* UtilisationReport.module.css */
+
+.wrap {
+  padding: 0 0 40px;
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+}
+
+/* ── Header ────────────────────────────────────────────────────── */
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-bottom: 16px;
+}
+
+.title {
+  font-size: 18px;
+  font-weight: 800;
+  color: #111827;
+  margin: 0 0 4px;
+  letter-spacing: -0.3px;
+}
+
+.subtitle {
+  font-size: 13px;
+  color: #6b7280;
+  margin: 0;
+}
+
+/* ── Week navigator ─────────────────────────────────────────────── */
+.weekNav {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 6px 10px;
+}
+
+.navBtn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #6b7280;
+  display: flex;
+  align-items: center;
+  padding: 2px 4px;
+  border-radius: 5px;
+  transition: background 0.15s, color 0.15s;
+}
+
+.navBtn:hover {
+  background: #e5e7eb;
+  color: #111827;
+}
+
+.weekLabel {
+  font-size: 13px;
+  font-weight: 600;
+  color: #374151;
+  white-space: nowrap;
+}
+
+/* ── Legend ─────────────────────────────────────────────────────── */
+.legend {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  font-size: 12px;
+  color: #6b7280;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.legendDot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  margin-right: 4px;
+}
+
+.legendDot.low  { background: #22c55e; }
+.legendDot.mid  { background: #f59e0b; }
+.legendDot.high { background: #ef4444; }
+
+/* ── Error ──────────────────────────────────────────────────────── */
+.errorMsg {
+  font-size: 13px;
+  color: #dc2626;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin-bottom: 16px;
+}
+
+/* ── Table wrapper ──────────────────────────────────────────────── */
+.tableWrap {
+  overflow-x: auto;
+  border-radius: 12px;
+  border: 1px solid #e5e7eb;
+  background: #fff;
+  margin-bottom: 20px;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  min-width: 640px;
+}
+
+/* ── Table head ─────────────────────────────────────────────────── */
+.slotHeader {
+  text-align: left;
+  padding: 12px 16px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #6b7280;
+  background: #f9fafb;
+  border-bottom: 1px solid #e5e7eb;
+  white-space: nowrap;
+  position: sticky;
+  left: 0;
+  z-index: 1;
+}
+
+.dayHeader {
+  padding: 10px 12px;
+  background: #f9fafb;
+  border-bottom: 1px solid #e5e7eb;
+  border-left: 1px solid #f3f4f6;
+  text-align: center;
+  min-width: 100px;
+}
+
+.dayName {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: #374151;
+  white-space: nowrap;
+}
+
+.dayBadge {
+  display: inline-block;
+  margin-top: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+
+.dayBadge.low  { background: #dcfce7; color: #15803d; }
+.dayBadge.mid  { background: #fef3c7; color: #92400e; }
+.dayBadge.high { background: #fee2e2; color: #b91c1c; }
+
+/* ── Table body ─────────────────────────────────────────────────── */
+.row:not(:last-child) td {
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.slotCell {
+  padding: 10px 16px;
+  font-weight: 600;
+  color: #374151;
+  background: #fff;
+  white-space: nowrap;
+  position: sticky;
+  left: 0;
+  border-right: 1px solid #e5e7eb;
+  z-index: 1;
+}
+
+.cell {
+  padding: 10px 12px;
+  text-align: center;
+  border-left: 1px solid #f3f4f6;
+  transition: background 0.15s;
+}
+
+.cell_low  { background: #f0fdf4; }
+.cell_mid  { background: #fffbeb; }
+.cell_high { background: #fff1f2; }
+
+.pct {
+  display: block;
+  font-size: 14px;
+  font-weight: 700;
+  color: #111827;
+  line-height: 1.2;
+}
+
+.fraction {
+  display: block;
+  font-size: 11px;
+  color: #9ca3af;
+  margin-top: 2px;
+}
+
+/* ── Shimmer loading grid ───────────────────────────────────────── */
+.loadingGrid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 6px;
+  padding: 16px;
+}
+
+.shimmerCell {
+  height: 52px;
+  border-radius: 8px;
+  background: linear-gradient(90deg, #f0f2f5 25%, #e4e8ed 50%, #f0f2f5 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s infinite;
+}
+
+@keyframes shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* ── Summary cards ──────────────────────────────────────────────── */
+.summaryRow {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 8px;
+}
+
+.summaryCard {
+  border-radius: 10px;
+  padding: 12px 10px;
+  text-align: center;
+  border: 1px solid #e5e7eb;
+}
+
+.card_low  { background: #f0fdf4; border-color: #bbf7d0; }
+.card_mid  { background: #fffbeb; border-color: #fde68a; }
+.card_high { background: #fff1f2; border-color: #fecdd3; }
+
+.summaryDate {
+  font-size: 11px;
+  font-weight: 600;
+  color: #6b7280;
+  margin: 0 0 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.summaryPct {
+  font-size: 20px;
+  font-weight: 800;
+  color: #111827;
+  margin: 0 0 2px;
+  line-height: 1;
+}
+
+.summaryDetail {
+  font-size: 10px;
+  color: #9ca3af;
+  margin: 0;
+}
+
+/* ── Responsive ─────────────────────────────────────────────────── */
+@media (max-width: 768px) {
+  .summaryRow {
+    grid-template-columns: repeat(4, 1fr);
+  }
+
+  .header {
+    flex-direction: column;
+  }
+}
+
+@media (max-width: 480px) {
+  .summaryRow {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
