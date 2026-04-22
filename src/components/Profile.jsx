@@ -1,5 +1,3 @@
-Profile.jsx
-
 import { onAuthStateChanged } from 'firebase/auth';
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
@@ -12,6 +10,7 @@ import { updateProfile } from 'firebase/auth';
 import ProfileListingCard from './ProfileListingCard';
 import OfferItem from './OfferItem';
 import styles from './Profile.module.css';
+import ProfileRating from './ProfileRating';
 
 const toRawListingType = (displayType) => {
   if (!displayType) return displayType;
@@ -32,6 +31,7 @@ function Profile() {
   const fileInputRef = useRef(null);
 
   const [loading, setLoading]               = useState(true);
+  const [showRatings, setShowRatings]       = useState(false);
   const [isEditing, setIsEditing]           = useState(false);
   const [incomingOffers, setIncomingOffers] = useState([]);
   const [highlightedOfferId, setHighlightedOfferId] = useState(null);
@@ -83,14 +83,11 @@ function Profile() {
       const d = docSnap.data();
       setHistory(d.history || []);
 
-      // Run all fetches in parallel
       const [, , reviewSnap, allUserListingsSnap, completedTxAsSellerSnap] = await Promise.all([
         fetchUserListings(user.uid),
         fetchUserPurchases(user.uid),
         getDocs(query(collection(db, 'reviews'), where('reviewedUserId', '==', user.uid))),
-        // Get ALL of this user's listings — we'll filter by status in JS
         getDocs(query(collection(db, 'listings'), where('sellerUID', '==', user.uid))),
-        // Get ALL completed/accepted transactions as seller — filter type in JS
         getDocs(query(
           collection(db, 'transactions'),
           where('sellerId', '==', user.uid),
@@ -112,22 +109,17 @@ function Profile() {
       }
 
       // ── Sales aggregation ──
-      // Count listings whose status indicates a completed sale (any casing)
       const SOLD_STATUSES = new Set(['sold', 'completed', 'traded']);
-      const TRADE_LISTING_TYPES = new Set(['trade']);
-
       const soldListings = allUserListingsSnap.docs.filter(doc => {
         const status = doc.data().status?.toLowerCase?.() ?? '';
         return SOLD_STATUSES.has(status);
       });
 
-      // Sales = sold listings that are NOT pure trade-type
       const liveTotalSales = soldListings.filter(doc => {
         const lt = doc.data().listingType?.toLowerCase?.() ?? '';
-        return lt !== 'trade'; // 'sale', 'either', or unset all count as sales
+        return lt !== 'trade';
       }).length;
 
-      // Trades = sold listings that are trade-type OR completed transactions of type trade
       const tradedFromListings = soldListings.filter(doc => {
         const lt = doc.data().listingType?.toLowerCase?.() ?? '';
         return lt === 'trade' || doc.data().status?.toLowerCase?.() === 'traded';
@@ -139,7 +131,6 @@ function Profile() {
         return type === 'trade' || lt === 'trade';
       }).length;
 
-      // Use whichever source gives a higher count (avoid double-counting by taking max)
       const liveTotalTrades = Math.max(tradedFromListings, tradedFromTransactions);
 
       // ── Sync to Firestore if changed ──
@@ -173,7 +164,6 @@ function Profile() {
     }
   };
 
-  // Helper: resolve a user's full name from Firestore
   async function getUserName(uid) {
     if (!uid) return null;
     try {
@@ -197,7 +187,6 @@ function Profile() {
 
       setListings(all);
 
-      // Only sold/completed/traded go to history
       const doneItems = all.filter(l => {
         const s = l.status?.toLowerCase();
         return HISTORY_STATUSES.has(s);
@@ -214,13 +203,11 @@ function Profile() {
             side:   'seller',
             date:   l.date,
             price:  l.price != null ? `R${Number(l.price).toLocaleString()}` : null,
-            buyer:  null, // will be enriched below
+            buyer:  null,
             status: 'sold',
           }))] : prev;
         });
 
-        // Enrich with buyer names in background
-       // Enrich with buyer names — query transactions by listingId
         Promise.all(doneItems.map(async (l) => {
           let buyerName = null;
           let date = l.date;
@@ -230,9 +217,7 @@ function Profile() {
             );
             if (!txSnap.empty) {
               const tx = txSnap.docs[0].data();
-              // buyerName stored directly on transaction
               buyerName = tx.buyerName || null;
-              // If no name stored, resolve from users collection
               if (!buyerName && tx.buyerId) {
                 buyerName = await getUserName(tx.buyerId);
               }
@@ -254,7 +239,6 @@ function Profile() {
 
   const fetchUserPurchases = async (uid) => {
     try {
-      // Try both 'transactions' and 'purchases' collections
       const [txBuyerSnap, txSellerSnap, pBuyerSnap, pSellerSnap] = await Promise.all([
         getDocs(query(collection(db, 'transactions'), where('buyerId',  '==', uid), where('status', 'in', ['accepted', 'completed']))),
         getDocs(query(collection(db, 'transactions'), where('sellerId', '==', uid), where('status', 'in', ['accepted', 'completed']))),
@@ -279,7 +263,6 @@ function Profile() {
           let price     = p.price ?? p.amount ?? p.agreedPrice ?? null;
           let otherName = null;
 
-          // Fetch listing title/price if missing
           if (p.listingId && !itemTitle) {
             try {
               const ls = await getDoc(doc(db, 'listings', p.listingId));
@@ -292,7 +275,6 @@ function Profile() {
           }
           itemTitle = itemTitle || (side === 'buyer' ? 'Purchase' : 'Sale');
 
-          // Resolve the other party's name
           if (side === 'buyer') {
             otherName = p.sellerName || await getUserName(p.sellerId);
           } else {
@@ -418,6 +400,11 @@ function Profile() {
     </div>
   );
 
+  // ── Show ratings page ─────────────────────────────────────────────────────
+  if (showRatings) {
+    return <ProfileRating onClose={() => setShowRatings(false)} />;
+  }
+
   const totalSales        = safeNumber(profileData.totalSales);
   const totalTrades       = safeNumber(profileData.totalTrades);
   const totalTransactions = totalSales + totalTrades;
@@ -425,7 +412,6 @@ function Profile() {
   const activeListings   = listings.filter(l => !HISTORY_STATUSES.has(l.status?.toLowerCase?.()) && !READONLY_STATUSES.has(l.status?.toLowerCase?.()));
   const acceptedListings = listings.filter(l => READONLY_STATUSES.has(l.status?.toLowerCase?.()));
 
-  // Sort history newest first
   const sortedHistory = [...history].sort((a, b) => new Date(b.date) - new Date(a.date));
 
   return (
@@ -464,11 +450,20 @@ function Profile() {
         </div>
 
         <div className={styles.statsSection}>
+          {/* ── Rating row with View reviews link ── */}
           <div className={styles.rating}>
             <div className={styles.ratingStars}>{renderStars(profileData.rating)}</div>
             <span className={styles.ratingValue}>{safeNumber(profileData.rating).toFixed(1)}</span>
             <span className={styles.totalRatings}>({safeNumber(profileData.totalRatings)} ratings)</span>
+            <button
+              className={styles.viewRatingsLink}
+              onClick={() => setShowRatings(true)}
+              title="View all your ratings and reviews"
+            >
+              <i className="fas fa-chevron-right" /> View reviews
+            </button>
           </div>
+
           <div className={styles.statsGrid}>
             <div className={styles.statItem}><i className="fas fa-tag" /><div className={styles.statInfo}><span className={styles.statValue}>{totalSales}</span><span className={styles.statLabel}>Sales</span></div></div>
             <div className={styles.statItem}><i className="fas fa-exchange-alt" /><div className={styles.statInfo}><span className={styles.statValue}>{totalTrades}</span><span className={styles.statLabel}>Trades</span></div></div>
@@ -508,14 +503,11 @@ function Profile() {
 
                   return (
                     <div key={item.id} className={styles.historyItem}>
-                      {/* Icon */}
                       <div className={`${styles.historyIcon} ${isBuyer ? styles.historyIconBuyer : styles.historyIconSeller}`}>
                         {item.type === 'purchase' && <i className="fas fa-shopping-cart" />}
                         {item.type === 'sale'     && <i className="fas fa-tag" />}
                         {item.type === 'trade'    && <i className="fas fa-exchange-alt" />}
                       </div>
-
-                      {/* Details */}
                       <div className={styles.historyDetails}>
                         <h4 className={styles.historyItemTitle}>{item.item}</h4>
                         <div className={styles.historyMeta}>
@@ -535,8 +527,6 @@ function Profile() {
                           )}
                         </div>
                       </div>
-
-                      {/* Badge */}
                       <span className={`${styles.historyBadge} ${isBuyer ? styles.historyBadgeBought : styles.historyBadgeSold}`}>
                         {isBuyer ? 'Bought' : 'Sold'}
                       </span>
@@ -573,7 +563,6 @@ function Profile() {
                     />
                   </div>
                 ))}
-
                 {acceptedListings.map(listing => (
                   <div key={listing.id} className={`${styles.listingCardCompact} ${styles.listingCardAccepted}`}>
                     <ProfileListingCard
