@@ -502,7 +502,7 @@ export default function AdminDashboard() {
           {[
             { label: "Total Users", value: stats.totalUsers, icon: "fas fa-users" },
             { label: "Open Reports", value: stats.openReports, icon: "fas fa-flag", highlight: stats.openReports > 0 },
-            { label: "Transactions", value: stats.transactions, icon: "fas fa-exchange-alt" },
+            { label: "Completed Transactions", value: stats.transactions, icon: "fas fa-exchange-alt" },
             { label: "Revenue (Paid)", value: `R ${stats.revenue.toLocaleString()}`, icon: "fas fa-wallet" },
           ].map(({ label, value, icon, highlight }) => (
             <div key={label} className={`${styles.statCard} ${highlight ? styles.statCardAlert : ""}`}>
@@ -709,14 +709,41 @@ export default function AdminDashboard() {
                     <div key={r.id} className={styles.modRow} style={{ alignItems: "flex-start", gap: 14 }}>
                       <div style={{ fontSize: "1.4rem", flexShrink: 0, width: 36, textAlign: "center" }}>{reportTypeIcon(r.reportType)}</div>
                       <div className={styles.modInfo} style={{ flex: 1 }}>
+                        {/* Title + type pill */}
                         <span className={styles.modTitle}>
                           {r.reportedName || r.reportedId}
                           <span style={{ marginLeft: 8, fontSize: "0.68rem", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", background: "#eff6ff", color: "#2563eb", padding: "2px 8px", borderRadius: 20 }}>
                             {r.reportType}
                           </span>
                         </span>
-                        <span className={styles.modMeta}>{r.reason}</span>
-                        {r.details && <span style={{ fontSize: "0.78rem", color: "#94a3b8", fontStyle: "italic" }}>"{r.details}"</span>}
+                        {/* Reason — highlighted in red */}
+                        <span style={{ display: "flex", alignItems: "center", gap: 5, fontSize: "0.8rem", color: "#dc2626", fontWeight: 600, marginTop: 2 }}>
+                          <i className="fas fa-flag" style={{ fontSize: "0.7rem" }} />
+                          {r.reason}
+                        </span>
+                        {/* For review reports: show the actual review comment */}
+                        {r.reportType === "review" && r.reviewComment && (
+                          <div style={{ margin: "6px 0", padding: "8px 12px", background: "#fef9f0", border: "1px solid #fed7aa", borderLeft: "3px solid #f97316", borderRadius: 8 }}>
+                            <p style={{ margin: "0 0 3px", fontSize: "0.7rem", fontWeight: 700, color: "#c2410c", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                              Reported review content
+                            </p>
+                            <p style={{ margin: 0, fontSize: "0.82rem", color: "#374151", fontStyle: "italic", lineHeight: 1.5 }}>
+                              "{r.reviewComment}"
+                            </p>
+                            {r.reviewRating && (
+                              <p style={{ margin: "4px 0 0", fontSize: "0.75rem", color: "#f59e0b" }}>
+                                {"★".repeat(r.reviewRating)}{"☆".repeat(5 - r.reviewRating)} ({r.reviewRating}/5)
+                              </p>
+                            )}
+                          </div>
+                        )}
+                        {/* Additional details from reporter */}
+                        {r.details && (
+                          <span style={{ fontSize: "0.78rem", color: "#64748b", fontStyle: "italic" }}>
+                            Reporter notes: "{r.details}"
+                          </span>
+                        )}
+                        {/* Meta */}
                         <span style={{ fontSize: "0.73rem", color: "#94a3b8", marginTop: 2 }}>
                           Reported by {r.reporterName} ·{" "}
                           {r.createdAt?.toDate ? r.createdAt.toDate().toLocaleDateString("en-ZA", { day: "numeric", month: "short" }) : "Recently"}
@@ -731,7 +758,7 @@ export default function AdminDashboard() {
                           <button className={styles.btnReject} onClick={() => handleResolveReport(r, "remove_listing")}>Remove Listing</button>
                         )}
                         {r.reportType === "review" && (
-                          <button className={styles.btnReject} onClick={() => handleResolveReport(r, "remove_review")}>Remove Review</button>
+                          <button className={styles.btnReject} onClick={() => handleResolveReport(r, "remove_review")}>Delete Review</button>
                         )}
                       </div>
                     </div>
@@ -769,18 +796,39 @@ export default function AdminDashboard() {
               {listings.filter(l => l.status === "sold" || l.status === "traded").length === 0 ? (
                 <p className={styles.emptyNote}>No completed transactions yet.</p>
               ) : (
-                <div className={styles.payTable}>
-                  <div className={styles.payHeader}>
-                    <span>Item</span><span>Type</span><span>Amount</span><span>Status</span>
-                  </div>
-                  {listings.filter(l => l.status === "sold" || l.status === "traded").map(l => (
-                    <div key={l.id} className={styles.payRow}>
-                      <span className={styles.payTitle}>{l.title}</span>
-                      <span className={styles.payType}>{l.listingType || "—"}</span>
-                      <span className={styles.payAmount}>R {Number(l.price || 0).toLocaleString()}</span>
-                      <span className={`${styles.payStatus} ${styles[l.status]}`}>{l.status}</span>
-                    </div>
-                  ))}
+                <div className={styles.modList}>
+                  {listings.filter(l => l.status === "sold" || l.status === "traded").map(l => {
+                    const img = l.imageUrl || l.photos?.[0] || null;
+                    return (
+                      <div key={l.id} className={styles.modRow} style={{ alignItems: "center", gap: 14 }}>
+                        {/* Item image */}
+                        <div className={styles.modThumb}>
+                          {img
+                            ? <img src={img} alt={l.title} style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: 8 }} />
+                            : <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", background: "#f1f5f9", borderRadius: 8, color: "#94a3b8" }}>
+                                <i className="fas fa-image" style={{ fontSize: "1.4rem" }} />
+                              </div>
+                          }
+                        </div>
+                        {/* Item info */}
+                        <div className={styles.modInfo} style={{ flex: 1 }}>
+                          <span className={styles.modTitle}>{l.title}</span>
+                          <span className={styles.modMeta}>
+                            {l.category && <>{l.category} · </>}
+                            {l.listingType || "—"}
+                          </span>
+                        </div>
+                        {/* Amount */}
+                        <span style={{ fontWeight: 700, color: "#16a34a", fontSize: "0.95rem", flexShrink: 0 }}>
+                          R {Number(l.price || 0).toLocaleString()}
+                        </span>
+                        {/* Status badge */}
+                        <span className={`${styles.modStatus} ${styles[l.status]}`} style={{ flexShrink: 0 }}>
+                          {l.status}
+                        </span>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </ReportCard>

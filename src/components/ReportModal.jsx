@@ -24,7 +24,7 @@ const REASONS = [
  *  reportedId  – uid / listingId / reviewId
  *  reportedName – display name shown in the modal
  */
-export default function ReportModal({ open, onClose, reportType = 'user', reportedId, reportedName = '' }) {
+export default function ReportModal({ open, onClose, reportType = 'user', reportedId, reportedName = '', extraData = {} }) {
   const [reason, setReason]       = useState('');
   const [details, setDetails]     = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -59,7 +59,9 @@ export default function ReportModal({ open, onClose, reportType = 'user', report
         reporterName,
         reason,
         details: details.trim() || null,
-        status: 'pending',    // pending | reviewed | resolved
+        // Extra fields for review reports (comment + rating visible to admin)
+        ...extraData,
+        status: 'pending',
         createdAt: serverTimestamp(),
       });
 
