@@ -2,12 +2,14 @@ import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { auth, db } from "../firebase";
 import { signOut, onAuthStateChanged } from "firebase/auth";
-import { doc, getDoc, collection, getDocs, query, orderBy, updateDoc, where, deleteDoc, onSnapshot, writeBatch } from "firebase/firestore";
+import { doc, getDoc, collection, getDocs, query, orderBy, updateDoc, where, setDoc, deleteDoc, onSnapshot, writeBatch } from "firebase/firestore";
 import styles from "./Admindashboard.module.css";
+import { validateFacilityConfig, generateTimeSlots, getTotalCapacity } from "../utils/facilityConfig.utils";
+import UtilisationReport from "./UtilisationReport.jsx";
 
 export default function AdminDashboard() {
-    const navigate = useNavigate();
-    const dropdownRef = useRef(null);
+    const navigate     = useNavigate();
+    const dropdownRef  = useRef(null);
 
     const [activeTab, setActiveTab] = useState("users");
     const [dropdownOpen, setDropdownOpen] = useState(false);
@@ -24,11 +26,21 @@ export default function AdminDashboard() {
     const [reports, setReports]     = useState([]);
     const [loading, setLoading]     = useState(true);
 
-    // ── Auth guard + load admin profile ────────────────────────────────────
+    // ── Facility config state ──────────────────────────────────────
+    const [facilityConfig, setFacilityConfig] = useState({
+        openTime:     "09:00",
+        closeTime:    "16:00",
+        slotsPerHour: 1,
+    });
+    const [configLoading,  setConfigLoading]  = useState(false);
+    const [configSaving,   setConfigSaving]   = useState(false);
+    const [configError,    setConfigError]    = useState("");
+    const [configSuccess,  setConfigSuccess]  = useState("");
+
+    // ── Auth guard + load admin profile ───────────────────────────
     useEffect(() => {
         const unsub = onAuthStateChanged(auth, async (user) => {
             if (!user) { navigate("/login"); return; }
-
             try {
                 const snap = await getDoc(doc(db, "users", user.uid));
                 const data = snap.exists() ? snap.data() : {};
@@ -37,44 +49,40 @@ export default function AdminDashboard() {
                 const fn = data.firstName || user.displayName?.split(" ")[0] || "Admin";
                 const ln = data.lastName  || user.displayName?.split(" ").slice(1).join(" ") || "";
                 setAdminUser({
-                    name: `${fn} ${ln}`.trim(),
-                    email: data.email || user.email,
+                    name:     `${fn} ${ln}`.trim(),
+                    email:    data.email || user.email,
                     photoURL: data.photoURL || user.photoURL || "",
-                    initials: `${fn[0] || "A"}${ln[0] || ""}`.toUpperCase()
+                    initials: `${fn[0] || "A"}${ln[0] || ""}`.toUpperCase(),
                 });
             } catch (e) { console.error(e); }
         });
         return () => unsub();
     }, [navigate]);
 
-    // ── Fetch dashboard data ────────────────────────────────────────────────
+    // ── Fetch dashboard data ───────────────────────────────────────
     useEffect(() => {
         async function load() {
             try {
-                // All users
                 const usersSnap = await getDocs(collection(db, "users"));
-                const users = usersSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+                const users     = usersSnap.docs.map(d => ({ id: d.id, ...d.data() }));
                 setAllUsers(users);
 
-                // Pending staff approvals (userType === "staff" && !approved)
                 const pending = users.filter(u => u.userType === "staff" && !u.approved);
                 setPendingStaff(pending);
 
-                // Listings
                 const listSnap = await getDocs(query(collection(db, "listings"), orderBy("timestamp", "desc")));
                 const listData = listSnap.docs.map(d => ({ id: d.id, ...d.data() }));
                 setListings(listData);
 
-                // Stats
-                const sold = listData.filter(l => l.status === "sold");
+                const sold    = listData.filter(l => l.status === "sold");
                 const revenue = sold.reduce((sum, l) => sum + (Number(l.price) || 0), 0);
-                const reports = users.filter(u => u.suspended).length; // open reports = suspended users as proxy
+                const reports = users.filter(u => u.suspended).length;
 
                 setStats({
-                    totalUsers: users.length,
-                    openReports: reports,
+                    totalUsers:   users.length,
+                    openReports:  reports,
                     transactions: sold.length,
-                    revenue: revenue
+                    revenue,
                 });
             } catch (e) {
                 console.error("Dashboard load error:", e);
@@ -95,6 +103,60 @@ export default function AdminDashboard() {
     }, []);
 
     // ── Actions ─────────────────────────────────────────────────────────────
+
+    // ── Load facility config when settings tab opens ───────────────
+    useEffect(() => {
+        if (activeTab !== "settings") return;
+        (async () => {
+            setConfigLoading(true);
+            setConfigError("");
+            try {
+                const snap = await getDoc(doc(db, "facilityConfig", "default"));
+                if (snap.exists()) {
+                    const data = snap.data();
+                    setFacilityConfig({
+                        openTime:     data.openTime     ?? "09:00",
+                        closeTime:    data.closeTime    ?? "16:00",
+                        slotsPerHour: data.slotsPerHour ?? 1,
+                    });
+                }
+            } catch (e) {
+                setConfigError("Failed to load facility config.");
+                console.error(e);
+            } finally {
+                setConfigLoading(false);
+            }
+        })();
+    }, [activeTab]);
+
+    // ── Save facility config ───────────────────────────────────────
+    async function handleSaveConfig(e) {
+        e.preventDefault();
+        setConfigError("");
+        setConfigSuccess("");
+
+        const parsed = { ...facilityConfig, slotsPerHour: Number(facilityConfig.slotsPerHour) };
+        const { valid, error } = validateFacilityConfig(parsed);
+        if (!valid) { setConfigError(error); return; }
+
+        setConfigSaving(true);
+        try {
+            await setDoc(doc(db, "facilityConfig", "default"), {
+                openTime:     parsed.openTime,
+                closeTime:    parsed.closeTime,
+                slotsPerHour: parsed.slotsPerHour,
+            });
+            setConfigSuccess("Facility settings saved successfully.");
+            setTimeout(() => setConfigSuccess(""), 3500);
+        } catch (e) {
+            setConfigError("Failed to save. Please try again.");
+            console.error(e);
+        } finally {
+            setConfigSaving(false);
+        }
+    }
+
+    // ── Actions ────────────────────────────────────────────────────
     const approveStaff = async (userId) => {
         await updateDoc(doc(db, "users", userId), { approved: true });
         setPendingStaff(prev => prev.filter(u => u.id !== userId));
@@ -112,7 +174,7 @@ export default function AdminDashboard() {
         setAllUsers(prev => prev.map(u => u.id === userId ? { ...u, suspended: !suspended } : u));
         setStats(prev => ({
             ...prev,
-            openReports: !suspended ? prev.openReports + 1 : Math.max(0, prev.openReports - 1)
+            openReports: !suspended ? prev.openReports + 1 : Math.max(0, prev.openReports - 1),
         }));
     };
 
@@ -128,7 +190,6 @@ export default function AdminDashboard() {
         }, 1500);
     };
 
-    // Close dropdown on outside click
     useEffect(() => {
         const handler = (e) => {
             if (dropdownRef.current && !dropdownRef.current.contains(e.target))
@@ -138,9 +199,11 @@ export default function AdminDashboard() {
         return () => document.removeEventListener("mousedown", handler);
     }, []);
 
-    const filteredUsers = allUsers.filter(u =>
+    const filteredUsers   = allUsers.filter(u =>
         `${u.firstName} ${u.lastName} ${u.email}`.toLowerCase().includes(userSearch.toLowerCase())
     );
+    const previewSlots    = generateTimeSlots(facilityConfig.openTime, facilityConfig.closeTime);
+    const previewCapacity = getTotalCapacity({ ...facilityConfig, slotsPerHour: Number(facilityConfig.slotsPerHour) });
 
     const suspendedUsers = allUsers.filter(u => u.suspended);
 
@@ -173,9 +236,15 @@ export default function AdminDashboard() {
                 </div>
 
                 <div className={styles.navCenter}>
-                    <span className={styles.navBreadcrumb}>
+                    <span className={styles.navActive}>
                         <i className="fas fa-th-large" /> Dashboard
                     </span>
+                    <button
+                        className={styles.navAnalyticsLink}
+                        onClick={() => navigate("/admin/analytics")}
+                    >
+                        <i className="fas fa-chart-bar" /> Analytics
+                    </button>
                     <span className={styles.navHandle}>@{adminUser.name.split(" ")[0] || "Admin"}</span>
                 </div>
 
@@ -192,9 +261,8 @@ export default function AdminDashboard() {
                             className={styles.iconButton}
                             onClick={() => !isLoggingOut && setDropdownOpen(v => !v)}
                             title={adminUser.name}
-                            
                         >
-                            <i className="fa-solid fa-bars"></i>
+                            <i className="fa-solid fa-bars" />
                         </button>
 
                         {dropdownOpen && !isLoggingOut && (
@@ -213,8 +281,7 @@ export default function AdminDashboard() {
                                     <i className="fas fa-cog" /> Settings
                                 </button>
                                 <div className={styles.ddDivider} />
-                                <button className={`${styles.ddItem} ${styles.ddLogout}`}
-                                    onClick={handleLogout}>
+                                <button className={`${styles.ddItem} ${styles.ddLogout}`} onClick={handleLogout}>
                                     <i className="fas fa-right-from-bracket" /> Logout
                                 </button>
                             </div>
@@ -226,19 +293,18 @@ export default function AdminDashboard() {
             {/* ── Page body ── */}
             <main className={styles.main}>
 
-                {/* Page title */}
                 <div className={styles.pageTitle}>
-                    <h1>Admin DashBoard</h1>
+                    <h1>Admin Dashboard</h1>
                     <p>System management, moderation &amp; oversight</p>
                 </div>
 
-                {/* Stat cards */}
+                {/* ── Stat cards ── */}
                 <div className={styles.statsRow}>
                     {[
-                        { label: "Total Users",     value: stats.totalUsers,    icon: "fas fa-users" },
-                        { label: "Open Reports",    value: stats.openReports,   icon: "fas fa-flag" },
-                        { label: "Transactions",    value: stats.transactions,  icon: "fas fa-exchange-alt" },
-                        { label: "Revenue (Paid)",  value: `R ${stats.revenue.toLocaleString()}`, icon: "fas fa-wallet" },
+                        { label: "Total Users",    value: stats.totalUsers,                            icon: "fas fa-users" },
+                        { label: "Open Reports",   value: stats.openReports,                           icon: "fas fa-flag" },
+                        { label: "Transactions",   value: stats.transactions,                          icon: "fas fa-exchange-alt" },
+                        { label: "Revenue (Paid)", value: `R ${stats.revenue.toLocaleString()}`,       icon: "fas fa-wallet" },
                     ].map(({ label, value, icon }) => (
                         <div key={label} className={styles.statCard}>
                             <span className={styles.statLabel}>{label}</span>
@@ -248,14 +314,17 @@ export default function AdminDashboard() {
                     ))}
                 </div>
 
-                {/* Tabs */}
+                {/* ── Tabs ── */}
                 <div className={styles.tabs}>
                     {[
                         { id: "users",      icon: "fas fa-users",       label: "Users" },
+                        { id: "suspended",  icon: "fas fa-ban",         label: "Suspended" },
                         { id: "moderation", icon: "fas fa-shield-alt",  label: "Moderation" },
                         { id: "reports",    icon: "fas fa-flag",        label: "Reports" },
                         { id: "payments",   icon: "fas fa-credit-card", label: "Payments" },
-                        { id: "suspended",  icon: "fas fa-ban",         label: "Suspended" },
+                        //{ id: "suspended",  icon: "fas fa-ban",         label: "Suspended" },
+                        { id: "utilisation",    icon: "fas fa-calendar-alt",  label: " Utilisation Reports" },
+                        { id: "settings",   icon: "fas fa-cog",           label: "Settings" },
                     ].map(t => (
                         <button
                             key={t.id}
@@ -270,8 +339,6 @@ export default function AdminDashboard() {
                 {/* ── USERS TAB ── */}
                 {activeTab === "users" && (
                     <div className={styles.tabContent}>
-
-                        {/* Pending Staff Approvals */}
                         {pendingStaff.length > 0 && (
                             <div className={styles.card}>
                                 <h3 className={styles.cardTitle}>Pending Staff Approvals</h3>
@@ -291,16 +358,10 @@ export default function AdminDashboard() {
                                                 <span className={styles.approvalEmail}>{u.email}</span>
                                             </div>
                                             <div className={styles.approvalActions}>
-                                                <button
-                                                    className={styles.btnApprove}
-                                                    onClick={() => approveStaff(u.id)}
-                                                >
+                                                <button className={styles.btnApprove} onClick={() => approveStaff(u.id)}>
                                                     Approve
                                                 </button>
-                                                <button
-                                                    className={styles.btnReject}
-                                                    onClick={() => rejectStaff(u.id)}
-                                                >
+                                                <button className={styles.btnReject} onClick={() => rejectStaff(u.id)}>
                                                     Reject
                                                 </button>
                                             </div>
@@ -310,7 +371,6 @@ export default function AdminDashboard() {
                             </div>
                         )}
 
-                        {/* All users table */}
                         <div className={styles.card}>
                             <div className={styles.cardHeader}>
                                 <h3 className={styles.cardTitle}>All users</h3>
@@ -325,7 +385,6 @@ export default function AdminDashboard() {
                                     />
                                 </div>
                             </div>
-
                             <div className={styles.userList}>
                                 {filteredUsers.length === 0 && (
                                     <p className={styles.emptyNote}>No users found.</p>
@@ -339,13 +398,14 @@ export default function AdminDashboard() {
                                             }
                                         </div>
                                         <div className={styles.userInfo}>
-                                            <span className={styles.userName}>
-                                                {u.firstName} {u.lastName}
-                                            </span>
-                                            <span className={styles.userMeta}>
-                                                <i className="fas fa-star" style={{ color: "#fbbf24", fontSize: "0.65rem" }} />
-                                                {" "}{u.rating || 0} ({u.totalRatings || 0} Trades)
-                                            </span>
+                                            <span className={styles.userName}>{u.firstName} {u.lastName}</span>
+                                            {/* Only show rating for students, not for admin or staff */}
+                                            {(u.userType === "student" || !u.userType) && (
+                                                <span className={styles.userMeta}>
+                                                    <i className="fas fa-star" style={{ color: "#fbbf24", fontSize: "0.65rem" }} />
+                                                    {" "}{u.rating || 0} ({u.totalRatings || 0} Trades)
+                                                </span>
+                                            )}
                                         </div>
                                         <span className={styles.userType}>{u.userType || "Student"}</span>
                                         <button
@@ -402,21 +462,19 @@ export default function AdminDashboard() {
                                                 <button
                                                     className={styles.btnReject}
                                                     onClick={async () => {
-                                                        const isConfirmed = window.confirm(
-                                                            "Are you sure you want to remove this Listing? "+
-                                                            "This action is PERMANENT and cannot be undone. "+
-                                                            "Click OK to delete this item or CANCEL to keep."
+                                                        const ok = window.confirm(
+                                                            "Are you sure you want to remove this listing? " +
+                                                            "This action is PERMANENT and cannot be undone."
                                                         );
-                                                        if (!isConfirmed) return;
-                                                        try{
+                                                        if (!ok) return;
+                                                        try {
                                                             await deleteDoc(doc(db, "listings", l.id));
                                                             setListings(prev => prev.filter(x => x.id !== l.id));
-                                                            console.log("Listing permanently deleted");
-                                                        } catch(error){
-                                                            console.error("Error deleting listing:", error);
-                                                            alert("Failed to delete listing. Please try again.")
+                                                        } catch (err) {
+                                                            console.error("Error deleting listing:", err);
+                                                            alert("Failed to delete listing. Please try again.");
                                                         }
-                                                        }}
+                                                    }}
                                                     disabled={l.status === "removed"}
                                                 >
                                                     Remove
@@ -627,9 +685,129 @@ export default function AdminDashboard() {
                         </div>
                     </div>
                 )}
+                {/* ── REPORTS TAB (US20 — Utilisation Report) ── */}
+                {activeTab === "utilisation" && (
+                    <div className={styles.tabContent}>
+                        <div className={styles.card}>
+                            <UtilisationReport />
+                        </div>
+                    </div>
+                )}
+
+                {/* ── SETTINGS TAB ── */}
+                {activeTab === "settings" && (
+                    <div className={styles.tabContent}>
+                        <div className={styles.card}>
+                            <h3 className={styles.cardTitle}>
+                                <i className="fas fa-clock" style={{ marginRight: 8, color: "#6AA6DA" }} />
+                                Trade Facility Operating Hours &amp; Capacity
+                            </h3>
+
+                            {configLoading ? (
+                                <div className={styles.configLoading}>
+                                    <div className={styles.spinner} />
+                                    <span>Loading facility settings…</span>
+                                </div>
+                            ) : (
+                                <form className={styles.configForm} onSubmit={handleSaveConfig}>
+                                    <div className={styles.configRow}>
+                                        <div className={styles.configField}>
+                                            <label className={styles.configLabel}>
+                                                <i className="fas fa-door-open" /> Opening time
+                                            </label>
+                                            <input
+                                                type="time"
+                                                className={styles.configInput}
+                                                value={facilityConfig.openTime}
+                                                onChange={e => setFacilityConfig(prev => ({ ...prev, openTime: e.target.value }))}
+                                                required
+                                            />
+                                        </div>
+
+                                        <div className={styles.configField}>
+                                            <label className={styles.configLabel}>
+                                                <i className="fas fa-door-closed" /> Closing time
+                                            </label>
+                                            <input
+                                                type="time"
+                                                className={styles.configInput}
+                                                value={facilityConfig.closeTime}
+                                                onChange={e => setFacilityConfig(prev => ({ ...prev, closeTime: e.target.value }))}
+                                                required
+                                            />
+                                        </div>
+
+                                        <div className={styles.configField}>
+                                            <label className={styles.configLabel}>
+                                                <i className="fas fa-layer-group" /> Slots per hour
+                                            </label>
+                                            <select
+                                                className={styles.configInput}
+                                                value={facilityConfig.slotsPerHour}
+                                                onChange={e => setFacilityConfig(prev => ({ ...prev, slotsPerHour: Number(e.target.value) }))}
+                                            >
+                                                {[1, 2, 3, 4].map(n => (
+                                                    <option key={n} value={n}>{n}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                    </div>
+
+                                    {previewSlots.length > 0 && (
+                                        <div className={styles.configPreview}>
+                                            <p className={styles.configPreviewTitle}>
+                                                Preview — {previewSlots.length} slot{previewSlots.length !== 1 ? "s" : ""},&nbsp;
+                                                {previewCapacity} booking{previewCapacity !== 1 ? "s" : ""} max per day
+                                            </p>
+                                            <div className={styles.slotGrid}>
+                                                {previewSlots.map(s => (
+                                                    <span key={s} className={styles.slotChip}>{s}</span>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {configError && (
+                                        <div className={styles.configError}>
+                                            <i className="fas fa-exclamation-circle" /> {configError}
+                                        </div>
+                                    )}
+                                    {configSuccess && (
+                                        <div className={styles.configSuccess}>
+                                            <i className="fas fa-check-circle" /> {configSuccess}
+                                        </div>
+                                    )}
+
+                                    <button
+                                        type="submit"
+                                        className={styles.btnApprove}
+                                        disabled={configSaving}
+                                        style={{ marginTop: 4, width: "fit-content" }}
+                                    >
+                                        {configSaving
+                                            ? <><i className="fas fa-spinner fa-spin" /> Saving…</>
+                                            : <><i className="fas fa-save" /> Save facility settings</>
+                                        }
+                                    </button>
+                                </form>
+                            )}
+                        </div>
+
+                        <div className={styles.card}>
+                            <h3 className={styles.cardTitle}>
+                                <i className="fas fa-sliders-h" style={{ marginRight: 8, color: "#6AA6DA" }} />
+                                Platform Settings
+                            </h3>
+                            <p className={styles.emptyNote}>
+                                Coming soon — configure allowed email domains, listing categories, and moderation rules.
+                            </p>
+                        </div>
+                    </div>
+                )}
+
             </main>
 
-            {/* Logout overlay */}
+            {/* ── Logout overlay ── */}
             {isLoggingOut && (
                 <div className={styles.logoutOverlay}>
                     <div className={styles.logoutBox}>

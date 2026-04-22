@@ -37,6 +37,8 @@ import ProfileListingCard from './components/ProfileListingCard';
 import TradeFacility from './components/TradeFacility';
 import BookDropOff from './components/BookDropOff';
 
+// SPRINT 3 IMPORTS
+import AdminAnalytics from './components/AdminAnalytics';
 // -------------------------
 // Protected Route (CLEAN)
 // -------------------------
@@ -204,6 +206,9 @@ export function AppRoutes() {
       <Route path="/review/:transactionId" element={<ReviewForm />} />
       <Route path="/notifications" element={<ProtectedRoute allowedRoles={['student']}><Notificationspage /></ProtectedRoute>} />
       <Route path="/my-purchases" element={<ProtectedRoute allowedRoles={['student']}><MyPurchases /></ProtectedRoute>} />
+
+      {/* Sprint 3 Routes */}
+      <Route path="/admin/analytics" element={<AdminAnalytics />} />
     </Routes>
   );
 }

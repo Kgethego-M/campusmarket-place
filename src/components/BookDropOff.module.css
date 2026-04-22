@@ -334,3 +334,99 @@
   .actions { flex-direction: column; }
   .submitBtn, .cancelBtn { flex: unset; width: 100%; }
 }
+
+.slotHint {
+  font-size: 13px;
+  color: #9ca3af;
+  margin: 4px 0 0;
+  font-style: italic;
+}
+
+/* ── Selected badge next to label ────────────────────────────── */
+.selectedBadge {
+  margin-left: 10px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #6AA6DA;
+  background: rgba(106, 166, 218, 0.12);
+  padding: 2px 10px;
+  border-radius: 999px;
+  vertical-align: middle;
+}
+
+/* ── Slot grid ────────────────────────────────────────────────── */
+.slotGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
+  gap: 8px;
+  margin-top: 4px;
+}
+
+/* ── Slot pill base ───────────────────────────────────────────── */
+.slotPill {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1.5px solid #e2e8f0;
+  background: #fff;
+  cursor: pointer;
+  font-family: inherit;
+  text-align: left;
+  transition: border-color 0.15s, background 0.15s, transform 0.12s, box-shadow 0.15s;
+  width: 100%;
+}
+
+/* Available (default unselected) */
+.slotAvailable:hover {
+  border-color: #6AA6DA;
+  background: #f0f7fd;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(106, 166, 218, 0.15);
+}
+
+/* Selected */
+.slotSelected {
+  border-color: #6AA6DA;
+  background: #6AA6DA;
+}
+.slotSelected .slotTime  { color: #fff; }
+.slotSelected .slotCount { color: rgba(255,255,255,0.85); }
+
+/* Full / disabled */
+.slotFull {
+  border-color: #f3f4f6;
+  background: #f9fafb;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+.slotFull .slotTime  { color: #9ca3af; }
+.slotFull .slotCount { color: #d1d5db; }
+
+/* Text inside pill */
+.slotTime {
+  font-size: 13px;
+  font-weight: 700;
+  color: #111827;
+  line-height: 1;
+}
+
+.slotCount {
+  font-size: 11px;
+  font-weight: 600;
+  color: #6b7280;
+  line-height: 1;
+}
+
+/* Shimmer skeleton for slots while loading */
+.slotShimmer {
+  height: 52px;
+  border-radius: 10px;
+  cursor: default;
+  background: linear-gradient(90deg, #f0f2f5 25%, #e4e8ed 50%, #f0f2f5 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s infinite;
+  border: none;
+}
