@@ -470,4 +470,124 @@
     box-shadow:0 10px 25px rgba(0,0,0,0.2);
 }
 .logoutBox i  { font-size:2rem; color:#6AA6DA; }
-.logoutBox p  { margin:0; font-size:1rem; font-weight:500; color:#374151; }
+.configLoading {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: #888;
+    font-size: 0.875rem;
+    padding: 12px 0;
+}
+
+/* Form layout */
+.configForm {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.configRow {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 16px;
+}
+@media (max-width: 600px) {
+    .configRow { grid-template-columns: 1fr; }
+}
+
+.configField {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.configLabel {
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: #555;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+.configLabel i { color: #6AA6DA; font-size: 0.75rem; }
+
+.configInput {
+    padding: 8px 12px;
+    border: 1.5px solid #e2e6ea;
+    border-radius: 8px;
+    font-family: inherit;
+    font-size: 0.875rem;
+    color: #1a1a1a;
+    background: #fff;
+    outline: none;
+    transition: border-color 0.15s, box-shadow 0.15s;
+    appearance: auto;
+}
+.configInput:focus {
+    border-color: #6AA6DA;
+    box-shadow: 0 0 0 3px rgba(106, 166, 218, 0.15);
+}
+
+/* Live preview */
+.configPreview {
+    background: #f4f8fc;
+    border: 1px solid #d4e4f4;
+    border-radius: 10px;
+    padding: 14px 16px;
+}
+
+.configPreviewTitle {
+    margin: 0 0 10px;
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: #4a7fa5;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.slotGrid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.slotChip {
+    background: #fff;
+    border: 1px solid #c8d8e8;
+    border-radius: 20px;
+    padding: 3px 12px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: #3d6b8a;
+    white-space: nowrap;
+}
+
+/* Feedback messages */
+.configError {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: #fff5f5;
+    border: 1px solid #fecaca;
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-size: 0.85rem;
+    color: #dc2626;
+}
+.configError i { flex-shrink: 0; }
+
+.configSuccess {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: #f0fdf4;
+    border: 1px solid #bbf7d0;
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-size: 0.85rem;
+    color: #15803d;
+}
+.configSuccess i { flex-shrink: 0; }
+
