@@ -1,4 +1,4 @@
-//Chat.jsx
+// Chat.jsx
 import { useState, useRef, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import styles from "./Chat.module.css";
@@ -9,18 +9,16 @@ import {
   doc, updateDoc, serverTimestamp, where, getDoc,
 } from "firebase/firestore";
 import { uploadToCloudinary } from "../utils/cloudinaryUpload";
+import ReportModal from "./ReportModal";
 
-// ── Avatar ───────────────────────────────────────────────────────
+// ── Avatar ────────────────────────────────────────────────────────────────────
 function Avatar({ name = "?", photoURL = null, size = 40, online = false }) {
-  const initials = name
-    .split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase();
+  const initials = name.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase();
   return (
     <div className={styles.avatarWrap} style={{ width: size, height: size }}>
       {photoURL ? (
         <img
-          src={photoURL}
-          alt={name}
-          className={styles.avatarImg}
+          src={photoURL} alt={name} className={styles.avatarImg}
           style={{ width: size, height: size }}
           onError={(e) => { e.currentTarget.style.display = "none"; }}
         />
@@ -55,12 +53,25 @@ export default function Chat() {
   const [userProfiles, setUserProfiles]   = useState({});
   const [convsLoading, setConvsLoading]   = useState(true);
 
-  const fileInputRef    = useRef(null);
-  const messagesEndRef  = useRef(null);
+  // 3-dot menu
+  const [menuOpen, setMenuOpen]         = useState(false);
+  const menuRef                         = useRef(null);
+
+  // Report modal
+  const [reportOpen, setReportOpen]     = useState(false);
+
+  const fileInputRef   = useRef(null);
+  const messagesEndRef = useRef(null);
   const resolvedUidsRef = useRef(new Set());
 
-  const activeConv = conversations.find((c) => c.id === activeId);
-  const mediaItems = messages.filter((m) => m.type === "image" || m.type === "video");
+  const activeConv   = conversations.find((c) => c.id === activeId);
+  const mediaItems   = messages.filter((m) => m.type === "image" || m.type === "video");
+  const otherUidActive = activeConv
+    ? (activeConv.participants || []).find((p) => p !== me?.uid)
+    : null;
+  const otherProfileActive = otherUidActive
+    ? (userProfiles[otherUidActive] || { name: "Unknown", photoURL: null })
+    : null;
 
   // Auto-open from ?open= param
   useEffect(() => {
@@ -72,6 +83,15 @@ export default function Chat() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  // Close 3-dot menu on outside click
+  useEffect(() => {
+    const handler = (e) => {
+      if (menuRef.current && !menuRef.current.contains(e.target)) setMenuOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
 
   // Resolve user profile
   async function resolveUserProfile(uid) {
@@ -120,7 +140,7 @@ export default function Chat() {
     return () => unsub();
   }, [activeId]);
 
-  // Mark unread as 0 when opening a chat
+  // Mark unread as 0 when opening
   useEffect(() => {
     if (!activeId || !me) return;
     updateDoc(doc(db, "chats", activeId), { [`unread_${me.uid}`]: 0 }).catch(() => {});
@@ -129,12 +149,10 @@ export default function Chat() {
   function getOtherUid(conv) {
     return (conv?.participants || []).find((p) => p !== me?.uid);
   }
-
   function getOtherProfile(conv) {
     const uid = getOtherUid(conv);
     return userProfiles[uid] || { name: uid || "Unknown", photoURL: null };
   }
-
   function getUnread(conv) {
     return conv?.[`unread_${me?.uid}`] || 0;
   }
@@ -150,14 +168,8 @@ export default function Chat() {
     })
     .sort((a, b) => (b.updatedAt?.seconds || 0) - (a.updatedAt?.seconds || 0));
 
-  function openConv(id) {
-    setActiveId(id);
-    setMessages([]);
-  }
-
-  function goBackToList() {
-    setActiveId(null);
-  }
+  function openConv(id) { setActiveId(id); setMessages([]); }
+  function goBackToList() { setActiveId(null); setMenuOpen(false); }
 
   function sendText() {
     const content = inputText.trim();
@@ -165,12 +177,8 @@ export default function Chat() {
     sendMessageToFirebase("text", content);
     setInputText("");
   }
-
   function handleKeyDown(e) {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      sendText();
-    }
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendText(); }
   }
 
   async function handleFileSelect(e) {
@@ -183,7 +191,6 @@ export default function Chat() {
       await sendMessageToFirebase(resourceType, url);
     } catch (err) {
       console.error(err);
-      alert("Upload failed. Please try again.");
     } finally {
       setIsUploading(false);
       e.target.value = "";
@@ -198,12 +205,21 @@ export default function Chat() {
     await addDoc(collection(db, "chats", activeId, "messages"), {
       senderId: me.uid, type, content, timestamp: serverTimestamp(),
     });
-
     await updateDoc(doc(db, "chats", activeId), {
       lastMessage: type === "text" ? content : "📎 Attachment",
       updatedAt:   serverTimestamp(),
       ...(otherUid ? { [`unread_${otherUid}`]: currentOtherUnread + 1 } : {}),
     });
+  }
+
+  function handleViewProfile() {
+    setMenuOpen(false);
+    if (otherUidActive) navigate(`/profile/${otherUidActive}`);
+  }
+
+  function handleReportUser() {
+    setMenuOpen(false);
+    setReportOpen(true);
   }
 
   if (!me) return (
@@ -254,7 +270,6 @@ export default function Chat() {
             </button>
           </div>
 
-          {/* ── Chats tab ── */}
           {sidebarTab === "chats" && (
             convsLoading ? (
               <ul className={styles.convList}>
@@ -283,16 +298,10 @@ export default function Chat() {
                       <Avatar name={profile.name} photoURL={profile.photoURL} size={46} />
                       <div className={styles.convInfo}>
                         <span className={styles.convName}>{profile.name}</span>
-                        {conv.listingTitle && (
-                          <span className={styles.convSub}>{conv.listingTitle}</span>
-                        )}
-                        {conv.lastMessage && (
-                          <span className={styles.convLast}>{conv.lastMessage}</span>
-                        )}
+                        {conv.listingTitle && <span className={styles.convSub}>{conv.listingTitle}</span>}
+                        {conv.lastMessage  && <span className={styles.convLast}>{conv.lastMessage}</span>}
                       </div>
-                      {unread > 0 && (
-                        <span className={styles.unreadBadge}>{unread}</span>
-                      )}
+                      {unread > 0 && <span className={styles.unreadBadge}>{unread}</span>}
                     </li>
                   );
                 })}
@@ -309,18 +318,13 @@ export default function Chat() {
             )
           )}
 
-          {/* ── Media tab ── */}
           {sidebarTab === "media" && (
             <div className={styles.mediaSidePanel}>
               {mediaItems.length === 0 ? (
                 <div className={styles.noMedia}>
-                  <div className={styles.noMediaIcon}>
-                    <i className="fa-solid fa-photo-film" />
-                  </div>
+                  <div className={styles.noMediaIcon}><i className="fa-solid fa-photo-film" /></div>
                   <p className={styles.noMediaTitle}>No shared media</p>
-                  <p className={styles.noMediaSub}>
-                    Images and videos sent in this conversation will appear here
-                  </p>
+                  <p className={styles.noMediaSub}>Images and videos sent in this conversation will appear here</p>
                 </div>
               ) : (
                 <div className={styles.mediaGrid}>
@@ -351,16 +355,17 @@ export default function Chat() {
             const otherProfile = getOtherProfile(activeConv);
             return (
               <>
-                {/* Header */}
+                {/* ── Header with name + 3-dot menu ── */}
                 <header className={styles.chatHeader}>
                   <button className={styles.chatBackBtn} onClick={goBackToList}>
                     <i className="fa-solid fa-arrow-left" />
                   </button>
+
+                  {/* Clickable profile area */}
                   <button
                     className={styles.headerProfile}
                     onClick={() => {
-                      const uid = getOtherUid(activeConv);
-                      if (uid) navigate(`/profile/${uid}`);
+                      if (otherUidActive) navigate(`/profile/${otherUidActive}`);
                     }}
                   >
                     <Avatar name={otherProfile.name} photoURL={otherProfile.photoURL} size={38} />
@@ -371,6 +376,37 @@ export default function Chat() {
                       )}
                     </div>
                   </button>
+
+                  {/* 3-dot vertical menu */}
+                  <div className={styles.chatMenuWrap} ref={menuRef}>
+                    <button
+                      className={styles.chatMenuBtn}
+                      onClick={() => setMenuOpen(v => !v)}
+                      aria-label="More options"
+                      title="More options"
+                    >
+                      <span className={styles.dotMenu}>⋮</span>
+                    </button>
+
+                    {menuOpen && (
+                      <div className={styles.chatDropdown}>
+                        <button
+                          className={styles.chatDropdownItem}
+                          onClick={handleViewProfile}
+                        >
+                          <i className="fas fa-user" style={{ width: 16 }} />
+                          View Profile
+                        </button>
+                        <button
+                          className={`${styles.chatDropdownItem} ${styles.chatDropdownDanger}`}
+                          onClick={handleReportUser}
+                        >
+                          <i className="fas fa-flag" style={{ width: 16 }} />
+                          Report User
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </header>
 
                 {/* Messages */}
@@ -385,33 +421,13 @@ export default function Chat() {
                           className={`${styles.msgRow} ${isMe ? styles.msgRowMe : styles.msgRowThem}`}
                         >
                           {!isMe && (
-                            <Avatar
-                              name={otherProfile.name}
-                              photoURL={otherProfile.photoURL}
-                              size={28}
-                            />
+                            <Avatar name={otherProfile.name} photoURL={otherProfile.photoURL} size={28} />
                           )}
                           <div className={`${styles.bubble} ${isMe ? styles.bubbleMe : styles.bubbleThem}`}>
-                            {msg.type === "text" && (
-                              <span className={styles.bubbleText}>{msg.content}</span>
-                            )}
-                            {msg.type === "image" && (
-                              <img
-                                src={msg.content}
-                                alt="attachment"
-                                className={styles.bubbleImg}
-                              />
-                            )}
-                            {msg.type === "video" && (
-                              <video
-                                src={msg.content}
-                                controls
-                                className={styles.bubbleVideo}
-                              />
-                            )}
-                            {time && (
-                              <span className={styles.msgTime}>{time}</span>
-                            )}
+                            {msg.type === "text"  && <span className={styles.bubbleText}>{msg.content}</span>}
+                            {msg.type === "image" && <img src={msg.content} alt="attachment" className={styles.bubbleImg} />}
+                            {msg.type === "video" && <video src={msg.content} controls className={styles.bubbleVideo} />}
+                            {time && <span className={styles.msgTime}>{time}</span>}
                           </div>
                         </div>
                       );
@@ -459,6 +475,15 @@ export default function Chat() {
           })()}
         </main>
       </div>
+
+      {/* Report user modal */}
+      <ReportModal
+        open={reportOpen}
+        onClose={() => setReportOpen(false)}
+        reportType="user"
+        reportedId={otherUidActive || ""}
+        reportedName={otherProfileActive?.name || ""}
+      />
     </>
   );
 }

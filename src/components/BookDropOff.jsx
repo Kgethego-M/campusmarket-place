@@ -7,11 +7,9 @@ import {
 } from "firebase/firestore";
 import NavBar from "./NavBarTemp.jsx";
 import styles from "./BookDropOff.module.css";
+import { generateTimeSlots } from "../utils/facilityConfig.utils";
 
-const TIME_SLOTS = [
-  "09:00 - 10:00","10:00 - 11:00","11:00 - 12:00","12:00 - 13:00",
-  "13:00 - 14:00","14:00 - 15:00","15:00 - 16:00",
-];
+const FALLBACK_CONFIG = { openTime: "09:00", closeTime: "16:00", slotsPerHour: 1 };
 
 function formatPrice(value) {
   const num = Number(String(value ?? "0").replace(/\s/g, ""));
@@ -35,20 +33,42 @@ export default function BookDropOff() {
   const [paymentMethod,    setPaymentMethod]     = useState(null);
   const [selectedDate,     setSelectedDate]      = useState("");
   const [selectedTimeSlot, setSelectedTimeSlot]  = useState("");
-  const [availableSlots,   setAvailableSlots]    = useState(TIME_SLOTS);
   const [minDate,          setMinDate]           = useState("");
+
+  const [facilityConfig,   setFacilityConfig]   = useState(FALLBACK_CONFIG);
+  const [slotCounts,       setSlotCounts]        = useState({});
+  const [slotsLoading,     setSlotsLoading]      = useState(false);
 
   const fetchedRef = useRef(false);
 
   useEffect(() => {
-  document.body.style.background = "#f5f7fa";
-  return () => { document.body.style.background = ""; };
-}, []);
+    document.body.style.background = "#f5f7fa";
+    return () => { document.body.style.background = ""; };
+  }, []);
 
   useEffect(() => {
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);
     setMinDate(tomorrow.toISOString().split("T")[0]);
+  }, []);
+
+  // ── Load facility config once on mount ────────────────────────
+  useEffect(() => {
+    (async () => {
+      try {
+        const snap = await getDoc(doc(db, "facilityConfig", "default"));
+        if (snap.exists()) {
+          const data = snap.data();
+          setFacilityConfig({
+            openTime:     data.openTime     ?? FALLBACK_CONFIG.openTime,
+            closeTime:    data.closeTime    ?? FALLBACK_CONFIG.closeTime,
+            slotsPerHour: data.slotsPerHour ?? FALLBACK_CONFIG.slotsPerHour,
+          });
+        }
+      } catch (err) {
+        console.warn("Could not load facility config, using defaults:", err.message);
+      }
+    })();
   }, []);
 
   const fetchTransaction = useCallback(async (uid) => {
@@ -59,9 +79,7 @@ export default function BookDropOff() {
 
     try {
       const transSnap = await getDoc(doc(db, "transactions", transactionId));
-
-      if (!transSnap.exists())
-        return setError("Transaction not found");
+      if (!transSnap.exists()) return setError("Transaction not found");
 
       const txn = { id: transSnap.id, ...transSnap.data() };
 
@@ -109,22 +127,40 @@ export default function BookDropOff() {
     return () => unsub();
   }, [fetchTransaction]);
 
+  // ── When date or config changes, build slot remaining counts ──
   useEffect(() => {
     if (!selectedDate) return;
+    setSelectedTimeSlot("");
+
     (async () => {
+      setSlotsLoading(true);
       try {
-        const snap   = await getDocs(query(
+        const snap = await getDocs(query(
           collection(db, "bookings"), where("date", "==", selectedDate)
         ));
-        const booked = snap.docs.map(d => d.data().timeSlot);
-        const avail  = TIME_SLOTS.filter(s => !booked.includes(s));
-        setAvailableSlots(avail);
-        if (selectedTimeSlot && !avail.includes(selectedTimeSlot)) setSelectedTimeSlot("");
+
+        // count bookings per slot
+        const booked = {};
+        snap.docs.forEach(d => {
+          const slot = d.data().timeSlot;
+          booked[slot] = (booked[slot] || 0) + 1;
+        });
+
+        // remaining = slotsPerHour - booked (min 0)
+        const allSlots = generateTimeSlots(facilityConfig.openTime, facilityConfig.closeTime);
+        const counts   = {};
+        allSlots.forEach(slot => {
+          counts[slot] = Math.max(0, facilityConfig.slotsPerHour - (booked[slot] || 0));
+        });
+
+        setSlotCounts(counts);
       } catch (err) {
         console.error("Slot check failed:", err);
+      } finally {
+        setSlotsLoading(false);
       }
     })();
-  }, [selectedDate]);
+  }, [selectedDate, facilityConfig]);
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -186,7 +222,52 @@ export default function BookDropOff() {
     }
   }
 
-  // ── Skeleton ─────────────────────────────────────────────────
+  // ── Slot grid ─────────────────────────────────────────────────
+  function renderSlotGrid() {
+    const allSlots = generateTimeSlots(facilityConfig.openTime, facilityConfig.closeTime);
+
+    if (slotsLoading) {
+      return (
+        <div className={styles.slotGrid}>
+          {allSlots.map(s => (
+            <div key={s} className={`${styles.slotPill} ${styles.slotShimmer}`} />
+          ))}
+        </div>
+      );
+    }
+
+    return (
+      <div className={styles.slotGrid}>
+        {allSlots.map(slot => {
+          const remaining = slotCounts[slot] ?? facilityConfig.slotsPerHour;
+          const full      = remaining === 0;
+          const selected  = selectedTimeSlot === slot;
+
+          return (
+            <button
+              key={slot}
+              type="button"
+              disabled={full}
+              onClick={() => setSelectedTimeSlot(slot)}
+              className={[
+                styles.slotPill,
+                full     ? styles.slotFull     : "",
+                selected ? styles.slotSelected : "",
+                !full && !selected ? styles.slotAvailable : "",
+              ].join(" ")}
+            >
+              <span className={styles.slotTime}>{slot}</span>
+              <span className={styles.slotCount}>
+                {full ? "Full" : `${remaining} slot${remaining !== 1 ? "s" : ""} left`}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    );
+  }
+
+  // ── Skeleton ──────────────────────────────────────────────────
   if (loading) {
     return (
       <>
@@ -201,13 +282,13 @@ export default function BookDropOff() {
           <div className={`${styles.shimmer} ${styles.skeletonBlock}`}
                style={{ height: 110, marginBottom: 14, borderRadius: 14 }} />
           <div className={`${styles.shimmer} ${styles.skeletonBlock}`}
-               style={{ height: 50,  marginBottom: 24, borderRadius: 10 }} />
+               style={{ height: 50, marginBottom: 24, borderRadius: 10 }} />
           <div className={`${styles.shimmer} ${styles.skeletonBlock}`}
-               style={{ height: 44,  marginBottom: 16, borderRadius: 9 }} />
+               style={{ height: 44, marginBottom: 16, borderRadius: 9 }} />
           <div className={`${styles.shimmer} ${styles.skeletonBlock}`}
-               style={{ height: 44,  marginBottom: 24, borderRadius: 9 }} />
+               style={{ height: 120, marginBottom: 24, borderRadius: 9 }} />
           <div className={`${styles.shimmer} ${styles.skeletonBlock}`}
-               style={{ height: 44,  borderRadius: 9 }} />
+               style={{ height: 44, borderRadius: 9 }} />
         </div>
       </>
     );
@@ -261,8 +342,7 @@ export default function BookDropOff() {
         <div className={styles.summaryCard}>
           <div className={styles.summaryImgWrap}>
             {listing?.photos?.[0]
-              ? <img src={listing.photos[0]} alt={listing.title}
-                     className={styles.summaryImg} />
+              ? <img src={listing.photos[0]} alt={listing.title} className={styles.summaryImg} />
               : <div className={styles.summaryImgPlaceholder}>
                   <svg width="22" height="22" viewBox="0 0 24 24" fill="none"
                        stroke="#9ca3af" strokeWidth="1.5">
@@ -276,9 +356,7 @@ export default function BookDropOff() {
           <div className={styles.summaryInfo}>
             <p className={styles.summaryTitle}>{listing?.title ?? "Loading…"}</p>
             <div className={styles.summaryMeta}>
-              <span className={styles.summaryPrice}>
-                R{formatPrice(listing?.price)}
-              </span>
+              <span className={styles.summaryPrice}>R{formatPrice(listing?.price)}</span>
               <span className={styles.summaryDot}>·</span>
               <span className={styles.summaryBuyer}>
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
@@ -302,6 +380,7 @@ export default function BookDropOff() {
         </div>
 
         <form className={styles.form} onSubmit={handleSubmit}>
+
           <div className={styles.fieldGroup}>
             <label className={styles.label}>Drop-off date</label>
             <input
@@ -315,24 +394,16 @@ export default function BookDropOff() {
           </div>
 
           <div className={styles.fieldGroup}>
-            <label className={styles.label}>Time slot</label>
-            <select
-              className={styles.input}
-              value={selectedTimeSlot}
-              onChange={e => setSelectedTimeSlot(e.target.value)}
-              disabled={!selectedDate}
-              required
-            >
-              <option value="">Select a time slot</option>
-              {availableSlots.map(s => (
-                <option key={s} value={s}>{s}</option>
-              ))}
-            </select>
-            {selectedDate && availableSlots.length === 0 && (
-              <p className={styles.noSlots}>
-                No slots available for this date — please choose another.
-              </p>
-            )}
+            <label className={styles.label}>
+              Time slot
+              {selectedTimeSlot && (
+                <span className={styles.selectedBadge}>{selectedTimeSlot}</span>
+              )}
+            </label>
+            {!selectedDate
+              ? <p className={styles.slotHint}>Select a date above to see available slots.</p>
+              : renderSlotGrid()
+            }
           </div>
 
           {error && (

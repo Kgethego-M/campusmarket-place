@@ -674,3 +674,74 @@
 
   .bubble { max-width: 80%; }
 }
+
+/* ── ADD THESE TO THE BOTTOM OF YOUR Chat.module.css ── */
+
+/* 3-dot vertical menu button */
+.chatMenuWrap {
+  position: relative;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.chatMenuBtn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s;
+  color: inherit;
+}
+.chatMenuBtn:hover { background: rgba(0, 0, 0, 0.07); }
+
+.dotMenu {
+  font-size: 1.35rem;
+  line-height: 1;
+  letter-spacing: 0;
+  font-weight: 700;
+  color: #64748b;
+}
+
+.chatDropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  box-shadow: 0 8px 28px rgba(0,0,0,0.13);
+  min-width: 170px;
+  z-index: 999;
+  overflow: hidden;
+  animation: dropFade 0.15s ease;
+}
+
+@keyframes dropFade {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.chatDropdownItem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 11px 16px;
+  background: none;
+  border: none;
+  font-size: 0.85rem;
+  color: #1e293b;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.12s;
+  font-family: inherit;
+}
+.chatDropdownItem:hover { background: #f8fafc; }
+
+.chatDropdownDanger { color: #dc2626; }
+.chatDropdownDanger:hover { background: #fef2f2; }
