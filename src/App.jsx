@@ -17,6 +17,7 @@ import LandingPage from './components/LandingPage';
 import LoginForm from './components/LoginForm';
 import SignupForm from './components/SignupForm';
 import AdminDashboard from './components/Admindashboard';
+import SuspendedPage from './components/SuspendedPage';
 import Dashboard from './components/Dashboard';
 import CreateListing from './components/CreateListing';
 import ViewRating from './components/ViewRating';
@@ -43,6 +44,8 @@ function ProtectedRoute({ children, allowedRoles }) {
   const [loading, setLoading] = useState(true);
   const [firebaseUser, setFirebaseUser] = useState(null);
   const [roleAllowed, setRoleAllowed] = useState(false);
+  const [isSuspended, setIsSuspended] = useState(false);
+
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
@@ -66,6 +69,14 @@ function ProtectedRoute({ children, allowedRoles }) {
         }
 
         const userData = userSnap.data();
+
+        // Suspended users get blocked from every protected route
+        if (userData.suspended) {
+          setIsSuspended(true);
+          setRoleAllowed(false);
+          setLoading(false);
+          return;
+        }
 
         setRoleAllowed(
           allowedRoles.includes(userData.role)
@@ -95,7 +106,8 @@ function ProtectedRoute({ children, allowedRoles }) {
   }
 
   if (!firebaseUser) return <Navigate to="/login" />;
-  if (!roleAllowed) return <AccessDenied />;
+  if (isSuspended)   return <Navigate to="/suspended" />;
+  if (!roleAllowed)  return <AccessDenied />;
 
   return children;
 }
@@ -121,6 +133,11 @@ function LoginWrapper() {
       <LoginForm
         onSwitchToSignup={() => navigate('/signup')}
         onLoginSuccess={(userData) => {
+          // Block suspended users immediately at login
+          if (userData.suspended) {
+            navigate('/suspended');
+            return;
+          }
           const role = userData.role || userData.userType;
           if (role === 'admin'){
             navigate('/admin');
@@ -164,6 +181,7 @@ export function AppRoutes() {
       <Route path="/" element={<LandingPageWrapper />} />
       <Route path="/login" element={<LoginWrapper />} />
       <Route path="/signup" element={<SignupWrapper />} />
+      <Route path="/suspended" element={<SuspendedPage />} />
       <Route path="/dashboard" element={<Dashboard />} />
       <Route path="/profile" element={<Profile />} />
       <Route path="/view-listing" element={<ProtectedRoute allowedRoles={['student']}><ViewListing /></ProtectedRoute>} />

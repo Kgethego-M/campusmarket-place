@@ -471,3 +471,125 @@
 }
 .logoutBox i  { font-size:2rem; color:#6AA6DA; }
 .logoutBox p  { margin:0; font-size:1rem; font-weight:500; color:#374151; }
+
+/* Highlighted stat card for open reports */
+.statCardAlert {
+  border-color: #fca5a5 !important;
+  background: linear-gradient(135deg, #fff5f5 0%, #fff 100%) !important;
+}
+.statCardAlert .statValue {
+  color: #dc2626 !important;
+}
+
+/* Suspended user row */
+.userRowSuspended {
+  opacity: 0.7;
+  background: #fef9f9;
+}
+
+/* ── Reports tab ── */
+.reportList {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.reportRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 16px 0;
+  border-bottom: 1px solid #f1f5f9;
+}
+.reportRow:last-child { border-bottom: none; }
+
+.reportRowResolved {
+  opacity: 0.6;
+}
+
+.reportIcon {
+  font-size: 1.5rem;
+  flex-shrink: 0;
+  width: 36px;
+  text-align: center;
+}
+
+.reportInfo {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.reportTitle {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #0f172a;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.reportTypePill {
+  font-size: 0.68rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  background: #eff6ff;
+  color: #2563eb;
+  padding: 2px 8px;
+  border-radius: 20px;
+}
+
+.reportReason {
+  font-size: 0.82rem;
+  color: #64748b;
+}
+
+.reportDetails {
+  font-size: 0.8rem;
+  color: #94a3b8;
+  font-style: italic;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.reportMeta {
+  font-size: 0.75rem;
+  color: #94a3b8;
+}
+
+.reportActions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.btnDismiss {
+  padding: 6px 14px;
+  border-radius: 7px;
+  border: 1.5px solid #e2e8f0;
+  background: #fff;
+  color: #475569;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+  white-space: nowrap;
+}
+.btnDismiss:hover { background: #f8fafc; }
+
+.resolvedBadge {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #16a34a;
+  background: #f0fdf4;
+  padding: 4px 10px;
+  border-radius: 20px;
+  flex-shrink: 0;
+  align-self: center;
+}
