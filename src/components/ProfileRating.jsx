@@ -6,6 +6,7 @@ import {
   where, getDocs,
 } from 'firebase/firestore';
 import styles from './ProfileRating.module.css';
+import ReportModal from './ReportModal';
 import {
   calculateAverageRating,
   getRatingPercentage,
@@ -64,7 +65,7 @@ function Stars({ rating, size = 13 }) {
 
 // ─── Review Card ──────────────────────────────────────────────────────────────
 
-function ReviewCard({ review, animate = false, delay = 0 }) {
+function ReviewCard({ review, animate = false, delay = 0, onReport = null }) {
   const formattedDate = review.createdAt
     ? (review.createdAt.toDate
         ? review.createdAt.toDate()
@@ -100,6 +101,34 @@ function ReviewCard({ review, animate = false, delay = 0 }) {
         </div>
         {review.comment && <p className={styles.reviewComment}>{review.comment}</p>}
         {formattedDate && <div className={styles.reviewDate}>{formattedDate}</div>}
+        {/* Report button — only shown when onReport is provided */}
+        {onReport && (
+          <button
+            onClick={() => onReport(review)}
+            style={{
+              marginTop: 8,
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 5,
+              fontSize: '0.75rem',
+              color: '#94a3b8',
+              padding: '2px 0',
+              fontFamily: 'inherit',
+              transition: 'color 0.15s',
+            }}
+            onMouseEnter={e => e.currentTarget.style.color = '#dc2626'}
+            onMouseLeave={e => e.currentTarget.style.color = '#94a3b8'}
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/>
+              <line x1="4" y1="22" x2="4" y2="15"/>
+            </svg>
+            Report this review
+          </button>
+        )}
       </div>
     </div>
   );
@@ -116,6 +145,7 @@ export default function ProfileRating({ onClose }) {
   const [loading, setLoading]                   = useState(true);
   const [error, setError]                       = useState(null);
   const [reviewDrawerOpen, setReviewDrawerOpen] = useState(false);
+  const [reportReview, setReportReview]         = useState(null);
 
   // ── Get current user then fetch ───────────────────────────────────────────
 
@@ -238,6 +268,16 @@ export default function ProfileRating({ onClose }) {
   return (
     <div className={styles.page}>
       <div className={styles.bgAccent} />
+
+      {/* Report review modal — saves comment + rating so admin can see the content */}
+      <ReportModal
+        open={!!reportReview}
+        onClose={() => setReportReview(null)}
+        reportType="review"
+        reportedId={reportReview?.id || ''}
+        reportedName={`Review by ${reportReview?.reviewerName || 'user'} on "${reportReview?.listingTitle || 'listing'}"`}
+        extraData={reportReview ? { reviewComment: reportReview.comment || '', reviewRating: reportReview.rating || 0 } : {}}
+      />
 
       {/* ── Header row ── */}
       <div className={styles.headerRow}>
@@ -374,7 +414,7 @@ export default function ProfileRating({ onClose }) {
             <>
               <div className={styles.transactionsList}>
                 {previewReviews.map((review, i) => (
-                  <ReviewCard key={review.id} review={review} animate delay={i * 60} />
+                  <ReviewCard key={review.id} review={review} animate delay={i * 60} onReport={(r) => setReportReview(r)} />
                 ))}
               </div>
               {hasMore && (
@@ -400,7 +440,7 @@ export default function ProfileRating({ onClose }) {
       >
         <div className={styles.drawerReviewList}>
           {reviews.map((review, i) => (
-            <ReviewCard key={review.id} review={review} animate delay={i * 40} />
+            <ReviewCard key={review.id} review={review} animate delay={i * 40} onReport={(r) => setReportReview(r)} />
           ))}
         </div>
       </Drawer>
