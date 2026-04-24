@@ -193,19 +193,36 @@ function Profile() {
       });
 
       if (doneItems.length) {
+        const coveredByTx = await Promise.all(
+          doneItems.map(async (l) => {
+            try {
+              const txSnap = await getDocs(query(
+                collection(db, 'transactions'),
+                where('listingId', '==', l.id),
+                where('status', '==', 'completed'),
+              ));
+              return txSnap.empty ? null : l.id; // null = not covered, id = covered by tx
+            } catch { return null; }
+          })
+        );
+        const coveredIds = new Set(coveredByTx.filter(Boolean));
+
         setHistory(prev => {
           const existingIds = new Set(prev.map(h => h.id));
-          const newItems = doneItems.filter(l => !existingIds.has(l.id));
-          return newItems.length ? [...prev, ...newItems.map(l => ({
-            id:     l.id,
-            item:   l.title,
-            type:   'sale',
-            side:   'seller',
-            date:   l.date,
-            price:  l.price != null ? `R${Number(l.price).toLocaleString()}` : null,
-            buyer:  null,
-            status: 'sold',
-          }))] : prev;
+          const newItems = doneItems
+            .filter(l => !existingIds.has(l.id) && !coveredIds.has(l.id)) // ← skip if tx exists
+            .map(l => ({
+              id:           l.id,
+              item:         l.title,
+              type:         'sale',
+              side:         'seller',
+              date:         l.date,
+              price:        l.price != null ? `R${Number(l.price).toLocaleString()}` : null,
+              buyer:        null,
+              status:       'sold',
+              listingImage: l.photos?.[0] || l.imageUrl || null,
+            }));
+          return newItems.length ? [...prev, ...newItems] : prev;
         });
 
         Promise.all(doneItems.map(async (l) => {
@@ -239,61 +256,90 @@ function Profile() {
 
   const fetchUserPurchases = async (uid) => {
     try {
-      const [txBuyerSnap, txSellerSnap, pBuyerSnap, pSellerSnap] = await Promise.all([
-        getDocs(query(collection(db, 'transactions'), where('buyerId',  '==', uid), where('status', 'in', ['accepted', 'completed']))),
-        getDocs(query(collection(db, 'transactions'), where('sellerId', '==', uid), where('status', 'in', ['accepted', 'completed']))),
-        getDocs(query(collection(db, 'purchases'),   where('buyerId',  '==', uid), where('status', '==', 'completed'))),
-        getDocs(query(collection(db, 'purchases'),   where('sellerId', '==', uid), where('status', '==', 'completed'))),
+      // Only look at the transactions collection, status = completed
+      const [asBuyerSnap, asSellerSnap] = await Promise.all([
+        getDocs(query(
+          collection(db, 'transactions'),
+          where('buyerId',  '==', uid),
+          where('status',   '==', 'completed'),
+        )),
+        getDocs(query(
+          collection(db, 'transactions'),
+          where('sellerId', '==', uid),
+          where('status',   '==', 'completed'),
+        )),
       ]);
 
+      // Deduplicate — a trade doc can appear in both queries
+      const seen = new Set();
       const allDocs = [
-        ...txBuyerSnap.docs.map(d  => ({ d, side: 'buyer',  collection: 'transactions' })),
-        ...txSellerSnap.docs.map(d => ({ d, side: 'seller', collection: 'transactions' })),
-        ...pBuyerSnap.docs.map(d   => ({ d, side: 'buyer',  collection: 'purchases' })),
-        ...pSellerSnap.docs.map(d  => ({ d, side: 'seller', collection: 'purchases' })),
-      ];
+        ...asBuyerSnap.docs.map(d  => ({ d, side: 'buyer'  })),
+        ...asSellerSnap.docs.map(d => ({ d, side: 'seller' })),
+      ].filter(({ d }) => {
+        if (seen.has(d.id)) return false;
+        seen.add(d.id);
+        return true;
+      });
 
       if (allDocs.length === 0) return;
 
       const enriched = await Promise.all(
-        allDocs.map(async ({ d: purchaseDoc, side }) => {
-          const p = purchaseDoc.data();
+        allDocs.map(async ({ d: txDoc, side }) => {
+          const p      = txDoc.data();
+          const type   = p.type?.toLowerCase?.() ?? 'sale'; // 'sale' | 'trade'
+          const isTrade = type === 'trade';
 
-          let itemTitle = p.listingTitle || null;
-          let price     = p.price ?? p.amount ?? p.agreedPrice ?? null;
-          let otherName = null;
+          // ── Resolve listing title + image ──
+          let itemTitle    = p.listingTitle || null;
+          let listingImage = p.listingImage || p.productImage || null;
+          let price        = p.price ?? p.amount ?? p.agreedPrice ?? null;
 
-          if (p.listingId && !itemTitle) {
+          if (p.listingId && (!itemTitle || !listingImage)) {
             try {
               const ls = await getDoc(doc(db, 'listings', p.listingId));
               if (ls.exists()) {
-                const ld = ls.data();
-                itemTitle = ld.title || null;
-                price = price ?? ld.price;
+                const ld  = ls.data();
+                itemTitle    = itemTitle    || ld.title            || null;
+                listingImage = listingImage || ld.photos?.[0]      || ld.imageUrl || null;
+                price        = price        ?? ld.price;
               }
             } catch { /* non-fatal */ }
           }
           itemTitle = itemTitle || (side === 'buyer' ? 'Purchase' : 'Sale');
 
+          // ── Resolve other party name ──
+          let otherName = null;
           if (side === 'buyer') {
             otherName = p.sellerName || await getUserName(p.sellerId);
           } else {
             otherName = p.buyerName  || await getUserName(p.buyerId);
           }
 
+          // ── Date ──
           const rawDate = p.completedAt || p.updatedAt || p.createdAt;
           const date    = rawDate?.toDate ? rawDate.toDate() : rawDate ? new Date(rawDate) : new Date();
 
+          // ── tradeItem — what was offered in exchange ──
+          const tradeItem = p.tradeItem ?? null;
+
+          // ── History type logic ──
+          // Buyer:  type=sale  → 'purchase' (badge: Bought)
+          //         type=trade → 'trade'    (badge: Traded) + tradeItem if present
+          // Seller: type=sale  → 'sale'     (badge: Sold)
+          //         type=trade → 'trade'    (badge: Traded) + tradeItem if present
+          const historyType = isTrade ? 'trade' : side === 'buyer' ? 'purchase' : 'sale';
+
           return {
-            id:        purchaseDoc.id,
-            item:      itemTitle,
-            type:      side === 'buyer' ? 'purchase' : 'sale',
+            id:           txDoc.id,
+            item:         itemTitle,
+            type:         historyType,
             side,
             date,
-            price:     price != null ? `R${Number(price).toLocaleString()}` : null,
-            seller:    side === 'buyer'  ? otherName : null,
-            buyer:     side === 'seller' ? otherName : null,
-            status:    side === 'buyer'  ? 'bought'  : 'sold',
+            price:        price != null ? `R${Number(price).toLocaleString()}` : null,
+            seller:       side === 'buyer'  ? otherName : null,
+            buyer:        side === 'seller' ? otherName : null,
+            tradeItem,
+            listingImage,
           };
         })
       );
@@ -306,6 +352,7 @@ function Profile() {
     } catch (err) {
       console.warn('fetchUserPurchases:', err);
     }
+    
   };
 
   const handleInputChange = (e) => {
@@ -400,7 +447,6 @@ function Profile() {
     </div>
   );
 
-  // ── Show ratings page ─────────────────────────────────────────────────────
   if (showRatings) {
     return <ProfileRating onClose={() => setShowRatings(false)} />;
   }
@@ -450,7 +496,6 @@ function Profile() {
         </div>
 
         <div className={styles.statsSection}>
-          {/* ── Rating row with View reviews link ── */}
           <div className={styles.rating}>
             <div className={styles.ratingStars}>{renderStars(profileData.rating)}</div>
             <span className={styles.ratingValue}>{safeNumber(profileData.rating).toFixed(1)}</span>
@@ -495,19 +540,34 @@ function Profile() {
             ) : (
               <div className={styles.historyList}>
                 {sortedHistory.map(item => {
-                  const isBuyer  = item.side === 'buyer' || item.type === 'purchase';
+                  const isBuyer    = item.side === 'buyer' || item.type === 'purchase';
+                  const isTrade    = item.type === 'trade';
                   const otherParty = isBuyer ? item.seller : item.buyer;
-                  const dateStr = item.date
+                  const dateStr    = item.date
                     ? new Date(item.date).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric' })
                     : null;
 
                   return (
                     <div key={item.id} className={styles.historyItem}>
-                      <div className={`${styles.historyIcon} ${isBuyer ? styles.historyIconBuyer : styles.historyIconSeller}`}>
-                        {item.type === 'purchase' && <i className="fas fa-shopping-cart" />}
-                        {item.type === 'sale'     && <i className="fas fa-tag" />}
-                        {item.type === 'trade'    && <i className="fas fa-exchange-alt" />}
+
+                      {/* ── Listing image ── */}
+                      <div className={styles.historyImg}>
+                        {item.listingImage
+                          ? <img src={item.listingImage} alt={item.item} />
+                          : <div className={styles.historyImgPlaceholder}><i className="fas fa-image" /></div>
+                        }
+                        <span className={`${styles.historyTypeDot} ${
+                          item.type === 'purchase' ? styles.historyTypeDotBought
+                          : isTrade               ? styles.historyTypeDotTrade
+                          : styles.historyTypeDotSold
+                        }`}>
+                          {item.type === 'purchase' && <i className="fas fa-shopping-cart" />}
+                          {item.type === 'sale'     && <i className="fas fa-tag" />}
+                          {isTrade                  && <i className="fas fa-exchange-alt" />}
+                        </span>
                       </div>
+
+                      {/* ── Details ── */}
                       <div className={styles.historyDetails}>
                         <h4 className={styles.historyItemTitle}>{item.item}</h4>
                         <div className={styles.historyMeta}>
@@ -522,14 +582,32 @@ function Profile() {
                               {isBuyer ? `From: ${otherParty}` : `To: ${otherParty}`}
                             </span>
                           )}
-                          {item.price && (
+                          {/* Price only shown for sales, not trades */}
+                          {item.price && !isTrade && (
                             <span className={styles.historyMetaPrice}>{item.price}</span>
+                          )}
+                          {/* tradeItem shown only when present and it was a trade */}
+                          {isTrade && item.tradeItem && (
+                            <span className={styles.historyMetaChip}>
+                              <i className="fas fa-exchange-alt" /> Traded for: {item.tradeItem}
+                            </span>
                           )}
                         </div>
                       </div>
-                      <span className={`${styles.historyBadge} ${isBuyer ? styles.historyBadgeBought : styles.historyBadgeSold}`}>
-                        {isBuyer ? 'Bought' : 'Sold'}
-                      </span>
+
+                      {/* ── Badge ── */}
+                      <div className={styles.historyBadgeWrap}>
+                        <span className={`${styles.historyBadge} ${
+                          item.type === 'purchase' ? styles.historyBadgeBought
+                          : isTrade               ? styles.historyBadgeTrade
+                          : styles.historyBadgeSold
+                        }`}>
+                          {item.type === 'purchase' && 'Bought'}
+                          {item.type === 'sale'     && 'Sold'}
+                          {isTrade                  && 'Traded'}
+                        </span>
+                      </div>
+
                     </div>
                   );
                 })}

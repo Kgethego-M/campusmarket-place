@@ -1064,3 +1064,127 @@
 .viewRatingsLink i {
   font-size: 0.65rem;
 }
+/* ── History card — new design ── */
+.historyItem {
+  display: flex;
+  align-items: stretch;
+  background: white;
+  border-radius: 12px;
+  border: 1px solid #e8eaed;
+  overflow: hidden;
+  transition: box-shadow 0.18s, transform 0.18s;
+}
+
+.historyItem:hover {
+  box-shadow: 0 4px 16px rgba(0,0,0,0.08);
+  transform: translateY(-1px);
+}
+
+.historyImg {
+  width: 88px;
+  min-width: 88px;
+  background: #f8fafc;
+  overflow: hidden;
+  flex-shrink: 0;
+  position: relative;
+}
+
+.historyImg img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.historyImgPlaceholder {
+  width: 100%;
+  height: 100%;
+  min-height: 88px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #cbd5e1;
+  font-size: 1.25rem;
+}
+
+.historyTypeDot {
+  position: absolute;
+  top: 7px;
+  left: 7px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+}
+
+.historyTypeDotSold  { background: #dcfce7; color: #15803d; }
+.historyTypeDotBought { background: #dbeafe; color: #1d4ed8; }
+.historyTypeDotTrade  { background: #ede9fe; color: #6d28d9; }
+
+.historyDetails {
+  flex: 1;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 5px;
+  min-width: 0;
+}
+
+.historyItemTitle {
+  margin: 0;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #1f2937;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.historyMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  align-items: center;
+}
+
+.historyMetaChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.72rem;
+  color: #64748b;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 99px;
+  padding: 2px 8px;
+}
+
+.historyMetaChip i { font-size: 0.65rem; }
+
+.historyMetaPrice {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #6AA6DA;
+}
+
+.historyBadgeWrap {
+  padding: 12px 14px 12px 0;
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.historyBadge {
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 99px;
+  white-space: nowrap;
+}
+
+.historyBadgeSold   { background: #dcfce7; color: #15803d; }
+.historyBadgeBought { background: #dbeafe; color: #1d4ed8; }
+.historyBadgeTrade  { background: #ede9fe; color: #6d28d9; }
