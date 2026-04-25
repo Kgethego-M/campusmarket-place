@@ -1,9 +1,9 @@
 // src/components/ListingDetailView.jsx
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   doc, getDoc, collection, query, where,
-  getDocs, addDoc, serverTimestamp,
+  getDocs, addDoc, serverTimestamp, setDoc, updateDoc, arrayUnion, arrayRemove,
 } from 'firebase/firestore';
 import { auth, db } from '../firebase';
 import { onAuthStateChanged } from 'firebase/auth';
@@ -11,6 +11,251 @@ import { createTransaction } from '../services/transactionService';
 import { notifySellerOfOffer } from '../services/notificationService';
 import NavBarTemp from './NavBarTemp';
 import ReportModal from './ReportModal';
+
+// ── Toast ─────────────────────────────────────────────────────────────────────
+function Toast({ toast }) {
+  if (!toast) return null;
+  const bg = toast.type === 'error' ? '#dc2626' : toast.type === 'warn' ? '#d97706' : '#1f2937';
+  return (
+    <div style={{
+      position: 'fixed', top: 80, left: '50%', transform: 'translateX(-50%)',
+      background: bg, color: 'white', padding: '10px 20px', borderRadius: 10,
+      fontFamily: 'Segoe UI, system-ui, sans-serif', fontSize: '0.875rem', fontWeight: 600,
+      display: 'flex', alignItems: 'center', gap: 8, zIndex: 9999,
+      boxShadow: '0 4px 20px rgba(0,0,0,0.15)', pointerEvents: 'none',
+      animation: 'toastSlide 0.25s ease',
+    }}>
+      <style>{`@keyframes toastSlide { from { opacity:0; transform:translateX(-50%) translateY(-8px); } to { opacity:1; transform:translateX(-50%) translateY(0); } }`}</style>
+      <span>{toast.type === 'error' ? '✕' : toast.type === 'warn' ? '⚠' : '✓'}</span>
+      {toast.msg}
+    </div>
+  );
+}
+
+// ── Image Scroller (Shein-style) ──────────────────────────────────────────────
+function ImageScroller({ photos, title }) {
+  const [active, setActive] = useState(0);
+  const trackRef            = useRef(null);
+  const startX              = useRef(null);
+  const isDragging          = useRef(false);
+
+  const goTo = useCallback((i) => {
+    const clamped = Math.max(0, Math.min(i, photos.length - 1));
+    setActive(clamped);
+    const track = trackRef.current;
+    if (track) {
+      const slide = track.children[clamped];
+      if (slide) slide.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+    }
+  }, [photos.length]);
+
+  // Touch handlers
+  const onTouchStart = (e) => { startX.current = e.touches[0].clientX; };
+  const onTouchEnd   = (e) => {
+    if (startX.current === null) return;
+    const delta = startX.current - e.changedTouches[0].clientX;
+    if (Math.abs(delta) > 40) goTo(active + (delta > 0 ? 1 : -1));
+    startX.current = null;
+  };
+
+  // Mouse drag
+  const onMouseDown = (e) => { startX.current = e.clientX; isDragging.current = false; };
+  const onMouseMove = (e) => { if (startX.current !== null && Math.abs(e.clientX - startX.current) > 5) isDragging.current = true; };
+  const onMouseUp   = (e) => {
+    if (startX.current === null) return;
+    const delta = startX.current - e.clientX;
+    if (Math.abs(delta) > 40) goTo(active + (delta > 0 ? 1 : -1));
+    startX.current = null;
+  };
+
+  if (photos.length === 0) {
+    return (
+      <div style={imgStyles.wrapper}>
+        <div style={imgStyles.placeholder}>
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#ccc" strokeWidth="1.5" strokeLinecap="round">
+            <rect x="3" y="3" width="18" height="18" rx="2"/>
+            <circle cx="8.5" cy="8.5" r="1.5"/>
+            <path d="M21 15l-5-5L5 21"/>
+          </svg>
+          <p style={{ color: '#bbb', fontSize: '0.85rem', margin: '10px 0 0' }}>No Image Available</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={imgStyles.root}>
+      {/* Main scroller */}
+      <div
+        style={imgStyles.wrapper}
+        onTouchStart={onTouchStart}
+        onTouchEnd={onTouchEnd}
+        onMouseDown={onMouseDown}
+        onMouseMove={onMouseMove}
+        onMouseUp={onMouseUp}
+        onMouseLeave={onMouseUp}
+      >
+        <div ref={trackRef} style={imgStyles.track}>
+          {photos.map((src, i) => (
+            <div key={i} style={imgStyles.slide}>
+              <img
+                src={src}
+                alt={`${title} ${i + 1}`}
+                style={{
+                  ...imgStyles.img,
+                  opacity: i === active ? 1 : 0,
+                  transition: 'opacity 0.35s ease',
+                  position: i === 0 ? 'relative' : 'absolute',
+                  inset: 0,
+                }}
+                draggable={false}
+              />
+            </div>
+          ))}
+          {/* All images stacked, only active is visible */}
+          <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+            {photos.map((src, i) => (
+              <img
+                key={`overlay-${i}`}
+                src={src}
+                alt={`${title} ${i + 1}`}
+                style={{
+                  position: 'absolute',
+                  inset: 0,
+                  width: '100%',
+                  height: '100%',
+                  objectFit: 'contain',
+                  opacity: i === active ? 1 : 0,
+                  transition: 'opacity 0.38s cubic-bezier(0.4, 0, 0.2, 1)',
+                  pointerEvents: 'none',
+                  userSelect: 'none',
+                  WebkitUserDrag: 'none',
+                }}
+                draggable={false}
+              />
+            ))}
+          </div>
+        </div>
+
+        {/* Arrows — only if multiple photos */}
+        {photos.length > 1 && (
+          <>
+            <button
+              onClick={() => goTo(active - 1)}
+              disabled={active === 0}
+              style={{ ...imgStyles.arrow, left: 10, opacity: active === 0 ? 0.3 : 1 }}
+            >
+              ‹
+            </button>
+            <button
+              onClick={() => goTo(active + 1)}
+              disabled={active === photos.length - 1}
+              style={{ ...imgStyles.arrow, right: 10, opacity: active === photos.length - 1 ? 0.3 : 1 }}
+            >
+              ›
+            </button>
+          </>
+        )}
+
+        {/* Counter pill */}
+        {photos.length > 1 && (
+          <div style={imgStyles.counter}>{active + 1} / {photos.length}</div>
+        )}
+      </div>
+
+      {/* Dot indicators */}
+      {photos.length > 1 && (
+        <div style={imgStyles.dots}>
+          {photos.map((_, i) => (
+            <button
+              key={i}
+              onClick={() => goTo(i)}
+              style={{
+                ...imgStyles.dot,
+                background: i === active ? '#6AA6DA' : '#d1d5db',
+                width: i === active ? 20 : 8,
+              }}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* Thumbnail strip */}
+      {photos.length > 1 && (
+        <div style={imgStyles.thumbRow}>
+          {photos.map((src, i) => (
+            <button
+              key={i}
+              onClick={() => goTo(i)}
+              style={{
+                ...imgStyles.thumb,
+                border: i === active ? '2px solid #6AA6DA' : '2px solid transparent',
+                opacity: i === active ? 1 : 0.6,
+              }}
+            >
+              <img src={src} alt={`thumb-${i}`} style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 5 }} />
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+const imgStyles = {
+  root:    { display: 'flex', flexDirection: 'column', gap: 10 },
+  wrapper: {
+    width: '100%',
+    aspectRatio: '4/3',
+    borderRadius: 12,
+    overflow: 'hidden',
+    backgroundColor: '#f0f2f5',
+    position: 'relative',
+    cursor: 'grab',
+    userSelect: 'none',
+  },
+  track:   { position: 'absolute', inset: 0 },
+  slide:   { display: 'none' }, // hidden — we use absolute positioning above
+  img:     { width: '100%', height: '100%', objectFit: 'contain' },
+  placeholder: {
+    width: '100%', height: '100%',
+    display: 'flex', flexDirection: 'column',
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: '#f0f2f5',
+  },
+  arrow: {
+    position: 'absolute', top: '50%', transform: 'translateY(-50%)',
+    background: 'rgba(255,255,255,0.9)', border: 'none',
+    width: 34, height: 34, borderRadius: '50%',
+    fontSize: '1.4rem', lineHeight: '1', cursor: 'pointer',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+    transition: 'opacity 0.15s, transform 0.15s',
+    zIndex: 2,
+    fontFamily: 'serif',
+  },
+  counter: {
+    position: 'absolute', bottom: 10, right: 12,
+    background: 'rgba(0,0,0,0.45)', color: 'white',
+    fontSize: '0.72rem', fontWeight: 600,
+    padding: '2px 9px', borderRadius: 99,
+    fontFamily: 'Segoe UI, system-ui, sans-serif',
+  },
+  dots: { display: 'flex', justifyContent: 'center', gap: 6, padding: '2px 0' },
+  dot: {
+    height: 8, borderRadius: 99, border: 'none', cursor: 'pointer',
+    transition: 'width 0.25s ease, background 0.25s ease',
+    padding: 0,
+  },
+  thumbRow: { display: 'flex', gap: 8, flexWrap: 'wrap' },
+  thumb: {
+    width: 58, height: 58, borderRadius: 6,
+    overflow: 'hidden', cursor: 'pointer',
+    transition: 'border 0.15s, opacity 0.15s',
+    padding: 0, background: 'none',
+    flexShrink: 0,
+  },
+};
 
 // ── Icons ─────────────────────────────────────────────────────────────────────
 const IconMessage = () => (
@@ -35,20 +280,19 @@ const IconClock = () => (
 
 const IconLoader = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, animation: 'spin 1s linear infinite' }}>
-    <line x1="12" y1="2"     x2="12" y2="6"/>
-    <line x1="12" y1="18"    x2="12" y2="22"/>
-    <line x1="4.93" y1="4.93"   x2="7.76" y2="7.76"/>
+    <line x1="12" y1="2"   x2="12" y2="6"/>
+    <line x1="12" y1="18"  x2="12" y2="22"/>
+    <line x1="4.93" y1="4.93"   x2="7.76"  y2="7.76"/>
     <line x1="16.24" y1="16.24" x2="19.07" y2="19.07"/>
-    <line x1="2" y1="12"    x2="6" y2="12"/>
-    <line x1="18" y1="12"   x2="22" y2="12"/>
-    <line x1="4.93" y1="19.07"  x2="7.76" y2="16.24"/>
+    <line x1="2"  y1="12"  x2="6"  y2="12"/>
+    <line x1="18" y1="12"  x2="22" y2="12"/>
+    <line x1="4.93" y1="19.07"  x2="7.76"  y2="16.24"/>
     <line x1="16.24" y1="7.76"  x2="19.07" y2="4.93"/>
   </svg>
 );
 
-// ── Inner view (reusable / testable) ─────────────────────────────────────────
+// ── Inner view ────────────────────────────────────────────────────────────────
 export function ListingDetailView({ listing, currentUser, existingTransaction = null, navigate }) {
-  const [mainImage, setMainImage]         = useState(0);
   const [isModalOpen, setIsModalOpen]     = useState(false);
   const [purchaseType, setPurchaseType]   = useState('');
   const [agreedPrice, setAgreedPrice]     = useState(listing.price);
@@ -60,20 +304,74 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
   const [chatLoading, setChatLoading]     = useState(false);
   const [submitting, setSubmitting]       = useState(false);
   const [reportOpen, setReportOpen]       = useState(false);
+  const [inCart, setInCart]               = useState(false);
+  const [cartLoading, setCartLoading]     = useState(false);
+  const [toast, setToast]                 = useState(null);
+
+  const showToast = (msg, type = 'success') => {
+    setToast({ msg, type });
+    setTimeout(() => setToast(null), 2800);
+  };
 
   const sellerId     = listing.sellerUID || listing.sellerId;
   const isOwnListing = currentUser && currentUser.uid === sellerId;
 
+  // ── Check if already in cart ───────────────────────────────────────────────
+  useEffect(() => {
+    if (!currentUser || !listing.id) return;
+    const checkCart = async () => {
+      try {
+        const snap = await getDoc(doc(db, 'carts', currentUser.uid));
+        if (snap.exists()) {
+          const items = snap.data().items || [];
+          setInCart(items.includes(listing.id));
+        }
+      } catch (_) {}
+    };
+    checkCart();
+  }, [currentUser, listing.id]);
+
+  // ── Cart toggle ────────────────────────────────────────────────────────────
+  const handleCartToggle = async () => {
+    if (!currentUser) { showToast('Please log in to save items', 'warn'); return; }
+    if (isOwnListing)  { showToast('You cannot add your own listing to cart', 'warn'); return; }
+    setCartLoading(true);
+    try {
+      const cartRef = doc(db, 'carts', currentUser.uid);
+      const snap    = await getDoc(cartRef);
+
+      if (inCart) {
+        await updateDoc(cartRef, { items: arrayRemove(listing.id) });
+        setInCart(false);
+        showToast('Removed from cart');
+      } else {
+        const items = snap.exists() ? (snap.data().items || []) : [];
+        if (items.length >= 50) { showToast('Cart is full (max 50 items)', 'warn'); return; }
+        if (snap.exists()) {
+          await updateDoc(cartRef, { items: arrayUnion(listing.id) });
+        } else {
+          await setDoc(cartRef, { items: [listing.id], createdAt: serverTimestamp() });
+        }
+        setInCart(true);
+        showToast('Added to cart');
+      }
+    } catch (err) {
+      console.error('Cart error:', err);
+      showToast('Something went wrong', 'error');
+    } finally {
+      setCartLoading(false);
+    }
+  };
+
+  // ── Chat ───────────────────────────────────────────────────────────────────
   async function findOrCreateChat() {
     const buyerId = currentUser.uid;
     if (!sellerId) throw new Error('Seller information is missing from this listing');
     if (buyerId === sellerId) throw new Error('Cannot message yourself');
-
     const q = query(collection(db, 'chats'), where('participants', 'array-contains', buyerId));
     const snap = await getDocs(q);
     const existing = snap.docs.find((d) => d.data().participants?.includes(sellerId));
     if (existing) return existing.id;
-
     const ref = await addDoc(collection(db, 'chats'), {
       participants:          [buyerId, sellerId],
       listingTitle:          listing.title || '',
@@ -88,15 +386,15 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
   }
 
   async function handleMessageSeller() {
-    if (!currentUser) { alert('Please log in to message the seller'); return; }
-    if (!sellerId)    { alert('Seller information is missing'); return; }
-    if (currentUser.uid === sellerId) { alert('You cannot message yourself'); return; }
+    if (!currentUser) { showToast('Please log in to message the seller', 'warn'); return; }
+    if (!sellerId)    { showToast('Seller information is missing', 'error'); return; }
+    if (currentUser.uid === sellerId) { showToast('You cannot message yourself', 'warn'); return; }
     setChatLoading(true);
     try {
       const chatId = await findOrCreateChat();
       navigate(`/chat?open=${chatId}`);
     } catch (err) {
-      alert(`Could not open chat: ${err.message || 'Please try again.'}`);
+      showToast(`Could not open chat: ${err.message || 'Please try again.'}`, 'error');
     } finally {
       setChatLoading(false);
     }
@@ -106,11 +404,12 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
     navigate(isOwnListing ? '/profile' : `/profile/${sellerId}`);
   }
 
+  // ── Offer ──────────────────────────────────────────────────────────────────
   const handleTransaction = async () => {
     if (submitting) return;
-    if (!purchaseType)                           { alert('Please select a transaction type'); return; }
-    if (purchaseType === 'sale' && !agreedPrice) { alert('Please enter an agreed price'); return; }
-    if (purchaseType === 'trade' && !tradeItem)  { alert('Please describe what you want to trade'); return; }
+    if (!purchaseType)                           { showToast('Please select a transaction type', 'warn'); return; }
+    if (purchaseType === 'sale' && !agreedPrice) { showToast('Please enter an agreed price', 'warn'); return; }
+    if (purchaseType === 'trade' && !tradeItem)  { showToast('Please describe what you want to trade', 'warn'); return; }
 
     setSubmitting(true);
 
@@ -148,10 +447,10 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
       });
       setIsModalOpen(false);
       setOfferSent(true);
-      alert('Offer initiated! The seller will review your offer.');
+      showToast('Offer sent! The seller will review it shortly.');
     } catch (err) {
       console.error('Transaction error:', err);
-      alert('Failed to create offer. Please try again.');
+      showToast('Failed to create offer. Please try again.', 'error');
       setSubmitting(false);
     }
   };
@@ -199,6 +498,7 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
   return (
     <>
       <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
+      <Toast toast={toast} />
 
       <ReportModal
         open={reportOpen}
@@ -207,34 +507,12 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
         reportedId={listing.id}
         reportedName={listing.title}
       />
+
       <div style={styles.page}>
 
-        {/* ── Images ── */}
+        {/* ── Images (Shein-style) ── */}
         <div style={styles.imageSection}>
-          <div style={styles.mainImageWrapper}>
-            {photos.length > 0
-              ? <img src={photos[mainImage]} alt={listing.title} style={styles.mainImage}/>
-              : (
-                <div style={styles.imagePlaceholder}>
-                  <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#ccc" strokeWidth="1.5" strokeLinecap="round">
-                    <rect x="3" y="3" width="18" height="18" rx="2"/>
-                    <circle cx="8.5" cy="8.5" r="1.5"/>
-                    <path d="M21 15l-5-5L5 21"/>
-                  </svg>
-                  <p style={{ color: '#bbb', fontSize: '0.85rem', margin: '10px 0 0' }}>No Image Available</p>
-                </div>
-              )
-            }
-          </div>
-          {photos.length > 1 && (
-            <div style={styles.thumbnailRow}>
-              {photos.map((photo, i) => (
-                <img key={i} src={photo} alt={`thumb-${i}`} onClick={() => setMainImage(i)}
-                  style={{ ...styles.thumbnail, border: mainImage === i ? '2px solid #6AA6DA' : '2px solid transparent' }}
-                />
-              ))}
-            </div>
-          )}
+          <ImageScroller photos={photos} title={listing.title} />
         </div>
 
         {/* ── Details ── */}
@@ -249,7 +527,6 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
           <h1 style={styles.title}>{listing.title}</h1>
           <p style={styles.price}>R {Number(listing.price).toLocaleString()}</p>
 
-          {/* ── Description box (amber) ── */}
           {listing.description && (
             <div style={styles.descBox}>
               <p style={styles.descLabel}>
@@ -263,7 +540,7 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
               <p style={styles.descText}>{listing.description}</p>
             </div>
           )}
-          {/* ── Specifications box (blue) ── */}
+
           {listing.specification && (
             <div style={styles.specBox}>
               <p style={styles.specLabel}>
@@ -277,6 +554,29 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
           )}
 
           {renderButton()}
+
+          {/* ── Add to Cart ── */}
+          {currentUser && !isOwnListing && (
+            <button
+              style={{
+                ...styles.cartBtn,
+                backgroundColor: inCart ? '#f0fdf4' : '#f8fafc',
+                borderColor:     inCart ? '#86efac' : '#d1d5db',
+                color:           inCart ? '#15803d' : '#374151',
+              }}
+              onClick={handleCartToggle}
+              disabled={cartLoading}
+            >
+              {cartLoading
+                ? <IconLoader />
+                : <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+                    <circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/>
+                    <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/>
+                  </svg>
+              }
+              <span>{inCart ? 'Remove from cart' : 'Save to cart'}</span>
+            </button>
+          )}
 
           {/* ── Message Seller ── */}
           {currentUser && !isOwnListing && (
@@ -321,8 +621,7 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
           >
             <div style={styles.sellerAvatar}>
               {listing.sellerAvatar
-                ? <img src={listing.sellerAvatar} alt={listing.sellerName}
-                       style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }}/>
+                ? <img src={listing.sellerAvatar} alt={listing.sellerName} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }}/>
                 : <span style={styles.sellerInitial}>{listing.sellerName?.[0]?.toUpperCase() ?? '?'}</span>
               }
             </div>
@@ -434,9 +733,9 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
 export default function ListingDetail() {
   const { id }       = useParams();
   const navigate     = useNavigate();
-  const [listing, setListing]                   = useState(null);
-  const [currentUser, setCurrentUser]           = useState(null);
-  const [loading, setLoading]                   = useState(true);
+  const [listing, setListing]                         = useState(null);
+  const [currentUser, setCurrentUser]                 = useState(null);
+  const [loading, setLoading]                         = useState(true);
   const [existingTransaction, setExistingTransaction] = useState(null);
 
   useEffect(() => {
@@ -497,46 +796,36 @@ export default function ListingDetail() {
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 const styles = {
-  page:             { display: 'flex', gap: '48px', padding: '40px 32px 48px', width: '100%', margin: '0 auto', flexWrap: 'wrap', backgroundColor: '#fbfbfb', minHeight: '100vh', borderRadius: '24px' },
-  imageSection:     { flex: '1 1 400px', minWidth: '300px' },
-  mainImageWrapper: { width: '100%', aspectRatio: '4/3', borderRadius: '12px', overflow: 'hidden', backgroundColor: '#f0f2f5' },
-  mainImage:        { width: '100%', height: '100%', objectFit: 'cover' },
-  imagePlaceholder: { width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', backgroundColor: '#f0f2f5' },
-  thumbnailRow:     { display: 'flex', gap: '8px', marginTop: '12px', flexWrap: 'wrap' },
-  thumbnail:        { width: '72px', height: '72px', objectFit: 'cover', borderRadius: '8px', cursor: 'pointer' },
-  detailSection:    { flex: '1 1 340px', minWidth: '280px', display: 'flex', flexDirection: 'column', gap: '12px' },
+  page:             { display: 'flex', gap: '40px', padding: '24px 32px 48px', width: '100%', margin: '0 auto', flexWrap: 'wrap', backgroundColor: '#fbfbfb', minHeight: '100vh' },
+  imageSection:     { flex: '1 1 420px', minWidth: '300px', maxWidth: 600 },
+  detailSection:    { flex: '1 1 300px', minWidth: '260px', display: 'flex', flexDirection: 'column', gap: '12px' },
   badgeRow:         { display: 'flex', gap: '8px', flexWrap: 'wrap' },
   badge:            { padding: '4px 12px', borderRadius: '20px', fontSize: '0.75rem', fontWeight: '600', fontFamily: 'Segoe UI, system-ui, sans-serif' },
-  title:            { fontSize: '1.8rem', fontWeight: '700', color: '#1a1a1a', margin: '0', fontFamily: 'Segoe UI, system-ui, sans-serif' },
-  price:            { fontSize: '1.6rem', fontWeight: '700', color: '#6AA6DA', margin: '0', fontFamily: 'Segoe UI, system-ui, sans-serif' },
-  buyBtn:           { width: '100%', padding: '16px', backgroundColor: '#6AA6DA', color: '#fff', border: 'none', borderRadius: '10px', fontSize: '1rem', fontWeight: '700', cursor: 'pointer', fontFamily: 'Segoe UI, system-ui, sans-serif' },
-  messageBtn:       { width: '100%', padding: '12px', backgroundColor: 'transparent', color: '#444', border: '1px solid #6aa6da57', borderRadius: '10px', fontSize: '0.95rem', fontWeight: '500', cursor: 'pointer', fontFamily: 'Segoe UI, system-ui, sans-serif', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' },
-  reportBtn:        { width: '100%', padding: '11px', backgroundColor: 'transparent', color: '#dc2626', border: '1.5px solid #fca5a5', borderRadius: '10px', fontSize: '0.85rem', fontWeight: '500', cursor: 'pointer', fontFamily: 'Segoe UI, system-ui, sans-serif', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '7px' },
-
+  title:            { fontSize: '1.5rem', fontWeight: '700', color: '#1a1a1a', margin: '0', fontFamily: 'Segoe UI, system-ui, sans-serif' },
+  price:            { fontSize: '1.4rem', fontWeight: '700', color: '#6AA6DA', margin: '0', fontFamily: 'Segoe UI, system-ui, sans-serif' },
+  buyBtn:           { width: '100%', padding: '14px', backgroundColor: '#6AA6DA', color: '#fff', border: 'none', borderRadius: '10px', fontSize: '0.95rem', fontWeight: '700', cursor: 'pointer', fontFamily: 'Segoe UI, system-ui, sans-serif' },
+  cartBtn:          { width: '100%', padding: '12px', border: '1.5px solid', borderRadius: '10px', fontSize: '0.9rem', fontWeight: '600', cursor: 'pointer', fontFamily: 'Segoe UI, system-ui, sans-serif', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', transition: 'all 0.18s' },
+  messageBtn:       { width: '100%', padding: '11px', backgroundColor: 'transparent', color: '#444', border: '1px solid #6aa6da57', borderRadius: '10px', fontSize: '0.875rem', fontWeight: '500', cursor: 'pointer', fontFamily: 'Segoe UI, system-ui, sans-serif', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' },
+  reportBtn:        { width: '100%', padding: '10px', backgroundColor: 'transparent', color: '#dc2626', border: '1.5px solid #fca5a5', borderRadius: '10px', fontSize: '0.82rem', fontWeight: '500', cursor: 'pointer', fontFamily: 'Segoe UI, system-ui, sans-serif', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '7px' },
   pendingBanner:       { display: 'flex', alignItems: 'center', gap: '12px', padding: '16px', backgroundColor: '#fff8e1', border: '1px solid #ffe082', borderRadius: '10px', fontFamily: 'Segoe UI, system-ui, sans-serif' },
   pendingTitle:        { margin: '0 0 4px', fontWeight: '700', fontSize: '0.95rem', color: '#b45309' },
   pendingSubtitle:     { margin: '0', fontSize: '0.85rem', color: '#92400e' },
   ownerBanner:         { display: 'flex', alignItems: 'center', gap: '12px', padding: '16px', backgroundColor: '#e8f4fd', border: '1px solid #90caf9', borderRadius: '10px', fontFamily: 'Segoe UI, system-ui, sans-serif' },
   ownerBannerTitle:    { margin: '0 0 4px', fontWeight: '700', fontSize: '0.95rem', color: '#0d47a1' },
   ownerBannerSubtitle: { margin: '0', fontSize: '0.85rem', color: '#1565c0' },
-
-  sellerCard:    { display: 'flex', alignItems: 'center', gap: '14px', padding: '16px', border: '1px solid #dde3ea', borderRadius: '14px', marginTop: '8px', cursor: 'pointer', backgroundColor: '#fff', transition: 'box-shadow 0.15s', outline: 'none', userSelect: 'none' },
-  sellerAvatar:  { width: '52px', height: '52px', borderRadius: '50%', backgroundColor: '#166bc0', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', flexShrink: 0 },
-  sellerInitial: { fontSize: '1.2rem', fontWeight: '700', color: '#fff' },
-  sellerName:    { margin: '0 0 2px', fontWeight: '600', fontSize: '0.95rem', color: '#1a1a1a', fontFamily: 'Segoe UI, system-ui, sans-serif' },
-  sellerSub:     { margin: '0', fontSize: '0.8rem', color: '#6AA6DA', fontFamily: 'Segoe UI, system-ui, sans-serif' },
-  sellerChevron: { fontSize: '1.6rem', color: '#bbb', flexShrink: 0 },
+  sellerCard:    { display: 'flex', alignItems: 'center', gap: '14px', padding: '14px', border: '1px solid #dde3ea', borderRadius: '12px', marginTop: '4px', cursor: 'pointer', backgroundColor: '#fff', transition: 'box-shadow 0.15s', outline: 'none', userSelect: 'none' },
+  sellerAvatar:  { width: '46px', height: '46px', borderRadius: '50%', backgroundColor: '#166bc0', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', flexShrink: 0 },
+  sellerInitial: { fontSize: '1.1rem', fontWeight: '700', color: '#fff' },
+  sellerName:    { margin: '0 0 2px', fontWeight: '600', fontSize: '0.9rem', color: '#1a1a1a', fontFamily: 'Segoe UI, system-ui, sans-serif' },
+  sellerSub:     { margin: '0', fontSize: '0.78rem', color: '#6AA6DA', fontFamily: 'Segoe UI, system-ui, sans-serif' },
+  sellerChevron: { fontSize: '1.5rem', color: '#bbb', flexShrink: 0 },
   backBtn:       { background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.9rem', color: '#555', padding: '0', fontFamily: 'Segoe UI, system-ui, sans-serif' },
-
-  // ── Spec box (blue) ──
-  specBox:   { backgroundColor: '#f0f6ff', border: '1px solid #bdd6f0', borderLeft: '4px solid #6AA6DA', borderRadius: '10px', padding: '14px 16px', margin: '0' },
-  specLabel: { fontSize: '0.72rem', fontWeight: '700', color: '#6AA6DA', textTransform: 'uppercase', letterSpacing: '0.07em', margin: '0 0 8px', display: 'flex', alignItems: 'center', fontFamily: 'Segoe UI, system-ui, sans-serif' },
-  specText:  { fontSize: '0.88rem', color: '#1e3a5f', lineHeight: '1.65', fontFamily: 'Segoe UI, system-ui, sans-serif', margin: '0', whiteSpace: 'pre-wrap' },
-
-  // ── Desc box (amber) ──
-  descBox:   { backgroundColor: '#fdf6ee', border: '1px solid #f0dfc0', borderLeft: '4px solid #e8a838', borderRadius: '10px', padding: '14px 16px', margin: '0' },
-  descLabel: { fontSize: '0.72rem', fontWeight: '700', color: '#c07a10', textTransform: 'uppercase', letterSpacing: '0.07em', margin: '0 0 8px', display: 'flex', alignItems: 'center', fontFamily: 'Segoe UI, system-ui, sans-serif' },
-  descText:  { fontSize: '0.88rem', color: '#4a3000', lineHeight: '1.65', fontFamily: 'Segoe UI, system-ui, sans-serif', margin: '0', whiteSpace: 'pre-wrap' },
+  specBox:   { backgroundColor: '#f0f6ff', border: '1px solid #bdd6f0', borderLeft: '4px solid #6AA6DA', borderRadius: '10px', padding: '12px 14px' },
+  specLabel: { fontSize: '0.7rem', fontWeight: '700', color: '#6AA6DA', textTransform: 'uppercase', letterSpacing: '0.07em', margin: '0 0 6px', display: 'flex', alignItems: 'center', fontFamily: 'Segoe UI, system-ui, sans-serif' },
+  specText:  { fontSize: '0.85rem', color: '#1e3a5f', lineHeight: '1.6', fontFamily: 'Segoe UI, system-ui, sans-serif', margin: '0', whiteSpace: 'pre-wrap' },
+  descBox:   { backgroundColor: '#fdf6ee', border: '1px solid #f0dfc0', borderLeft: '4px solid #e8a838', borderRadius: '10px', padding: '12px 14px' },
+  descLabel: { fontSize: '0.7rem', fontWeight: '700', color: '#c07a10', textTransform: 'uppercase', letterSpacing: '0.07em', margin: '0 0 6px', display: 'flex', alignItems: 'center', fontFamily: 'Segoe UI, system-ui, sans-serif' },
+  descText:  { fontSize: '0.85rem', color: '#4a3000', lineHeight: '1.6', fontFamily: 'Segoe UI, system-ui, sans-serif', margin: '0', whiteSpace: 'pre-wrap' },
 };
 
 const modalStyles = {

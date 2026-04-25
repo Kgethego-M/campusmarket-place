@@ -1,0 +1,409 @@
+.page {
+  min-height: 100vh;
+  background: #f5f6f8;
+  padding: 2rem 1rem 4rem;
+  font-family: 'Franklin Gothic Medium', 'Arial Narrow', Arial, sans-serif;
+}
+
+.container {
+  max-width: 1100px;
+  margin: 0 auto;
+  position: relative;
+}
+
+/* ── Toast ── */
+.toast {
+  position: fixed;
+  top: 80px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  border-radius: 10px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  z-index: 9999;
+  animation: toastIn 0.25s ease, toastOut 0.3s ease 2.5s forwards;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.12);
+  pointer-events: none;
+}
+
+.toastSuccess { background: #1f2937; color: white; }
+.toastError   { background: #dc2626; color: white; }
+
+@keyframes toastIn {
+  from { opacity: 0; transform: translateX(-50%) translateY(-10px); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+@keyframes toastOut {
+  from { opacity: 1; }
+  to   { opacity: 0; }
+}
+
+/* ── Header ── */
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1.75rem;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.headerLeft {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.backBtn {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: none;
+  border: none;
+  color: #6AA6DA;
+  font-size: 0.875rem;
+  font-family: inherit;
+  cursor: pointer;
+  padding: 0.4rem 0.75rem;
+  border-radius: 6px;
+  transition: background 0.15s;
+  white-space: nowrap;
+}
+
+.backBtn:hover { background: #e8f4fc; }
+
+.pageTitle {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #1a1a1a;
+}
+
+.pageSub {
+  margin: 2px 0 0;
+  font-size: 0.8rem;
+  color: #6b7280;
+}
+
+.clearBtn {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: none;
+  border: 1.5px solid #fca5a5;
+  color: #dc2626;
+  font-size: 0.8rem;
+  font-family: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0.4rem 0.875rem;
+  border-radius: 8px;
+  transition: background 0.15s;
+}
+
+.clearBtn:hover { background: #fff1f1; }
+
+/* ── Grid ── */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 14px;
+}
+
+/* ── Card — matches ProfileListingCard exactly ── */
+.card {
+  background: #fff;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid #e8eaed;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  animation: cardSlideIn 0.35s ease both;
+  transition: box-shadow 0.18s ease, transform 0.18s ease;
+}
+
+.card:hover {
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.10);
+  transform: translateY(-2px);
+}
+
+@keyframes cardSlideIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Image wrapper ── */
+.imageWrapper {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  background-color: #f0f2f5;
+  overflow: hidden;
+}
+
+.image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  transition: transform 0.3s ease;
+}
+
+.card:hover .image {
+  transform: scale(1.03);
+}
+
+.imagePlaceholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #eaecef;
+}
+
+/* ── Badges (same positions as ProfileListingCard) ── */
+.conditionBadge {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  color: #fff;
+  font-size: 0.68rem;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 4px;
+  letter-spacing: 0.3px;
+  z-index: 10;
+}
+
+.typeBadge {
+  position: absolute;
+  bottom: 8px;
+  left: 8px;
+  background: rgba(0, 0, 0, 0.58);
+  color: #fff;
+  font-size: 0.65rem;
+  font-weight: 500;
+  padding: 3px 8px;
+  border-radius: 4px;
+  backdrop-filter: blur(4px);
+  z-index: 10;
+}
+
+/* ── Body ── */
+.body {
+  padding: 10px 10px 0 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+}
+
+.title {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #1a1a1a;
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.price {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #3d87c8;
+  margin: 0;
+}
+
+/* ── Action row — blue view + purple remove (matches ProfileListingCard) ── */
+.actionRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  margin-top: 8px;
+  border-top: 1px solid #e8eaed;
+}
+
+.viewBtn {
+  flex: 1;
+  padding: 6px 0;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.18s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  background-color: #6AA6DA;
+  color: white;
+}
+
+.viewBtn:hover {
+  background-color: #5b9bd4;
+  transform: translateY(-1px);
+}
+
+.removeBtn {
+  flex: 1;
+  padding: 6px 0;
+  border: 1.5px solid #fca5a5;
+  border-radius: 6px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.18s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  background: none;
+  color: #dc2626;
+}
+
+.removeBtn:hover {
+  background: #fff1f1;
+  transform: translateY(-1px);
+}
+
+.removeBtn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* ── Empty state ── */
+.emptyState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 5rem 1rem;
+  text-align: center;
+}
+
+.emptyIcon {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  background: #e8f4fc;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 1.25rem;
+  font-size: 1.75rem;
+  color: #6AA6DA;
+}
+
+.emptyTitle { margin: 0 0 0.5rem; font-size: 1.1rem; font-weight: 700; color: #1a1a1a; }
+.emptySub   { margin: 0 0 1.5rem; font-size: 0.875rem; color: #6b7280; }
+
+.browseBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: #6AA6DA;
+  color: white;
+  border: none;
+  padding: 0.65rem 1.5rem;
+  border-radius: 8px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.browseBtn:hover { background: #5a96ca; }
+
+/* ── Skeleton — MyPurchases style pulse ── */
+.skeletonCard {
+  background: white;
+  border-radius: 12px;
+  border: 1px solid #e8eaed;
+  overflow: hidden;
+  animation: skeletonFadeIn 0.3s ease both;
+}
+
+@keyframes skeletonFadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.skeletonImg {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  background: #e2e8f0;
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+.skeletonBody {
+  padding: 10px 10px 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.skeletonLine {
+  height: 13px;
+  background: #e2e8f0;
+  border-radius: 6px;
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+.skeletonChips {
+  display: flex;
+  gap: 5px;
+  margin-top: 2px;
+}
+
+.skeletonChip {
+  width: 44px;
+  height: 18px;
+  background: #e2e8f0;
+  border-radius: 99px;
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+.skeletonActions {
+  display: flex;
+  gap: 8px;
+  padding: 8px 10px;
+  border-top: 1px solid #f1f5f9;
+  margin-top: 6px;
+}
+
+.skeletonBtn {
+  flex: 1;
+  height: 28px;
+  background: #e2e8f0;
+  border-radius: 6px;
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.4; }
+}
+
+/* ── Responsive ── */
+@media (max-width: 600px) {
+  .grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  .pageTitle { font-size: 1.2rem; }
+}
+
+@media (max-width: 400px) {
+  .grid { grid-template-columns: 1fr; }
+}

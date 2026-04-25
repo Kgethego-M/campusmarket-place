@@ -40,6 +40,7 @@ import BookDropOff from './components/BookDropOff';
 
 // SPRINT 3 IMPORTS
 import AdminAnalytics from './components/AdminAnalytics';
+import ViewCart from './components/ViewCart';
 // -------------------------
 // Protected Route (CLEAN)
 // -------------------------
@@ -189,6 +190,7 @@ export function AppRoutes() {
       <Route path="/profile" element={<Profile />} />
       <Route path="/view-listing" element={<ProtectedRoute allowedRoles={['student']}><ViewListing /></ProtectedRoute>} />
       <Route path="/create-listing" element={<ProtectedRoute allowedRoles={['student']}><CreateListing /></ProtectedRoute>} />
+      <Route path="/cart" element={<ProtectedRoute allowedRoles={['student']}><ViewCart /></ProtectedRoute>} />
       <Route path="/view-rating" element={<ViewRating userId="sampleUserId" />} />
       <Route path="/chat" element={<ProtectedRoute allowedRoles={['student']}><Chat/></ProtectedRoute>} />
       <Route path="/chat/:transactionId" element={<Chat />} />

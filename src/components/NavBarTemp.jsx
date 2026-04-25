@@ -13,6 +13,7 @@ const NAV_LINKS = [
     { label: "Trade Facility", path: "/trade-facility" },
     { label: "Messages",       path: "/chat" },
     { label: "My Purchases",   path: "/my-purchases" },
+    { label: "Cart",           path: "/cart", isCart: true },
 ];
 
 const formatTime = (ts) => {
@@ -25,7 +26,6 @@ const formatTime = (ts) => {
     return d.toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric' });
 };
 
-/** Fetch a listing title from Firestore, returns null if not found */
 const fetchListingTitle = async (listingId) => {
     if (!listingId) return null;
     try {
@@ -46,12 +46,10 @@ export default function Navbar() {
     const [isLoggingOut, setIsLoggingOut]           = useState(false);
     const [notificationsOpen, setNotificationsOpen] = useState(false);
     const [currentUser, setCurrentUser]             = useState(null);
+    const [cartCount, setCartCount]                 = useState(0);
 
-    // Offer/transaction notifications (Firestore real-time), enriched with listing title
-    const [offerNotifications, setOfferNotifications] = useState([]);
-    // Rating notifications derived from completed Purchases
+    const [offerNotifications, setOfferNotifications]   = useState([]);
     const [ratingNotifications, setRatingNotifications] = useState([]);
-    // localStorage cache of dismissed rating IDs
     const [readRatingIds, setReadRatingIds] = useState(() => {
         try { return JSON.parse(localStorage.getItem('readRatingNotifs') || '[]'); }
         catch { return []; }
@@ -79,7 +77,6 @@ export default function Navbar() {
 
     const handleNotificationClick = async (n) => {
         setNotificationsOpen(false);
-
         if (n.source === 'offer') {
             await markOfferAsRead(n.id);
             if (n.type === 'new_offer') {
@@ -115,8 +112,6 @@ export default function Navbar() {
         setRatingNotifications([]);
     };
 
-    // ── Notification display helpers ──────────────────────────────────────────
-
     const notificationIcon = (type) => {
         if (type === 'new_offer')                              return 'fa-shopping-cart';
         if (type === 'offer_accepted')                         return 'fa-circle-check';
@@ -126,10 +121,10 @@ export default function Navbar() {
     };
 
     const notificationIconColor = (type) => {
-        if (type === 'new_offer')      return '#3b82f6'; // blue
-        if (type === 'offer_accepted') return '#22c55e'; // green
-        if (type === 'offer_declined') return '#ef4444'; // red
-        if (type === 'rate_seller' || type === 'rate_buyer') return '#f59e0b'; // amber
+        if (type === 'new_offer')      return '#3b82f6';
+        if (type === 'offer_accepted') return '#22c55e';
+        if (type === 'offer_declined') return '#ef4444';
+        if (type === 'rate_seller' || type === 'rate_buyer') return '#f59e0b';
         return '#94a3b8';
     };
 
@@ -143,7 +138,7 @@ export default function Navbar() {
         return 'Notification';
     };
 
-    // ── Auth + Firestore profile ──────────────────────────────────────────────
+    // ── Auth + profile ────────────────────────────────────────────────────────
 
     useEffect(() => {
         const unsub = onAuthStateChanged(auth, async (firebaseUser) => {
@@ -152,6 +147,7 @@ export default function Navbar() {
                 setCurrentUser(null);
                 setOfferNotifications([]);
                 setRatingNotifications([]);
+                setCartCount(0);
                 return;
             }
             setCurrentUser(firebaseUser);
@@ -183,6 +179,23 @@ export default function Navbar() {
         return () => unsub();
     }, []);
 
+    // ── Cart count (real-time) ────────────────────────────────────────────────
+
+    useEffect(() => {
+        if (!currentUser) return;
+
+        const unsub = onSnapshot(doc(db, 'carts', currentUser.uid), (snap) => {
+            if (snap.exists()) {
+                const items = snap.data().items || [];
+                setCartCount(items.length);
+            } else {
+                setCartCount(0);
+            }
+        });
+
+        return () => unsub();
+    }, [currentUser]);
+
     // ── Close on outside click ────────────────────────────────────────────────
 
     useEffect(() => {
@@ -206,7 +219,6 @@ export default function Navbar() {
                 navigate('/login');
             } catch (err) {
                 console.error('Error signing out:', err);
-                alert('Failed to logout. Please try again.');
             } finally {
                 setIsLoggingOut(false);
                 setDropdownOpen(false);
@@ -214,7 +226,7 @@ export default function Navbar() {
         }, 2000);
     };
 
-    // ── Real-time offer notifications — enriched with listing title ───────────
+    // ── Offer notifications ───────────────────────────────────────────────────
 
     useEffect(() => {
         if (!currentUser) return;
@@ -227,7 +239,6 @@ export default function Navbar() {
 
         const unsub = onSnapshot(q, async (snapshot) => {
             const raw = snapshot.docs.map((d) => ({ id: d.id, source: 'offer', ...d.data() }));
-
             const enriched = await Promise.all(
                 raw.map(async (n) => {
                     const listingTitle = await fetchListingTitle(n.listingId);
@@ -240,7 +251,7 @@ export default function Navbar() {
         return () => unsub();
     }, [currentUser]);
 
-    // ── One-time fetch: rating notifications from completed Purchases ──────────
+    // ── Rating notifications ──────────────────────────────────────────────────
 
     useEffect(() => {
         if (!currentUser) return;
@@ -248,16 +259,8 @@ export default function Navbar() {
         const fetchRatingNotifications = async () => {
             try {
                 const [buyerSnap, sellerSnap] = await Promise.all([
-                    getDocs(query(
-                        collection(db, 'transactions'),
-                        where('buyerId',  '==', currentUser.uid),
-                        where('status',   '==', 'completed')
-                    )),
-                    getDocs(query(
-                        collection(db, 'transactions'),
-                        where('sellerId', '==', currentUser.uid),
-                        where('status',   '==', 'completed')
-                    )),
+                    getDocs(query(collection(db, 'transactions'), where('buyerId',  '==', currentUser.uid), where('status', '==', 'completed'))),
+                    getDocs(query(collection(db, 'transactions'), where('sellerId', '==', currentUser.uid), where('status', '==', 'completed'))),
                 ]);
 
                 const results = [];
@@ -265,10 +268,7 @@ export default function Navbar() {
                 for (const d of buyerSnap.docs) {
                     const data = d.data();
                     const listingId = data.listingId || data.ListingId || data.listing_id || null;
-                    if (!listingId) {
-                        console.warn(`NavBar: Purchases/${d.id} missing listingId — fields:`, Object.keys(data));
-                        continue;
-                    }
+                    if (!listingId) continue;
                     let sellerName = 'Seller';
                     try {
                         const u = await getDoc(doc(db, 'users', data.sellerId));
@@ -290,10 +290,7 @@ export default function Navbar() {
                 for (const d of sellerSnap.docs) {
                     const data = d.data();
                     const listingId = data.listingId || data.ListingId || data.listing_id || null;
-                    if (!listingId) {
-                        console.warn(`NavBar: Purchases/${d.id} missing listingId — fields:`, Object.keys(data));
-                        continue;
-                    }
+                    if (!listingId) continue;
                     let buyerName = 'Buyer';
                     try {
                         const u = await getDoc(doc(db, 'users', data.buyerId));
@@ -312,10 +309,8 @@ export default function Navbar() {
                     });
                 }
 
-                // Drop already-dismissed ones
                 const unread = results.filter((n) => !readRatingIds.includes(n.id));
 
-                // Drop ones the user has already reviewed
                 const reviewChecks = await Promise.all(
                     unread.map(async (n) => {
                         try {
@@ -339,8 +334,6 @@ export default function Navbar() {
         fetchRatingNotifications();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [currentUser]);
-
-    // ── Merge & counts ────────────────────────────────────────────────────────
 
     const totalCount = offerNotifications.length + ratingNotifications.length;
 
@@ -370,7 +363,15 @@ export default function Navbar() {
                             onClick={() => link.path && navigate(link.path)}
                             disabled={!link.path}
                         >
-                            {link.label}
+                            {link.isCart
+                                ? (
+                                    <span className={styles.cartNavItem}>
+                                        <i className="fas fa-shopping-cart" />
+                                        Cart
+                                    </span>
+                                )
+                                : link.label
+                            }
                         </button>
                     );
                 })}
@@ -394,8 +395,6 @@ export default function Navbar() {
 
                     {notificationsOpen && (
                         <div className={styles.notificationDropdown}>
-
-                            {/* Header */}
                             <div className={styles.notificationHeader}>
                                 <span>Notifications</span>
                                 {totalCount > 0 && (
@@ -404,10 +403,7 @@ export default function Navbar() {
                                     </button>
                                 )}
                             </div>
-
-                            {/* Scrollable list */}
                             <div className={styles.notificationList}>
-
                                 {totalCount === 0 ? (
                                     <div className={styles.notificationEmpty}>
                                         <i className="fas fa-bell-slash" style={{ fontSize: '1.5rem', color: '#94a3b8', marginBottom: '0.5rem' }} />
@@ -415,7 +411,6 @@ export default function Navbar() {
                                     </div>
                                 ) : (
                                     <>
-                                        {/* ── Offers & Transactions ── */}
                                         {offerNotifications.length > 0 && (
                                             <>
                                                 <div className={styles.notificationSectionLabel}>
@@ -429,12 +424,8 @@ export default function Navbar() {
                                                         role="button"
                                                         tabIndex={0}
                                                         onKeyDown={(e) => e.key === 'Enter' && handleNotificationClick(n)}
-                                                        data-testid={`notification-item-${n.id}`}
                                                     >
-                                                        <div
-                                                            className={styles.notificationIconWrap}
-                                                            style={{ color: notificationIconColor(n.type) }}
-                                                        >
+                                                        <div className={styles.notificationIconWrap} style={{ color: notificationIconColor(n.type) }}>
                                                             <i className={`fas ${notificationIcon(n.type)}`} />
                                                         </div>
                                                         <div className={styles.notificationContent}>
@@ -446,8 +437,6 @@ export default function Navbar() {
                                                 ))}
                                             </>
                                         )}
-
-                                        {/* ── Rate & Review ── */}
                                         {ratingNotifications.length > 0 && (
                                             <>
                                                 <div className={styles.notificationSectionLabel}>
@@ -461,21 +450,13 @@ export default function Navbar() {
                                                         role="button"
                                                         tabIndex={0}
                                                         onKeyDown={(e) => e.key === 'Enter' && handleNotificationClick(n)}
-                                                        data-testid={`notification-item-${n.id}`}
                                                     >
-                                                        <div
-                                                            className={styles.notificationIconWrap}
-                                                            style={{ color: notificationIconColor(n.type) }}
-                                                        >
+                                                        <div className={styles.notificationIconWrap} style={{ color: notificationIconColor(n.type) }}>
                                                             <i className={`fas ${notificationIcon(n.type)}`} />
                                                         </div>
                                                         <div className={styles.notificationContent}>
                                                             <p>{notificationMessage(n)}</p>
-                                                            {n.message && (
-                                                                <p style={{ color: '#94a3b8', fontSize: '0.75rem', margin: '1px 0 0' }}>
-                                                                    {n.message}
-                                                                </p>
-                                                            )}
+                                                            {n.message && <p style={{ color: '#94a3b8', fontSize: '0.75rem', margin: '1px 0 0' }}>{n.message}</p>}
                                                             <span>{formatTime(n.createdAt)}</span>
                                                         </div>
                                                         <i className="fas fa-chevron-right" style={{ color: '#cbd5e1', fontSize: '0.65rem', flexShrink: 0 }} />
@@ -532,7 +513,6 @@ export default function Navbar() {
                 </div>
             </div>
 
-            {/* Global logout overlay */}
             {isLoggingOut && (
                 <div className={styles.logoutOverlay}>
                     <div className={styles.logoutLoader}>

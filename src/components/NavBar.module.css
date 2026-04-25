@@ -65,7 +65,6 @@
     color: #1a1a1a;
 }
 
-/* Active state — same for ALL active nav links (Browse, Messages, etc.) */
 .navLinkActive {
     background-color: #6AA6DA;
     color: #ffffff !important;
@@ -79,6 +78,29 @@
 .navLinkDisabled {
     color: #aaa;
     cursor: default;
+}
+
+/* ── Cart nav item with badge ── */
+.cartNavItem {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    position: relative;
+}
+
+.cartNavBadge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: #ef4444;
+    color: white;
+    font-size: 0.6rem;
+    font-weight: 700;
+    min-width: 16px;
+    height: 16px;
+    border-radius: 99px;
+    padding: 0 4px;
+    line-height: 1;
 }
 
 /* ── Right side ── */
@@ -104,35 +126,11 @@
     color: #2a7fd4;
 }
 
-/* ── Avatar + Dropdown wrapper ── */
-.avatarWrapper {
+/* ── Dropdown ── */
+.menuWrapper {
     position: relative;
 }
 
-.avatar {
-    width: 34px;
-    height: 34px;
-    border-radius: 50%;
-    background-color: #dde3e9;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-family: 'Franklin Gothic Medium', 'Arial Narrow', Arial, sans-serif;
-    font-size: 0.85rem;
-    font-weight: 600;
-    color: #666;
-    cursor: pointer;
-    flex-shrink: 0;
-    transition: background-color 0.15s, box-shadow 0.15s;
-    user-select: none;
-}
-
-.avatar:hover {
-    background-color: #c8d4de;
-    box-shadow: 0 0 0 3px rgba(106, 166, 218, 0.25);
-}
-
-/* ── Dropdown menu ── */
 .dropdown {
     position: absolute;
     top: calc(100% + 10px);
@@ -168,12 +166,6 @@
     color: #1a1a1a;
 }
 
-.dropdownEmail {
-    font-family: 'Franklin Gothic Medium', 'Arial Narrow', Arial, sans-serif;
-    font-size: 0.75rem;
-    color: #aaa;
-}
-
 .dropdownDivider {
     height: 1px;
     background-color: #f0f2f5;
@@ -207,25 +199,15 @@
     font-size: 0.8rem;
 }
 
-.dropdownLogout {
-    color: #e53935;
-}
+.dropdownLogout { color: #e53935; }
+.dropdownLogout:hover { background-color: #fff5f5; color: #c62828; }
+.dropdownLogout i { color: #e53935; }
 
-.dropdownLogout:hover {
-    background-color: #fff5f5;
-    color: #c62828;
-}
-
-.dropdownLogout i {
-    color: #e53935;
-}
+.dropdownAvatar { flex-shrink: 0; }
 
 .logoutOverlay {
     position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
+    top: 0; left: 0; right: 0; bottom: 0;
     background-color: rgba(0, 0, 0, 0.7);
     display: flex;
     justify-content: center;
@@ -246,27 +228,15 @@
     animation: fadeIn 0.3s ease-in-out;
 }
 
-.logoutLoader i {
-    font-size: 2.5rem;
-    color: #6AA6DA;
-}
-
-.logoutLoader p {
-    margin: 0;
-    font-size: 1.1rem;
-    font-weight: 500;
-    color: #374151;
-}
+.logoutLoader i { font-size: 2.5rem; color: #6AA6DA; }
+.logoutLoader p { margin: 0; font-size: 1.1rem; font-weight: 500; color: #374151; }
 
 @keyframes fadeIn {
     from { opacity: 0; transform: scale(0.95); }
     to   { opacity: 1; transform: scale(1); }
 }
 
-.dropdownItem:disabled {
-    opacity: 0.7;
-    cursor: not-allowed;
-}
+.dropdownItem:disabled { opacity: 0.7; cursor: not-allowed; }
 
 /* ── Icon Buttons ── */
 .iconButton {
@@ -330,10 +300,7 @@
     border-bottom: 1px solid #e5e7eb;
 }
 
-.notificationHeader span {
-    font-weight: 600;
-    color: #1f2937;
-}
+.notificationHeader span { font-weight: 600; color: #1f2937; }
 
 .markAllRead {
     background: none;
@@ -346,9 +313,7 @@
     transition: all 0.2s;
 }
 
-.markAllRead:hover {
-    background-color: #e8f4fc;
-}
+.markAllRead:hover { background-color: #e8f4fc; }
 
 .notificationList {
     max-height: 420px;
@@ -356,7 +321,6 @@
     overscroll-behavior: contain;
 }
 
-/* ── Section label (e.g. "Offers & Transactions", "Rate & Review") ── */
 .notificationSectionLabel {
     display: flex;
     align-items: center;
@@ -371,11 +335,8 @@
     border-top: 1px solid #f1f5f9;
 }
 
-.notificationSectionLabel:first-child {
-    border-top: none;
-}
+.notificationSectionLabel:first-child { border-top: none; }
 
-/* ── Coloured icon circle inside each notification row ── */
 .notificationIconWrap {
     display: flex;
     align-items: center;
@@ -390,7 +351,6 @@
     margin-top: 0.1rem;
 }
 
-/* ── Empty state inside the dropdown ── */
 .notificationEmpty {
     display: flex;
     flex-direction: column;
@@ -407,84 +367,14 @@
     border-bottom: 1px solid #f3f4f6;
     transition: all 0.2s;
     cursor: pointer;
-}
-
-.notificationItem:hover {
-    background-color: #f9fafb;
-}
-
-.notificationItem i {
-    color: #6AA6DA;
-    font-size: 1rem;
-    margin-top: 0.25rem;
-}
-
-.notificationContent {
-    flex: 1;
-}
-
-.notificationContent p {
-    margin: 0 0 0.25rem 0;
-    font-size: 0.875rem;
-    color: #374151;
-}
-
-.notificationContent span {
-    font-size: 0.75rem;
-    color: #9ca3af;
-}
-
-.notificationFooter {
-    padding: 0.75rem;
-    text-align: center;
-    border-top: 1px solid #e5e7eb;
-    background-color: #f9fafb;
-}
-
-.notificationFooter button {
-    background: none;
-    border: none;
-    color: #6AA6DA;
-    font-size: 0.875rem;
-    cursor: pointer;
-    padding: 0.5rem;
-    width: 100%;
-    border-radius: 6px;
-    transition: all 0.2s;
-}
-
-.notificationFooter button:hover {
-    background-color: #e8f4fc;
-}
-
-/* ── Menu Wrapper ── */
-.menuWrapper {
-    position: relative;
-}
-
-.dropdownAvatar {
-    flex-shrink: 0;
-}
-
-.dropdownAvatarImg {
-    width: 48px;
-    height: 48px;
-    border-radius: 50%;
-    object-fit: cover;
-}
-
-.dropdownAvatarInitials {
-    width: 48px;
-    height: 48px;
-    border-radius: 50%;
-    background-color: #6AA6DA;
-    color: white;
-    display: flex;
     align-items: center;
-    justify-content: center;
-    font-weight: 600;
-    font-size: 1.1rem;
 }
+
+.notificationItem:hover { background-color: #f9fafb; }
+
+.notificationContent { flex: 1; }
+.notificationContent p { margin: 0 0 0.25rem 0; font-size: 0.875rem; color: #374151; }
+.notificationContent span { font-size: 0.75rem; color: #9ca3af; }
 
 @keyframes slideDown {
     from { opacity: 0; transform: translateY(-10px); }
@@ -500,6 +390,8 @@
         width: calc(100vw - 2rem);
         right: -1rem;
     }
+    .navLinks { gap: 0; }
+    .navLink { padding: 6px 8px; font-size: 0.8rem; }
 }
 
 .viewOfferButton {
@@ -514,6 +406,4 @@
     transition: background-color 0.2s;
 }
 
-.viewOfferButton:hover {
-    background-color: #dadb75;
-}
+.viewOfferButton:hover { background-color: #dadb75; }
