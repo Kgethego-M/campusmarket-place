@@ -11,6 +11,7 @@ import {
 } from "../utils/create-listing.utils.js";
 import NavBar from "./NavBarTemp.jsx";
 import styles from "./CreateListing.module.css";
+import PriceSuggestion from "./PriceSuggestion.jsx"; // US18
 
 const CLOUDINARY_CLOUD_NAME    = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME;
 const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
@@ -368,6 +369,7 @@ export default function CreateListing() {
                             <option value="study_materials">Study Materials</option>
                             <option value="other">Other</option>
                         </select>
+
                         {category === "other" && (
                             <input
                                 className={styles.input}
@@ -379,7 +381,19 @@ export default function CreateListing() {
                                 disabled={loading}
                             />
                         )}
+
+                        {/* ── US18: Price Suggestion widget ── */}
+                        <PriceSuggestion
+                            category={category === "other" ? "" : category}
+                            onSuggestionLoad={({ low, high }) => {
+                                // Pre-fill price only if seller hasn't typed one yet
+                                if (!price) {
+                                    setPrice(String(Math.round((low + high) / 2)));
+                                }
+                            }}
+                        />
                     </div>
+
                     <div>
                         <label className={styles.label}>Condition</label>
                         <select
@@ -404,11 +418,26 @@ export default function CreateListing() {
                     type="submit"
                     className={styles.submitBtn}
                     disabled={loading}
-                    style={{ opacity: loading ? 0.65 : 1, cursor: loading ? 'not-allowed' : 'pointer' }}
+                    style={{
+                        opacity:         loading ? 0.65 : 1,
+                        cursor:          loading ? "not-allowed" : "pointer",
+                        backgroundColor: loading ? "#a0c4e8" : undefined,
+                        display:         "flex",
+                        alignItems:      "center",
+                        justifyContent:  "center",
+                        gap:             "8px",
+                    }}
                 >
                     {loading && (
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"
-                            style={{ animation: 'spin 0.8s linear infinite', flexShrink: 0 }}>
+                        <svg
+                            width="16" height="16"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2.5"
+                            strokeLinecap="round"
+                            style={{ animation: "spin 0.8s linear infinite", flexShrink: 0 }}
+                        >
                             <path d="M21 12a9 9 0 1 1-6.219-8.56" />
                         </svg>
                     )}
