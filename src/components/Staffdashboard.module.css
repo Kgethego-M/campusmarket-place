@@ -871,3 +871,97 @@
     .navLinks { display: none; }
     .staffPill { display: none; }
 }
+
+/* ─────────────────────────────────────────────────────────────────
+    US15 ADDITIONS 
+   ───────────────────────────────────────────────────────────────── */
+
+/* Orange "Cash owed" chip — shown instead of green "Paid" chip */
+.shortfallChip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: #fff7ed;
+    color: #c2410c;
+    border: 1px solid #fed7aa;
+    border-radius: 999px;
+    padding: 2px 8px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    margin-left: 6px;
+    white-space: nowrap;
+}
+
+/* Orange warning banner inside the transaction card */
+.shortfallBanner {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: #fff7ed;
+    border: 1px solid #fed7aa;
+    border-left: 3px solid #f97316;
+    border-radius: 6px;
+    padding: 8px 12px;
+    margin-top: 10px;
+    font-size: 0.8rem;
+    color: #7c2d12;
+}
+
+.shortfallBanner i {
+    color: #f97316;
+    flex-shrink: 0;
+}
+
+/* Green confirmation banner after cash is confirmed */
+.cashConfirmedBanner {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: #f0fdf4;
+    border: 1px solid #bbf7d0;
+    border-left: 3px solid #22c55e;
+    border-radius: 6px;
+    padding: 8px 12px;
+    margin-top: 10px;
+    font-size: 0.8rem;
+    color: #14532d;
+}
+
+.cashConfirmedBanner i {
+    color: #22c55e;
+    flex-shrink: 0;
+}
+
+/* "Confirm Cash Received" button — orange, sits above Release button */
+.confirmCashBtn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    width: 100%;
+    padding: 9px 14px;
+    margin-bottom: 8px;
+    background: #f97316;
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: opacity 0.15s, transform 0.1s;
+    font-family: inherit;
+    white-space: nowrap;
+}
+
+.confirmCashBtn:not(.confirmCashBtnDisabled):hover {
+    opacity: 0.88;
+}
+
+.confirmCashBtn:not(.confirmCashBtnDisabled):active {
+    transform: scale(0.97);
+}
+
+.confirmCashBtnDisabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}

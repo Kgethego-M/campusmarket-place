@@ -1,0 +1,251 @@
+/* StaffTransactionView.module.css */
+
+/* ── Card ────────────────────────────────────────────────────────── */
+.card {
+    background: #ffffff;
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    padding: 24px;
+    max-width: 600px;
+    margin: 0 auto;
+    font-family: inherit;
+    color: #111827;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+/* ── Header ──────────────────────────────────────────────────────── */
+.header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 12px;
+}
+
+.itemTitle {
+    font-size: 1.2rem;
+    font-weight: 700;
+    margin: 0 0 4px;
+    color: #111827;
+}
+
+.meta {
+    font-size: 0.85rem;
+    color: #6b7280;
+    margin: 0;
+}
+
+/* ── Status badge ────────────────────────────────────────────────── */
+.badge {
+    font-size: 0.72rem;
+    font-weight: 600;
+    padding: 3px 10px;
+    border-radius: 999px;
+    white-space: nowrap;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    flex-shrink: 0;
+}
+
+.badgeGreen {
+    background: #d1fae5;
+    color: #065f46;
+}
+
+.badgeAmber {
+    background: #fef3c7;
+    color: #92400e;
+}
+
+.badgeGrey {
+    background: #f3f4f6;
+    color: #374151;
+}
+
+/* ── Divider ─────────────────────────────────────────────────────── */
+.divider {
+    border: none;
+    border-top: 1px solid #f3f4f6;
+    margin: 18px 0;
+}
+
+/* ── Financials ──────────────────────────────────────────────────── */
+.financials {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.financialRow {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.financialLabel {
+    font-size: 0.875rem;
+    color: #6b7280;
+}
+
+.financialValue {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: #111827;
+    font-variant-numeric: tabular-nums;
+}
+
+.highlight {
+    color: #dc2626;
+}
+
+.strikethrough {
+    text-decoration: line-through;
+    color: #9ca3af;
+}
+
+/* ── Banners ─────────────────────────────────────────────────────── */
+.shortfallBanner {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    background: #fff7ed;
+    border: 1px solid #fed7aa;
+    border-left: 4px solid #f97316;
+    border-radius: 8px;
+    padding: 12px 14px;
+    margin-top: 14px;
+    font-size: 0.875rem;
+    color: #7c2d12;
+}
+
+.shortfallIcon {
+    font-size: 1.1rem;
+    flex-shrink: 0;
+}
+
+.confirmedBanner {
+    background: #f0fdf4;
+    border: 1px solid #bbf7d0;
+    border-left: 4px solid #22c55e;
+    border-radius: 8px;
+    padding: 10px 14px;
+    margin-top: 14px;
+    font-size: 0.875rem;
+    color: #14532d;
+}
+
+.releasedBanner {
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    border-radius: 8px;
+    padding: 14px;
+    margin-top: 4px;
+    font-size: 0.9rem;
+    color: #1e40af;
+    text-align: center;
+}
+
+/* ── Item-present checkbox ───────────────────────────────────────── */
+.checkRow {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 0.875rem;
+    color: #374151;
+    cursor: pointer;
+    user-select: none;
+    margin-bottom: 16px;
+}
+
+.checkbox {
+    width: 17px;
+    height: 17px;
+    accent-color: #2563eb;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+/* ── Action buttons ──────────────────────────────────────────────── */
+.actions {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.confirmBtn,
+.releaseBtn {
+    flex: 1;
+    min-width: 140px;
+    padding: 10px 18px;
+    border: none;
+    border-radius: 8px;
+    font-size: 0.875rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: opacity 0.15s, transform 0.1s;
+    font-family: inherit;
+}
+
+.confirmBtn {
+    background: #f97316;
+    color: #ffffff;
+}
+
+.releaseBtn {
+    background: #2563eb;
+    color: #ffffff;
+}
+
+.confirmBtn:disabled,
+.releaseBtn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    transform: none;
+}
+
+.confirmBtn:not(:disabled):hover,
+.releaseBtn:not(:disabled):hover {
+    opacity: 0.88;
+}
+
+.confirmBtn:not(:disabled):active,
+.releaseBtn:not(:disabled):active {
+    transform: scale(0.97);
+}
+
+/* ── Error state ─────────────────────────────────────────────────── */
+.errorCard {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    border-color: #fca5a5;
+    background: #fff5f5;
+}
+
+.errorIcon {
+    font-size: 1.4rem;
+}
+
+.errorText {
+    margin: 0;
+    color: #b91c1c;
+    font-size: 0.875rem;
+}
+
+/* ── Loading skeletons ───────────────────────────────────────────── */
+.skeleton {
+    height: 18px;
+    border-radius: 6px;
+    background: linear-gradient(90deg, #f3f4f6 25%, #e5e7eb 50%, #f3f4f6 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.4s infinite;
+    margin-bottom: 12px;
+}
+
+.skeletonShort {
+    width: 55%;
+}
+
+@keyframes shimmer {
+    0%   { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}
