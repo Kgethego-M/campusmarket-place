@@ -2,10 +2,11 @@ import { useState, useRef, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { auth, db } from "../firebase";
 import { signOut, onAuthStateChanged } from "firebase/auth";
-import { doc, getDoc, collection, getDocs, query, orderBy, where } from "firebase/firestore";
+import { doc, getDoc, updateDoc, serverTimestamp } from "firebase/firestore";
 import styles from "./Staffdashboard.module.css";
 
 // ─── Mock Data ────────────────────────────────────────────────────────────────
+// cashShortfall: amount still owed in cash (0 means fully paid electronically)
 const MOCK_TRANSACTIONS = [
     {
         id: "txn001",
@@ -15,14 +16,16 @@ const MOCK_TRANSACTIONS = [
         buyer: "James van der Merwe",
         type: "Purchase",
         price: 3000,
+        cashShortfall: 500,          // ← US15: R500 still owed in cash
+        paymentStatus: "Partially Paid",
         tradeFor: null,
         timeSlot: "09:00 - 10:00",
         status: "ready_to_release",
         campus: "Main Campus",
         checklist: [
             { label: "Confirmed Drop-off by Nontokozo Mbatha", done: true },
-            { label: "Inspected Item by Nontokozo Mbatha", done: true },
-            { label: "Confirmed Payment by Nontokozo Mbatha", done: true },
+            { label: "Inspected Item by Nontokozo Mbatha",     done: true },
+            { label: "Confirmed Payment by Nontokozo Mbatha",  done: true },
         ],
         date: new Date(),
     },
@@ -34,14 +37,16 @@ const MOCK_TRANSACTIONS = [
         buyer: "Samkelisiwe Mofokeng",
         type: "Purchase",
         price: 1500,
+        cashShortfall: 0,            // ← fully paid, no shortfall
+        paymentStatus: "Fully Paid",
         tradeFor: null,
         timeSlot: "10:00 - 11:00",
         status: "ready_to_release",
         campus: "Main Campus",
         checklist: [
             { label: "Confirmed Drop-off by Nontokozo Mbatha", done: true },
-            { label: "Inspected Item by Nontokozo Mbatha", done: true },
-            { label: "Confirmed Payment by Nontokozo Mbatha", done: false },
+            { label: "Inspected Item by Nontokozo Mbatha",     done: true },
+            { label: "Confirmed Payment by Nontokozo Mbatha",  done: false },
         ],
         date: new Date(),
     },
@@ -53,14 +58,16 @@ const MOCK_TRANSACTIONS = [
         buyer: "Wendy Khumalo",
         type: "Purchase",
         price: 200,
+        cashShortfall: 200,          // ← US15: full amount is cash shortfall
+        paymentStatus: "Partially Paid",
         tradeFor: null,
         timeSlot: "11:00 - 12:00",
         status: "in_facility",
         campus: "Education Campus",
         checklist: [
             { label: "Confirmed Drop-off by Nontokozo Matha", done: true },
-            { label: "Inspected Item by Nontokozo Matha", done: false },
-            { label: "Confirmed Payment by Nontokozo Matha", done: false },
+            { label: "Inspected Item by Nontokozo Matha",     done: false },
+            { label: "Confirmed Payment by Nontokozo Matha",  done: false },
         ],
         date: new Date(),
     },
@@ -72,15 +79,17 @@ const MOCK_TRANSACTIONS = [
         buyer: "Sduduzo Mdlalose",
         type: "Purchase",
         price: 200,
+        cashShortfall: 0,
+        paymentStatus: "Fully Paid",
         tradeFor: null,
         timeSlot: "14:00 - 15:00",
         status: "completed",
         campus: "Main Campus",
         checklist: [
             { label: "Confirmed Drop-off", done: true },
-            { label: "Inspected Item", done: true },
-            { label: "Confirmed Payment", done: true },
-            { label: "Released to Buyer", done: true },
+            { label: "Inspected Item",     done: true },
+            { label: "Confirmed Payment",  done: true },
+            { label: "Released to Buyer",  done: true },
         ],
         date: new Date(Date.now() - 86400000),
     },
@@ -92,14 +101,16 @@ const MOCK_TRANSACTIONS = [
         buyer: "Zanenkosi Mbatha",
         type: "Purchase",
         price: 100,
+        cashShortfall: 0,
+        paymentStatus: "Fully Paid",
         tradeFor: null,
         timeSlot: "15:00 - 16:00",
         status: "awaiting_collection",
         campus: "Health Sciences Campus",
         checklist: [
             { label: "Confirmed Drop-off", done: true },
-            { label: "Inspected Item", done: true },
-            { label: "Confirmed Payment", done: true },
+            { label: "Inspected Item",     done: true },
+            { label: "Confirmed Payment",  done: true },
         ],
         date: new Date(),
     },
@@ -107,21 +118,21 @@ const MOCK_TRANSACTIONS = [
 
 const CAMPUSES = ["All Campuses", "Main Campus", "Education Campus", "Health Sciences Campus", "Business School Campus"];
 const TABS = [
-    { key: "due_today",       label: "Due Today",        icon: "fa-calendar-day" },
-    { key: "all",             label: "All Transactions", icon: "fa-list" },
-    { key: "history",         label: "History",          icon: "fa-clock-rotate-left" },
-    { key: "time_slots",      label: "Time Slots",       icon: "fa-clock" },
+    { key: "due_today",  label: "Due Today",        icon: "fa-calendar-day"      },
+    { key: "all",        label: "All Transactions",  icon: "fa-list"              },
+    { key: "history",    label: "History",           icon: "fa-clock-rotate-left" },
+    { key: "time_slots", label: "Time Slots",        icon: "fa-clock"             },
 ];
 
 const STATUS_META = {
-    ready_to_release: { label: "Ready to Release", cls: "ready",    icon: "fa-circle-check" },
-    in_facility:      { label: "In Facility",       cls: "facility", icon: "fa-warehouse" },
-    awaiting_collection: { label: "Awaiting Collection", cls: "awaiting", icon: "fa-person-walking" },
-    completed:        { label: "Completed",         cls: "done",     icon: "fa-check-double" },
-    pending:          { label: "Pending",           cls: "pending",  icon: "fa-hourglass-half" },
+    ready_to_release:    { label: "Ready to Release",    cls: "ready",    icon: "fa-circle-check"    },
+    in_facility:         { label: "In Facility",         cls: "facility", icon: "fa-warehouse"       },
+    awaiting_collection: { label: "Awaiting Collection", cls: "awaiting", icon: "fa-person-walking"  },
+    completed:           { label: "Completed",           cls: "done",     icon: "fa-check-double"    },
+    pending:             { label: "Pending",             cls: "pending",  icon: "fa-hourglass-half"  },
 };
 
-// ─── Navbar (without profile dropdown) ───────────────────────────────────────────────────
+// ─── Navbar ───────────────────────────────────────────────────────────────────
 function StaffNavbar({ staffName, staffInitials, staffPhoto }) {
     const navigate = useNavigate();
     const location = useLocation();
@@ -137,14 +148,13 @@ function StaffNavbar({ staffName, staffInitials, staffPhoto }) {
     }, []);
 
     const STAFF_LINKS = [
-        { label: "Dashboard", path: "/staff",  icon: "fa-gauge" },
-        { label: "Time Slots", path: null, icon: "fa-clock" },
-        { label: "Reports",  path: null, icon: "fa-chart-bar" },
+        { label: "Dashboard", path: "/staff",  icon: "fa-gauge"    },
+        { label: "Time Slots", path: null,      icon: "fa-clock"    },
+        { label: "Reports",    path: null,      icon: "fa-chart-bar"},
     ];
 
     return (
         <header className={styles.navbar}>
-            {/* Logo */}
             <div className={styles.logo} onClick={() => navigate("/staff-dashboard")}>
                 <div className={styles.logoBox}>
                     <i className="fa-solid fa-shop" style={{ color: "#fff", fontSize: "1.1rem" }} />
@@ -152,7 +162,6 @@ function StaffNavbar({ staffName, staffInitials, staffPhoto }) {
                 <span className={styles.logoText}>CampusMarket</span>
             </div>
 
-            {/* Nav links */}
             <nav className={styles.navLinks}>
                 {STAFF_LINKS.map((link) => {
                     const isActive = link.path && location.pathname === link.path;
@@ -170,12 +179,9 @@ function StaffNavbar({ staffName, staffInitials, staffPhoto }) {
             </nav>
 
             <div className={styles.navRight}>
-                {/* Staff badge */}
                 <span className={styles.staffPill}>
                     <i className="fa-solid fa-shield-halved" /> Staff
                 </span>
-
-                {/* Notifications */}
                 <div className={styles.notificationWrapper} ref={notifRef}>
                     <button className={styles.iconButton} onClick={() => setNotifOpen(v => !v)} title="Notifications">
                         <i className="fa-solid fa-bell" />
@@ -211,13 +217,51 @@ function StaffNavbar({ staffName, staffInitials, staffPhoto }) {
     );
 }
 
-// ─── Transaction Card ─────────────────────────────────────────────────────────
+// ─── Transaction Card (with US15 cash shortfall logic) ────────────────────────
 function TransactionCard({ txn, onRelease, onMarkStep }) {
-    const meta = STATUS_META[txn.status] || STATUS_META.pending;
+    const meta       = STATUS_META[txn.status] || STATUS_META.pending;
     const allChecked = txn.checklist.every(c => c.done);
+
+    // ── US15 state ──────────────────────────────────────────────────────────
+    const shortfall      = txn.cashShortfall ?? 0;
+    const hasShortfall   = shortfall > 0;
+    const [cashConfirmed, setCashConfirmed] = useState(
+        txn.paymentStatus === "Fully Paid" || shortfall === 0
+    );
+    const [saving, setSaving] = useState(false);
+
+    // "Confirm Cash Received" is enabled only when all checklist items are done
+    // AND there is an outstanding shortfall AND staff haven't confirmed yet
+    const canConfirmCash = allChecked && hasShortfall && !cashConfirmed;
+
+    // Release button is enabled only when all checklist done
+    // AND (no shortfall OR cash already confirmed)
+    const canRelease = allChecked && (!hasShortfall || cashConfirmed);
+
+    async function handleConfirmCash() {
+        setCashConfirmed(true);
+
+        // Persist to Firestore if this is a real transaction (not mock)
+        if (!txn.id.startsWith("txn00")) {
+            setSaving(true);
+            try {
+                await updateDoc(doc(db, "transactions", txn.id), {
+                    cashShortfall:  0,
+                    paymentStatus:  "Fully Paid",
+                    cashConfirmedAt: serverTimestamp(),
+                });
+            } catch (err) {
+                console.error("Failed to update cash status:", err);
+            } finally {
+                setSaving(false);
+            }
+        }
+    }
+    // ── end US15 ────────────────────────────────────────────────────────────
 
     return (
         <div className={`${styles.txnCard} ${styles[`txnCard_${meta.cls}`]}`}>
+
             {/* Left thumb */}
             <div className={styles.txnThumb}>
                 {txn.itemImage
@@ -231,7 +275,7 @@ function TransactionCard({ txn, onRelease, onMarkStep }) {
                 <div className={styles.txnTopRow}>
                     <span className={styles.txnTitle}>{txn.item}</span>
                     <div className={styles.txnBadges}>
-                        <span className={`${styles.timeBadge}`}>
+                        <span className={styles.timeBadge}>
                             <i className="fa-regular fa-clock" /> {txn.timeSlot}
                         </span>
                         <span className={`${styles.statusBadge} ${styles[`status_${meta.cls}`]}`}>
@@ -250,12 +294,40 @@ function TransactionCard({ txn, onRelease, onMarkStep }) {
                     {txn.type === "Purchase" ? (
                         <span className={styles.txnTag}>
                             Purchase · R{txn.price?.toLocaleString()}
-                            <span className={styles.paidChip}><i className="fa-solid fa-circle-check" /> Paid</span>
+                            {/* ── US15: show payment status chip ── */}
+                            {cashConfirmed || !hasShortfall ? (
+                                <span className={styles.paidChip}>
+                                    <i className="fa-solid fa-circle-check" /> Paid
+                                </span>
+                            ) : (
+                                <span className={styles.shortfallChip}>
+                                    <i className="fa-solid fa-triangle-exclamation" /> Cash owed: R{shortfall.toLocaleString()}
+                                </span>
+                            )}
                         </span>
                     ) : (
                         <span className={styles.txnTag}>Trade · {txn.tradeFor}</span>
                     )}
                 </div>
+
+                {/* ── US15: Cash shortfall warning banner ── */}
+                {hasShortfall && !cashConfirmed && (
+                    <div className={styles.shortfallBanner}>
+                        <i className="fa-solid fa-coins" />
+                        <span>
+                            Outstanding cash shortfall of <strong>R{shortfall.toLocaleString()}</strong>.
+                            Collect from buyer before releasing the item.
+                        </span>
+                    </div>
+                )}
+
+                {/* ── US15: Cash confirmed success ── */}
+                {hasShortfall && cashConfirmed && (
+                    <div className={styles.cashConfirmedBanner}>
+                        <i className="fa-solid fa-circle-check" />
+                        <span>Cash of <strong>R{shortfall.toLocaleString()}</strong> confirmed received.</span>
+                    </div>
+                )}
 
                 {/* Checklist */}
                 <div className={styles.checklist}>
@@ -273,14 +345,37 @@ function TransactionCard({ txn, onRelease, onMarkStep }) {
                 </div>
             </div>
 
-            {/* Action */}
+            {/* Action buttons */}
             {(txn.status === "ready_to_release" || txn.status === "in_facility") && (
                 <div className={styles.txnAction}>
+
+                    {/* ── US15: Confirm Cash Received button ── */}
+                    {hasShortfall && (
+                        <button
+                            className={`${styles.confirmCashBtn} ${!canConfirmCash ? styles.confirmCashBtnDisabled : ""}`}
+                            onClick={handleConfirmCash}
+                            disabled={!canConfirmCash || saving}
+                            title={
+                                !allChecked     ? "Complete all checklist steps first" :
+                                cashConfirmed   ? "Cash already confirmed" :
+                                "Confirm you have received the cash shortfall"
+                            }
+                        >
+                            <i className={`fa-solid ${cashConfirmed ? "fa-circle-check" : "fa-hand-holding-dollar"}`} />
+                            {saving ? "Saving…" : cashConfirmed ? "Cash Received" : "Confirm Cash Received"}
+                        </button>
+                    )}
+
+                    {/* Release button — locked until checklist done AND cash confirmed */}
                     <button
-                        className={`${styles.releaseBtn} ${!allChecked ? styles.releaseBtnDisabled : ""}`}
-                        onClick={() => allChecked && onRelease(txn.id)}
-                        disabled={!allChecked}
-                        title={!allChecked ? "Complete all checklist steps first" : "Release to buyer"}
+                        className={`${styles.releaseBtn} ${!canRelease ? styles.releaseBtnDisabled : ""}`}
+                        onClick={() => canRelease && onRelease(txn.id)}
+                        disabled={!canRelease}
+                        title={
+                            !allChecked                    ? "Complete all checklist steps first" :
+                            hasShortfall && !cashConfirmed ? "Confirm cash received first" :
+                            "Release to buyer"
+                        }
                     >
                         <i className="fa-solid fa-arrow-up-from-bracket" />
                         Release for Collection
@@ -329,7 +424,7 @@ function TimeSlotsView({ transactions }) {
     );
 }
 
-// ─── Staff Profile Panel (with logout button) ─────────────────────────────────
+// ─── Staff Profile Panel ──────────────────────────────────────────────────────
 function StaffProfilePanel({ staffName, staffEmail, staffInitials, staffPhoto, onClose, onLogout, isLoggingOut }) {
     return (
         <div className={styles.profileOverlay} onClick={onClose}>
@@ -386,18 +481,16 @@ function StaffProfilePanel({ staffName, staffEmail, staffInitials, staffPhoto, o
                     </div>
                 </div>
 
-                {/* Logout Button */}
                 <div className={styles.profileLogoutSection}>
-                    <button 
-                        className={styles.profileLogoutBtn} 
+                    <button
+                        className={styles.profileLogoutBtn}
                         onClick={onLogout}
                         disabled={isLoggingOut}
                     >
-                        {isLoggingOut ? (
-                            <><i className="fas fa-spinner fa-spin" /> Logging out...</>
-                        ) : (
-                            <><i className="fas fa-right-from-bracket" /> Logout</>
-                        )}
+                        {isLoggingOut
+                            ? <><i className="fas fa-spinner fa-spin" /> Logging out...</>
+                            : <><i className="fas fa-right-from-bracket" /> Logout</>
+                        }
                     </button>
                 </div>
             </div>
@@ -421,7 +514,6 @@ export default function StaffDashboard() {
         initials: "SN",
     });
 
-    // Load real auth user
     useEffect(() => {
         const unsub = onAuthStateChanged(auth, async (user) => {
             if (!user) return;
@@ -435,9 +527,9 @@ export default function StaffDashboard() {
                     const d = snap.data();
                     const f = d.firstName || fn, l = d.lastName || ln;
                     setStaffUser({
-                        name: `${f} ${l}`.trim() || user.displayName || "Staff",
-                        email: d.email || user.email || "",
-                        photoURL: d.photoURL || user.photoURL || "",
+                        name:     `${f} ${l}`.trim() || user.displayName || "Staff",
+                        email:    d.email     || user.email    || "",
+                        photoURL: d.photoURL  || user.photoURL || "",
                         initials: `${f[0] || ""}${l[0] || ""}`.toUpperCase() || "S",
                     });
                 }
@@ -459,30 +551,46 @@ export default function StaffDashboard() {
         }, 1800);
     };
 
-    const handleRelease = (id) => {
-        setTransactions(prev => prev.map(t => t.id === id ? { ...t, status: "completed" } : t));
+    // On release: mark completed in Firestore (real) and local state (mock + real)
+    const handleRelease = async (id) => {
+        setTransactions(prev =>
+            prev.map(t => t.id === id ? { ...t, status: "completed" } : t)
+        );
+        // Persist for real transactions
+        if (!id.startsWith("txn00")) {
+            try {
+                await updateDoc(doc(db, "transactions", id), {
+                    status:      "completed",
+                    paymentStatus: "Fully Paid",
+                    cashShortfall: 0,
+                    releasedAt:  serverTimestamp(),
+                    releasedByStaff: true,
+                });
+            } catch (err) {
+                console.error("Failed to update release status:", err);
+            }
+        }
     };
 
     const handleMarkStep = (txnId, stepIdx) => {
         setTransactions(prev => prev.map(t => {
             if (t.id !== txnId) return t;
             const newChecklist = t.checklist.map((s, i) => i === stepIdx ? { ...s, done: true } : s);
-            const allDone = newChecklist.every(s => s.done);
+            const allDone      = newChecklist.every(s => s.done);
             return { ...t, checklist: newChecklist, status: allDone ? "ready_to_release" : t.status };
         }));
     };
 
     // Stats
-    const today = new Date().toDateString();
-    const todayTxns       = transactions.filter(t => new Date(t.date).toDateString() === today);
-    const inFacility      = transactions.filter(t => t.status === "in_facility" || t.status === "ready_to_release");
-    const awaitingColl    = transactions.filter(t => t.status === "awaiting_collection");
-    const completed       = transactions.filter(t => t.status === "completed");
+    const today        = new Date().toDateString();
+    const todayTxns    = transactions.filter(t => new Date(t.date).toDateString() === today);
+    const inFacility   = transactions.filter(t => t.status === "in_facility" || t.status === "ready_to_release");
+    const awaitingColl = transactions.filter(t => t.status === "awaiting_collection");
+    const completed    = transactions.filter(t => t.status === "completed");
 
-    // Filter
     const visibleTxns = transactions.filter(t => {
         const matchSearch = !search ||
-            t.item.toLowerCase().includes(search.toLowerCase()) ||
+            t.item.toLowerCase().includes(search.toLowerCase())   ||
             t.seller.toLowerCase().includes(search.toLowerCase()) ||
             t.buyer.toLowerCase().includes(search.toLowerCase());
         const matchCampus = campus === "All Campuses" || t.campus === campus;
@@ -494,10 +602,10 @@ export default function StaffDashboard() {
     });
 
     const STATS = [
-        { label: "Due Today",           value: todayTxns.filter(t => t.status !== "completed").length, icon: "fa-calendar-day",   color: "#f59e0b" },
-        { label: "Items In Facility",   value: inFacility.length,   icon: "fa-warehouse",         color: "#6AA6DA" },
-        { label: "Awaiting Collection", value: awaitingColl.length, icon: "fa-person-walking",    color: "#8b5cf6" },
-        { label: "Completed",           value: completed.length,    icon: "fa-circle-check",      color: "#10b981" },
+        { label: "Due Today",           value: todayTxns.filter(t => t.status !== "completed").length, icon: "fa-calendar-day",  color: "#f59e0b" },
+        { label: "Items In Facility",   value: inFacility.length,   icon: "fa-warehouse",       color: "#6AA6DA" },
+        { label: "Awaiting Collection", value: awaitingColl.length, icon: "fa-person-walking",  color: "#8b5cf6" },
+        { label: "Completed",           value: completed.length,    icon: "fa-circle-check",    color: "#10b981" },
     ];
 
     return (
@@ -509,7 +617,6 @@ export default function StaffDashboard() {
             />
 
             <main className={styles.main}>
-                {/* Page title */}
                 <div className={styles.pageTitle}>
                     <div className={styles.pageTitleLeft}>
                         <h1>Staff Dashboard</h1>
@@ -583,7 +690,9 @@ export default function StaffDashboard() {
                             <i className={`fa-solid ${tab.icon}`} />
                             {tab.label}
                             {tab.key === "due_today" && todayTxns.filter(t => t.status !== "completed").length > 0 && (
-                                <span className={styles.tabBadge}>{todayTxns.filter(t => t.status !== "completed").length}</span>
+                                <span className={styles.tabBadge}>
+                                    {todayTxns.filter(t => t.status !== "completed").length}
+                                </span>
                             )}
                         </button>
                     ))}
@@ -596,7 +705,11 @@ export default function StaffDashboard() {
                     <div className={styles.emptyState}>
                         <i className="fa-solid fa-box-open" />
                         <p>No transactions found</p>
-                        {search && <button className={styles.clearBtn} onClick={() => setSearch("")}>Clear search</button>}
+                        {search && (
+                            <button className={styles.clearBtn} onClick={() => setSearch("")}>
+                                Clear search
+                            </button>
+                        )}
                     </div>
                 ) : (
                     <div className={styles.txnList}>
@@ -612,7 +725,6 @@ export default function StaffDashboard() {
                 )}
             </main>
 
-            {/* Staff profile slide panel with logout button */}
             {showProfile && (
                 <StaffProfilePanel
                     staffName={staffUser.name}
@@ -625,7 +737,6 @@ export default function StaffDashboard() {
                 />
             )}
 
-            {/* Logout overlay */}
             {isLoggingOut && (
                 <div className={styles.logoutOverlay}>
                     <div className={styles.logoutBox}>

@@ -13,8 +13,9 @@ import {
 } from "../utils/create-listing.utils.js";
 import NavBar from "./NavBarTemp.jsx";
 import styles from "./CreateListing.module.css";
+import PriceSuggestion from "./PriceSuggestion.jsx"; // US18
 
-const CLOUDINARY_CLOUD_NAME   = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME;
+const CLOUDINARY_CLOUD_NAME    = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME;
 const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
 
 async function uploadToCloudinary(file) {
@@ -33,22 +34,22 @@ async function uploadToCloudinary(file) {
 }
 
 export default function CreateListing() {
-    const navigate    = useNavigate();
+    const navigate     = useNavigate();
     const fileInputRef = useRef(null);
 
-    const [title, setTitle]               = useState("");
-    const [description, setDescription]   = useState("");
+    const [title, setTitle]                 = useState("");
+    const [description, setDescription]     = useState("");
     const [specification, setSpecification] = useState("");
-    const [price, setPrice]               = useState("");
-    const [category, setCategory]         = useState("");
+    const [price, setPrice]                 = useState("");
+    const [category, setCategory]           = useState("");
     const [otherCategory, setOtherCategory] = useState("");
-    const [condition, setCondition]       = useState("");
-    const [listingType, setListingType]   = useState("");
-    const [imageFiles, setImageFiles]     = useState([]);
+    const [condition, setCondition]         = useState("");
+    const [listingType, setListingType]     = useState("");
+    const [imageFiles, setImageFiles]       = useState([]);
     const [imagePreviews, setImagePreviews] = useState([]);
-    const [loading, setLoading]           = useState(false);
-    const [uploadStep, setUploadStep]     = useState(0);   // 0 = idle, N = uploading photo N
-    const [totalPhotos, setTotalPhotos]   = useState(0);
+    const [loading, setLoading]             = useState(false);
+    const [uploadStep, setUploadStep]       = useState(0);   // 0 = idle
+    const [totalPhotos, setTotalPhotos]     = useState(0);
 
     function handleImageChange(e) {
         const files = Array.from(e.target.files);
@@ -56,7 +57,6 @@ export default function CreateListing() {
         setImagePreviews(files.map((f) => URL.createObjectURL(f)));
     }
 
-    // Derive button label from state
     function buttonLabel() {
         if (!loading) return "Publish Listing";
         if (uploadStep > 0 && totalPhotos > 0) {
@@ -67,7 +67,7 @@ export default function CreateListing() {
 
     async function handleSubmit(e) {
         e.preventDefault();
-        if (loading) return; // prevent double-submit
+        if (loading) return;
 
         const user = auth.currentUser;
         if (!user) { alert("Please log in to create a listing."); return; }
@@ -98,7 +98,7 @@ export default function CreateListing() {
                 photoURLs.push(url);
             }
 
-            setUploadStep(0); // switches label to "Saving listing…"
+            setUploadStep(0);
 
             const listingData = {
                 title,
@@ -139,7 +139,7 @@ export default function CreateListing() {
 
             <form className={styles.form} onSubmit={handleSubmit}>
 
-                {/* Photos */}
+                {/* ── Photos ── */}
                 <label className={styles.label}>Photos</label>
                 <input
                     ref={fileInputRef}
@@ -171,7 +171,7 @@ export default function CreateListing() {
                     )}
                 </div>
 
-                {/* Title */}
+                {/* ── Title ── */}
                 <label className={styles.label}>Title</label>
                 <input
                     className={styles.input}
@@ -183,7 +183,7 @@ export default function CreateListing() {
                     disabled={loading}
                 />
 
-                {/* Description */}
+                {/* ── Description ── */}
                 <label className={styles.label}>Description</label>
                 <textarea
                     className={styles.textarea}
@@ -195,7 +195,7 @@ export default function CreateListing() {
                     disabled={loading}
                 />
 
-                {/* Specification */}
+                {/* ── Specification ── */}
                 <label className={styles.label}>Specification</label>
                 <textarea
                     className={styles.textarea}
@@ -206,7 +206,7 @@ export default function CreateListing() {
                     disabled={loading}
                 />
 
-                {/* Price + Listing Type */}
+                {/* ── Price + Listing Type ── */}
                 <div className={styles.row}>
                     <div>
                         <label className={styles.label}>Price</label>
@@ -239,7 +239,7 @@ export default function CreateListing() {
                     </div>
                 </div>
 
-                {/* Category + Condition */}
+                {/* ── Category + Condition ── */}
                 <div className={styles.row}>
                     <div>
                         <label className={styles.label}>Category</label>
@@ -265,6 +265,7 @@ export default function CreateListing() {
                             <option value="study_materials">Study Materials</option>
                             <option value="other">Other</option>
                         </select>
+
                         {category === "other" && (
                             <input
                                 className={styles.input}
@@ -276,7 +277,19 @@ export default function CreateListing() {
                                 disabled={loading}
                             />
                         )}
+
+                        {/* ── US18: Price Suggestion widget ── */}
+                        <PriceSuggestion
+                            category={category === "other" ? "" : category}
+                            onSuggestionLoad={({ low, high }) => {
+                                // Pre-fill price only if seller hasn't typed one yet
+                                if (!price) {
+                                    setPrice(String(Math.round((low + high) / 2)));
+                                }
+                            }}
+                        />
                     </div>
+
                     <div>
                         <label className={styles.label}>Condition</label>
                         <select
@@ -296,18 +309,19 @@ export default function CreateListing() {
                     </div>
                 </div>
 
+                {/* ── Submit ── */}
                 <button
                     type="submit"
                     className={styles.submitBtn}
                     disabled={loading}
                     style={{
-                        opacity:          loading ? 0.65 : 1,
-                        cursor:           loading ? 'not-allowed' : 'pointer',
-                        backgroundColor:  loading ? '#a0c4e8' : undefined,
-                        display:          'flex',
-                        alignItems:       'center',
-                        justifyContent:   'center',
-                        gap:              '8px',
+                        opacity:         loading ? 0.65 : 1,
+                        cursor:          loading ? "not-allowed" : "pointer",
+                        backgroundColor: loading ? "#a0c4e8" : undefined,
+                        display:         "flex",
+                        alignItems:      "center",
+                        justifyContent:  "center",
+                        gap:             "8px",
                     }}
                 >
                     {loading && (
@@ -318,7 +332,7 @@ export default function CreateListing() {
                             stroke="currentColor"
                             strokeWidth="2.5"
                             strokeLinecap="round"
-                            style={{ animation: 'spin 0.8s linear infinite', flexShrink: 0 }}
+                            style={{ animation: "spin 0.8s linear infinite", flexShrink: 0 }}
                         >
                             <path d="M21 12a9 9 0 1 1-6.219-8.56" />
                         </svg>
@@ -326,7 +340,6 @@ export default function CreateListing() {
                     {buttonLabel()}
                 </button>
 
-                {/* Inline spin keyframe */}
                 <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
             </form>
         </div>
