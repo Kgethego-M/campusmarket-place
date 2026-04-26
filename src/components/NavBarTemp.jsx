@@ -46,7 +46,6 @@ export default function Navbar() {
     const [isLoggingOut, setIsLoggingOut]           = useState(false);
     const [notificationsOpen, setNotificationsOpen] = useState(false);
     const [currentUser, setCurrentUser]             = useState(null);
-    const [cartCount, setCartCount]                 = useState(0);
 
     const [offerNotifications, setOfferNotifications]   = useState([]);
     const [ratingNotifications, setRatingNotifications] = useState([]);
@@ -147,7 +146,6 @@ export default function Navbar() {
                 setCurrentUser(null);
                 setOfferNotifications([]);
                 setRatingNotifications([]);
-                setCartCount(0);
                 return;
             }
             setCurrentUser(firebaseUser);
@@ -179,22 +177,7 @@ export default function Navbar() {
         return () => unsub();
     }, []);
 
-    // ── Cart count (real-time) ────────────────────────────────────────────────
 
-    useEffect(() => {
-        if (!currentUser) return;
-
-        const unsub = onSnapshot(doc(db, 'carts', currentUser.uid), (snap) => {
-            if (snap && typeof snap.exists === 'function' && snap.exists()) {
-                const items = snap.data().items || [];
-                setCartCount(items.length);
-            } else {
-                setCartCount(0);
-            }
-        });
-
-        return () => unsub();
-    }, [currentUser]);
 
     // ── Close on outside click ────────────────────────────────────────────────
 
@@ -219,6 +202,7 @@ export default function Navbar() {
                 navigate('/login');
             } catch (err) {
                 console.error('Error signing out:', err);
+                alert('Failed to logout. Please try again.');
             } finally {
                 setIsLoggingOut(false);
                 setDropdownOpen(false);

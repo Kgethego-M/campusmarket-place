@@ -63,7 +63,7 @@ export default function MyPurchases() {
     });
 
     // Fallback: if Firestore doesn't respond (e.g. in tests), stop loading
-    const fallback = setTimeout(() => setSnapshotReceived(true), 800);
+    const fallback = setTimeout(() => setSnapshotReceived(true), 50);
 
     return () => { unsub(); clearTimeout(fallback); };
   }, [currentUser]);

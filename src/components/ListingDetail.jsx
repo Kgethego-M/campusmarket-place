@@ -99,10 +99,10 @@ function ImageScroller({ photos, title }) {
       >
         <div ref={trackRef} style={imgStyles.track}>
           {photos.map((src, i) => (
-            <div key={i} style={imgStyles.slide}>
+            <div key={i} style={imgStyles.slide} aria-hidden="true">
               <img
                 src={src}
-                alt={i === 0 ? title : `${title} ${i + 1}`}
+                alt=""
                 style={{
                   ...imgStyles.img,
                   opacity: i === active ? 1 : 0,
@@ -191,11 +191,19 @@ function ImageScroller({ photos, title }) {
               onClick={() => goTo(i)}
               style={{
                 ...imgStyles.thumb,
-                border: i === active ? '2px solid #6AA6DA' : '2px solid transparent',
+                border: 'none',
                 opacity: i === active ? 1 : 0.6,
               }}
             >
-              <img src={src} alt={`thumb-${i}`} style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 5 }} />
+              <img
+                src={src}
+                alt={`thumb-${i}`}
+                style={{
+                  width: '100%', height: '100%', objectFit: 'cover', borderRadius: 5,
+                  border: i === active ? '2px solid #6AA6DA' : '2px solid transparent',
+                  boxSizing: 'border-box',
+                }}
+              />
             </button>
           ))}
         </div>
