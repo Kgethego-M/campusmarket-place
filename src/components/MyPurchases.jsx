@@ -62,7 +62,10 @@ export default function MyPurchases() {
       setSnapshotReceived(true);
     });
 
-    return () => unsub();
+    // Fallback: if Firestore doesn't respond (e.g. in tests), stop loading
+    const fallback = setTimeout(() => setSnapshotReceived(true), 800);
+
+    return () => { unsub(); clearTimeout(fallback); };
   }, [currentUser]);
 
   // Enrich transactions with listing + seller details

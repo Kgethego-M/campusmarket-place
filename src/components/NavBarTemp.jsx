@@ -185,7 +185,7 @@ export default function Navbar() {
         if (!currentUser) return;
 
         const unsub = onSnapshot(doc(db, 'carts', currentUser.uid), (snap) => {
-            if (snap.exists()) {
+            if (snap && typeof snap.exists === 'function' && snap.exists()) {
                 const items = snap.data().items || [];
                 setCartCount(items.length);
             } else {

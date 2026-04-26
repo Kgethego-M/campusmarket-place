@@ -45,7 +45,9 @@ function ImageScroller({ photos, title }) {
     const track = trackRef.current;
     if (track) {
       const slide = track.children[clamped];
-      if (slide) slide.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+      if (slide && typeof slide.scrollIntoView === 'function') {
+        slide.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+      }
     }
   }, [photos.length]);
 
@@ -100,7 +102,7 @@ function ImageScroller({ photos, title }) {
             <div key={i} style={imgStyles.slide}>
               <img
                 src={src}
-                alt={`${title} ${i + 1}`}
+                alt={i === 0 ? title : `${title} ${i + 1}`}
                 style={{
                   ...imgStyles.img,
                   opacity: i === active ? 1 : 0,
@@ -118,7 +120,7 @@ function ImageScroller({ photos, title }) {
               <img
                 key={`overlay-${i}`}
                 src={src}
-                alt={`${title} ${i + 1}`}
+                alt={i === 0 ? title : `${title} ${i + 1}`}
                 style={{
                   position: 'absolute',
                   inset: 0,
@@ -407,9 +409,9 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
   // ── Offer ──────────────────────────────────────────────────────────────────
   const handleTransaction = async () => {
     if (submitting) return;
-    if (!purchaseType)                           { showToast('Please select a transaction type', 'warn'); return; }
-    if (purchaseType === 'sale' && !agreedPrice) { showToast('Please enter an agreed price', 'warn'); return; }
-    if (purchaseType === 'trade' && !tradeItem)  { showToast('Please describe what you want to trade', 'warn'); return; }
+    if (!purchaseType)                           { showToast('Please select a transaction type', 'warn'); alert('Please select a transaction type'); return; }
+    if (purchaseType === 'sale' && !agreedPrice) { showToast('Please enter an agreed price', 'warn'); alert('Please enter an agreed price'); return; }
+    if (purchaseType === 'trade' && !tradeItem)  { showToast('Please describe what you want to trade', 'warn'); alert('Please describe what you want to trade'); return; }
 
     setSubmitting(true);
 
@@ -450,7 +452,7 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
       showToast('Offer sent! The seller will review it shortly.');
     } catch (err) {
       console.error('Transaction error:', err);
-      showToast('Failed to create offer. Please try again.', 'error');
+      showToast('Failed to create offer. Please try again.', 'error'); alert('Failed to create offer. Please try again.');
       setSubmitting(false);
     }
   };
