@@ -71,6 +71,7 @@ describe("Navbar (high coverage)", () => {
     vi.useRealTimers();
 
     mockGetDoc.mockResolvedValue({ exists: () => false });
+    // Default: no completed transactions so no rating notifications
     mockGetDocs.mockResolvedValue({ docs: [], empty: true });
     mockOnSnapshot.mockImplementation((q, cb) => {
       cb({ docs: [] });
@@ -249,16 +250,22 @@ describe("Navbar - Additional Coverage Tests", () => {
       ],
     };
 
-    mockGetDocs
-      .mockResolvedValueOnce(mockCompletedBuyerTx)
-      .mockResolvedValueOnce({ docs: [], empty: true });
-
     const mockUserDoc = {
       exists: () => true,
       data: () => ({ firstName: "Jane", lastName: "Smith" }),
     };
+
+    // Call order from fetchRatingNotifications:
+    // 1. getDocs(buyer transactions)  → mockCompletedBuyerTx
+    // 2. getDocs(seller transactions) → empty
+    // 3. getDocs(reviews check)       → empty (no existing review)
+    // getDoc calls are for user profile lookups
+    mockGetDocs
+      .mockResolvedValueOnce(mockCompletedBuyerTx)  // buyer tx query
+      .mockResolvedValueOnce({ docs: [], empty: true }) // seller tx query
+      .mockResolvedValue({ docs: [], empty: true });    // review checks
+
     mockGetDoc.mockResolvedValue(mockUserDoc);
-    mockGetDocs.mockResolvedValue({ docs: [], empty: true });
 
     await renderNav();
     await waitFor(() => {
@@ -282,12 +289,24 @@ describe("Navbar - Additional Coverage Tests", () => {
       ],
     };
 
-    mockGetDocs.mockResolvedValue(mockCompletedTx);
-    const mockReviewsWithData = {
-      docs: [{ id: "review1", data: () => ({}) }],
-      empty: false,
+    const mockUserDoc = {
+      exists: () => true,
+      data: () => ({ firstName: "Jane", lastName: "Smith" }),
     };
-    mockGetDocs.mockResolvedValue(mockReviewsWithData);
+
+    // Call order:
+    // 1. getDocs(buyer tx)   → mockCompletedTx
+    // 2. getDocs(seller tx)  → empty
+    // 3. getDocs(review check for tx1) → has a review → notification filtered out
+    mockGetDocs
+      .mockResolvedValueOnce(mockCompletedTx)           // buyer tx
+      .mockResolvedValueOnce({ docs: [], empty: true }) // seller tx
+      .mockResolvedValue({                              // review check: already reviewed
+        docs: [{ id: "review1", data: () => ({}) }],
+        empty: false,
+      });
+
+    mockGetDoc.mockResolvedValue(mockUserDoc);
 
     await renderNav();
     await waitFor(() => {
@@ -296,9 +315,8 @@ describe("Navbar - Additional Coverage Tests", () => {
   });
 
   test("handles transaction without listingId gracefully", async () => {
-    // The source skips transactions with no listingId via `continue` and
-    // emits console.warn. We verify the component doesn't crash and the
-    // bell is still rendered.
+    // Transactions missing listingId are skipped with console.warn.
+    // Verify the component doesn't crash and the bell still renders.
     const mockCompletedTx = {
       docs: [
         {
@@ -307,14 +325,17 @@ describe("Navbar - Additional Coverage Tests", () => {
             buyerId: "123",
             sellerId: "seller456",
             status: "completed",
-            // listingId intentionally omitted
+            // listingId intentionally absent
             updatedAt: new Date(),
           }),
         },
       ],
     };
 
-    mockGetDocs.mockResolvedValue(mockCompletedTx);
+    mockGetDocs
+      .mockResolvedValueOnce(mockCompletedTx)           // buyer tx
+      .mockResolvedValueOnce({ docs: [], empty: true }); // seller tx
+
     await renderNav();
 
     await waitFor(() => {
@@ -338,9 +359,13 @@ describe("Navbar - Additional Coverage Tests", () => {
       ],
     };
 
-    mockGetDocs.mockResolvedValue(mockCompletedTx);
+    mockGetDocs
+      .mockResolvedValueOnce(mockCompletedTx)           // buyer tx
+      .mockResolvedValueOnce({ docs: [], empty: true }) // seller tx
+      .mockResolvedValue({ docs: [], empty: true });     // review check
+
+    // User doc doesn't exist
     mockGetDoc.mockResolvedValue({ exists: () => false });
-    mockGetDocs.mockResolvedValue({ docs: [], empty: true });
 
     await renderNav();
     await waitFor(() => {
@@ -427,14 +452,13 @@ describe("Navbar - Additional Coverage Tests", () => {
 
     mockGetDocs
       .mockResolvedValueOnce(mockCompletedTx)
-      .mockResolvedValueOnce({ docs: [], empty: true });
+      .mockResolvedValueOnce({ docs: [], empty: true })
+      .mockResolvedValue({ docs: [], empty: true });
 
-    const mockUserDoc = {
+    mockGetDoc.mockResolvedValue({
       exists: () => true,
       data: () => ({ firstName: "Jane", lastName: "Smith" }),
-    };
-    mockGetDoc.mockResolvedValue(mockUserDoc);
-    mockGetDocs.mockResolvedValue({ docs: [], empty: true });
+    });
 
     await renderNav();
     fireEvent.click(screen.getByTitle("Notifications"));
@@ -503,6 +527,9 @@ describe("Navbar - Additional Coverage Tests", () => {
   });
 
   test("fetchListingTitle handles errors gracefully", async () => {
+    // mockGetDoc rejects — fetchListingTitle catches silently.
+    // The auth profile fetch also uses getDoc; set it to reject for
+    // listing fetches but we only care that the bell still renders.
     mockGetDoc.mockRejectedValue(new Error("Network error"));
     mockOnSnapshot.mockImplementation((q, cb) => {
       cb({
@@ -538,9 +565,12 @@ describe("Navbar - Additional Coverage Tests", () => {
     fireEvent.click(screen.getByTitle("Menu"));
     fireEvent.click(screen.getByText("Logout"));
 
-    await waitFor(() => {
-      expect(alertSpy).toHaveBeenCalledWith("Failed to logout. Please try again.");
-    }, { timeout: 3000 });
+    await waitFor(
+      () => {
+        expect(alertSpy).toHaveBeenCalledWith("Failed to logout. Please try again.");
+      },
+      { timeout: 3000 }
+    );
 
     alertSpy.mockRestore();
   });
@@ -606,11 +636,10 @@ describe("Navbar - Additional Coverage Tests", () => {
   });
 
   test("handles notification with listing title from fetchListingTitle", async () => {
-    const mockListingData = {
+    mockGetDoc.mockResolvedValue({
       exists: () => true,
       data: () => ({ title: "Awesome Textbook" }),
-    };
-    mockGetDoc.mockResolvedValue(mockListingData);
+    });
 
     mockOnSnapshot.mockImplementation((q, cb) => {
       cb({
@@ -723,14 +752,13 @@ describe("Navbar - Final Edge Cases Coverage", () => {
 
     mockGetDocs
       .mockResolvedValueOnce(mockCompletedTx)
-      .mockResolvedValueOnce({ docs: [], empty: true });
+      .mockResolvedValueOnce({ docs: [], empty: true })
+      .mockResolvedValue({ docs: [], empty: true });
 
-    const mockUserDoc = {
+    mockGetDoc.mockResolvedValue({
       exists: () => true,
       data: () => ({ firstName: "Jane", lastName: "Smith" }),
-    };
-    mockGetDoc.mockResolvedValue(mockUserDoc);
-    mockGetDocs.mockResolvedValue({ docs: [], empty: true });
+    });
 
     await renderNav();
     fireEvent.click(screen.getByTitle("Notifications"));
@@ -743,7 +771,7 @@ describe("Navbar - Final Edge Cases Coverage", () => {
     fireEvent.click(notificationItem);
 
     await waitFor(() => {
-      const stored = localStorage.getItem('readRatingNotifs');
+      const stored = localStorage.getItem("readRatingNotifs");
       expect(stored).toBeTruthy();
       const parsed = JSON.parse(stored);
       expect(parsed.length).toBeGreaterThan(0);
@@ -751,8 +779,8 @@ describe("Navbar - Final Edge Cases Coverage", () => {
   });
 
   test("formatTime shows different date formats for older notifications", async () => {
-    const twoDaysAgo = Date.now() - (2 * 86400000);
-    const twoWeeksAgo = Date.now() - (14 * 86400000);
+    const twoDaysAgo = Date.now() - 2 * 86400000;
+    const twoWeeksAgo = Date.now() - 14 * 86400000;
 
     mockOnSnapshot.mockImplementation((q, cb) => {
       cb({
@@ -795,8 +823,8 @@ describe("Navbar - Final Edge Cases Coverage", () => {
   });
 
   test("handles transaction with completely missing fields", async () => {
-    // The source skips transactions missing listingId — no crash expected.
-    // We simply verify the component remains stable.
+    // Transactions with no listingId are skipped with console.warn.
+    // Verify the component doesn't crash.
     const mockIncompleteTx = {
       docs: [
         {
@@ -804,13 +832,16 @@ describe("Navbar - Final Edge Cases Coverage", () => {
           data: () => ({
             status: "completed",
             updatedAt: new Date(),
-            // buyerId, sellerId, listingId all missing
+            // buyerId, sellerId, listingId all absent
           }),
         },
       ],
     };
 
-    mockGetDocs.mockResolvedValue(mockIncompleteTx);
+    mockGetDocs
+      .mockResolvedValueOnce(mockIncompleteTx)          // buyer tx
+      .mockResolvedValueOnce({ docs: [], empty: true }); // seller tx
+
     await renderNav();
 
     await waitFor(() => {
@@ -835,15 +866,14 @@ describe("Navbar - Final Edge Cases Coverage", () => {
     };
 
     mockGetDocs
-      .mockResolvedValueOnce({ docs: [], empty: true })
-      .mockResolvedValueOnce(mockCompletedSellerTx);
+      .mockResolvedValueOnce({ docs: [], empty: true }) // buyer tx
+      .mockResolvedValueOnce(mockCompletedSellerTx)     // seller tx
+      .mockResolvedValue({ docs: [], empty: true });     // review check
 
-    const mockUserDoc = {
+    mockGetDoc.mockResolvedValue({
       exists: () => true,
       data: () => ({ firstName: "John", lastName: "Doe" }),
-    };
-    mockGetDoc.mockResolvedValue(mockUserDoc);
-    mockGetDocs.mockResolvedValue({ docs: [], empty: true });
+    });
 
     await renderNav();
     fireEvent.click(screen.getByTitle("Notifications"));
@@ -871,14 +901,13 @@ describe("Navbar - Final Edge Cases Coverage", () => {
 
     mockGetDocs
       .mockResolvedValueOnce(mockCompletedTx)
-      .mockResolvedValueOnce({ docs: [], empty: true });
+      .mockResolvedValueOnce({ docs: [], empty: true })
+      .mockResolvedValue({ docs: [], empty: true });
 
-    const mockUserDoc = {
+    mockGetDoc.mockResolvedValue({
       exists: () => true,
       data: () => ({ firstName: "Jane", lastName: "Smith" }),
-    };
-    mockGetDoc.mockResolvedValue(mockUserDoc);
-    mockGetDocs.mockResolvedValue({ docs: [], empty: true });
+    });
 
     await renderNav();
     fireEvent.click(screen.getByTitle("Notifications"));

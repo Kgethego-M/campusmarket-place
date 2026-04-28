@@ -2,8 +2,6 @@ import { render, screen, fireEvent, waitFor, act } from "@testing-library/react"
 import { vi, describe, test, beforeEach } from "vitest";
 import { MemoryRouter } from "react-router-dom";
 import MyPurchases from "../components/MyPurchases";
-import { onAuthStateChanged } from "firebase/auth";
-import { onSnapshot, getDoc } from "firebase/firestore";
 
 // ── Router mock ─────────────────────────────────
 const mockNavigate = vi.fn();
@@ -24,12 +22,17 @@ vi.mock("react-router-dom", async () => {
 });
 
 // ── Firebase mocks ──────────────────────────────
+// Keep references at module scope so beforeEach can reconfigure them
+// without using require() (which is incompatible with ESM/Vitest).
 const mockUnsubscribe = vi.fn();
+const mockOnSnapshot = vi.fn();
+const mockOnAuthStateChanged = vi.fn();
+const mockGetDoc = vi.fn();
 
 vi.mock("../firebase", () => ({ auth: {}, db: {} }));
 
 vi.mock("firebase/auth", () => ({
-  onAuthStateChanged: vi.fn(),
+  onAuthStateChanged: (...args) => mockOnAuthStateChanged(...args),
 }));
 
 vi.mock("firebase/firestore", () => ({
@@ -37,8 +40,8 @@ vi.mock("firebase/firestore", () => ({
   query: vi.fn(),
   where: vi.fn(),
   doc: vi.fn(),
-  getDoc: vi.fn(),
-  onSnapshot: vi.fn(),
+  getDoc: (...args) => mockGetDoc(...args),
+  onSnapshot: (...args) => mockOnSnapshot(...args),
 }));
 
 vi.mock("../components/NavBarTemp", () => ({
@@ -49,25 +52,28 @@ vi.mock("../components/MyPurchases.module.css", () => ({
   default: new Proxy({}, { get: (_, key) => key }),
 }));
 
-// ── Default mock implementations ────────────────
-const applyDefaultMocks = () => {
-  // Fire auth callback immediately with an authenticated user
-  onAuthStateChanged.mockImplementation((auth, cb) => {
+// ── Default implementations ─────────────────────
+// Defined once, re-applied in beforeEach after vi.clearAllMocks() resets
+// call counts (but NOT the implementation since we use wrapper fns above).
+const setupDefaultMocks = () => {
+  // Fire auth callback synchronously so currentUser is set before snapshot
+  mockOnAuthStateChanged.mockImplementation((auth, cb) => {
     cb({ uid: "123", email: "user@test.com" });
     return () => {};
   });
 
-  // Fire snapshot callback immediately with empty docs so the component
-  // exits the loading skeleton and renders the empty state
-  onSnapshot.mockImplementation((query, cb) => {
+  // Fire the snapshot callback immediately with empty docs.
+  // This is the critical fix: without it the component stays in the
+  // loading-skeleton state and never renders the empty-state UI.
+  mockOnSnapshot.mockImplementation((_query, cb) => {
     cb({ docs: [] });
     return mockUnsubscribe;
   });
 
-  getDoc.mockResolvedValue({ exists: () => false });
+  mockGetDoc.mockResolvedValue({ exists: () => false });
 };
 
-// ── helper ─────────────────────────────────────
+// ── Render helper ───────────────────────────────
 const renderMyPurchases = async () => {
   let result;
   await act(async () => {
@@ -80,13 +86,13 @@ const renderMyPurchases = async () => {
   return result;
 };
 
-// ── tests ──────────────────────────────────────
+// ── Tests ───────────────────────────────────────
 describe("MyPurchases Component - Basic Tests", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockNavigate.mockClear();
     mockNavigateBack.mockClear();
-    applyDefaultMocks();
+    setupDefaultMocks();
   });
 
   test("shows filter buttons when authenticated", async () => {
@@ -181,9 +187,9 @@ describe("MyPurchases Component - Basic Tests", () => {
     await renderMyPurchases();
 
     await waitFor(() => {
-      expect(document.querySelector('.page')).toBeInTheDocument();
-      expect(document.querySelector('.container')).toBeInTheDocument();
-      expect(document.querySelector('.header')).toBeInTheDocument();
+      expect(document.querySelector(".page")).toBeInTheDocument();
+      expect(document.querySelector(".container")).toBeInTheDocument();
+      expect(document.querySelector(".header")).toBeInTheDocument();
     });
   });
 
@@ -191,7 +197,7 @@ describe("MyPurchases Component - Basic Tests", () => {
     await renderMyPurchases();
 
     await waitFor(() => {
-      const filtersDiv = document.querySelector('.filters');
+      const filtersDiv = document.querySelector(".filters");
       expect(filtersDiv).toBeInTheDocument();
       // FILTERS array: all, pending, accepted, waiting, completed, declined = 6
       expect(filtersDiv.children.length).toBe(6);
@@ -203,18 +209,18 @@ describe("MyPurchases Component - Basic Tests", () => {
 
     const backButton = await screen.findByText("Back");
     expect(backButton).toBeInTheDocument();
-    const icon = backButton.querySelector('i');
-    expect(icon).toHaveClass('fa-arrow-left');
+    const icon = backButton.querySelector("i");
+    expect(icon).toHaveClass("fa-arrow-left");
   });
 
   test("empty state has correct icon", async () => {
     await renderMyPurchases();
 
     await waitFor(() => {
-      const emptyStateDiv = document.querySelector('.emptyState');
+      const emptyStateDiv = document.querySelector(".emptyState");
       expect(emptyStateDiv).toBeInTheDocument();
-      const icon = emptyStateDiv.querySelector('i');
-      expect(icon).toHaveClass('fa-shopping-bag');
+      const icon = emptyStateDiv.querySelector("i");
+      expect(icon).toHaveClass("fa-shopping-bag");
     });
   });
 });
