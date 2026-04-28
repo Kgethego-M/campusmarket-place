@@ -26,6 +26,10 @@ vi.mock('firebase/firestore', () => ({
   serverTimestamp: vi.fn(),
   doc: vi.fn(),
   getDoc: vi.fn(),
+  setDoc: vi.fn(),
+  updateDoc: vi.fn(),
+  arrayUnion: vi.fn(),
+  arrayRemove: vi.fn(),
 }));
 
 vi.mock('../services/transactionService', () => ({
@@ -34,6 +38,11 @@ vi.mock('../services/transactionService', () => ({
 
 vi.mock('../services/notificationService', () => ({
   notifySellerOfOffer: vi.fn(() => Promise.resolve('mock-notification-id')),
+}));
+
+// Mock ReportModal to avoid its own Firebase/routing dependencies
+vi.mock('../components/ReportModal', () => ({
+  default: () => null,
 }));
 
 // ─── Shared mock data ─────────────────────────────────────────────────────────

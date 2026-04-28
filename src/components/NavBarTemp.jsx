@@ -177,8 +177,6 @@ export default function Navbar() {
         return () => unsub();
     }, []);
 
-
-
     // ── Close on outside click ────────────────────────────────────────────────
 
     useEffect(() => {
@@ -252,7 +250,10 @@ export default function Navbar() {
                 for (const d of buyerSnap.docs) {
                     const data = d.data();
                     const listingId = data.listingId || data.ListingId || data.listing_id || null;
-                    if (!listingId) continue;
+                    if (!listingId) {
+                        console.warn('NavBar: transaction missing listingId', d.id);
+                        continue;
+                    }
                     let sellerName = 'Seller';
                     try {
                         const u = await getDoc(doc(db, 'users', data.sellerId));
@@ -274,7 +275,10 @@ export default function Navbar() {
                 for (const d of sellerSnap.docs) {
                     const data = d.data();
                     const listingId = data.listingId || data.ListingId || data.listing_id || null;
-                    if (!listingId) continue;
+                    if (!listingId) {
+                        console.warn('NavBar: transaction missing listingId', d.id);
+                        continue;
+                    }
                     let buyerName = 'Buyer';
                     try {
                         const u = await getDoc(doc(db, 'users', data.buyerId));
@@ -403,6 +407,7 @@ export default function Navbar() {
                                                 {offerNotifications.map((n) => (
                                                     <div
                                                         key={n.id}
+                                                        data-testid={`notification-item-${n.id}`}
                                                         className={styles.notificationItem}
                                                         onClick={() => handleNotificationClick(n)}
                                                         role="button"
@@ -429,6 +434,7 @@ export default function Navbar() {
                                                 {ratingNotifications.map((n) => (
                                                     <div
                                                         key={n.id}
+                                                        data-testid={`notification-item-${n.id}`}
                                                         className={styles.notificationItem}
                                                         onClick={() => handleNotificationClick(n)}
                                                         role="button"

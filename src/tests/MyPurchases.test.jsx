@@ -2,6 +2,8 @@ import { render, screen, fireEvent, waitFor, act } from "@testing-library/react"
 import { vi, describe, test, beforeEach } from "vitest";
 import { MemoryRouter } from "react-router-dom";
 import MyPurchases from "../components/MyPurchases";
+import { onAuthStateChanged } from "firebase/auth";
+import { onSnapshot, getDoc } from "firebase/firestore";
 
 // ── Router mock ─────────────────────────────────
 const mockNavigate = vi.fn();
@@ -22,17 +24,12 @@ vi.mock("react-router-dom", async () => {
 });
 
 // ── Firebase mocks ──────────────────────────────
-let authStateCallback = null;
-let snapshotCallback = null;
 const mockUnsubscribe = vi.fn();
 
 vi.mock("../firebase", () => ({ auth: {}, db: {} }));
 
 vi.mock("firebase/auth", () => ({
-  onAuthStateChanged: vi.fn((auth, cb) => {
-    authStateCallback = cb;
-    return () => {};
-  }),
+  onAuthStateChanged: vi.fn(),
 }));
 
 vi.mock("firebase/firestore", () => ({
@@ -40,11 +37,8 @@ vi.mock("firebase/firestore", () => ({
   query: vi.fn(),
   where: vi.fn(),
   doc: vi.fn(),
-  getDoc: vi.fn(() => Promise.resolve({ exists: () => false })),
-  onSnapshot: vi.fn((query, cb) => {
-    snapshotCallback = cb;
-    return mockUnsubscribe;
-  }),
+  getDoc: vi.fn(),
+  onSnapshot: vi.fn(),
 }));
 
 vi.mock("../components/NavBarTemp", () => ({
@@ -54,6 +48,24 @@ vi.mock("../components/NavBarTemp", () => ({
 vi.mock("../components/MyPurchases.module.css", () => ({
   default: new Proxy({}, { get: (_, key) => key }),
 }));
+
+// ── Default mock implementations ────────────────
+const applyDefaultMocks = () => {
+  // Fire auth callback immediately with an authenticated user
+  onAuthStateChanged.mockImplementation((auth, cb) => {
+    cb({ uid: "123", email: "user@test.com" });
+    return () => {};
+  });
+
+  // Fire snapshot callback immediately with empty docs so the component
+  // exits the loading skeleton and renders the empty state
+  onSnapshot.mockImplementation((query, cb) => {
+    cb({ docs: [] });
+    return mockUnsubscribe;
+  });
+
+  getDoc.mockResolvedValue({ exists: () => false });
+};
 
 // ── helper ─────────────────────────────────────
 const renderMyPurchases = async () => {
@@ -72,27 +84,14 @@ const renderMyPurchases = async () => {
 describe("MyPurchases Component - Basic Tests", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    authStateCallback = null;
-    snapshotCallback = null;
     mockNavigate.mockClear();
     mockNavigateBack.mockClear();
+    applyDefaultMocks();
   });
 
   test("shows filter buttons when authenticated", async () => {
-    if (authStateCallback) {
-      act(() => {
-        authStateCallback({ uid: "123", email: "user@test.com" });
-      });
-    }
-    
-    if (snapshotCallback) {
-      act(() => {
-        snapshotCallback({ docs: [] });
-      });
-    }
-    
     await renderMyPurchases();
-    
+
     await waitFor(() => {
       expect(screen.getByText("All")).toBeInTheDocument();
       expect(screen.getByText("Pending")).toBeInTheDocument();
@@ -103,145 +102,67 @@ describe("MyPurchases Component - Basic Tests", () => {
   });
 
   test("filter buttons are clickable", async () => {
-    if (authStateCallback) {
-      act(() => {
-        authStateCallback({ uid: "123", email: "user@test.com" });
-      });
-    }
-    
-    if (snapshotCallback) {
-      act(() => {
-        snapshotCallback({ docs: [] });
-      });
-    }
-    
     await renderMyPurchases();
-    
+
     await waitFor(() => {
       expect(screen.getByText("Pending")).toBeInTheDocument();
     });
-    
+
     const pendingFilter = screen.getByText("Pending");
     fireEvent.click(pendingFilter);
     expect(pendingFilter).toHaveClass("filterBtnActive");
   });
 
   test("navigates back when back button clicked", async () => {
-    if (authStateCallback) {
-      act(() => {
-        authStateCallback({ uid: "123", email: "user@test.com" });
-      });
-    }
-    
     await renderMyPurchases();
-    
+
     const backButton = await screen.findByText("Back");
     fireEvent.click(backButton);
     expect(mockNavigateBack).toHaveBeenCalled();
   });
 
   test("displays header title", async () => {
-    if (authStateCallback) {
-      act(() => {
-        authStateCallback({ uid: "123", email: "user@test.com" });
-      });
-    }
-    
     await renderMyPurchases();
-    
+
     expect(screen.getByText("My Purchases & Offers")).toBeInTheDocument();
   });
 
   test("displays NavBar component", async () => {
-    if (authStateCallback) {
-      act(() => {
-        authStateCallback({ uid: "123", email: "user@test.com" });
-      });
-    }
-    
     await renderMyPurchases();
-    
+
     expect(screen.getByTestId("mock-navbar")).toBeInTheDocument();
   });
 
   test("shows empty state message when no transactions", async () => {
-    if (authStateCallback) {
-      act(() => {
-        authStateCallback({ uid: "123", email: "user@test.com" });
-      });
-    }
-    
-    if (snapshotCallback) {
-      act(() => {
-        snapshotCallback({ docs: [] });
-      });
-    }
-    
     await renderMyPurchases();
-    
+
     await waitFor(() => {
       expect(screen.getByText("You haven't made any offers yet")).toBeInTheDocument();
     });
   });
 
   test("displays browse listings button in empty state", async () => {
-    if (authStateCallback) {
-      act(() => {
-        authStateCallback({ uid: "123", email: "user@test.com" });
-      });
-    }
-    
-    if (snapshotCallback) {
-      act(() => {
-        snapshotCallback({ docs: [] });
-      });
-    }
-    
     await renderMyPurchases();
-    
+
     await waitFor(() => {
-      const browseBtn = screen.getByText("Browse Listings");
-      expect(browseBtn).toBeInTheDocument();
+      expect(screen.getByText("Browse Listings")).toBeInTheDocument();
     });
   });
 
   test("navigates to browse listings when button clicked", async () => {
-    if (authStateCallback) {
-      act(() => {
-        authStateCallback({ uid: "123", email: "user@test.com" });
-      });
-    }
-    
-    if (snapshotCallback) {
-      act(() => {
-        snapshotCallback({ docs: [] });
-      });
-    }
-    
     await renderMyPurchases();
-    
+
     await waitFor(() => {
-      const browseBtn = screen.getByText("Browse Listings");
-      fireEvent.click(browseBtn);
-      expect(mockNavigate).toHaveBeenCalledWith("/view-listing");
+      expect(screen.getByText("Browse Listings")).toBeInTheDocument();
     });
+
+    fireEvent.click(screen.getByText("Browse Listings"));
+    expect(mockNavigate).toHaveBeenCalledWith("/view-listing");
   });
 
   test("filter count badges are not shown when no transactions", async () => {
-    if (authStateCallback) {
-      act(() => {
-        authStateCallback({ uid: "123", email: "user@test.com" });
-      });
-    }
-    
-    if (snapshotCallback) {
-      act(() => {
-        snapshotCallback({ docs: [] });
-      });
-    }
-    
     await renderMyPurchases();
-    
+
     await waitFor(() => {
       expect(screen.getByText("All")).toBeInTheDocument();
       expect(screen.queryByText("1")).not.toBeInTheDocument();
@@ -249,70 +170,37 @@ describe("MyPurchases Component - Basic Tests", () => {
   });
 
   test("active count badge not shown when no active transactions", async () => {
-    if (authStateCallback) {
-      act(() => {
-        authStateCallback({ uid: "123", email: "user@test.com" });
-      });
-    }
-    
-    if (snapshotCallback) {
-      act(() => {
-        snapshotCallback({ docs: [] });
-      });
-    }
-    
     await renderMyPurchases();
-    
+
     await waitFor(() => {
       expect(screen.queryByText(/active/)).not.toBeInTheDocument();
     });
   });
 
   test("component has correct CSS classes", async () => {
-    if (authStateCallback) {
-      act(() => {
-        authStateCallback({ uid: "123", email: "user@test.com" });
-      });
-    }
-    
     await renderMyPurchases();
-    
+
     await waitFor(() => {
-      const pageDiv = document.querySelector('.page');
-      const containerDiv = document.querySelector('.container');
-      const headerDiv = document.querySelector('.header');
-      
-      expect(pageDiv).toBeInTheDocument();
-      expect(containerDiv).toBeInTheDocument();
-      expect(headerDiv).toBeInTheDocument();
+      expect(document.querySelector('.page')).toBeInTheDocument();
+      expect(document.querySelector('.container')).toBeInTheDocument();
+      expect(document.querySelector('.header')).toBeInTheDocument();
     });
   });
 
   test("filters section has correct structure", async () => {
-    if (authStateCallback) {
-      act(() => {
-        authStateCallback({ uid: "123", email: "user@test.com" });
-      });
-    }
-    
     await renderMyPurchases();
-    
+
     await waitFor(() => {
       const filtersDiv = document.querySelector('.filters');
       expect(filtersDiv).toBeInTheDocument();
-      expect(filtersDiv.children.length).toBe(5);
+      // FILTERS array: all, pending, accepted, waiting, completed, declined = 6
+      expect(filtersDiv.children.length).toBe(6);
     });
   });
 
   test("back button has correct icon", async () => {
-    if (authStateCallback) {
-      act(() => {
-        authStateCallback({ uid: "123", email: "user@test.com" });
-      });
-    }
-    
     await renderMyPurchases();
-    
+
     const backButton = await screen.findByText("Back");
     expect(backButton).toBeInTheDocument();
     const icon = backButton.querySelector('i');
@@ -320,20 +208,8 @@ describe("MyPurchases Component - Basic Tests", () => {
   });
 
   test("empty state has correct icon", async () => {
-    if (authStateCallback) {
-      act(() => {
-        authStateCallback({ uid: "123", email: "user@test.com" });
-      });
-    }
-    
-    if (snapshotCallback) {
-      act(() => {
-        snapshotCallback({ docs: [] });
-      });
-    }
-    
     await renderMyPurchases();
-    
+
     await waitFor(() => {
       const emptyStateDiv = document.querySelector('.emptyState');
       expect(emptyStateDiv).toBeInTheDocument();
