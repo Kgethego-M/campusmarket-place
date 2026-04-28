@@ -1,5 +1,5 @@
 import { render, screen, fireEvent, waitFor, act } from "@testing-library/react";
-import { vi, describe, test, beforeEach } from "vitest";
+import { vi, describe, test, beforeEach, afterEach } from "vitest";
 import { MemoryRouter } from "react-router-dom";
 import MyPurchases from "../components/MyPurchases";
 
@@ -22,8 +22,8 @@ vi.mock("react-router-dom", async () => {
 });
 
 // ── Firebase mocks ──────────────────────────────
-// Keep references at module scope so beforeEach can reconfigure them
-// without using require() (which is incompatible with ESM/Vitest).
+// Use module-scope wrapper fns so vi.clearAllMocks() only resets call counts,
+// not the implementations (which live on our local vi.fn() references).
 const mockUnsubscribe = vi.fn();
 const mockOnSnapshot = vi.fn();
 const mockOnAuthStateChanged = vi.fn();
@@ -52,20 +52,26 @@ vi.mock("../components/MyPurchases.module.css", () => ({
   default: new Proxy({}, { get: (_, key) => key }),
 }));
 
-// ── Default implementations ─────────────────────
-// Defined once, re-applied in beforeEach after vi.clearAllMocks() resets
-// call counts (but NOT the implementation since we use wrapper fns above).
+// ── Default mock implementations ────────────────
 const setupDefaultMocks = () => {
-  // Fire auth callback synchronously so currentUser is set before snapshot
+  // Auth fires immediately with an authenticated user
   mockOnAuthStateChanged.mockImplementation((auth, cb) => {
     cb({ uid: "123", email: "user@test.com" });
     return () => {};
   });
 
-  // Fire the snapshot callback immediately with empty docs.
-  // This is the critical fix: without it the component stays in the
-  // loading-skeleton state and never renders the empty-state UI.
+  // onSnapshot fires cb with empty docs AND stores the callback so
+  // we can manually re-fire it after timers advance if needed.
+  // Critically: we do NOT fire cb here synchronously, because doing so
+  // sets transactions=[] but doesn't change it from its initial [],
+  // meaning the [transactions] effect dep never sees a change and the
+  // component stays stuck in loading=true even after snapshotReceived=true.
+  // Instead we let the component's own 50ms fallback timer flip
+  // snapshotReceived=true, which we trigger by advancing fake timers.
   mockOnSnapshot.mockImplementation((_query, cb) => {
+    // Fire synchronously so transactions=[] and snapshotReceived=true both set
+    // in the same flush. React batches these together, so [transactions] effect
+    // WILL see transactions change (from uninitialised to []) and re-run.
     cb({ docs: [] });
     return mockUnsubscribe;
   });
@@ -74,15 +80,24 @@ const setupDefaultMocks = () => {
 };
 
 // ── Render helper ───────────────────────────────
+// Uses fake timers to ensure the component's 50ms fallback setTimeout
+// (which sets snapshotReceived=true as a safety net) always fires,
+// guaranteeing the enrich effect runs and loading becomes false.
 const renderMyPurchases = async () => {
+  vi.useFakeTimers({ shouldAdvanceTime: true });
   let result;
+
   await act(async () => {
     result = render(
       <MemoryRouter>
         <MyPurchases />
       </MemoryRouter>
     );
+    // Advance past the component's 50ms fallback timer
+    await vi.advanceTimersByTimeAsync(100);
   });
+
+  vi.useRealTimers();
   return result;
 };
 
@@ -93,6 +108,11 @@ describe("MyPurchases Component - Basic Tests", () => {
     mockNavigate.mockClear();
     mockNavigateBack.mockClear();
     setupDefaultMocks();
+  });
+
+  afterEach(() => {
+    // Always restore real timers in case a test fails mid-fake-timer usage
+    vi.useRealTimers();
   });
 
   test("shows filter buttons when authenticated", async () => {
@@ -143,7 +163,9 @@ describe("MyPurchases Component - Basic Tests", () => {
     await renderMyPurchases();
 
     await waitFor(() => {
-      expect(screen.getByText("You haven't made any offers yet")).toBeInTheDocument();
+      expect(
+        screen.getByText("You haven't made any offers yet")
+      ).toBeInTheDocument();
     });
   });
 
