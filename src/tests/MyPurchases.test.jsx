@@ -1,5 +1,5 @@
-import { render, screen, fireEvent, waitFor, act } from "@testing-library/react";
-import { vi, describe, test, beforeEach, afterEach } from "vitest";
+import { render, screen, fireEvent, act } from "@testing-library/react";
+import { vi, describe, test, beforeEach } from "vitest";
 import { MemoryRouter } from "react-router-dom";
 import MyPurchases from "../components/MyPurchases";
 
@@ -50,30 +50,25 @@ vi.mock("../components/MyPurchases.module.css", () => ({
   default: new Proxy({}, { get: (_, key) => key }),
 }));
 
-// ── Default mock implementations ────────────────
-// Strategy: fire both auth and snapshot synchronously so the component
-// reaches loading=false without any timers. No fake timers needed.
+// ── Setup ───────────────────────────────────────
+// Both auth and snapshot fire synchronously → component reaches
+// loading=false inside the initial act() flush. No waitFor needed.
 const setupDefaultMocks = () => {
   mockOnAuthStateChanged.mockImplementation((_auth, cb) => {
     cb({ uid: "123", email: "user@test.com" });
     return () => {};
   });
-
-  // Fire synchronously with empty docs — component sets transactions=[]
-  // and snapshotReceived=true in one flush, so the enrich effect runs
-  // immediately and sets loading=false.
   mockOnSnapshot.mockImplementation((_query, cb) => {
     cb({ docs: [] });
     return mockUnsubscribe;
   });
-
   mockGetDoc.mockResolvedValue({ exists: () => false });
 };
 
 // ── Render helper ───────────────────────────────
-// Pure act() — no fake timers. Both auth and snapshot fire synchronously,
-// so a single act() flush is enough for loading=false to be reached.
-const renderMyPurchases = async () => {
+// Single act() is sufficient — all state updates happen synchronously.
+// No fake timers, no waitFor, no timer advancement.
+const renderComponent = async () => {
   let result;
   await act(async () => {
     result = render(
@@ -86,166 +81,131 @@ const renderMyPurchases = async () => {
 };
 
 // ── Tests ───────────────────────────────────────
-describe("MyPurchases Component - Basic Tests", () => {
+describe("MyPurchases Component", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockNavigate.mockClear();
-    mockNavigateBack.mockClear();
     setupDefaultMocks();
   });
 
-  test("shows filter buttons when authenticated", async () => {
-    await renderMyPurchases();
-
-    await waitFor(() => {
-      expect(screen.getByText("All")).toBeInTheDocument();
-      expect(screen.getByText("Pending")).toBeInTheDocument();
-      expect(screen.getByText("Accepted")).toBeInTheDocument();
-      expect(screen.getByText("Completed")).toBeInTheDocument();
-      expect(screen.getByText("Declined")).toBeInTheDocument();
-    });
+  test("renders NavBar", async () => {
+    await renderComponent();
+    expect(screen.getByTestId("mock-navbar")).toBeInTheDocument();
   });
 
-  test("filter buttons are clickable", async () => {
-    await renderMyPurchases();
+  test("displays header title", async () => {
+    await renderComponent();
+    expect(screen.getByText("My Purchases & Offers")).toBeInTheDocument();
+  });
 
-    await waitFor(() => {
-      expect(screen.getByText("Pending")).toBeInTheDocument();
-    });
+  test("shows all filter buttons", async () => {
+    await renderComponent();
+    expect(screen.getByText("All")).toBeInTheDocument();
+    expect(screen.getByText("Pending")).toBeInTheDocument();
+    expect(screen.getByText("Accepted")).toBeInTheDocument();
+    expect(screen.getByText("Waiting")).toBeInTheDocument();
+    expect(screen.getByText("Completed")).toBeInTheDocument();
+    expect(screen.getByText("Declined")).toBeInTheDocument();
+  });
 
+  test("filters section renders 6 buttons", async () => {
+    await renderComponent();
+    const filtersDiv = document.querySelector(".filters");
+    expect(filtersDiv).toBeInTheDocument();
+    expect(filtersDiv.children.length).toBe(6);
+  });
+
+  test("clicking a filter marks it active", async () => {
+    await renderComponent();
     const pendingFilter = screen.getByText("Pending");
     fireEvent.click(pendingFilter);
     expect(pendingFilter).toHaveClass("filterBtnActive");
   });
 
-  test("navigates back when back button clicked", async () => {
-    await renderMyPurchases();
+  test("clicking All filter marks it active", async () => {
+    await renderComponent();
+    fireEvent.click(screen.getByText("Pending"));
+    fireEvent.click(screen.getByText("All"));
+    expect(screen.getByText("All")).toHaveClass("filterBtnActive");
+  });
 
-    const backButton = await screen.findByText("Back");
+  test("back button is present and navigates back", async () => {
+    await renderComponent();
+    const backButton = screen.getByText("Back");
+    expect(backButton).toBeInTheDocument();
     fireEvent.click(backButton);
     expect(mockNavigateBack).toHaveBeenCalled();
   });
 
-  test("displays header title", async () => {
-    await renderMyPurchases();
-
-    expect(screen.getByText("My Purchases & Offers")).toBeInTheDocument();
+  test("back button has arrow-left icon", async () => {
+    await renderComponent();
+    const icon = screen.getByText("Back").querySelector("i");
+    expect(icon).toHaveClass("fa-arrow-left");
   });
 
-  test("displays NavBar component", async () => {
-    await renderMyPurchases();
-
-    expect(screen.getByTestId("mock-navbar")).toBeInTheDocument();
+  test("shows empty state when no transactions", async () => {
+    await renderComponent();
+    expect(screen.getByText("You haven't made any offers yet")).toBeInTheDocument();
   });
 
-  test("shows empty state message when no transactions", async () => {
-    await renderMyPurchases();
-
-    await waitFor(() => {
-      expect(
-        screen.getByText("You haven't made any offers yet")
-      ).toBeInTheDocument();
-    });
+  test("empty state has shopping-bag icon", async () => {
+    await renderComponent();
+    const emptyDiv = document.querySelector(".emptyState");
+    expect(emptyDiv).toBeInTheDocument();
+    expect(emptyDiv.querySelector("i")).toHaveClass("fa-shopping-bag");
   });
 
-  test("displays browse listings button in empty state", async () => {
-    await renderMyPurchases();
-
-    await waitFor(() => {
-      expect(screen.getByText("Browse Listings")).toBeInTheDocument();
-    });
+  test("Browse Listings button is visible in empty state", async () => {
+    await renderComponent();
+    expect(screen.getByText("Browse Listings")).toBeInTheDocument();
   });
 
-  test("navigates to browse listings when button clicked", async () => {
-    await renderMyPurchases();
-
-    await waitFor(() => {
-      expect(screen.getByText("Browse Listings")).toBeInTheDocument();
-    });
-
+  test("Browse Listings navigates to /view-listing", async () => {
+    await renderComponent();
     fireEvent.click(screen.getByText("Browse Listings"));
     expect(mockNavigate).toHaveBeenCalledWith("/view-listing");
   });
 
-  test("filter count badges are not shown when no transactions", async () => {
-    await renderMyPurchases();
-
-    await waitFor(() => {
-      expect(screen.getByText("All")).toBeInTheDocument();
-      expect(screen.queryByText("1")).not.toBeInTheDocument();
-    });
+  test("no count badges shown when empty", async () => {
+    await renderComponent();
+    expect(screen.queryByText("1")).not.toBeInTheDocument();
   });
 
-  test("active count badge not shown when no active transactions", async () => {
-    await renderMyPurchases();
-
-    await waitFor(() => {
-      expect(screen.queryByText(/active/)).not.toBeInTheDocument();
-    });
+  test("no active count badge when empty", async () => {
+    await renderComponent();
+    expect(screen.queryByText(/\d+ active/)).not.toBeInTheDocument();
   });
 
-  test("component has correct CSS classes", async () => {
-    await renderMyPurchases();
-
-    await waitFor(() => {
-      expect(document.querySelector(".page")).toBeInTheDocument();
-      expect(document.querySelector(".container")).toBeInTheDocument();
-      expect(document.querySelector(".header")).toBeInTheDocument();
-    });
+  test("correct top-level CSS classes exist", async () => {
+    await renderComponent();
+    expect(document.querySelector(".page")).toBeInTheDocument();
+    expect(document.querySelector(".container")).toBeInTheDocument();
+    expect(document.querySelector(".header")).toBeInTheDocument();
   });
 
-  test("filters section has correct structure", async () => {
-    await renderMyPurchases();
-
-    await waitFor(() => {
-      const filtersDiv = document.querySelector(".filters");
-      expect(filtersDiv).toBeInTheDocument();
-      // FILTERS array: all, pending, accepted, waiting, completed, declined = 6
-      expect(filtersDiv.children.length).toBe(6);
-    });
-  });
-
-  test("back button has correct icon", async () => {
-    await renderMyPurchases();
-
-    const backButton = await screen.findByText("Back");
-    expect(backButton).toBeInTheDocument();
-    const icon = backButton.querySelector("i");
-    expect(icon).toHaveClass("fa-arrow-left");
-  });
-
-  test("empty state has correct icon", async () => {
-    await renderMyPurchases();
-
-    await waitFor(() => {
-      const emptyStateDiv = document.querySelector(".emptyState");
-      expect(emptyStateDiv).toBeInTheDocument();
-      const icon = emptyStateDiv.querySelector("i");
-      expect(icon).toHaveClass("fa-shopping-bag");
-    });
-  });
-
-  test("redirects to login when unauthenticated", async () => {
+  test("redirects to /login when unauthenticated", async () => {
     mockOnAuthStateChanged.mockImplementation((_auth, cb) => {
-      cb(null); // no user
+      cb(null);
       return () => {};
     });
-
-    await renderMyPurchases();
-
-    await waitFor(() => {
-      expect(mockNavigate).toHaveBeenCalledWith("/login");
-    });
+    await renderComponent();
+    expect(mockNavigate).toHaveBeenCalledWith("/login");
   });
 
-  test("unsubscribes from snapshot on unmount", async () => {
-    const { unmount } = await renderMyPurchases();
-
-    await waitFor(() => {
-      expect(screen.getByText("All")).toBeInTheDocument();
-    });
-
+  test("unsubscribes snapshot listener on unmount", async () => {
+    const { unmount } = await renderComponent();
     unmount();
     expect(mockUnsubscribe).toHaveBeenCalled();
+  });
+
+  test("non-all filter hides Browse Listings button", async () => {
+    await renderComponent();
+    fireEvent.click(screen.getByText("Pending"));
+    expect(screen.queryByText("Browse Listings")).not.toBeInTheDocument();
+  });
+
+  test("non-all filter shows correct empty message", async () => {
+    await renderComponent();
+    fireEvent.click(screen.getByText("Declined"));
+    expect(screen.getByText("No declined offers")).toBeInTheDocument();
   });
 });

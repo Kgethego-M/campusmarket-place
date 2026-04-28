@@ -132,7 +132,7 @@ export default function MyPurchases() {
     };
 
     enrich();
-  }, [transactions]);
+  }, [transactions, snapshotReceived]); // ✅ fixed: snapshotReceived added to deps
 
   const FILTERS = [
     { key: 'all',       label: 'All' },
@@ -156,9 +156,6 @@ export default function MyPurchases() {
     tx.status === 'pending' || tx.status === 'accepted' || tx.status === 'waiting'
   ).length;
 
-  // ── Arrow click handler ─────────────────────────────────────────────────────
-  // accepted → go to payment page
-  // all others → go to listing
   const handleArrowClick = (tx) => {
     if (tx.status === 'accepted') {
       navigate(`/payment/${tx.id}`);
