@@ -22,8 +22,6 @@ vi.mock("react-router-dom", async () => {
 });
 
 // ── Firebase mocks ──────────────────────────────
-// Use module-scope wrapper fns so vi.clearAllMocks() only resets call counts,
-// not the implementations (which live on our local vi.fn() references).
 const mockUnsubscribe = vi.fn();
 const mockOnSnapshot = vi.fn();
 const mockOnAuthStateChanged = vi.fn();
@@ -53,25 +51,18 @@ vi.mock("../components/MyPurchases.module.css", () => ({
 }));
 
 // ── Default mock implementations ────────────────
+// Strategy: fire both auth and snapshot synchronously so the component
+// reaches loading=false without any timers. No fake timers needed.
 const setupDefaultMocks = () => {
-  // Auth fires immediately with an authenticated user
-  mockOnAuthStateChanged.mockImplementation((auth, cb) => {
+  mockOnAuthStateChanged.mockImplementation((_auth, cb) => {
     cb({ uid: "123", email: "user@test.com" });
     return () => {};
   });
 
-  // onSnapshot fires cb with empty docs AND stores the callback so
-  // we can manually re-fire it after timers advance if needed.
-  // Critically: we do NOT fire cb here synchronously, because doing so
-  // sets transactions=[] but doesn't change it from its initial [],
-  // meaning the [transactions] effect dep never sees a change and the
-  // component stays stuck in loading=true even after snapshotReceived=true.
-  // Instead we let the component's own 50ms fallback timer flip
-  // snapshotReceived=true, which we trigger by advancing fake timers.
+  // Fire synchronously with empty docs — component sets transactions=[]
+  // and snapshotReceived=true in one flush, so the enrich effect runs
+  // immediately and sets loading=false.
   mockOnSnapshot.mockImplementation((_query, cb) => {
-    // Fire synchronously so transactions=[] and snapshotReceived=true both set
-    // in the same flush. React batches these together, so [transactions] effect
-    // WILL see transactions change (from uninitialised to []) and re-run.
     cb({ docs: [] });
     return mockUnsubscribe;
   });
@@ -80,24 +71,17 @@ const setupDefaultMocks = () => {
 };
 
 // ── Render helper ───────────────────────────────
-// Uses fake timers to ensure the component's 50ms fallback setTimeout
-// (which sets snapshotReceived=true as a safety net) always fires,
-// guaranteeing the enrich effect runs and loading becomes false.
+// Pure act() — no fake timers. Both auth and snapshot fire synchronously,
+// so a single act() flush is enough for loading=false to be reached.
 const renderMyPurchases = async () => {
-  vi.useFakeTimers({ shouldAdvanceTime: true });
   let result;
-
   await act(async () => {
     result = render(
       <MemoryRouter>
         <MyPurchases />
       </MemoryRouter>
     );
-    // Advance past the component's 50ms fallback timer
-    await vi.advanceTimersByTimeAsync(100);
   });
-
-  vi.useRealTimers();
   return result;
 };
 
@@ -108,11 +92,6 @@ describe("MyPurchases Component - Basic Tests", () => {
     mockNavigate.mockClear();
     mockNavigateBack.mockClear();
     setupDefaultMocks();
-  });
-
-  afterEach(() => {
-    // Always restore real timers in case a test fails mid-fake-timer usage
-    vi.useRealTimers();
   });
 
   test("shows filter buttons when authenticated", async () => {
@@ -244,5 +223,29 @@ describe("MyPurchases Component - Basic Tests", () => {
       const icon = emptyStateDiv.querySelector("i");
       expect(icon).toHaveClass("fa-shopping-bag");
     });
+  });
+
+  test("redirects to login when unauthenticated", async () => {
+    mockOnAuthStateChanged.mockImplementation((_auth, cb) => {
+      cb(null); // no user
+      return () => {};
+    });
+
+    await renderMyPurchases();
+
+    await waitFor(() => {
+      expect(mockNavigate).toHaveBeenCalledWith("/login");
+    });
+  });
+
+  test("unsubscribes from snapshot on unmount", async () => {
+    const { unmount } = await renderMyPurchases();
+
+    await waitFor(() => {
+      expect(screen.getByText("All")).toBeInTheDocument();
+    });
+
+    unmount();
+    expect(mockUnsubscribe).toHaveBeenCalled();
   });
 });
