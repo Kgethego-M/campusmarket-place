@@ -1,26 +1,10 @@
 import { useCallback } from "react";
 
-/**
- * Custom hook for exporting report data to CSV and PDF.
- * @param {string} title - Report title (used in PDF header and CSV filename)
- * @param {Array} headers - Array of column header strings
- * @param {Array} rows - Array of row objects, each key should match headers
- * @returns {Object} { exportToCSV, exportToPDF }
- */
 export default function useExportReport(title, headers, rows) {
-  // Safely convert any value to a string, handling null/undefined
   const toSafeString = (value) => {
     if (value === undefined || value === null) return "";
     if (typeof value === "object") return JSON.stringify(value);
     return String(value);
-  };
-
-  const escapeCSV = (value) => {
-    const str = toSafeString(value);
-    if (str.includes(",") || str.includes('"') || str.includes("\n")) {
-      return `"${str.replace(/"/g, '""')}"`;
-    }
-    return str;
   };
 
   const escapeHtml = (value) => {
@@ -39,14 +23,19 @@ export default function useExportReport(title, headers, rows) {
       return;
     }
 
+    const escapeCSV = (value) => {
+      const str = toSafeString(value);
+      if (str.includes(",") || str.includes('"') || str.includes("\n")) {
+        return `"${str.replace(/"/g, '""')}"`;
+      }
+      return str;
+    };
+
     const csvRows = [
       headers.join(","),
-      ...rows.map((row) =>
-        headers.map((header) => escapeCSV(row[header])).join(",")
-      ),
+      ...rows.map((row) => headers.map((h) => escapeCSV(row[h])).join(",")),
     ];
-    const csvString = csvRows.join("\n");
-    const blob = new Blob([csvString], { type: "text/csv;charset=utf-8;" });
+    const blob = new Blob([csvRows.join("\n")], { type: "text/csv;charset=utf-8;" });
     const link = document.createElement("a");
     const url = URL.createObjectURL(blob);
     link.href = url;
@@ -63,16 +52,9 @@ export default function useExportReport(title, headers, rows) {
       return;
     }
 
-    const tableHeaders = `<thead><tr>${headers
-      .map((h) => `<th>${escapeHtml(h)}</th>`)
-      .join("")}</thead>`;
+    const tableHeaders = `<thead><tr>${headers.map((h) => `<th>${escapeHtml(h)}</th>`).join("")}</thead>`;
     const tableRows = rows
-      .map(
-        (row) =>
-          `<tr>${headers
-            .map((h) => `<td>${escapeHtml(row[h])}</td>`)
-            .join("")}</tr>`
-      )
+      .map((row) => `<tr>${headers.map((h) => `<td>${escapeHtml(row[h])}</td>`).join("")}</tr>`)
       .join("");
 
     const printContent = `
@@ -83,14 +65,10 @@ export default function useExportReport(title, headers, rows) {
         <title>${escapeHtml(title)}</title>
         <style>
           body { font-family: Arial, sans-serif; margin: 20px; }
-          h1 { color: #1a1a1a; }
           table { border-collapse: collapse; width: 100%; margin-top: 20px; }
           th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
           th { background-color: #f2f2f2; }
-          @media print {
-            body { margin: 0; }
-            button { display: none; }
-          }
+          @media print { body { margin: 0; } }
         </style>
       </head>
       <body>
@@ -101,31 +79,25 @@ export default function useExportReport(title, headers, rows) {
           <tbody>${tableRows}</tbody>
         </table>
         <script>
-          window.onload = function() { setTimeout(window.print, 100); };
+          // Auto‑print after the page loads
+          window.onload = function() {
+            window.print();
+          };
         <\/script>
       </body>
       </html>
     `;
 
-    // Use an iframe to avoid popup blockers
-    const iframe = document.createElement("iframe");
-    iframe.style.position = "absolute";
-    iframe.style.width = "0";
-    iframe.style.height = "0";
-    iframe.style.border = "none";
-    document.body.appendChild(iframe);
-    const doc = iframe.contentWindow.document;
-    doc.open();
-    doc.write(printContent);
-    doc.close();
-    // Print after a short delay to allow rendering
-    setTimeout(() => {
-      iframe.contentWindow.print();
-      // Remove iframe after printing (optional – you can keep it)
-      setTimeout(() => {
-        document.body.removeChild(iframe);
-      }, 500);
-    }, 200);
+    // Open a new tab, write the HTML, and let the browser print it.
+    const printWindow = window.open();
+    if (!printWindow) {
+      alert("Please allow pop‑ups to generate the PDF.");
+      return;
+    }
+    printWindow.document.write(printContent);
+    printWindow.document.close();
+    // No extra timers – the window will close automatically after printing? 
+    // Actually the user will close the tab manually. That's fine.
   }, [title, headers, rows]);
 
   return { exportToCSV, exportToPDF };

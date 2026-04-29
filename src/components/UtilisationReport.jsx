@@ -15,6 +15,8 @@ import {
   utilisationLevel,
 } from "../utils/utilisationReport.utils.js";
 import styles from "./UtilisationReport.module.css";
+import useExportReport from "../hooks/useExportReport";
+import ExportButtons from "./ExportButtons";
 
 const FALLBACK_CONFIG = { openTime: "09:00", closeTime: "16:00", slotsPerHour: 1 };
 
@@ -94,6 +96,23 @@ export default function UtilisationReport() {
   const dates = getWeekDates(weekStart);
   const slots = generateTimeSlots(config.openTime, config.closeTime);
 
+  // Prepare export data for CSV/PDF
+  const exportHeaders = ["Time Slot", ...dates.map(date => formatDateLabel(date))];
+  const exportRows = slots.map(slot => {
+    const row = { "Time Slot": slot };
+    dates.forEach(date => {
+      const cell = report[date]?.[slot] ?? { booked: 0, capacity: config.slotsPerHour, utilisation: 0 };
+      row[formatDateLabel(date)] = `${cell.utilisation}% (${cell.booked}/${cell.capacity})`;
+    });
+    return row;
+  });
+
+  const { exportToCSV, exportToPDF } = useExportReport(
+    `Facility_Utilisation_${formatDateLabel(dates[0])}_to_${formatDateLabel(dates[6])}`,
+    exportHeaders,
+    exportRows
+  );
+
   return (
     <div className={styles.wrap}>
 
@@ -106,23 +125,26 @@ export default function UtilisationReport() {
           </p>
         </div>
 
-        {/* Week navigator */}
-        <div className={styles.weekNav}>
-          <button className={styles.navBtn} onClick={() => shiftWeek(-1)} title="Previous week">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-                 stroke="currentColor" strokeWidth="2">
-              <polyline points="15 18 9 12 15 6"/>
-            </svg>
-          </button>
-          <span className={styles.weekLabel}>
-            {formatDateLabel(dates[0])} – {formatDateLabel(dates[6])}
-          </span>
-          <button className={styles.navBtn} onClick={() => shiftWeek(1)} title="Next week">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-                 stroke="currentColor" strokeWidth="2">
-              <polyline points="9 18 15 12 9 6"/>
-            </svg>
-          </button>
+        {/* Week navigator + Export buttons */}
+        <div style={{ display: "flex", gap: "16px", alignItems: "center" }}>
+          <div className={styles.weekNav}>
+            <button className={styles.navBtn} onClick={() => shiftWeek(-1)} title="Previous week">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+                   stroke="currentColor" strokeWidth="2">
+                <polyline points="15 18 9 12 15 6"/>
+              </svg>
+            </button>
+            <span className={styles.weekLabel}>
+              {formatDateLabel(dates[0])} – {formatDateLabel(dates[6])}
+            </span>
+            <button className={styles.navBtn} onClick={() => shiftWeek(1)} title="Next week">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+                   stroke="currentColor" strokeWidth="2">
+                <polyline points="9 18 15 12 9 6"/>
+              </svg>
+            </button>
+          </div>
+          <ExportButtons onExportCSV={exportToCSV} onExportPDF={exportToPDF} />
         </div>
       </div>
 
@@ -176,7 +198,7 @@ export default function UtilisationReport() {
                         <span className={styles.fraction}>
                           {cell.booked}/{cell.capacity}
                         </span>
-                      </td>
+                       </td>
                     );
                   })}
                 </tr>
