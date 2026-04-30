@@ -8,6 +8,7 @@ import { validateListingData } from "../utils/view-listing.utils.js";
 import ListingCard from "./ListingCard.jsx";
 import NavBar from "./NavBarTemp.jsx";
 import styles from "./ViewListing.module.css";
+import AdPopup from "./AdPopup";
 
 const LISTING_TYPES = ["All", "For Sale", "For Trade", "For Sale or Trade"];
 const CONDITIONS    = ["All", "New", "Like New", "Good", "Fair", "Poor"];
@@ -170,6 +171,7 @@ export default function ViewListings() {
 
     return (
         <>
+        <AdPopup />
         <NavBar />
         <div className={styles.page}>
             <div className={styles.pageHeader}>
