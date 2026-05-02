@@ -529,3 +529,48 @@
     padding: 24px 0; 
     margin: 0; 
 }
+
+.navLink {
+    background: none;
+    border: none;
+    font-family: inherit;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #555;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: 6px;
+    transition: background 0.15s, color 0.15s;
+}
+
+.navLink:hover {
+    background: #e8f0f8;
+    color: #6AA6DA;
+}
+
+.navLinkActive {
+    background: #6AA6DA;
+    color: #fff;
+}
+
+.navLinkActive:hover {
+    background: #5A95C8;
+    color: #fff;
+}
+
+.reportBadge {
+    background: #dc2626;
+    color: #fff;
+    border-radius: 50%;
+    width: 16px;
+    height: 16px;
+    font-size: 0.6rem;
+    font-weight: 700;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-left: 4px;
+}

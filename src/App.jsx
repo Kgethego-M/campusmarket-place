@@ -27,6 +27,8 @@ import ReviewForm from './components/ReviewForm.jsx';
 import Notificationspage from './components/Notificationspage.jsx';
 import MyPurchases from './components/MyPurchases.jsx';
 import Payment from './components/Payment.jsx';
+import ReportsPage from "./components/ReportsPage";
+import ModerationSummaryPage from "./components/ModerationSummaryPage";
 
 import CreateListingAzure from './components/CreateListingAzure';
 //import EditListingAzure from './pages/EditListingAzure';
@@ -214,6 +216,8 @@ export function AppRoutes() {
 
       {/* Sprint 3 Routes */}
       <Route path="/admin/analytics" element={<AdminAnalytics />} />
+      <Route path="/admin/reports" element={<ReportsPage />} />
+      <Route path="/admin/moderation-summary" element={<ModerationSummaryPage />} />
     </Routes>
   );
 }

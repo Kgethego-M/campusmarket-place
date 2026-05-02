@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { auth, db } from "../firebase";
-import { onAuthStateChanged } from "firebase/auth";
-import { doc, getDoc, collection, getDocs, query, where } from "firebase/firestore";
+import { signOut, onAuthStateChanged } from "firebase/auth";
+import { doc, getDoc, collection, getDocs, query, where, orderBy, onSnapshot } from "firebase/firestore";
 import styles from "./AdminAnalytics.module.css";
 
 export default function AdminAnalytics() {
@@ -15,6 +15,7 @@ export default function AdminAnalytics() {
     const [adminName, setAdminName] = useState("Admin");
     const [dropdownOpen, setDropdownOpen] = useState(false);
     const [isLoggingOut, setIsLoggingOut] = useState(false);
+    const [unreadReports, setUnreadReports] = useState(0); // Add this state
 
     // ── Auth guard ────────────────────────────────────────────────
     useEffect(() => {
@@ -29,6 +30,17 @@ export default function AdminAnalytics() {
         });
         return () => unsub();
     }, [navigate]);
+
+    // ── Real-time reports listener for unread count ──
+    useEffect(() => {
+        const q = query(collection(db, "reports"), orderBy("createdAt", "desc"));
+        const unsub = onSnapshot(q, (snap) => {
+            const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+            const pending = data.filter(r => r.status === "pending").length;
+            setUnreadReports(pending);
+        });
+        return () => unsub();
+    }, []);
 
     // ── Load analytics data ───────────────────────────────────────
     useEffect(() => {
@@ -273,14 +285,18 @@ export default function AdminAnalytics() {
                     <span className={styles.navActive}>
                         <i className="fas fa-chart-bar" /> Analytics
                     </span>
-                    <span className={styles.navHandle}>@{adminName}</span>
+                    <button className={styles.navLink} onClick={() => navigate("/admin/reports")}>
+                        <i className="fas fa-flag" /> Reports
+                        {unreadReports > 0 && (
+                            <span className={styles.reportBadge}>{unreadReports}</span>
+                        )}
+                    </button>
+                    <button className={styles.navLink} onClick={() => navigate("/admin/moderation-summary")}>
+                        <i className="fas fa-chart-simple" /> Moderation Summary
+                    </button>
                 </div>
 
                 <div className={styles.navRight}>
-                    <button className={styles.bellBtn} title="Notifications">
-                        <i className="fas fa-bell" />
-                    </button>
-
                     <div className={styles.menuWrap} ref={dropdownRef}>
                         <button
                             className={styles.iconButton}
