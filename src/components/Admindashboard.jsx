@@ -1,10 +1,10 @@
-import { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { auth, db } from "../firebase";
 import { signOut, onAuthStateChanged } from "firebase/auth";
 import {
   doc, getDoc, collection, getDocs, query, orderBy,
-  updateDoc, where, deleteDoc, onSnapshot, writeBatch, setDoc,
+  updateDoc, deleteDoc, onSnapshot, writeBatch, setDoc,
 } from "firebase/firestore";
 import styles from "./Admindashboard.module.css";
 import ConfirmModal from "./ConfirmModal";
@@ -46,7 +46,6 @@ export default function AdminDashboard() {
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [userSearch, setUserSearch] = useState("");
   const [listingSearch, setListingSearch] = useState("");
-  const [reportSearch, setReportSearch] = useState("");
 
   // ── Data state ───────────────────────────────────────────────────────────
   const [adminUser, setAdminUser] = useState({ name: "Admin", email: "", photoURL: "", initials: "A" });
@@ -58,7 +57,7 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(true);
   const [unreadReports, setUnreadReports] = useState(0);
 
-  // ── Facility config state (settings tab) ─────────────────────────────────
+  // ── Facility config state ─────────────────────────────────────────────────
   const [facilityConfig, setFacilityConfig] = useState({
     openTime: "09:00",
     closeTime: "16:00",
@@ -80,7 +79,7 @@ export default function AdminDashboard() {
     setConfirm({ open: true, title, message, variant, onConfirm });
   const closeConfirm = () => setConfirm(c => ({ ...c, open: false }));
 
-  // ── Export (CSV/PDF) hooks – your modular export ─────────────────────────
+  // ── Export hooks ─────────────────────────────────────────────────────────
   const summaryHeaders = ["Metric", "Value"];
   const summaryRows = [
     { Metric: "Total Users", Value: stats.totalUsers },
@@ -88,11 +87,9 @@ export default function AdminDashboard() {
     { Metric: "Transactions", Value: stats.transactions },
     { Metric: "Revenue (Paid)", Value: `R ${stats.revenue.toLocaleString()}` },
   ];
-  const { exportToCSV: exportSummaryCSV, exportToPDF: exportSummaryPDF } = useExportReport(
-    "Admin_Summary", summaryHeaders, summaryRows
-  );
+  const { exportToCSV: exportSummaryCSV, exportToPDF: exportSummaryPDF } = useExportReport("Admin_Summary", summaryHeaders, summaryRows);
 
-  // Prepare data for ReportCard components (exportable datasets)
+  // Prepare data
   const filteredUsers = allUsers.filter(u =>
     `${u.firstName} ${u.lastName} ${u.email}`.toLowerCase().includes(userSearch.toLowerCase())
   );
@@ -129,30 +126,7 @@ export default function AdminDashboard() {
     }));
   const paymentsHeaders = ["Item", "Type", "Amount", "Status"];
 
-  const filteredReports = reports.filter(r =>
-    (r.reportedName || "").toLowerCase().includes(reportSearch.toLowerCase())
-  );
-  const reportsExportData = filteredReports.map(r => ({
-    Type: r.reportType || "",
-    ReportedItem: r.reportedName || r.reportedId,
-    Reason: r.reason || "",
-    Details: r.details || "",
-    ReportedBy: r.reporterName || "",
-    Status: r.status || "pending",
-    Resolution: r.resolution || "",
-    Date: r.createdAt?.toDate ? r.createdAt.toDate().toLocaleDateString() : "",
-  }));
-  const reportsHeaders = ["Type", "ReportedItem", "Reason", "Details", "ReportedBy", "Status", "Resolution", "Date"];
-
   const suspendedUsers = allUsers.filter(u => u.suspended);
-  const pendingReports = reports.filter(r => r.status === "pending");
-  const resolvedReports = reports.filter(r => r.status !== "pending");
-
-  const reportTypeIcon = (type) => {
-    if (type === "listing") return "🛍️";
-    if (type === "review") return "⭐";
-    return "👤";
-  };
 
   // ── Auth guard ───────────────────────────────────────────────────────────
   useEffect(() => {
@@ -175,7 +149,7 @@ export default function AdminDashboard() {
     return () => unsub();
   }, [navigate]);
 
-  // ── Fetch dashboard data (users, listings, stats) ─────────────────────────
+  // ── Fetch dashboard data ─────────────────────────────────────────────────
   useEffect(() => {
     async function load() {
       try {
@@ -219,7 +193,7 @@ export default function AdminDashboard() {
     return () => unsub();
   }, []);
 
-  // ── Load facility config when settings tab opens ─────────────────────────
+  // ── Load facility config ─────────────────────────────────────────────────
   useEffect(() => {
     if (activeTab !== "settings") return;
     (async () => {
@@ -271,7 +245,7 @@ export default function AdminDashboard() {
     }
   }
 
-  // ── Actions (staff approval, suspend, remove listing, resolve reports) ───
+  // ── Actions ──────────────────────────────────────────────────────────────
   const approveStaff = async (userId) => {
     await updateDoc(doc(db, "users", userId), { approved: true });
     setPendingStaff(prev => prev.filter(u => u.id !== userId));
@@ -332,66 +306,6 @@ export default function AdminDashboard() {
     });
   };
 
-  const handleResolveReport = async (report, action) => {
-    const doResolve = async () => {
-      closeConfirm();
-      try {
-        const batch = writeBatch(db);
-        batch.update(doc(db, "reports", report.id), {
-          status: "resolved",
-          resolution: action,
-          resolvedAt: new Date(),
-        });
-        if (action === "suspend_user") {
-          batch.update(doc(db, "users", report.reportedId), { suspended: true });
-          setAllUsers(prev => prev.map(u => u.id === report.reportedId ? { ...u, suspended: true } : u));
-        }
-        if (action === "remove_listing") {
-          batch.delete(doc(db, "listings", report.reportedId));
-          setListings(prev => prev.filter(x => x.id !== report.reportedId));
-        }
-        if (action === "remove_review") {
-          batch.delete(doc(db, "reviews", report.reportedId));
-        }
-        await batch.commit();
-        showToast(action === "dismiss" ? "Report dismissed." : "Report resolved & action taken.");
-      } catch (err) {
-        console.error(err);
-        showToast("Failed to resolve report.", "error");
-      }
-    };
-
-    if (action === "dismiss") {
-      openConfirm({
-        title: "Dismiss Report",
-        message: "Mark this report as dismissed? No action will be taken against the reported content.",
-        variant: "info",
-        onConfirm: doResolve,
-      });
-    } else if (action === "suspend_user") {
-      openConfirm({
-        title: "Suspend Reported User",
-        message: `Suspend "${report.reportedName}"? This will block their access to the platform.`,
-        variant: "warning",
-        onConfirm: doResolve,
-      });
-    } else if (action === "remove_listing") {
-      openConfirm({
-        title: "Remove Reported Listing",
-        message: `Permanently remove the listing "${report.reportedName}"?`,
-        variant: "danger",
-        onConfirm: doResolve,
-      });
-    } else if (action === "remove_review") {
-      openConfirm({
-        title: "Remove Reported Review",
-        message: "Permanently delete this review? This cannot be undone.",
-        variant: "danger",
-        onConfirm: doResolve,
-      });
-    }
-  };
-
   const handleLogout = async () => {
     setIsLoggingOut(true);
     setTimeout(async () => {
@@ -449,13 +363,17 @@ export default function AdminDashboard() {
           <button className={styles.navAnalyticsLink} onClick={() => navigate("/admin/analytics")}>
             <i className="fas fa-chart-bar" /> Analytics
           </button>
-          <span className={styles.navHandle}>@{adminUser.name.split(" ")[0] || "Admin"}</span>
+          <button className={styles.navAnalyticsLink} onClick={() => navigate("/admin/reports")}>
+            <i className="fas fa-flag" /> Reports
+            {unreadReports > 0 && (
+              <span className={styles.reportBadge}>{unreadReports}</span>
+            )}
+          </button>
+          <button className={styles.navAnalyticsLink} onClick={() => navigate("/admin/moderation-summary")}>
+            <i className="fas fa-chart-simple" /> Moderation Summary
+          </button>
         </div>
         <div className={styles.navRight}>
-          <button className={styles.bellBtn} title="Pending reports" onClick={() => setActiveTab("reports")}>
-            <i className="fas fa-flag" />
-            {unreadReports > 0 && <span className={styles.bellBadge}>{unreadReports}</span>}
-          </button>
           <div className={styles.menuWrap} ref={dropdownRef}>
             <button className={styles.iconButton} onClick={() => !isLoggingOut && setDropdownOpen(v => !v)} title={adminUser.name}>
               <i className="fa-solid fa-bars" />
@@ -513,13 +431,12 @@ export default function AdminDashboard() {
           ))}
         </div>
 
-        {/* Tabs */}
+        {/* Tabs - Only Dashboard tabs, Reports and Moderation Summary are separate pages */}
         <div className={styles.tabs}>
           {[
             { id: "users", icon: "fas fa-users", label: "Users" },
             { id: "suspended", icon: "fas fa-ban", label: "Suspended" },
             { id: "moderation", icon: "fas fa-shield-alt", label: "Moderation" },
-            { id: "reports", icon: "fas fa-flag", label: "Reports", badge: unreadReports > 0 ? unreadReports : null },
             { id: "payments", icon: "fas fa-credit-card", label: "Payments" },
             { id: "utilisation", icon: "fas fa-calendar-alt", label: "Utilisation Reports" },
             { id: "settings", icon: "fas fa-cog", label: "Settings" },
@@ -528,18 +445,8 @@ export default function AdminDashboard() {
               key={t.id}
               className={`${styles.tab} ${activeTab === t.id ? styles.tabActive : ""}`}
               onClick={() => setActiveTab(t.id)}
-              style={{ position: "relative" }}
             >
               <i className={t.icon} /> {t.label}
-              {t.badge && (
-                <span style={{
-                  position: "absolute", top: 4, right: 4,
-                  background: "#dc2626", color: "#fff",
-                  borderRadius: "50%", width: 17, height: 17,
-                  fontSize: "0.65rem", fontWeight: 700,
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                }}>{t.badge}</span>
-              )}
             </button>
           ))}
         </div>
@@ -645,7 +552,7 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* ── MODERATION TAB ── */}
+        {/* ── MODERATION TAB (Listings) ── */}
         {activeTab === "moderation" && (
           <div className={styles.tabContent}>
             <ReportCard title="Listing Moderation" headers={listingsHeaders} data={listingsExportData}>
@@ -659,131 +566,26 @@ export default function AdminDashboard() {
                 <p className={styles.emptyNote}>{listingSearch ? "No listings match your search." : "No listings to moderate."}</p>
               ) : (
                 <div className={styles.modList}>
-                  {filteredListings.map(l => (
-                    <div key={l.id} className={styles.modRow}>
-                      <div className={styles.modThumb}>
-                        {(l.imageUrl || l.photos?.[0]) ? <img src={l.imageUrl || l.photos[0]} alt="" /> : <i className="fas fa-image" />}
-                      </div>
-                      <div className={styles.modInfo}>
-                        <span className={styles.modTitle}>{l.title}</span>
-                        <span className={styles.modMeta}>{l.category} · R {Number(l.price || 0).toLocaleString()}</span>
-                      </div>
-                      <span className={`${styles.modStatus} ${styles[l.status || "active"]}`}>{l.status || "active"}</span>
-                      <button className={styles.btnReject} onClick={() => handleRemoveListing(l)} disabled={l.status === "removed"}>Remove</button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </ReportCard>
-          </div>
-        )}
-
-        {/* ── REPORTS TAB ── */}
-        {activeTab === "reports" && (
-          <div className={styles.tabContent}>
-            <ReportCard title="Reports" headers={reportsHeaders} data={reportsExportData}>
-              <div className={styles.cardHeader}>
-                <div className={styles.searchWrap}>
-                  <i className="fas fa-search" />
-                  <input className={styles.searchInput} type="text" placeholder="Search reported names…" value={reportSearch} onChange={e => setReportSearch(e.target.value)} />
-                </div>
-              </div>
-
-              <h3 className={styles.cardTitle} style={{ marginTop: 12 }}>
-                Pending Reports
-                {pendingReports.length > 0 && (
-                  <span style={{ marginLeft: 10, background: "#dc2626", color: "#fff", borderRadius: 20, padding: "2px 10px", fontSize: "0.72rem", fontWeight: 700 }}>
-                    {pendingReports.length}
-                  </span>
-                )}
-              </h3>
-
-              {pendingReports.length === 0 ? (
-                <div className={styles.emptyNote} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, padding: "32px 0" }}>
-                  <i className="fas fa-check-circle" style={{ fontSize: "2rem", color: "#16a34a" }} />
-                  <p>No pending reports — all clear!</p>
-                </div>
-              ) : (
-                <div className={styles.modList}>
-                  {filteredReports.filter(r => r.status === "pending").map(r => (
-                    <div key={r.id} className={styles.modRow} style={{ alignItems: "flex-start", gap: 14 }}>
-                      <div style={{ fontSize: "1.4rem", flexShrink: 0, width: 36, textAlign: "center" }}>{reportTypeIcon(r.reportType)}</div>
-                      <div className={styles.modInfo} style={{ flex: 1 }}>
-                        {/* Title + type pill */}
-                        <span className={styles.modTitle}>
-                          {r.reportedName || r.reportedId}
-                          <span style={{ marginLeft: 8, fontSize: "0.68rem", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", background: "#eff6ff", color: "#2563eb", padding: "2px 8px", borderRadius: 20 }}>
-                            {r.reportType}
-                          </span>
-                        </span>
-                        {/* Reason — highlighted in red */}
-                        <span style={{ display: "flex", alignItems: "center", gap: 5, fontSize: "0.8rem", color: "#dc2626", fontWeight: 600, marginTop: 2 }}>
-                          <i className="fas fa-flag" style={{ fontSize: "0.7rem" }} />
-                          {r.reason}
-                        </span>
-                        {/* For review reports: show the actual review comment */}
-                        {r.reportType === "review" && r.reviewComment && (
-                          <div style={{ margin: "6px 0", padding: "8px 12px", background: "#fef9f0", border: "1px solid #fed7aa", borderLeft: "3px solid #f97316", borderRadius: 8 }}>
-                            <p style={{ margin: "0 0 3px", fontSize: "0.7rem", fontWeight: 700, color: "#c2410c", textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                              Reported review content
-                            </p>
-                            <p style={{ margin: 0, fontSize: "0.82rem", color: "#374151", fontStyle: "italic", lineHeight: 1.5 }}>
-                              "{r.reviewComment}"
-                            </p>
-                            {r.reviewRating && (
-                              <p style={{ margin: "4px 0 0", fontSize: "0.75rem", color: "#f59e0b" }}>
-                                {"★".repeat(r.reviewRating)}{"☆".repeat(5 - r.reviewRating)} ({r.reviewRating}/5)
-                              </p>
-                            )}
-                          </div>
-                        )}
-                        {/* Additional details from reporter */}
-                        {r.details && (
-                          <span style={{ fontSize: "0.78rem", color: "#64748b", fontStyle: "italic" }}>
-                            Reporter notes: "{r.details}"
-                          </span>
-                        )}
-                        {/* Meta */}
-                        <span style={{ fontSize: "0.73rem", color: "#94a3b8", marginTop: 2 }}>
-                          Reported by {r.reporterName} ·{" "}
-                          {r.createdAt?.toDate ? r.createdAt.toDate().toLocaleDateString("en-ZA", { day: "numeric", month: "short" }) : "Recently"}
-                        </span>
-                      </div>
-                      <div style={{ display: "flex", flexDirection: "column", gap: 6, flexShrink: 0 }}>
-                        <button className={styles.btnApprove} onClick={() => handleResolveReport(r, "dismiss")}>Dismiss</button>
-                        {r.reportType === "user" && (
-                          <button className={styles.btnSuspend} onClick={() => handleResolveReport(r, "suspend_user")}>Suspend User</button>
-                        )}
-                        {r.reportType === "listing" && (
-                          <button className={styles.btnReject} onClick={() => handleResolveReport(r, "remove_listing")}>Remove Listing</button>
-                        )}
-                        {r.reportType === "review" && (
-                          <button className={styles.btnReject} onClick={() => handleResolveReport(r, "remove_review")}>Delete Review</button>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {resolvedReports.length > 0 && (
-                <>
-                  <h3 className={styles.cardTitle} style={{ marginTop: 24 }}>Resolved Reports</h3>
-                  <div className={styles.modList}>
-                    {filteredReports.filter(r => r.status !== "pending").map(r => (
-                      <div key={r.id} className={styles.modRow} style={{ opacity: 0.6 }}>
-                        <div style={{ fontSize: "1.2rem", flexShrink: 0 }}>{reportTypeIcon(r.reportType)}</div>
-                        <div className={styles.modInfo}>
-                          <span className={styles.modTitle}>{r.reportedName || r.reportedId}</span>
-                          <span className={styles.modMeta}>{r.reason}</span>
+                  {filteredListings.map(l => {
+                    const img = l.imageUrl || l.photos?.[0] || null;
+                    return (
+                      <div key={l.id} className={styles.modRow}>
+                        <div className={styles.modThumb}>
+                          {img
+                            ? <img src={img} alt={l.title || "listing"} style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: 8 }} />
+                            : <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", background: "#f1f5f9", borderRadius: 8, color: "#94a3b8" }}><i className="fas fa-image" style={{ fontSize: "1.4rem" }} /></div>
+                          }
                         </div>
-                        <span style={{ fontSize: "0.75rem", fontWeight: 700, color: "#16a34a", background: "#f0fdf4", padding: "4px 10px", borderRadius: 20 }}>
-                          ✓ {r.resolution || "resolved"}
-                        </span>
+                        <div className={styles.modInfo}>
+                          <span className={styles.modTitle}>{l.title}</span>
+                          <span className={styles.modMeta}>{l.category} · R {Number(l.price || 0).toLocaleString()}</span>
+                        </div>
+                        <span className={`${styles.modStatus} ${styles[l.status || "active"]}`}>{l.status || "active"}</span>
+                        <button className={styles.btnReject} onClick={() => handleRemoveListing(l)} disabled={l.status === "removed"}>Remove</button>
                       </div>
-                    ))}
-                  </div>
-                </>
+                    );
+                  })}
+                </div>
               )}
             </ReportCard>
           </div>
@@ -796,39 +598,18 @@ export default function AdminDashboard() {
               {listings.filter(l => l.status === "sold" || l.status === "traded").length === 0 ? (
                 <p className={styles.emptyNote}>No completed transactions yet.</p>
               ) : (
-                <div className={styles.modList}>
-                  {listings.filter(l => l.status === "sold" || l.status === "traded").map(l => {
-                    const img = l.imageUrl || l.photos?.[0] || null;
-                    return (
-                      <div key={l.id} className={styles.modRow} style={{ alignItems: "center", gap: 14 }}>
-                        {/* Item image */}
-                        <div className={styles.modThumb}>
-                          {img
-                            ? <img src={img} alt={l.title} style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: 8 }} />
-                            : <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", background: "#f1f5f9", borderRadius: 8, color: "#94a3b8" }}>
-                                <i className="fas fa-image" style={{ fontSize: "1.4rem" }} />
-                              </div>
-                          }
-                        </div>
-                        {/* Item info */}
-                        <div className={styles.modInfo} style={{ flex: 1 }}>
-                          <span className={styles.modTitle}>{l.title}</span>
-                          <span className={styles.modMeta}>
-                            {l.category && <>{l.category} · </>}
-                            {l.listingType || "—"}
-                          </span>
-                        </div>
-                        {/* Amount */}
-                        <span style={{ fontWeight: 700, color: "#16a34a", fontSize: "0.95rem", flexShrink: 0 }}>
-                          R {Number(l.price || 0).toLocaleString()}
-                        </span>
-                        {/* Status badge */}
-                        <span className={`${styles.modStatus} ${styles[l.status]}`} style={{ flexShrink: 0 }}>
-                          {l.status}
-                        </span>
-                      </div>
-                    );
-                  })}
+                <div className={styles.payTable}>
+                  <div className={styles.payHeader}>
+                    <span>Item</span><span>Type</span><span>Amount</span><span>Status</span>
+                  </div>
+                  {listings.filter(l => l.status === "sold" || l.status === "traded").map(l => (
+                    <div key={l.id} className={styles.payRow}>
+                      <span className={styles.payTitle}>{l.title}</span>
+                      <span className={styles.payType}>{l.listingType || "—"}</span>
+                      <span className={styles.payAmount}>R {Number(l.price || 0).toLocaleString()}</span>
+                      <span className={`${styles.payStatus} ${styles[l.status]}`}>{l.status}</span>
+                    </div>
+                  ))}
                 </div>
               )}
             </ReportCard>

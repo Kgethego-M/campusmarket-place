@@ -27,6 +27,8 @@ import ReviewForm from './components/ReviewForm.jsx';
 import Notificationspage from './components/Notificationspage.jsx';
 import MyPurchases from './components/MyPurchases.jsx';
 import Payment from './components/Payment.jsx';
+import ReportsPage from "./components/ReportsPage";
+import ModerationSummaryPage from "./components/ModerationSummaryPage";
 
 import CreateListingAzure from './components/CreateListingAzure';
 //import EditListingAzure from './pages/EditListingAzure';
@@ -213,7 +215,9 @@ export function AppRoutes() {
       <Route path="/my-purchases" element={<ProtectedRoute allowedRoles={['student']}><MyPurchases /></ProtectedRoute>} />
 
       {/* Sprint 3 Routes */}
-      <Route path="/admin/analytics" element={<AdminAnalytics />} />
+      <Route path="/admin/analytics" element={<ProtectedRoute allowedRoles={['admin']}><AdminAnalytics /></ProtectedRoute>} />
+      <Route path="/admin/reports" element={<ProtectedRoute allowedRoles={['admin']}><ReportsPage /></ProtectedRoute>} />
+      <Route path="/admin/moderation-summary" element={<ProtectedRoute allowedRoles={['admin']}><ModerationSummaryPage /></ProtectedRoute>} />
     </Routes>
   );
 }
