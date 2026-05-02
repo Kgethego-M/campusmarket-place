@@ -215,9 +215,9 @@ export function AppRoutes() {
       <Route path="/my-purchases" element={<ProtectedRoute allowedRoles={['student']}><MyPurchases /></ProtectedRoute>} />
 
       {/* Sprint 3 Routes */}
-      <Route path="/admin/analytics" element={<AdminAnalytics />} />
-      <Route path="/admin/reports" element={<ReportsPage />} />
-      <Route path="/admin/moderation-summary" element={<ModerationSummaryPage />} />
+      <Route path="/admin/analytics" element={<ProtectedRoute allowedRoles={['admin']}><AdminAnalytics /></ProtectedRoute>} />
+      <Route path="/admin/reports" element={<ProtectedRoute allowedRoles={['admin']}><ReportsPage /></ProtectedRoute>} />
+      <Route path="/admin/moderation-summary" element={<ProtectedRoute allowedRoles={['admin']}><ModerationSummaryPage /></ProtectedRoute>} />
     </Routes>
   );
 }
