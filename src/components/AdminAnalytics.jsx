@@ -16,6 +16,13 @@ export default function AdminAnalytics() {
     const [dropdownOpen, setDropdownOpen] = useState(false);
     const [isLoggingOut, setIsLoggingOut] = useState(false);
 
+    // ── US19: Date range filter state ─────────────────────────────
+    const [dateFrom, setDateFrom] = useState("");
+    const [dateTo, setDateTo]     = useState("");
+    const [filteredCategoryData, setFilteredCategoryData] = useState(null);
+    // Raw completed transactions with category + date, used for filtering
+    const [completedTxnRaw, setCompletedTxnRaw] = useState([]);
+
     // ── Auth guard ────────────────────────────────────────────────
     useEffect(() => {
         const unsub = onAuthStateChanged(auth, async (user) => {
@@ -44,11 +51,12 @@ export default function AdminAnalytics() {
                     getDocs(collection(db, "reviews")),
                 ]);
 
-                const users = usersSnap.docs.map(d => d.data());
-                const lists = listSnap.docs.map(d => d.data());
+                const users    = usersSnap.docs.map(d => d.data());
+                const lists    = listSnap.docs.map(d => d.data());
+                const listMap  = Object.fromEntries(listSnap.docs.map(d => [d.id, d.data()]));
                 const bookings = bookingsSnap.docs.map(d => d.data());
-                const txns = txnSnap.docs.map(d => d.data());
-                const reviews = reviewsSnap.docs.map(d => d.data());
+                const txns     = txnSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+                const reviews  = reviewsSnap.docs.map(d => d.data());
 
                 const userTypes = users.reduce((acc, u) => {
                     const t = u.userType || "student";
@@ -94,19 +102,15 @@ export default function AdminAnalytics() {
 
                 const soldListings = lists.filter(l => l.status === "sold");
 
-                // ── Moderation summary data ──
-                const abusiveReviews = reviews.filter(r => r.flagged || r.abusive === true).length;
+                const abusiveReviews     = reviews.filter(r => r.flagged || r.abusive === true).length;
                 const suspiciousListings = lists.filter(l => l.flagged || l.reported === true).length;
-                const reportedUsers = users.filter(u => u.reported || u.flagged === true).length;
+                const reportedUsers      = users.filter(u => u.reported || u.flagged === true).length;
 
-                // ── Average utilisation (from bookings) ──
                 let avgUtilisation = 0;
                 try {
                     const configSnap = await getDoc(doc(db, "facilityConfig", "default"));
                     const config = configSnap.exists() ? configSnap.data() : { slotsPerHour: 1 };
                     const slotsPerHour = config.slotsPerHour || 1;
-
-                    // Group bookings by date to calculate daily utilisation
                     const bookingsByDate = {};
                     bookings.forEach(b => {
                         if (b.date && b.timeSlot) {
@@ -114,21 +118,47 @@ export default function AdminAnalytics() {
                             bookingsByDate[b.date].push(b.timeSlot);
                         }
                     });
-
-                    // Get unique dates with bookings
                     const datesWithBookings = Object.keys(bookingsByDate);
                     if (datesWithBookings.length > 0) {
                         let totalUtilisation = 0;
                         for (const date of datesWithBookings) {
                             const uniqueSlots = new Set(bookingsByDate[date]);
-                            const dailyUtilisation = (uniqueSlots.size / slotsPerHour) * 100;
-                            totalUtilisation += Math.min(dailyUtilisation, 100);
+                            totalUtilisation += Math.min((uniqueSlots.size / slotsPerHour) * 100, 100);
                         }
                         avgUtilisation = Math.round(totalUtilisation / datesWithBookings.length);
                     }
                 } catch (e) {
                     console.error("Error calculating utilisation:", e);
                 }
+
+                // ── US19: Build completed transactions by category ──────────
+                // A transaction is "completed" when status === "completed"
+                // We look up the listing's category via listingId
+                const completedTxns = txns.filter(t => t.status === "completed");
+
+                const completedByCategory = {};
+                const rawForFilter = [];
+
+                for (const t of completedTxns) {
+                    // Get category from embedded listingTitle/category field or look up listing
+                    const listing = t.listingId ? listMap[t.listingId] : null;
+                    const category = listing?.category || t.category || "Uncategorised";
+
+                    // Get the completion date
+                    const dateRaw = t.updatedAt || t.createdAt;
+                    const dateObj = dateRaw?.toDate ? dateRaw.toDate() : (dateRaw ? new Date(dateRaw) : null);
+
+                    completedByCategory[category] = (completedByCategory[category] || 0) + 1;
+
+                    rawForFilter.push({
+                        category,
+                        date: dateObj,
+                        price: Number(t.agreedPrice || t.price || 0),
+                    });
+                }
+
+                setCompletedTxnRaw(rawForFilter);
+                setFilteredCategoryData(completedByCategory);
 
                 setData({
                     userTypes,
@@ -137,14 +167,15 @@ export default function AdminAnalytics() {
                     revenueByMonth,
                     bookingsByDay,
                     txnByStatus,
-                    totalListings: lists.length,
-                    totalBookings: bookings.length,
-                    totalTxns: txns.length,
-                    totalRevenue: soldListings.reduce((s, l) => s + (Number(l.price) || 0), 0),
+                    totalListings:    lists.length,
+                    totalBookings:    bookings.length,
+                    totalTxns:        txns.length,
+                    totalRevenue:     soldListings.reduce((s, l) => s + (Number(l.price) || 0), 0),
                     abusiveReviews,
                     suspiciousListings,
                     reportedUsers,
                     avgUtilisation,
+                    completedByCategory,
                 });
             } catch (e) {
                 console.error(e);
@@ -155,12 +186,33 @@ export default function AdminAnalytics() {
         })();
     }, []);
 
-    // ── Horizontal Bar Chart (left to right) ──
+    // ── US19: Re-filter completed-by-category when dates change ──
+    useEffect(() => {
+        if (!completedTxnRaw.length) return;
+
+        const from = dateFrom ? new Date(dateFrom + "T00:00:00") : null;
+        const to   = dateTo   ? new Date(dateTo   + "T23:59:59") : null;
+
+        const filtered = completedTxnRaw.filter(t => {
+            if (!t.date) return !from && !to; // include dateless only when no filter set
+            if (from && t.date < from) return false;
+            if (to   && t.date > to)   return false;
+            return true;
+        });
+
+        const byCategory = {};
+        filtered.forEach(t => {
+            byCategory[t.category] = (byCategory[t.category] || 0) + 1;
+        });
+
+        setFilteredCategoryData(byCategory);
+    }, [dateFrom, dateTo, completedTxnRaw]);
+
+    // ── Horizontal Bar Chart ──────────────────────────────────────
     function HorizontalBarChart({ data: chartData, colors = ["#6AA6DA", "#34d399", "#f59e0b", "#a78bfa", "#f87171"] }) {
         const entries = Object.entries(chartData).sort((a, b) => b[1] - a[1]);
-        if (!entries.length) return <p className={styles.emptyNote}>No data yet.</p>;
+        if (!entries.length) return <p className={styles.emptyNote}>No completed transactions for this period.</p>;
         const max = Math.max(...entries.map(([, v]) => v), 1);
-        const palette = colors;
 
         return (
             <div className={styles.horizontalChart}>
@@ -172,14 +224,12 @@ export default function AdminAnalytics() {
                                 className={styles.horizBarFill}
                                 style={{
                                     width: `${(value / max) * 100}%`,
-                                    backgroundColor: palette[idx % palette.length]
+                                    backgroundColor: colors[idx % colors.length],
                                 }}
                             />
                         </div>
                         <span className={styles.horizValue}>{value}</span>
-                        <span className={styles.horizPct}>
-                            {Math.round((value / max) * 100)}%
-                        </span>
+                        <span className={styles.horizPct}>{Math.round((value / max) * 100)}%</span>
                     </div>
                 ))}
             </div>
@@ -280,7 +330,6 @@ export default function AdminAnalytics() {
                     <button className={styles.bellBtn} title="Notifications">
                         <i className="fas fa-bell" />
                     </button>
-
                     <div className={styles.menuWrap} ref={dropdownRef}>
                         <button
                             className={styles.iconButton}
@@ -289,7 +338,6 @@ export default function AdminAnalytics() {
                         >
                             <i className="fa-solid fa-bars" />
                         </button>
-
                         {dropdownOpen && !isLoggingOut && (
                             <div className={styles.dropdown}>
                                 <div className={styles.ddHeader}>
@@ -317,7 +365,6 @@ export default function AdminAnalytics() {
         );
     }
 
-    // ── Loading ───────────────────────────────────────────────────
     if (loading) return (
         <div className={styles.shell}>
             {renderNav()}
@@ -330,7 +377,6 @@ export default function AdminAnalytics() {
         </div>
     );
 
-    // ── Error ─────────────────────────────────────────────────────
     if (error) return (
         <div className={styles.shell}>
             {renderNav()}
@@ -339,6 +385,13 @@ export default function AdminAnalytics() {
             </main>
         </div>
     );
+
+    // ── US19: total completed txns in current filter ──────────────
+    const filteredTotal = filteredCategoryData
+        ? Object.values(filteredCategoryData).reduce((s, v) => s + v, 0)
+        : 0;
+
+    const isFiltered = dateFrom || dateTo;
 
     return (
         <div className={styles.shell}>
@@ -353,11 +406,11 @@ export default function AdminAnalytics() {
                 {/* ── Summary stat cards ── */}
                 <div className={styles.statsRow}>
                     {[
-                        { label: "Total Listings", value: data.totalListings, icon: "fas fa-tag", color: "#6AA6DA" },
-                        { label: "Total Bookings", value: data.totalBookings, icon: "fas fa-calendar-check", color: "#34d399" },
-                        { label: "Total Transactions", value: data.totalTxns, icon: "fas fa-exchange-alt", color: "#f59e0b" },
-                        { label: "Total Revenue", value: `R ${data.totalRevenue.toLocaleString()}`, icon: "fas fa-wallet", color: "#a78bfa" },
-                        { label: "Avg Utilisation", value: `${data.avgUtilisation || 0}%`, icon: "fas fa-chart-line", color: "#f97316" },
+                        { label: "Total Listings",      value: data.totalListings,                  icon: "fas fa-tag",           color: "#6AA6DA" },
+                        { label: "Total Bookings",       value: data.totalBookings,                  icon: "fas fa-calendar-check", color: "#34d399" },
+                        { label: "Total Transactions",   value: data.totalTxns,                      icon: "fas fa-exchange-alt",   color: "#f59e0b" },
+                        { label: "Total Revenue",        value: `R ${data.totalRevenue.toLocaleString()}`, icon: "fas fa-wallet",   color: "#a78bfa" },
+                        { label: "Avg Utilisation",      value: `${data.avgUtilisation || 0}%`,      icon: "fas fa-chart-line",     color: "#f97316" },
                     ].map(({ label, value, icon, color }) => (
                         <div key={label} className={styles.statCard} style={{ borderTop: `3px solid ${color}` }}>
                             <i className={icon} style={{ color, fontSize: "1.4rem", marginBottom: 8 }} />
@@ -388,7 +441,7 @@ export default function AdminAnalytics() {
                     </div>
                 </div>
 
-                {/* ── Moderation Summary Row ── */}
+                {/* ── Moderation Summary ── */}
                 <div className={styles.moderationRow}>
                     <div className={styles.card}>
                         <h3 className={styles.cardTitle}>
@@ -424,13 +477,66 @@ export default function AdminAnalytics() {
                     <BarChart data={data.bookingsByDay} color="#6AA6DA" height={160} />
                 </div>
 
-                {/* ── Popular Categories (Horizontal) ── */}
+                {/* ── US19: Popular Categories by COMPLETED TRANSACTIONS + date filter ── */}
                 <div className={styles.card}>
-                    <h3 className={styles.cardTitle}>
-                        <i className="fas fa-layer-group" style={{ marginRight: 8, color: "#a78bfa" }} />
-                        Popular Categories
-                    </h3>
-                    <HorizontalBarChart data={data.byCategory} />
+                    <div className={styles.cardTitleRow}>
+                        <h3 className={styles.cardTitle}>
+                            <i className="fas fa-layer-group" style={{ marginRight: 8, color: "#a78bfa" }} />
+                            Popular Categories
+                            <span className={styles.cardSubtitle}> — completed transactions</span>
+                        </h3>
+
+                        {/* Date range filter */}
+                        <div className={styles.dateFilterRow}>
+                            <div className={styles.dateFilterGroup}>
+                                <label className={styles.dateFilterLabel}>From</label>
+                                <input
+                                    type="date"
+                                    className={styles.dateInput}
+                                    value={dateFrom}
+                                    onChange={e => setDateFrom(e.target.value)}
+                                />
+                            </div>
+                            <div className={styles.dateFilterGroup}>
+                                <label className={styles.dateFilterLabel}>To</label>
+                                <input
+                                    type="date"
+                                    className={styles.dateInput}
+                                    value={dateTo}
+                                    onChange={e => setDateTo(e.target.value)}
+                                />
+                            </div>
+                            {isFiltered && (
+                                <button
+                                    className={styles.clearDateBtn}
+                                    onClick={() => { setDateFrom(""); setDateTo(""); }}
+                                    title="Clear date filter"
+                                >
+                                    <i className="fas fa-times" /> Clear
+                                </button>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Filter summary pill */}
+                    {isFiltered && (
+                        <div className={styles.filterSummary}>
+                            <i className="fas fa-filter" />
+                            Showing <strong>{filteredTotal}</strong> completed transaction{filteredTotal !== 1 ? "s" : ""}
+                            {dateFrom && <> from <strong>{dateFrom}</strong></>}
+                            {dateTo   && <> to <strong>{dateTo}</strong></>}
+                        </div>
+                    )}
+
+                    {filteredCategoryData && Object.keys(filteredCategoryData).length > 0 ? (
+                        <HorizontalBarChart data={filteredCategoryData} />
+                    ) : (
+                        <p className={styles.emptyNote}>
+                            {isFiltered
+                                ? "No completed transactions found for this date range."
+                                : "No completed transactions yet."}
+                        </p>
+                    )}
                 </div>
 
                 {/* ── Revenue by month ── */}
@@ -469,7 +575,6 @@ export default function AdminAnalytics() {
 
             </main>
 
-            {/* ── Logout overlay ── */}
             {isLoggingOut && (
                 <div className={styles.logoutOverlay}>
                     <div className={styles.logoutBox}>
