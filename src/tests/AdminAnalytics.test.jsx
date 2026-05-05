@@ -402,7 +402,6 @@ describe("AdminAnalytics – data aggregation", () => {
         expect(screen.getByText("pending")).toBeInTheDocument();
         expect(screen.getByText("unknown")).toBeInTheDocument();
     });
-});
 
 describe("AdminAnalytics – navigation & dropdown", () => {
     it("displays the admin's firstName in the nav", async () => {
