@@ -694,7 +694,7 @@ describe("Navbar - Additional Coverage Tests", () => {
     await renderNav();
     fireEvent.click(screen.getByTitle("Notifications"));
     await waitFor(() => {
-      expect(screen.getByText(/your listing/)).toBeInTheDocument();
+      expect(screen.getByText(/your item/)).toBeInTheDocument();
     });
   });
 
