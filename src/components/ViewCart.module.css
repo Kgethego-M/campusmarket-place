@@ -115,7 +115,7 @@
   gap: 14px;
 }
 
-/* ── Card — matches ProfileListingCard exactly ── */
+/* ── Card ── */
 .card {
   background: #fff;
   border-radius: 12px;
@@ -168,7 +168,7 @@
   background-color: #eaecef;
 }
 
-/* ── Badges (same positions as ProfileListingCard) ── */
+/* ── Badges ── */
 .conditionBadge {
   position: absolute;
   top: 8px;
@@ -222,7 +222,7 @@
   margin: 0;
 }
 
-/* ── Action row — blue view + purple remove (matches ProfileListingCard) ── */
+/* ── Action row ── */
 .actionRow {
   display: flex;
   align-items: center;
@@ -328,7 +328,7 @@
 
 .browseBtn:hover { background: #5a96ca; }
 
-/* ── Skeleton — MyPurchases style pulse ── */
+/* ── Skeleton ── */
 .skeletonCard {
   background: white;
   border-radius: 12px;
@@ -399,11 +399,22 @@
 }
 
 /* ── Responsive ── */
+@media (max-width: 768px) {
+  .page { padding: 1.5rem 0.875rem 74px; }
+  .grid { grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .pageTitle { font-size: 1.3rem; }
+}
+
 @media (max-width: 600px) {
+  .page { padding: 1.25rem 0.75rem 74px; }
   .grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
   .pageTitle { font-size: 1.2rem; }
+  .headerLeft { gap: 0.6rem; }
 }
 
 @media (max-width: 400px) {
-  .grid { grid-template-columns: 1fr; }
+  .page { padding: 1rem 0.6rem 74px; }
+  .grid { grid-template-columns: repeat(2, 1fr); gap: 8px; }
+  .pageTitle { font-size: 1.1rem; }
+  .backBtn { padding: 0.3rem 0.5rem; font-size: 0.8rem; }
 }

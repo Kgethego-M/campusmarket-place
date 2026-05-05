@@ -73,7 +73,6 @@
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.07);
   position: relative;
   z-index: 1;
-  /* Subtle inner top highlight */
   background: linear-gradient(160deg, #ffffff 0%, #f8fafc 100%);
 }
 
@@ -414,7 +413,6 @@
   transform: translateY(-1px);
 }
 
-/* Staggered entrance */
 .txCardAnimate {
   animation: cardIn 0.35s ease both;
 }
@@ -558,9 +556,7 @@
   border-radius: 14px;
 }
 
-/* ─────────────────────────────────────────────────────────────
-   DRAWER
-─────────────────────────────────────────────────────────────── */
+/* ── Drawer ──────────────────────────────────────────────────── */
 .drawerOverlay {
   position: fixed;
   inset: 0;
@@ -589,7 +585,6 @@
   display: flex;
   flex-direction: column;
   box-shadow: 0 24px 64px rgba(0,0,0,0.18), 0 0 0 1px rgba(0,0,0,0.04);
-  /* Start hidden — slides up */
   opacity: 0;
   transform: translateY(28px) scale(0.97);
   transition: opacity 0.28s cubic-bezier(0.34,1.56,0.64,1), transform 0.28s cubic-bezier(0.34,1.56,0.64,1);
@@ -609,7 +604,6 @@
   padding: 20px 24px 16px;
   border-bottom: 1px solid #eef0f3;
   flex-shrink: 0;
-  /* Subtle gradient header */
   background: linear-gradient(160deg, #f8fafc 0%, #ffffff 100%);
   border-radius: 22px 22px 0 0;
 }
@@ -646,7 +640,6 @@
   flex: 1;
   overflow-y: auto;
   padding: 20px 24px 24px;
-  /* Custom scrollbar */
   scrollbar-width: thin;
   scrollbar-color: #dde3ea transparent;
 }
@@ -655,51 +648,19 @@
 .drawerBody::-webkit-scrollbar-thumb { background: #dde3ea; border-radius: 99px; }
 .drawerBody::-webkit-scrollbar-track { background: transparent; }
 
-/* Review list inside drawer */
 .drawerReviewList {
   display: flex;
   flex-direction: column;
   gap: 10px;
 }
 
-/* Listings grid inside drawer */
 .drawerListingsGrid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
   gap: 12px;
 }
 
-/* ── Responsive ──────────────────────────────────────────────── */
-@media (max-width: 600px) {
-  .page { padding: 16px 14px 48px; }
-
-  .profileCard {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 16px;
-  }
-
-  .distHeader { flex-direction: column; gap: 16px; align-items: flex-start; }
-
-  .listingsGrid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
-
-  .drawerOverlay { padding: 12px; align-items: flex-end; }
-
-  .drawer {
-    max-height: 88vh;
-    border-radius: 22px 22px 0 0;
-    transform: translateY(40px) scale(1);
-  }
-
-  .drawerOpen { transform: translateY(0) scale(1); }
-
-  .drawerListingsGrid { grid-template-columns: repeat(2, 1fr); }
-
-  .tabGroup { width: 100%; }
-  .tabBtn { flex: 1; justify-content: center; }
-}
-
-/* ── Back Button Row ─────────────────────────────────────────── */
+/* ── Back Button ─────────────────────────────────────────────── */
 .backRow {
   margin-bottom: 20px;
   position: relative;
@@ -725,17 +686,10 @@
   transition: transform 0.2s ease;
 }
 
-.backButton:hover {
-  color: #4094d4;
-}
+.backButton:hover { color: #4094d4; }
+.backButton:hover svg { transform: translateX(-3px); }
+.backButton:active { transform: scale(0.98); }
 
-.backButton:hover svg {
-  transform: translateX(-3px);
-}
-
-.backButton:active {
-  transform: scale(0.98);
-}
 /* Product image in review card */
 .txProductImage {
   width: 100%;
@@ -743,10 +697,59 @@
   object-fit: cover;
   border-radius: 10px;
 }
+
 .profileBio {
   font-size: 13px;
   color: #6b7a8d;
   margin: 0 0 14px 0;
   line-height: 1.5;
   font-style: italic;
+}
+
+/* ── Responsive ──────────────────────────────────────────────── */
+@media (max-width: 768px) {
+  .page { padding: 20px 16px 74px; }
+
+  .listingsGrid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+
+  .drawerListingsGrid { grid-template-columns: repeat(2, 1fr); }
+}
+
+@media (max-width: 600px) {
+  .page { padding: 16px 14px 74px; }
+
+  .profileCard {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 16px;
+    padding: 18px 16px;
+  }
+
+  .userName { font-size: 18px; }
+
+  .distHeader { flex-direction: column; gap: 16px; align-items: flex-start; }
+  .distBigNumber { font-size: 34px; }
+
+  .listingsGrid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+
+  .drawerOverlay { padding: 0; align-items: flex-end; }
+
+  .drawer {
+    max-height: 88vh;
+    border-radius: 22px 22px 0 0;
+    transform: translateY(40px);
+  }
+
+  .drawerOpen { transform: translateY(0); }
+
+  .drawerListingsGrid { grid-template-columns: repeat(2, 1fr); }
+
+  .drawerBody { padding: 16px; }
+
+  .tabGroup { width: 100%; }
+  .tabBtn { flex: 1; justify-content: center; padding: 7px 10px; }
+
+  .txCard { padding: 12px; gap: 10px; }
+  .txImage { width: 54px; height: 54px; }
+  .txProduct { font-size: 13px; }
 }

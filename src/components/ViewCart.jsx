@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { auth, db } from '../firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import {
@@ -8,15 +8,25 @@ import {
 import NavBarTemp from './NavBarTemp';
 import styles from './ViewCart.module.css';
 
+const NAV_LINKS = [
+  { label: 'Browse',       path: '/view-listing',  icon: 'fa-store' },
+  { label: 'Trade',        path: '/trade-facility', icon: 'fa-arrows-rotate' },
+  { label: 'Messages',     path: '/chat',           icon: 'fa-comment' },
+  { label: 'My Purchases', path: '/my-purchases',   icon: 'fa-bag-shopping' },
+  { label: 'Cart',         path: '/cart',           icon: 'fa-cart-shopping' },
+];
+
 export default function ViewCart() {
   const navigate = useNavigate();
-  const [currentUser, setCurrentUser]   = useState(null);
-  const [cartItems, setCartItems]       = useState([]);   // enriched listing objects
-  const [cartIds, setCartIds]           = useState([]);   // raw listingIds from Firestore
-  const [loading, setLoading]           = useState(true);
+  const location = useLocation();
+
+  const [currentUser, setCurrentUser]         = useState(null);
+  const [cartItems, setCartItems]             = useState([]);
+  const [cartIds, setCartIds]                 = useState([]);
+  const [loading, setLoading]                 = useState(true);
   const [snapshotReceived, setSnapshotReceived] = useState(false);
-  const [removing, setRemoving]         = useState(null); // listingId being removed
-  const [toast, setToast]               = useState(null); // { msg, type }
+  const [removing, setRemoving]               = useState(null);
+  const [toast, setToast]                     = useState(null);
 
   const showToast = (msg, type = 'success') => {
     setToast({ msg, type });
@@ -53,7 +63,7 @@ export default function ViewCart() {
 
   // ── Enrich cart IDs with listing data ─────────────────────────────────────
   useEffect(() => {
-    if (!snapshotReceived) return; // wait for Firestore to respond first
+    if (!snapshotReceived) return;
     if (cartIds.length === 0) {
       setCartItems([]);
       setLoading(false);
@@ -82,7 +92,6 @@ export default function ViewCart() {
           }
         })
       );
-      // Only show active listings in cart
       setCartItems(results.filter(r => r && r.status === 'active'));
       setLoading(false);
     };
@@ -118,8 +127,7 @@ export default function ViewCart() {
     }
   };
 
-
-  // ── Skeleton cards while loading ───────────────────────────────────────────
+  // ── Skeleton while loading ─────────────────────────────────────────────────
   if (loading) {
     return (
       <>
@@ -127,22 +135,41 @@ export default function ViewCart() {
         <div className={styles.page}>
           <div className={styles.container}>
             <div className={styles.header}>
-              <h1 className={styles.pageTitle}>My Cart</h1>
+              <div className={styles.headerLeft}>
+                <h1 className={styles.pageTitle}>My Cart</h1>
+              </div>
             </div>
             <div className={styles.grid}>
-              {[1, 2, 3].map(n => (
+              {[1, 2, 3, 4, 5, 6].map(n => (
                 <div key={n} className={styles.skeletonCard}>
                   <div className={styles.skeletonImg} />
                   <div className={styles.skeletonBody}>
                     <div className={styles.skeletonLine} style={{ width: '65%' }} />
                     <div className={styles.skeletonLine} style={{ width: '40%', height: '10px' }} />
-                    <div className={styles.skeletonLine} style={{ width: '30%', height: '10px' }} />
+                  </div>
+                  <div className={styles.skeletonActions}>
+                    <div className={styles.skeletonBtn} />
+                    <div className={styles.skeletonBtn} />
                   </div>
                 </div>
               ))}
             </div>
           </div>
         </div>
+
+        {/* Mobile bottom nav */}
+        <nav className={styles.mobileNav}>
+          {NAV_LINKS.map(link => (
+            <button
+              key={link.label}
+              className={`${styles.mobileNavBtn} ${location.pathname === link.path ? styles.mobileNavBtnActive : ''}`}
+              onClick={() => navigate(link.path)}
+            >
+              <i className={`fas ${link.icon}`} />
+              <span>{link.label}</span>
+            </button>
+          ))}
+        </nav>
       </>
     );
   }
@@ -222,7 +249,7 @@ export default function ViewCart() {
                     className={styles.card}
                     style={{ animationDelay: `${i * 55}ms` }}
                   >
-                    {/* ── Image wrapper (matches ProfileListingCard) ── */}
+                    {/* Image */}
                     <div className={styles.imageWrapper}>
                       {imageUrl ? (
                         <img
@@ -251,7 +278,7 @@ export default function ViewCart() {
                       )}
                     </div>
 
-                    {/* ── Body ── */}
+                    {/* Body */}
                     <div className={styles.body}>
                       <p className={styles.title}>{item.title}</p>
                       <p className={styles.price}>
@@ -259,7 +286,7 @@ export default function ViewCart() {
                       </p>
                     </div>
 
-                    {/* ── Action row (blue view + purple remove) ── */}
+                    {/* Actions */}
                     <div className={styles.actionRow}>
                       <button
                         className={styles.viewBtn}
@@ -285,6 +312,20 @@ export default function ViewCart() {
           )}
         </div>
       </div>
+
+      {/* Mobile bottom nav */}
+      <nav className={styles.mobileNav}>
+        {NAV_LINKS.map(link => (
+          <button
+            key={link.label}
+            className={`${styles.mobileNavBtn} ${location.pathname === link.path ? styles.mobileNavBtnActive : ''}`}
+            onClick={() => navigate(link.path)}
+          >
+            <i className={`fas ${link.icon}`} />
+            <span>{link.label}</span>
+          </button>
+        ))}
+      </nav>
     </>
   );
 }

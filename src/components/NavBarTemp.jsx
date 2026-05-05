@@ -511,6 +511,24 @@ export default function Navbar() {
                     </div>
                 </div>
             )}
+            <nav className={styles.mobileNav}>
+                {NAV_LINKS.map((link) => (
+                    <button
+                        key={link.label}
+                        className={`${styles.mobileNavBtn} ${location.pathname === link.path ? styles.mobileNavBtnActive : ''}`}
+                        onClick={() => link.path && navigate(link.path)}
+                    >
+                        <i className={`fas ${
+                            link.label === 'Browse' ? 'fa-store' :
+                            link.label === 'Messages' ? 'fa-comment' :
+                            link.label === 'My Purchases' ? 'fa-bag-shopping' :
+                            link.label === 'Cart' ? 'fa-cart-shopping' :
+                            'fa-arrows-rotate'
+                        }`} />
+                        <span>{link.label}</span>
+                    </button>
+                ))}
+            </nav>
         </header>
     );
 }
