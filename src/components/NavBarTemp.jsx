@@ -123,7 +123,6 @@ export default function Navbar() {
         if (type === 'offer_accepted')                       return 'fa-circle-check';
         if (type === 'offer_declined')                       return 'fa-circle-xmark';
         if (type === 'rate_seller' || type === 'rate_buyer') return 'fa-star';
-        // US11
         if (type === 'item_received_at_facility')            return 'fa-box-archive';
         if (type === 'item_at_facility')                     return 'fa-warehouse';
         if (type === 'item_ready_for_collection')            return 'fa-person-walking';
@@ -136,7 +135,6 @@ export default function Navbar() {
         if (type === 'offer_accepted')                       return '#22c55e';
         if (type === 'offer_declined')                       return '#ef4444';
         if (type === 'rate_seller' || type === 'rate_buyer') return '#f59e0b';
-        // US11
         if (type === 'item_received_at_facility')            return '#f59e0b';
         if (type === 'item_at_facility')                     return '#6AA6DA';
         if (type === 'item_ready_for_collection')            return '#8b5cf6';
@@ -151,7 +149,6 @@ export default function Navbar() {
         if (n.type === 'offer_declined') return `Your offer on ${title} was declined.`;
         if (n.type === 'rate_seller')    return n.title || 'Rate your seller';
         if (n.type === 'rate_buyer')     return n.title || 'Rate your buyer';
-        // US11
         if (n.type === 'item_received_at_facility') return `Your item ${title} has been received at the trade facility.`;
         if (n.type === 'item_at_facility')           return `${title} is now at the trade facility — payment will be processed shortly.`;
         if (n.type === 'item_ready_for_collection')  return `${title} is ready — please collect it from the trade facility.`;
@@ -359,7 +356,7 @@ export default function Navbar() {
                 <span className={styles.logoText}>CampusMarket</span>
             </div>
 
-            {/* Nav links */}
+            {/* Desktop nav links */}
             <nav className={styles.navLinks}>
                 {NAV_LINKS.map((link) => {
                     const isActive = link.path && location.pathname === link.path;
@@ -533,18 +530,21 @@ export default function Navbar() {
                     </div>
                 </div>
             )}
-            <nav className={styles.mobileNav}>
+
+            {/* Mobile bottom nav — aria-hidden so tests target the desktop nav only */}
+            <nav className={styles.mobileNav} aria-hidden="true">
                 {NAV_LINKS.map((link) => (
                     <button
                         key={link.label}
+                        tabIndex={-1}
                         className={`${styles.mobileNavBtn} ${location.pathname === link.path ? styles.mobileNavBtnActive : ''}`}
                         onClick={() => link.path && navigate(link.path)}
                     >
                         <i className={`fas ${
-                            link.label === 'Browse' ? 'fa-store' :
-                            link.label === 'Messages' ? 'fa-comment' :
+                            link.label === 'Browse'       ? 'fa-store' :
+                            link.label === 'Messages'     ? 'fa-comment' :
                             link.label === 'My Purchases' ? 'fa-bag-shopping' :
-                            link.label === 'Cart' ? 'fa-cart-shopping' :
+                            link.label === 'Cart'         ? 'fa-cart-shopping' :
                             'fa-arrows-rotate'
                         }`} />
                         <span>{link.label}</span>
