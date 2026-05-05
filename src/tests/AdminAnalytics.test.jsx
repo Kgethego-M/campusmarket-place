@@ -341,9 +341,10 @@ describe("AdminAnalytics – data aggregation", () => {
         });
         renderComponent();
         await waitFor(() => screen.getByText("Popular Categories"));
-        expect(screen.getByText("Books")).toBeInTheDocument();
-        expect(screen.getByText("Electronics")).toBeInTheDocument();
-        expect(screen.getByText("Uncategorised")).toBeInTheDocument();
+        // Categories render inside chart elements — use a flexible matcher
+    expect(screen.getByText((content) => content.includes("Books"))).toBeInTheDocument();
+    expect(screen.getByText((content) => content.includes("Electronics"))).toBeInTheDocument();
+    expect(screen.getByText((content) => content.includes("Uncategorised"))).toBeInTheDocument();
     });
 
     it("groups listings by status and defaults missing status to 'active'", async () => {
