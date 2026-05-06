@@ -32,10 +32,7 @@
   gap: 16px;
 }
 
-.loaderDots {
-  display: flex;
-  gap: 8px;
-}
+.loaderDots { display: flex; gap: 8px; }
 
 .loaderDots span {
   width: 10px;
@@ -53,11 +50,7 @@
   40% { transform: scale(1.1); opacity: 1; }
 }
 
-.loaderText {
-  color: #9ca3af;
-  font-size: 14px;
-  margin: 0;
-}
+.loaderText { color: #9ca3af; font-size: 14px; margin: 0; }
 
 /* ── Profile Card ─────────────────────────────────────────────── */
 .profileCard {
@@ -74,10 +67,7 @@
   z-index: 1;
 }
 
-.avatarWrap {
-  position: relative;
-  flex-shrink: 0;
-}
+.avatarWrap { position: relative; flex-shrink: 0; }
 
 .avatarCircle {
   width: 74px;
@@ -109,10 +99,7 @@
   50% { transform: scale(1.06); opacity: 0.2; }
 }
 
-.profileInfo {
-  flex: 1;
-  min-width: 0;
-}
+.profileInfo { flex: 1; min-width: 0; }
 
 .profileTopRow {
   display: flex;
@@ -152,11 +139,7 @@
   margin-bottom: 16px;
 }
 
-.metaDivider {
-  color: #d1d5db;
-  font-size: 16px;
-  line-height: 1;
-}
+.metaDivider { color: #d1d5db; font-size: 16px; line-height: 1; }
 
 .metaItem {
   display: flex;
@@ -166,27 +149,11 @@
   color: #6b7a8d;
 }
 
-.metaIcon {
-  width: 13px;
-  height: 13px;
-  flex-shrink: 0;
-  color: #9ca3af;
-}
+.metaIcon { width: 13px; height: 13px; flex-shrink: 0; color: #9ca3af; }
 
-.ratingRow {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-}
-
+.ratingRow { display: flex; align-items: center; gap: 5px; }
 .starGold { color: #E9A319; font-size: 15px; }
-
-.ratingValue {
-  font-size: 15px;
-  font-weight: 700;
-  color: #111827;
-}
-
+.ratingValue { font-size: 15px; font-weight: 700; color: #111827; }
 .ratingCount { font-size: 13px; color: #9ca3af; }
 .noRating { font-size: 13px; color: #bbb; font-style: italic; }
 
@@ -238,10 +205,7 @@
 }
 
 /* ── Content area ─────────────────────────────────────────────── */
-.contentArea {
-  position: relative;
-  z-index: 1;
-}
+.contentArea { position: relative; z-index: 1; }
 
 .contentVisible {
   opacity: 1;
@@ -266,11 +230,7 @@
   box-shadow: 0 1px 6px rgba(0,0,0,0.05);
 }
 
-.distHeader {
-  display: flex;
-  align-items: center;
-  gap: 32px;
-}
+.distHeader { display: flex; align-items: center; gap: 32px; }
 
 .distBigRating {
   display: flex;
@@ -288,17 +248,8 @@
   letter-spacing: -2px;
 }
 
-.distBigStars {
-  color: #E9A319;
-  font-size: 16px;
-  letter-spacing: 2px;
-}
-
-.distBigLabel {
-  font-size: 11px;
-  color: #9ca3af;
-  font-weight: 500;
-}
+.distBigStars { color: #E9A319; font-size: 16px; letter-spacing: 2px; }
+.distBigLabel { font-size: 11px; color: #9ca3af; font-weight: 500; }
 
 .distBars { flex: 1; display: flex; flex-direction: column; gap: 8px; }
 
@@ -311,11 +262,7 @@
   margin: 0 0 14px 0;
 }
 
-.distRow {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
+.distRow { display: flex; align-items: center; gap: 10px; }
 
 .distStar {
   font-size: 12px;
@@ -384,11 +331,7 @@
 }
 
 /* ── Review cards ────────────────────────────────────────────── */
-.transactionsList {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
+.transactionsList { display: flex; flex-direction: column; gap: 10px; }
 
 .txCard {
   background: #ffffff;
@@ -407,9 +350,7 @@
   transform: translateY(-1px);
 }
 
-.txCardAnimate {
-  animation: cardIn 0.35s ease both;
-}
+.txCardAnimate { animation: cardIn 0.35s ease both; }
 
 @keyframes cardIn {
   from { opacity: 0; transform: translateY(10px); }
@@ -667,8 +608,8 @@
 /* ── Responsive ──────────────────────────────────────────────── */
 @media (max-width: 768px) {
   .page { padding: 20px 16px 74px; }
-  .listingsGrid { grid-template-columns: repeat(3, 1fr); gap: 10px; }
-  .drawerListingsGrid { grid-template-columns: repeat(3, 1fr); }
+  .listingsGrid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  .drawerListingsGrid { grid-template-columns: repeat(2, 1fr); }
 }
 
 @media (max-width: 600px) {
@@ -693,18 +634,18 @@
   .txProductImage { width: 52px; height: 52px; object-fit: cover; border-radius: 8px; }
   .txProduct { font-size: 13px; }
 
-  /* Listings — 3 columns, no overflow */
-  .listingsGrid { grid-template-columns: repeat(3, 1fr); gap: 8px; align-items: stretch; }
+  /* Listings — 2 columns to prevent overflow */
+  .listingsGrid { grid-template-columns: repeat(2, 1fr); gap: 8px; align-items: stretch; }
   .listingCardWrap { height: 100%; }
 
   /* Drawer */
   .drawerOverlay { padding: 0; align-items: flex-end; }
   .drawer { max-height: 88vh; border-radius: 22px 22px 0 0; transform: translateY(40px); }
   .drawerOpen { transform: translateY(0); }
-  .drawerListingsGrid { grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .drawerListingsGrid { grid-template-columns: repeat(2, 1fr); gap: 8px; }
   .drawerBody { padding: 16px; }
 
-  /* Tabs — compact, don't stretch */
+  /* Tabs — compact */
   .tabGroup { width: auto; display: inline-flex; }
   .tabBtn { flex: none; padding: 6px 14px; font-size: 12px; }
 }
