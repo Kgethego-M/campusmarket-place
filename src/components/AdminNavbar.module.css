@@ -1,0 +1,418 @@
+/* AdminNavbar.module.css */
+
+.navbar {
+  display: flex;
+  align-items: center;
+  padding: 0 32px;
+  height: 64px;
+  background: #F5F6F8;
+  border-bottom: 2px solid #c8cfd6;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  box-sizing: border-box;
+  gap: 16px;
+}
+
+/* ── Left - FIXED SIZE, NO RESPONSIVE SHRINKING ── */
+.navLeft {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.logoBox {
+  width: 42px;
+  height: 42px;
+  min-width: 42px;
+  min-height: 42px;
+  background: #6AA6DA;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 1.1rem;
+  flex-shrink: 0;
+}
+
+.logoText {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #1a1a1a;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.adminPill {
+  background: #6AA6DA;
+  color: #fff;
+  font-size: 0.68rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 20px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* ── Center nav (desktop) ── */
+.navCenter {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  padding-left: 12px;
+  min-width: 0;
+  overflow-x: auto;
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.navCenter::-webkit-scrollbar {
+  display: none;
+}
+
+.navLink {
+  background: none;
+  border: none;
+  font-family: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #555;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  transition: background 0.15s, color 0.15s;
+  white-space: nowrap;
+  flex-shrink: 0;
+  position: relative;
+}
+
+.navLink:hover {
+  background: #e8f0f8;
+  color: #6AA6DA;
+}
+
+.navLinkActive {
+  background: #6AA6DA;
+  color: #fff !important;
+  cursor: default;
+}
+
+.navLinkActive:hover {
+  background: #5A95C8;
+}
+
+.navBadge {
+  background: #dc2626;
+  color: #fff;
+  border-radius: 50%;
+  min-width: 18px;
+  height: 18px;
+  font-size: 0.62rem;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 3px;
+  margin-left: 2px;
+}
+
+/* ── Right ── */
+.navRight {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+/* ── Profile dropdown (desktop) ── */
+.menuWrap {
+  position: relative;
+}
+
+.iconButton {
+  background: none;
+  border: none;
+  color: #4b5563;
+  font-size: 1.2rem;
+  cursor: pointer;
+  padding: 8px;
+  border-radius: 8px;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.iconButton:hover {
+  box-shadow: 0 0 0 3px rgba(106, 166, 218, 0.3);
+  color: #6AA6DA;
+}
+
+.dropdown {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  background: #fff;
+  border: 1.5px solid #e2e6ea;
+  border-radius: 10px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.12);
+  min-width: 210px;
+  z-index: 200;
+  overflow: hidden;
+  animation: ddFade 0.15s ease;
+}
+
+@keyframes ddFade {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.ddHeader {
+  padding: 14px 16px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.ddName {
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: #1a1a1a;
+}
+
+.ddRole {
+  font-size: 0.7rem;
+  color: #6AA6DA;
+  font-weight: 600;
+}
+
+.ddDivider {
+  height: 1px;
+  background: #f0f2f5;
+}
+
+.ddItem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 16px;
+  border: none;
+  background: transparent;
+  font-family: inherit;
+  font-size: 0.85rem;
+  color: #444;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.12s;
+}
+
+.ddItem:hover { background: #f4f8fc; }
+
+.ddItem i {
+  width: 14px;
+  color: #999;
+  font-size: 0.8rem;
+}
+
+.ddLogout { color: #e53935; }
+.ddLogout:hover { background: #fff5f5; color: #c62828; }
+
+/* ── Mobile hamburger (nav links) ── */
+.mobileMenuWrap {
+  position: relative;
+  display: none;
+}
+
+.mobileHamburger {
+  background: none;
+  border: none;
+  color: #4b5563;
+  font-size: 1.2rem;
+  cursor: pointer;
+  padding: 8px;
+  border-radius: 8px;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.mobileHamburger:hover {
+  background: #e8f0f8;
+  color: #6AA6DA;
+}
+
+.mobileDropdown {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  background: #fff;
+  border: 1.5px solid #e2e6ea;
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.14);
+  min-width: 220px;
+  z-index: 300;
+  overflow: hidden;
+  animation: ddFade 0.15s ease;
+}
+
+.mobileDropdownSection {
+  padding: 10px 0 6px;
+}
+
+.mobileSectionLabel {
+  display: block;
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: #aaa;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  padding: 0 16px 6px;
+}
+
+.mobileNavItem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 16px;
+  border: none;
+  background: transparent;
+  font-family: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #374151;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.12s;
+}
+
+.mobileNavItem i {
+  width: 16px;
+  font-size: 0.85rem;
+  color: #6AA6DA;
+}
+
+.mobileNavItem:hover { background: #f0f6fd; }
+
+.mobileNavItemActive {
+  background: #eff6ff;
+  color: #6AA6DA;
+}
+
+.mobileNavItemLogout {
+  color: #e53935;
+}
+
+.mobileNavItemLogout i { color: #e53935; }
+.mobileNavItemLogout:hover { background: #fff5f5; }
+
+.mobileDivider {
+  height: 1px;
+  background: #f0f2f5;
+  margin: 4px 0;
+}
+
+/* ── Logout overlay ── */
+.logoutOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  backdrop-filter: blur(4px);
+}
+
+.logoutBox {
+  background: #fff;
+  padding: 2rem 3rem;
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+}
+
+.logoutBox i {
+  font-size: 2rem;
+  color: #6AA6DA;
+}
+
+.logoutBox p {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 500;
+  color: #374151;
+}
+
+/* ── Responsive breakpoints ── */
+@media (max-width: 950px) {
+  .navbar {
+    padding: 0 16px;
+  }
+
+  .navCenter {
+    display: none;
+  }
+
+  .mobileMenuWrap {
+    display: block;
+  }
+
+  .desktopOnly {
+    display: none !important;
+  }
+
+  /* Lock logo at full size — no shrinking at this breakpoint */
+  .logoBox {
+    width: 42px;
+    height: 42px;
+    min-width: 42px;
+    min-height: 42px;
+    font-size: 1.1rem;
+  }
+
+  .logoText {
+    font-size: 1.5rem;
+  }
+}
+
+/* Only hide text/pill on very small screens — logo box stays full size always */
+@media (max-width: 480px) {
+  .logoText {
+    display: none;
+  }
+  .adminPill {
+    display: none;
+  }
+}
+
+/* Mid-size screen — desktop nav with horizontal scroll */
+@media (min-width: 951px) and (max-width: 1100px) {
+  .navbar {
+    padding: 0 16px;
+  }
+
+  .navCenter {
+    gap: 4px;
+    padding-left: 8px;
+  }
+
+  .navLink {
+    padding: 6px 8px;
+    gap: 5px;
+  }
+}
