@@ -21,7 +21,7 @@
 .imageWrapper {
     position: relative;
     width: 100%;
-    aspect-ratio: 4 / 3;
+    height: 180px;        /* fixed height instead of aspect-ratio */
     background-color: #f0f2f5;
     overflow: hidden;
 }
@@ -478,4 +478,17 @@
 .compact .deleteButton {
     padding: 6px 0;
     font-size: 0.7rem;
+}
+
+@media (max-width: 600px) {
+  /* Listings — match desktop 2-col layout */
+  .listingsGrid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+    align-items: stretch;
+  }
+
+  .listingCardWrap {
+    height: 100%;
+  }
 }

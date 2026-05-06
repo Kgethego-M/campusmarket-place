@@ -36,7 +36,7 @@
 .imageWrapper {
     position: relative;
     width: 100%;
-    aspect-ratio: 4 / 3;
+    height: 180px;        /* fixed height instead of aspect-ratio */
     background-color: #f0f2f5;
     overflow: hidden;
 }

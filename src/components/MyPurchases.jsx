@@ -35,11 +35,11 @@ export default function MyPurchases() {
   const [currentUser, setCurrentUser] = useState(null);
   const [transactions, setTransactions] = useState([]);
   const [enriched, setEnriched] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [snapshotReceived, setSnapshotReceived] = useState(false);
+  const [loading, setLoading] = useState(true);       // stays true until enrich completes
+  const [hasFetched, setHasFetched] = useState(false); // true once Firestore snapshot arrives
   const [activeFilter, setActiveFilter] = useState('all');
 
-  // Auth
+  // ── Auth ───────────────────────────────────────────────────────────────────
   useEffect(() => {
     return onAuthStateChanged(auth, (user) => {
       if (!user) { navigate('/login'); return; }
@@ -47,7 +47,7 @@ export default function MyPurchases() {
     });
   }, [navigate]);
 
-  // Real-time listener — all transactions where user is the buyer
+  // ── Real-time listener ─────────────────────────────────────────────────────
   useEffect(() => {
     if (!currentUser) return;
 
@@ -59,23 +59,29 @@ export default function MyPurchases() {
     const unsub = onSnapshot(q, (snap) => {
       const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       setTransactions(docs);
-      setSnapshotReceived(true);
+      setHasFetched(true);
     });
 
-    // Fallback: if Firestore doesn't respond (e.g. in tests), stop loading
-    const fallback = setTimeout(() => setSnapshotReceived(true), 50);
+    // Fallback: if Firestore doesn't respond, unblock after 4s
+    const fallback = setTimeout(() => setHasFetched(true), 4000);
 
     return () => { unsub(); clearTimeout(fallback); };
   }, [currentUser]);
 
-  // Enrich transactions with listing + seller details
+  // ── Enrich transactions with listing + seller details ──────────────────────
   useEffect(() => {
-    if (!snapshotReceived) return;
+    // Don't do anything until Firestore has responded at least once
+    if (!hasFetched) return;
+
+    // No transactions — stop loading, show empty state
     if (transactions.length === 0) {
       setEnriched([]);
       setLoading(false);
       return;
     }
+
+    // Keep loading=true while we enrich
+    setLoading(true);
 
     const enrich = async () => {
       const results = await Promise.all(
@@ -132,7 +138,7 @@ export default function MyPurchases() {
     };
 
     enrich();
-  }, [transactions, snapshotReceived]); // ✅ fixed: snapshotReceived added to deps
+  }, [transactions, hasFetched]);
 
   const FILTERS = [
     { key: 'all',       label: 'All' },
@@ -201,8 +207,9 @@ export default function MyPurchases() {
 
           {/* ── Content ── */}
           {loading ? (
+            /* Skeleton — shown the entire time we're fetching + enriching */
             <div className={styles.skeletonList}>
-              {[1, 2, 3].map(n => (
+              {[1, 2, 3, 4].map(n => (
                 <div key={n} className={styles.skeletonCard}>
                   <div className={styles.skeletonImg} />
                   <div className={styles.skeletonBody}>
@@ -230,9 +237,9 @@ export default function MyPurchases() {
           ) : (
             <div className={styles.transactionList}>
               {filtered.map(tx => {
-                const status  = STATUS_CONFIG[tx.status] || STATUS_CONFIG.pending;
-                const type    = TYPE_CONFIG[tx.type]     || TYPE_CONFIG.sale;
-                const isActive = tx.status === 'pending' || tx.status === 'accepted' || tx.status === 'waiting';
+                const status   = STATUS_CONFIG[tx.status] || STATUS_CONFIG.pending;
+                const type     = TYPE_CONFIG[tx.type]     || TYPE_CONFIG.sale;
+                const isActive   = tx.status === 'pending' || tx.status === 'accepted' || tx.status === 'waiting';
                 const isAccepted = tx.status === 'accepted';
 
                 return (
@@ -309,7 +316,6 @@ export default function MyPurchases() {
                               Your Offer Details
                             </p>
                             <div className={styles.offerPanelGrid}>
-
                               {tx.agreedPrice != null && (
                                 <>
                                   <span className={styles.offerPanelLabel}>Offered price</span>
@@ -321,7 +327,6 @@ export default function MyPurchases() {
                                   </span>
                                 </>
                               )}
-
                               {hasPayment && (
                                 <>
                                   <span className={styles.offerPanelLabel}>Payment</span>
@@ -330,7 +335,6 @@ export default function MyPurchases() {
                                   </span>
                                 </>
                               )}
-
                               {hasPartial && (
                                 <>
                                   <span className={styles.offerPanelLabel}>Online</span>
@@ -341,27 +345,24 @@ export default function MyPurchases() {
                                   </span>
                                 </>
                               )}
-
                               {tx.tradeItem && (
                                 <>
                                   <span className={styles.offerPanelLabel}>Trade item</span>
                                   <span className={styles.offerPanelValue}>{tx.tradeItem}</span>
                                 </>
                               )}
-
                               {hasTerms && (
                                 <>
                                   <span className={styles.offerPanelLabel}>Terms</span>
                                   <span className={styles.offerPanelValueItalic}>{tx.terms}</span>
                                 </>
                               )}
-
                             </div>
                           </div>
                         );
                       })()}
 
-                      {/* Status-specific messages */}
+                      {/* Status messages */}
                       {tx.status === 'pending' && (
                         <div className={styles.statusMsg} style={{ borderColor: '#f59e0b', background: '#fffbeb' }}>
                           <i className="fas fa-clock" style={{ color: '#f59e0b' }} />
