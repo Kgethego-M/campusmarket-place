@@ -16,7 +16,6 @@
     min-height: 100vh;
     gap: 1rem;
     background: #F5F6F8;
-    font-family: 'Franklin Gothic Medium', 'Arial Narrow', Arial, sans-serif;
     color: #888;
     font-size: 0.95rem;
 }
@@ -949,4 +948,44 @@
   align-items: center;
   justify-content: center;
   margin-left: 4px;
+}
+/* ── Mobile responsive additions ── */
+@media (max-width: 768px) {
+    .main {
+        padding: 20px 16px 48px;
+    }
+    .statsRow {
+        grid-template-columns: repeat(2, 1fr) !important;
+    }
+    .tabs {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        gap: 6px;
+        padding-bottom: 4px;
+    }
+    .tab {
+        white-space: nowrap;
+        flex-shrink: 0;
+        font-size: 0.78rem;
+        padding: 8px 12px;
+    }
+    .pageTitle h1 {
+        font-size: 1.3rem;
+    }
+    .userRow {
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+    .configRow {
+        flex-direction: column;
+    }
+    .payHeader, .payRow {
+        font-size: 0.78rem;
+    }
+}
+@media (max-width: 480px) {
+    .statsRow {
+        grid-template-columns: repeat(2, 1fr) !important;
+        gap: 10px;
+    }
 }

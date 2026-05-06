@@ -12,6 +12,7 @@ import ReportCard from "./ReportCard";
 import useExportReport from "../hooks/useExportReport";
 import { validateFacilityConfig, generateTimeSlots, getTotalCapacity } from "../utils/facilityConfig.utils";
 import UtilisationReport from "./UtilisationReport.jsx";
+import AdminNavbar from "./AdminNavbar";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Small inline toast
@@ -351,55 +352,7 @@ export default function AdminDashboard() {
       />
       {toast && <Toast message={toast.message} type={toast.type} onDismiss={hideToast} />}
 
-      {/* ── Navbar ── */}
-      <header className={styles.navbar}>
-        <div className={styles.navLeft}>
-          <div className={styles.logoBox}><i className="fa-solid fa-shop" /></div>
-          <span className={styles.logoText}>CampusMarket</span>
-          <span className={styles.adminPill}>Admin</span>
-        </div>
-        <div className={styles.navCenter}>
-          <span className={styles.navActive}><i className="fas fa-th-large" /> Dashboard</span>
-          <button className={styles.navAnalyticsLink} onClick={() => navigate("/admin/analytics")}>
-            <i className="fas fa-chart-bar" /> Analytics
-          </button>
-          <button className={styles.navAnalyticsLink} onClick={() => navigate("/admin/reports")}>
-            <i className="fas fa-flag" /> Reports
-            {unreadReports > 0 && (
-              <span className={styles.reportBadge}>{unreadReports}</span>
-            )}
-          </button>
-          <button className={styles.navAnalyticsLink} onClick={() => navigate("/admin/moderation-summary")}>
-            <i className="fas fa-chart-simple" /> Moderation Summary
-          </button>
-        </div>
-        <div className={styles.navRight}>
-          <div className={styles.menuWrap} ref={dropdownRef}>
-            <button className={styles.iconButton} onClick={() => !isLoggingOut && setDropdownOpen(v => !v)} title={adminUser.name}>
-              <i className="fa-solid fa-bars" />
-            </button>
-            {dropdownOpen && !isLoggingOut && (
-              <div className={styles.dropdown}>
-                <div className={styles.ddHeader}>
-                  <span className={styles.ddName}>{adminUser.name}</span>
-                  <span className={styles.ddRole}>Administrator</span>
-                </div>
-                <div className={styles.ddDivider} />
-                <button className={styles.ddItem} onClick={() => { navigate("/profile"); setDropdownOpen(false); }}>
-                  <i className="fas fa-user" /> My Profile
-                </button>
-                <button className={styles.ddItem} onClick={() => { navigate("/settings"); setDropdownOpen(false); }}>
-                  <i className="fas fa-cog" /> Settings
-                </button>
-                <div className={styles.ddDivider} />
-                <button className={`${styles.ddItem} ${styles.ddLogout}`} onClick={handleLogout}>
-                  <i className="fas fa-right-from-bracket" /> Logout
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
-      </header>
+      <AdminNavbar activePage="dashboard" adminUser={adminUser} unreadReports={unreadReports} />
 
       <main className={styles.main}>
         <div className={styles.pageTitle}>
@@ -409,8 +362,8 @@ export default function AdminDashboard() {
               <p>System management, moderation &amp; oversight</p>
             </div>
             <div style={{ display: "flex", gap: "8px" }}>
-              <button onClick={exportSummaryCSV} style={{ background: "#4a90d9", color: "white", border: "none", padding: "8px 16px", borderRadius: "8px", cursor: "pointer", fontWeight: "500", fontSize: "0.85rem" }}>📄 Export Summary CSV</button>
-              <button onClick={exportSummaryPDF} style={{ background: "#4a90d9", color: "white", border: "none", padding: "8px 16px", borderRadius: "8px", cursor: "pointer", fontWeight: "500", fontSize: "0.85rem" }}>📑 Export Summary PDF</button>
+              <button onClick={exportSummaryCSV} style={{ background: "#4a90d9", color: "white", border: "none", padding: "8px 16px", borderRadius: "8px", cursor: "pointer", fontWeight: "500", fontSize: "0.85rem" }}> Export Summary CSV</button>
+              <button onClick={exportSummaryPDF} style={{ background: "#4a90d9", color: "white", border: "none", padding: "8px 16px", borderRadius: "8px", cursor: "pointer", fontWeight: "500", fontSize: "0.85rem" }}> Export Summary PDF</button>
             </div>
           </div>
         </div>
@@ -701,14 +654,7 @@ export default function AdminDashboard() {
         )}
       </main>
 
-      {isLoggingOut && (
-        <div className={styles.logoutOverlay}>
-          <div className={styles.logoutBox}>
-            <i className="fas fa-spinner fa-spin" />
-            <p>Logging out…</p>
-          </div>
-        </div>
-      )}
+
     </div>
   );
 }
