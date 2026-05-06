@@ -34,7 +34,7 @@
 .imageWrapper {
     position: relative;
     width: 100%;
-    height: 180px;
+    aspect-ratio: 3 / 2;   /* scales with card width, no cropping */
     background-color: #f0f2f5;
     overflow: hidden;
 }

@@ -184,15 +184,14 @@
 .listingsGrid {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
-    gap: 16px;
+    gap: 12px;
     width: 100%;
 }
 
-/* ── Skeleton loading ── */
 .skeletonGrid {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
-    gap: 16px;
+    gap: 12px;
 }
 
 .skeletonCard {
@@ -253,15 +252,15 @@
 
 @media (max-width: 768px) {
     .page { padding: 20px 16px 74px; }
-    .listingsGrid { grid-template-columns: repeat(2, 1fr); gap: 12px; }
-    .skeletonGrid { grid-template-columns: repeat(2, 1fr); gap: 12px; }
+    .listingsGrid { grid-template-columns: repeat(3, 1fr); gap: 10px; }
+    .skeletonGrid { grid-template-columns: repeat(3, 1fr); gap: 10px; }
 }
 
 @media (max-width: 480px) {
     .page { padding: 16px 12px 74px; }
     .heading { font-size: 1.3rem; }
-    .listingsGrid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
-    .skeletonGrid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+    .listingsGrid { grid-template-columns: repeat(3, 1fr); gap: 8px; }
+    .skeletonGrid { grid-template-columns: repeat(3, 1fr); gap: 8px; }
     .filterPanel { padding: 12px 14px; }
     .pills { gap: 5px; }
     .pill { padding: 4px 10px; font-size: 0.75rem; }

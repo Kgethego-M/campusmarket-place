@@ -750,3 +750,16 @@
   .tabGroup { width: 100%; }
   .tabBtn { flex: 1; justify-content: center; padding: 7px 10px; }
 }
+@media (max-width: 600px) {
+  /* Tabs — don't stretch full width, stay compact */
+  .tabGroup {
+    width: auto;          /* was 100% */
+    display: inline-flex;
+  }
+
+  .tabBtn {
+    flex: none;           /* was flex: 1 */
+    padding: 6px 14px;
+    font-size: 12px;
+  }
+}
