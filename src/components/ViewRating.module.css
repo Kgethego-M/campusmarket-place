@@ -430,7 +430,6 @@
 }
 
 .imgIcon { color: #c4cad3; }
-
 .txBody { flex: 1; min-width: 0; }
 
 .txProduct {
@@ -522,25 +521,9 @@
   text-align: center;
 }
 
-.emptyIcon {
-  width: 40px;
-  height: 40px;
-  color: #c4cad3;
-  margin-bottom: 14px;
-}
-
-.emptyTitle {
-  font-size: 15px;
-  font-weight: 600;
-  color: #9ca3af;
-  margin: 0 0 6px 0;
-}
-
-.emptySubtitle {
-  font-size: 13px;
-  color: #c4cad3;
-  margin: 0;
-}
+.emptyIcon { width: 40px; height: 40px; color: #c4cad3; margin-bottom: 14px; }
+.emptyTitle { font-size: 15px; font-weight: 600; color: #9ca3af; margin: 0 0 6px 0; }
+.emptySubtitle { font-size: 13px; color: #c4cad3; margin: 0; }
 
 /* ── Error ───────────────────────────────────────────────────── */
 .error {
@@ -604,13 +587,7 @@
   border-radius: 22px 22px 0 0;
 }
 
-.drawerTitle {
-  font-size: 16px;
-  font-weight: 700;
-  color: #111827;
-  margin: 0;
-  letter-spacing: -0.3px;
-}
+.drawerTitle { font-size: 16px; font-weight: 700; color: #111827; margin: 0; letter-spacing: -0.3px; }
 
 .drawerClose {
   width: 34px;
@@ -626,11 +603,7 @@
   transition: background 0.15s, color 0.15s, transform 0.15s;
 }
 
-.drawerClose:hover {
-  background: #e2e6eb;
-  color: #111827;
-  transform: rotate(90deg);
-}
+.drawerClose:hover { background: #e2e6eb; color: #111827; transform: rotate(90deg); }
 
 .drawerBody {
   flex: 1;
@@ -644,11 +617,7 @@
 .drawerBody::-webkit-scrollbar-thumb { background: #dde3ea; border-radius: 99px; }
 .drawerBody::-webkit-scrollbar-track { background: transparent; }
 
-.drawerReviewList {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
+.drawerReviewList { display: flex; flex-direction: column; gap: 10px; }
 
 .drawerListingsGrid {
   display: grid;
@@ -658,11 +627,7 @@
 }
 
 /* ── Back Button ─────────────────────────────────────────────── */
-.backRow {
-  margin-bottom: 20px;
-  position: relative;
-  z-index: 1;
-}
+.backRow { margin-bottom: 20px; position: relative; z-index: 1; }
 
 .backButton {
   display: inline-flex;
@@ -684,7 +649,6 @@
 .backButton:hover svg { transform: translateX(-3px); }
 .backButton:active { transform: scale(0.98); }
 
-/* ── Product image in review card ────────────────────────────── */
 .txProductImage {
   width: 100%;
   height: 100%;
@@ -703,8 +667,8 @@
 /* ── Responsive ──────────────────────────────────────────────── */
 @media (max-width: 768px) {
   .page { padding: 20px 16px 74px; }
-  .listingsGrid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
-  .drawerListingsGrid { grid-template-columns: repeat(2, 1fr); }
+  .listingsGrid { grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .drawerListingsGrid { grid-template-columns: repeat(3, 1fr); }
 }
 
 @media (max-width: 600px) {
@@ -729,37 +693,18 @@
   .txProductImage { width: 52px; height: 52px; object-fit: cover; border-radius: 8px; }
   .txProduct { font-size: 13px; }
 
-  /* Listings */
-  @media (max-width: 600px) {
-    .listingsGrid { 
-      grid-template-columns: repeat(3, 1fr);  /* was repeat(2, 1fr) */
-      gap: 8px; 
-      align-items: stretch; 
-    }
-    .listingCardWrap { height: 100%; }
-  }
+  /* Listings — 3 columns, no overflow */
+  .listingsGrid { grid-template-columns: repeat(3, 1fr); gap: 8px; align-items: stretch; }
+  .listingCardWrap { height: 100%; }
 
   /* Drawer */
   .drawerOverlay { padding: 0; align-items: flex-end; }
   .drawer { max-height: 88vh; border-radius: 22px 22px 0 0; transform: translateY(40px); }
   .drawerOpen { transform: translateY(0); }
-  .drawerListingsGrid { grid-template-columns: repeat(2, 1fr); }
+  .drawerListingsGrid { grid-template-columns: repeat(3, 1fr); gap: 8px; }
   .drawerBody { padding: 16px; }
 
-  /* Tabs */
-  .tabGroup { width: 100%; }
-  .tabBtn { flex: 1; justify-content: center; padding: 7px 10px; }
-}
-@media (max-width: 600px) {
-  /* Tabs — don't stretch full width, stay compact */
-  .tabGroup {
-    width: auto;          /* was 100% */
-    display: inline-flex;
-  }
-
-  .tabBtn {
-    flex: none;           /* was flex: 1 */
-    padding: 6px 14px;
-    font-size: 12px;
-  }
+  /* Tabs — compact, don't stretch */
+  .tabGroup { width: auto; display: inline-flex; }
+  .tabBtn { flex: none; padding: 6px 14px; font-size: 12px; }
 }
