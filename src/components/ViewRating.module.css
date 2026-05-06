@@ -9,7 +9,6 @@
   overflow-x: hidden;
 }
 
-/* Subtle decorative background shape */
 .bgAccent {
   position: fixed;
   top: -120px;
@@ -62,7 +61,7 @@
 
 /* ── Profile Card ─────────────────────────────────────────────── */
 .profileCard {
-  background: #ffffff;
+  background: linear-gradient(160deg, #ffffff 0%, #f8fafc 100%);
   border: 1px solid #dde3ea;
   border-radius: 18px;
   padding: 26px 28px;
@@ -73,10 +72,8 @@
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.07);
   position: relative;
   z-index: 1;
-  background: linear-gradient(160deg, #ffffff 0%, #f8fafc 100%);
 }
 
-/* Avatar with animated ring */
 .avatarWrap {
   position: relative;
   flex-shrink: 0;
@@ -132,7 +129,6 @@
   letter-spacing: -0.4px;
 }
 
-/* Green dot = active user */
 .activeDot {
   width: 8px;
   height: 8px;
@@ -192,7 +188,6 @@
 }
 
 .ratingCount { font-size: 13px; color: #9ca3af; }
-
 .noRating { font-size: 13px; color: #bbb; font-style: italic; }
 
 /* ── Tabs ─────────────────────────────────────────────────────── */
@@ -242,7 +237,7 @@
   border-radius: 999px;
 }
 
-/* ── Content area — tab transition ───────────────────────────── */
+/* ── Content area ─────────────────────────────────────────────── */
 .contentArea {
   position: relative;
   z-index: 1;
@@ -263,13 +258,12 @@
 
 /* ── Distribution card ────────────────────────────────────────── */
 .distributionCard {
-  background: #ffffff;
+  background: linear-gradient(160deg, #ffffff 0%, #f8fafc 100%);
   border: 1px solid #dde3ea;
   border-radius: 16px;
   padding: 20px 24px;
   margin-bottom: 16px;
   box-shadow: 0 1px 6px rgba(0,0,0,0.05);
-  background: linear-gradient(160deg, #ffffff 0%, #f8fafc 100%);
 }
 
 .distHeader {
@@ -432,6 +426,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  overflow: hidden;
 }
 
 .imgIcon { color: #c4cad3; }
@@ -461,7 +456,6 @@
 }
 
 .reviewerName { font-size: 13px; font-weight: 700; color: #374151; }
-
 .reviewStars { color: #E9A319; letter-spacing: 1px; }
 
 .reviewComment {
@@ -507,10 +501,12 @@
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
   gap: 14px;
+  align-items: stretch;
 }
 
 .listingCardWrap {
   animation: cardIn 0.4s ease both;
+  height: 100%;
 }
 
 /* ── Empty state ─────────────────────────────────────────────── */
@@ -658,6 +654,7 @@
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
   gap: 12px;
+  align-items: stretch;
 }
 
 /* ── Back Button ─────────────────────────────────────────────── */
@@ -682,15 +679,12 @@
   transition: color 0.2s ease, transform 0.2s ease;
 }
 
-.backButton svg {
-  transition: transform 0.2s ease;
-}
-
+.backButton svg { transition: transform 0.2s ease; }
 .backButton:hover { color: #4094d4; }
 .backButton:hover svg { transform: translateX(-3px); }
 .backButton:active { transform: scale(0.98); }
 
-/* Product image in review card */
+/* ── Product image in review card ────────────────────────────── */
 .txProductImage {
   width: 100%;
   height: 100%;
@@ -709,47 +703,50 @@
 /* ── Responsive ──────────────────────────────────────────────── */
 @media (max-width: 768px) {
   .page { padding: 20px 16px 74px; }
-
   .listingsGrid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
-
   .drawerListingsGrid { grid-template-columns: repeat(2, 1fr); }
 }
 
 @media (max-width: 600px) {
   .page { padding: 16px 14px 74px; }
 
-  .profileCard {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 16px;
-    padding: 18px 16px;
-  }
-
+  /* Profile */
+  .profileCard { flex-direction: column; align-items: flex-start; gap: 16px; padding: 18px 16px; }
   .userName { font-size: 18px; }
 
+  /* Distribution */
   .distHeader { flex-direction: column; gap: 16px; align-items: flex-start; }
   .distBigNumber { font-size: 34px; }
+  .distBars { width: 100%; }
+  .distRow { gap: 6px; }
+  .distStar { width: 24px; font-size: 11px; }
+  .distPct { width: 30px; font-size: 11px; flex-shrink: 0; display: block; }
+  .barTrack { min-width: 0; flex: 1; }
 
-  .listingsGrid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  /* Review cards */
+  .txCard { padding: 12px; gap: 10px; align-items: flex-start; }
+  .txImage { width: 52px; height: 52px; min-width: 52px; border-radius: 8px; }
+  .txProductImage { width: 52px; height: 52px; object-fit: cover; border-radius: 8px; }
+  .txProduct { font-size: 13px; }
 
-  .drawerOverlay { padding: 0; align-items: flex-end; }
-
-  .drawer {
-    max-height: 88vh;
-    border-radius: 22px 22px 0 0;
-    transform: translateY(40px);
+  /* Listings */
+  @media (max-width: 600px) {
+    .listingsGrid { 
+      grid-template-columns: repeat(3, 1fr);  /* was repeat(2, 1fr) */
+      gap: 8px; 
+      align-items: stretch; 
+    }
+    .listingCardWrap { height: 100%; }
   }
 
+  /* Drawer */
+  .drawerOverlay { padding: 0; align-items: flex-end; }
+  .drawer { max-height: 88vh; border-radius: 22px 22px 0 0; transform: translateY(40px); }
   .drawerOpen { transform: translateY(0); }
-
   .drawerListingsGrid { grid-template-columns: repeat(2, 1fr); }
-
   .drawerBody { padding: 16px; }
 
+  /* Tabs */
   .tabGroup { width: 100%; }
   .tabBtn { flex: 1; justify-content: center; padding: 7px 10px; }
-
-  .txCard { padding: 12px; gap: 10px; }
-  .txImage { width: 54px; height: 54px; }
-  .txProduct { font-size: 13px; }
 }

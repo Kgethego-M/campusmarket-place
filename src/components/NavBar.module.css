@@ -474,7 +474,6 @@
     .navbar { padding: 0 12px; height: 52px; }
 
     /* Hide logo text on very small screens to save space */
-    .logoText { display: none; }
     .logoBox { width: 34px; height: 34px; }
 
     .navRight { gap: 6px; }

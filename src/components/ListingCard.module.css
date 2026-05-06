@@ -7,7 +7,7 @@
     display: flex;
     flex-direction: column;
     cursor: pointer;
-    /* start hidden, shifted down */
+    height: 100%;
     opacity: 0;
     transform: translateY(16px);
     transition:
@@ -16,7 +16,6 @@
         box-shadow 0.18s ease;
 }
 
-/* When visible prop is true, parent adds this class */
 .cardVisible {
     opacity: 1;
     transform: translateY(0);
@@ -27,7 +26,6 @@
     transform: translateY(-2px);
 }
 
-/* Keep hover working even after becoming visible */
 .cardVisible:hover {
     transform: translateY(-2px);
 }
@@ -36,7 +34,7 @@
 .imageWrapper {
     position: relative;
     width: 100%;
-    aspect-ratio: 4 / 3;
+    height: 180px;
     background-color: #f0f2f5;
     overflow: hidden;
 }
@@ -45,6 +43,7 @@
     width: 100%;
     height: 100%;
     object-fit: cover;
+    object-position: center top;
     display: block;
     transition: transform 0.3s ease;
 }
@@ -96,6 +95,7 @@
     display: flex;
     flex-direction: column;
     gap: 4px;
+    flex: 1;
 }
 
 .title {
@@ -104,9 +104,12 @@
     color: #1a1a1a;
     margin: 0;
     font-family: 'Segoe UI', system-ui, sans-serif;
-    white-space: nowrap;
+    white-space: normal;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
     overflow: hidden;
-    text-overflow: ellipsis;
+    min-height: 2.4em;
 }
 
 .price {
@@ -154,4 +157,34 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+}
+
+/* ── Mobile ── */
+@media (max-width: 600px) {
+    .imageWrapper {
+        height: 90px;
+    }
+
+    .title {
+        font-size: 0.8rem;
+    }
+
+    .price {
+        font-size: 0.8rem;
+    }
+
+    .body {
+        padding: 8px 10px 10px;
+        gap: 3px;
+    }
+
+    .sellerName {
+        font-size: 0.72rem;
+    }
+
+    .avatar {
+        width: 20px;
+        height: 20px;
+        font-size: 0.65rem;
+    }
 }
