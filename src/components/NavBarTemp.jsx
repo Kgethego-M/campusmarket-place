@@ -425,6 +425,7 @@ export default function Navbar() {
                                                 {offerNotifications.map((n) => (
                                                     <div
                                                         key={n.id}
+                                                        data-testid={`notification-item-${n.id}`}
                                                         className={styles.notificationItem}
                                                         onClick={() => handleNotificationClick(n)}
                                                         role="button"
@@ -451,6 +452,7 @@ export default function Navbar() {
                                                 {ratingNotifications.map((n) => (
                                                     <div
                                                         key={n.id}
+                                                        data-testid={`notification-item-${n.id}`}
                                                         className={styles.notificationItem}
                                                         onClick={() => handleNotificationClick(n)}
                                                         role="button"
