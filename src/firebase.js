@@ -25,7 +25,7 @@ export const isValidWitsEmail = (email) => {
 
 export const getUserType = (email) => {
   if (email.endsWith('@wits.ac.za') || email === 'nontokozombatha797@gmail.com' || email === 's08027456@gmail.com' || email === 'tshegomaphefo48@gmail.com' || email === 'hyginusvictor11@gmail.com' || email === 'dantesebopela@gmail.com' || email === 'kgethim25.o@gmail.com') return 'staff';
-  if (email === '2830236@students.wits.ac.za' || email === 'mphelanekgethego20060325@gmail.com' || email === '2833644@students.wits.ac.za' || email === 'anelevanwyk49@gmail.com') return 'admin';
+  if (email === '2830236@students.wits.ac.za' || email === 'mphelanekgethego20060325@gmail.com' || email === 'anelevanwyk49@gmail.com') return 'admin';
   if (email.endsWith('@students.wits.ac.za')) return 'student';
   return 'unknown';
 };
