@@ -385,6 +385,19 @@ export default function AdminDashboard() {
                   <span className={styles.ddRole}>Administrator</span>
                 </div>
                 <div className={styles.ddDivider} />
+                {/* These nav links are always in the dropdown but only
+                    matter on mobile where .navCenter is hidden via CSS */}
+                <button className={`${styles.ddItem} ${styles.navDropdownLink}`} onClick={() => { navigate("/admin/analytics"); setDropdownOpen(false); }}>
+                  <i className="fas fa-chart-bar" /> Analytics
+                </button>
+                <button className={`${styles.ddItem} ${styles.navDropdownLink}`} onClick={() => { navigate("/admin/reports"); setDropdownOpen(false); }}>
+                  <i className="fas fa-flag" /> Reports
+                  {unreadReports > 0 && <span className={styles.reportBadge}>{unreadReports}</span>}
+                </button>
+                <button className={`${styles.ddItem} ${styles.navDropdownLink}`} onClick={() => { navigate("/admin/moderation-summary"); setDropdownOpen(false); }}>
+                  <i className="fas fa-chart-simple" /> Moderation Summary
+                </button>
+                <div className={styles.ddDivider} />
                 <button className={styles.ddItem} onClick={() => { navigate("/profile"); setDropdownOpen(false); }}>
                   <i className="fas fa-user" /> My Profile
                 </button>
