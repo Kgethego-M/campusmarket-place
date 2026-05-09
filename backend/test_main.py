@@ -68,6 +68,86 @@ def test_404_response_structure():
 
 
 # =============================================================================
+# STRIPE CHECKOUT
+# =============================================================================
+
+def test_stripe_checkout_requires_secret_key():
+    payload = {
+        "transactionId": "tx123",
+        "buyerEmail": "student@example.com",
+        "amount": 30000,
+        "amountRand": 300,
+        "cashAmount": 0,
+        "totalAmount": 300,
+        "currency": "zar",
+        "stripeRef": "CM-TX123-123",
+        "paymentType": "online",
+        "listingTitle": "Calculator",
+        "successUrl": "http://localhost:5173/payment-success?tx=tx123",
+        "cancelUrl": "http://localhost:5173/payment-cancelled?tx=tx123",
+        "metadata": {"transactionId": "tx123"},
+    }
+
+    with patch.dict("os.environ", {}, clear=True):
+        response = client.post("/api/stripe/create-checkout-session", json=payload)
+
+    assert response.status_code == 500
+    assert "Stripe secret key" in response.json()["detail"]
+
+
+def test_stripe_checkout_creates_session():
+    payload = {
+        "transactionId": "tx123",
+        "buyerEmail": "student@example.com",
+        "amount": 30000,
+        "amountRand": 300,
+        "cashAmount": 0,
+        "totalAmount": 300,
+        "currency": "zar",
+        "stripeRef": "CM-TX123-123",
+        "paymentType": "online",
+        "listingId": "listing123",
+        "listingTitle": "Calculator",
+        "successUrl": "http://localhost:5173/payment-success?tx=tx123",
+        "cancelUrl": "http://localhost:5173/payment-cancelled?tx=tx123",
+        "metadata": {"buyerId": "buyer123", "sellerId": "seller123"},
+    }
+
+    fake_stripe = MagicMock()
+    fake_stripe.checkout.Session.create.return_value = MagicMock(
+        id="cs_test_123",
+        url="https://checkout.stripe.com/c/pay/cs_test_123",
+    )
+
+    trusted_amounts = {
+        "amount": 30000,
+        "amountRand": 300,
+        "cashAmount": 0,
+        "totalAmount": 300,
+        "paymentType": "online",
+        "listingId": "listing123",
+        "listingTitle": "Calculator",
+        "buyerId": "buyer123",
+        "sellerId": "seller123",
+    }
+
+    with patch("backend.routes.stripe_payments._stripe_client", return_value=fake_stripe), \
+         patch("backend.routes.stripe_payments._checkout_amounts_from_firestore", return_value=trusted_amounts):
+        response = client.post("/api/stripe/create-checkout-session", json=payload)
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "id": "cs_test_123",
+        "url": "https://checkout.stripe.com/c/pay/cs_test_123",
+    }
+
+    create_args = fake_stripe.checkout.Session.create.call_args.kwargs
+    assert create_args["mode"] == "payment"
+    assert create_args["line_items"][0]["price_data"]["unit_amount"] == 30000
+    assert create_args["metadata"]["transactionId"] == "tx123"
+
+
+# =============================================================================
 # GET /listings/
 # =============================================================================
 
