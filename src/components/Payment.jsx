@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { doc, getDoc, onSnapshot, collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { onAuthStateChanged } from 'firebase/auth';
@@ -81,18 +81,10 @@ export default function Payment() {
         } catch (_) {}
       }
 
-      // Persist cash_waiting screen if Firestore re-fires
+      // ── FIX 1: Detect Stripe payment already completed via webhook ────────────
+      // If Firestore already has status=waiting + paymentStatus=paid,
+      // jump straight to success screen (handles webhook arriving before redirect)
       if (
-        data.status === 'waiting' &&
-        data.paymentProvider === 'cash' &&
-        data.paymentStatus === 'cash_pending'
-      ) {
-        setStep('cash_waiting');
-      }
-
-      // Persist success screen if Firestore re-fires after Stripe webhook
-      if (
-        data.status === 'waiting' &&
         data.paymentProvider === 'stripe' &&
         data.paymentStatus === 'paid'
       ) {
@@ -103,6 +95,17 @@ export default function Payment() {
           ''
         );
         setStep('success');
+        setLoading(false);
+        return;
+      }
+
+      // Persist cash_waiting screen if Firestore re-fires
+      if (
+        data.status === 'waiting' &&
+        data.paymentProvider === 'cash' &&
+        data.paymentStatus === 'cash_pending'
+      ) {
+        setStep('cash_waiting');
       }
 
       setLoading(false);
@@ -290,18 +293,29 @@ export default function Payment() {
     </>
   );
 
-  // ── Already processed guard — AFTER all step screens ─────────────────────────
-  if (tx && tx.status !== 'accepted' && tx.status !== 'pending_payment') return (
+  // ── FIX 2: Already processed guard — blocks re-entry after Stripe OR cash paid
+  // Checks paymentStatus=paid first, then falls back to status check
+  if (tx && (
+    tx.paymentStatus === 'paid' ||
+    tx.paymentStatus === 'cash_pending' ||
+    (tx.status !== 'accepted' && tx.status !== 'pending_payment')
+  )) return (
     <><NavBar /><div className={styles.page}><div className={styles.container}>
       <div className={styles.alreadyProcessed}>
         <i className="fas fa-info-circle" />
-        <p>This transaction has already been processed (status: <strong>{tx.status}</strong>).</p>
+        <p>
+          {tx.paymentStatus === 'paid'
+            ? 'This payment has already been completed.'
+            : tx.paymentStatus === 'cash_pending'
+            ? 'You have already confirmed this cash transaction.'
+            : `This transaction has already been processed (status: ${tx.status}).`}
+        </p>
         <button className={styles.backBtn} onClick={() => navigate('/my-purchases')}>Back to purchases</button>
       </div>
     </div></div></>
   );
 
-  // ── Main summary page (cash + online) ────────────────────────────────────────
+  // ── Main summary page ─────────────────────────────────────────────────────────
   return (
     <>
       <NavBar />
@@ -373,7 +387,8 @@ export default function Payment() {
 
             {/* ── Right: payment action ── */}
             <div className={styles.actionCol}>
-              <div className={styles.card}>
+              {/* FIX 3: card has overflow:hidden to keep button inside */}
+              <div className={styles.card} style={{ overflow: 'hidden' }}>
                 <p className={styles.cardLabel}>{isCashOnly ? 'Confirm & proceed' : 'Pay online'}</p>
 
                 {/* Online amount display */}
@@ -421,17 +436,27 @@ export default function Payment() {
                     </button>
                   </>
                 ) : (
-                  /* Stripe flow — user clicks button, then gets redirected */
+                  /* Stripe flow */
                   <>
                     <div className={styles.stripeInfoBox}>
-                      <i className="fab fa-stripe" style={{ fontSize: '1.5rem', color: '#6772e5' }} />
-                      <p>You will be securely redirected to Stripe to complete your payment. No card details are stored by Campus Marketplace.</p>
+                      <i className="fab fa-stripe" style={{ fontSize: '1.5rem', color: '#6772e5', flexShrink: 0 }} />
+                      <p style={{ margin: 0, fontSize: '0.85rem', lineHeight: '1.4' }}>
+                        You will be securely redirected to Stripe to complete your payment.
+                        No card details are stored by Campus Marketplace.
+                      </p>
                     </div>
                     <button
                       className={styles.primaryBtn}
                       onClick={handleOnlinePayment}
                       disabled={processing}
-                      style={{ background: '#6772e5' }}
+                      style={{
+                        background:  '#6772e5',
+                        width:       '100%',
+                        boxSizing:   'border-box',
+                        whiteSpace:  'nowrap',
+                        overflow:    'hidden',
+                        textOverflow:'ellipsis',
+                      }}
                     >
                       {processing
                         ? <><i className="fas fa-spinner fa-spin" /> Redirecting...</>
