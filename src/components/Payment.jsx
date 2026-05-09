@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { doc, getDoc, onSnapshot, collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, onSnapshot, collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth, db } from '../firebase';
 import NavBar from './NavBarTemp';
@@ -71,6 +72,8 @@ export default function Payment() {
 
       if (data.sellerName) {
         setSellerName(data.sellerName);
+      if (data.sellerName) {
+        setSellerName(data.sellerName);
       } else if (data.sellerId) {
         try {
           const us = await getDoc(doc(db, 'users', data.sellerId));
@@ -137,6 +140,7 @@ export default function Payment() {
     } finally {
       setProcessing(false);
     }
+  }, [tx, currentUser, listing]);
   }, [tx, currentUser, listing]);
 
   // ── Stripe: user clicks button, THEN redirects ────────────────────────────────
@@ -233,6 +237,9 @@ export default function Payment() {
       </div></div>
     </>
   );
+      </div></div>
+    </>
+  );
 
   // ── Cash waiting screen — BEFORE already-processed guard ─────────────────────
   if (step === 'cash_waiting') return (
@@ -289,6 +296,9 @@ export default function Payment() {
       </div></div>
     </>
   );
+      </div></div>
+    </>
+  );
 
   // ── Already processed guard — AFTER all step screens ─────────────────────────
   if (tx && tx.status !== 'accepted' && tx.status !== 'pending_payment') return (
@@ -325,6 +335,7 @@ export default function Payment() {
                 <div className={styles.itemRow}>
                   <div className={styles.itemImg}>
                     {itemImage ? <img src={itemImage} alt={itemTitle} /> : <i className="fas fa-image" />}
+                    {itemImage ? <img src={itemImage} alt={itemTitle} /> : <i className="fas fa-image" />}
                   </div>
                   <div className={styles.itemInfo}>
                     <p className={styles.itemTitle}>{itemTitle}</p>
@@ -345,9 +356,11 @@ export default function Payment() {
                   <>
                     <div className={styles.breakdownRow}>
                       <span className={styles.breakdownOnline}><i className="fas fa-credit-card" /> Online now</span>
+                      <span className={styles.breakdownOnline}><i className="fas fa-credit-card" /> Online now</span>
                       <span className={styles.breakdownOnlineAmt}>R {onlineAmount.toLocaleString('en-ZA')}</span>
                     </div>
                     <div className={styles.breakdownRow}>
+                      <span className={styles.breakdownCash}><i className="fas fa-coins" /> Cash at drop-off</span>
                       <span className={styles.breakdownCash}><i className="fas fa-coins" /> Cash at drop-off</span>
                       <span className={styles.breakdownCashAmt}>R {cashAmount.toLocaleString('en-ZA')}</span>
                     </div>
@@ -366,6 +379,7 @@ export default function Payment() {
                     {isCashOnly
                       ? 'This is a cash-on-delivery transaction. Your status will move to waiting once you confirm below — pay the seller in person at the drop-off point.'
                       : `R ${cashAmount.toLocaleString('en-ZA')} cash is due at drop-off. The item will only be released once all payments are settled.`}
+                      : `R ${cashAmount.toLocaleString('en-ZA')} cash is due at drop-off. The item will only be released once all payments are settled.`}
                   </p>
                 </div>
               )}
@@ -374,6 +388,7 @@ export default function Payment() {
             {/* ── Right: payment action ── */}
             <div className={styles.actionCol}>
               <div className={styles.card}>
+                <p className={styles.cardLabel}>{isCashOnly ? 'Confirm & proceed' : 'Pay online'}</p>
                 <p className={styles.cardLabel}>{isCashOnly ? 'Confirm & proceed' : 'Pay online'}</p>
 
                 {/* Online amount display */}
@@ -389,6 +404,7 @@ export default function Payment() {
                   <div className={styles.amountDisplay}>
                     <span className={styles.amountLabel}>Cash to bring</span>
                     <span className={styles.amountValue}>R {cashAmount.toLocaleString('en-ZA')}</span>
+                    <span className={styles.amountValue}>R {cashAmount.toLocaleString('en-ZA')}</span>
                   </div>
                 )}
 
@@ -400,15 +416,8 @@ export default function Payment() {
                 {isCashOnly ? (
                   <>
                     <label className={styles.confirmCheck}>
-                      <input
-                        type="checkbox"
-                        checked={cashConfirmed}
-                        onChange={e => setCashConfirmed(e.target.checked)}
-                      />
-                      <span>
-                        I confirm I have seen and verified the amount of{' '}
-                        <strong>R {cashAmount.toLocaleString('en-ZA')}</strong> and will bring this cash to the drop-off point.
-                      </span>
+                      <input type="checkbox" checked={cashConfirmed} onChange={e => setCashConfirmed(e.target.checked)} />
+                      <span>I confirm I have seen and verified the amount of <strong>R {cashAmount.toLocaleString('en-ZA')}</strong> and will bring this cash to the drop-off point.</span>
                     </label>
                     <button
                       className={styles.primaryBtn}

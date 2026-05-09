@@ -31,3 +31,12 @@ As an admin, I want to view facility utilisation so that I can manage capacity.
 
 ## US21 — Moderated Content Summary Report
 As an admin, I want to view moderated content summaries so that I can monitor platform safety.
+
+## US22 — Export Reports
+As an admin, I want to export reports as CSV or PDF so that I can share data externally.
+
+## US24 — Sponsored Listings
+As a student seller, I want to sponsor my listing so that it appears as a pop-up ad or in an ad banner on other users' screens to increase visibility and sell my item faster.
+
+## US25 — Responsive Design for Small Screens
+As a user with a small-screen device, I want the purchase interface to remain fully usable without horizontal scrolling or cut-off elements so that I can complete purchases reliably regardless of my screen size.

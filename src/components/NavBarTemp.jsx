@@ -78,8 +78,14 @@ export default function Navbar() {
         setNotificationsOpen(false);
         if (n.source === 'offer') {
             await markOfferAsRead(n.id);
-            if (n.type === 'new_offer') {
+
+            if (n.type === 'buyer_paid') {
+                // Seller taps this → go to Trade Facility to book a drop-off slot
+                navigate('/trade-facility');
+
+            } else if (n.type === 'new_offer') {
                 navigate('/profile?tab=offers&highlight=' + (n.transactionId || n.listingId));
+
             } else if (n.type === 'offer_accepted') {
                 if (n.transactionId) {
                     navigate(`/payment/${n.transactionId}`);
@@ -88,6 +94,7 @@ export default function Navbar() {
                 }
             } else if (n.type === 'offer_declined') {
                 navigate('/view-listing');
+
             } else if (
                 n.type === 'item_received_at_facility' ||
                 n.type === 'item_at_facility'          ||
@@ -119,6 +126,7 @@ export default function Navbar() {
     };
 
     const notificationIcon = (type) => {
+        if (type === 'buyer_paid')                           return 'fa-money-bill-wave';
         if (type === 'new_offer')                            return 'fa-shopping-cart';
         if (type === 'offer_accepted')                       return 'fa-circle-check';
         if (type === 'offer_declined')                       return 'fa-circle-xmark';
@@ -131,6 +139,7 @@ export default function Navbar() {
     };
 
     const notificationIconColor = (type) => {
+        if (type === 'buyer_paid')                           return '#16a34a';
         if (type === 'new_offer')                            return '#3b82f6';
         if (type === 'offer_accepted')                       return '#22c55e';
         if (type === 'offer_declined')                       return '#ef4444';
@@ -144,6 +153,7 @@ export default function Navbar() {
 
     const notificationMessage = (n) => {
         const title = n.listingTitle ? `"${n.listingTitle}"` : 'your item';
+        if (n.type === 'buyer_paid')     return `${n.buyerName || 'Your buyer'} has paid for ${title}. Book a drop-off slot now.`;
         if (n.type === 'new_offer')      return `${n.buyerName || 'A student'} made an offer on ${title}`;
         if (n.type === 'offer_accepted') return `Your offer on ${title} was accepted!`;
         if (n.type === 'offer_declined') return `Your offer on ${title} was declined.`;
@@ -227,7 +237,7 @@ export default function Navbar() {
         }, 2000);
     };
 
-    // ── Offer notifications ───────────────────────────────────────────────────
+    // ── Offer notifications (real-time) ───────────────────────────────────────
 
     useEffect(() => {
         if (!currentUser) return;
@@ -269,10 +279,7 @@ export default function Navbar() {
                 for (const d of buyerSnap.docs) {
                     const data = d.data();
                     const listingId = data.listingId || data.ListingId || data.listing_id || null;
-                    if (!listingId) {
-                        console.warn('NavBar: transaction missing listingId', d.id);
-                        continue;
-                    }
+                    if (!listingId) continue;
                     let sellerName = 'Seller';
                     try {
                         const u = await getDoc(doc(db, 'users', data.sellerId));
@@ -294,10 +301,7 @@ export default function Navbar() {
                 for (const d of sellerSnap.docs) {
                     const data = d.data();
                     const listingId = data.listingId || data.ListingId || data.listing_id || null;
-                    if (!listingId) {
-                        console.warn('NavBar: transaction missing listingId', d.id);
-                        continue;
-                    }
+                    if (!listingId) continue;
                     let buyerName = 'Buyer';
                     try {
                         const u = await getDoc(doc(db, 'users', data.buyerId));
@@ -371,12 +375,7 @@ export default function Navbar() {
                             disabled={!link.path}
                         >
                             {link.isCart
-                                ? (
-                                    <span className={styles.cartNavItem}>
-                                        <i className="fas fa-shopping-cart" />
-                                        Cart
-                                    </span>
-                                )
+                                ? <span className={styles.cartNavItem}><i className="fas fa-shopping-cart" />Cart</span>
                                 : link.label
                             }
                         </button>
@@ -531,7 +530,7 @@ export default function Navbar() {
                 </div>
             )}
 
-            {/* Mobile bottom nav — aria-hidden so tests target the desktop nav only */}
+            {/* Mobile bottom nav */}
             <nav className={styles.mobileNav} aria-hidden="true">
                 {NAV_LINKS.map((link) => (
                     <button
