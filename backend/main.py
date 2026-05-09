@@ -10,8 +10,8 @@ from fastapi.middleware.cors import CORSMiddleware
 ROOT_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(ROOT_DIR / ".env")
 
-from backend.routes.listings import router as listings_router
-from backend.routes.stripe_payments import router as stripe_router
+from routes.listings import router as listings_router
+from routes.stripe_payments import router as stripe_router
 
 app = FastAPI(title="Campus Marketplace API")
 
