@@ -1,5 +1,5 @@
 import { render, screen, fireEvent, act } from "@testing-library/react";
-import { vi, describe, test, beforeEach } from "vitest";
+import { vi, describe, test, beforeEach, afterEach } from "vitest";
 import { MemoryRouter } from "react-router-dom";
 import MyPurchases from "../components/MyPurchases";
 
@@ -21,16 +21,18 @@ vi.mock("react-router-dom", async () => {
   };
 });
 
-// ── Firebase mocks ──────────────────────────────
+// ── Firebase mocks (minimal) ───────────────────
 const mockUnsubscribe = vi.fn();
-const mockOnSnapshot = vi.fn();
-const mockOnAuthStateChanged = vi.fn();
-const mockGetDoc = vi.fn();
+let mockSnapshotCallback = null;
+let mockAuthCallback = null;
 
 vi.mock("../firebase", () => ({ auth: {}, db: {} }));
 
 vi.mock("firebase/auth", () => ({
-  onAuthStateChanged: (...args) => mockOnAuthStateChanged(...args),
+  onAuthStateChanged: (_auth, cb) => {
+    mockAuthCallback = cb;
+    return () => {};
+  },
 }));
 
 vi.mock("firebase/firestore", () => ({
@@ -38,8 +40,11 @@ vi.mock("firebase/firestore", () => ({
   query: vi.fn(),
   where: vi.fn(),
   doc: vi.fn(),
-  getDoc: (...args) => mockGetDoc(...args),
-  onSnapshot: (...args) => mockOnSnapshot(...args),
+  getDoc: vi.fn().mockResolvedValue({ exists: () => false }),
+  onSnapshot: (_query, cb) => {
+    mockSnapshotCallback = cb;
+    return mockUnsubscribe;
+  },
 }));
 
 vi.mock("../components/NavBarTemp", () => ({
@@ -50,51 +55,71 @@ vi.mock("../components/MyPurchases.module.css", () => ({
   default: new Proxy({}, { get: (_, key) => key }),
 }));
 
-const setupDefaultMocks = () => {
-  mockOnAuthStateChanged.mockImplementation((_auth, cb) => {
-    cb({ uid: "123", email: "user@test.com" });
-    return () => {};
-  });
-  mockOnSnapshot.mockImplementation((_query, cb) => {
-    cb({ docs: [] });
-    return mockUnsubscribe;
-  });
-  mockGetDoc.mockResolvedValue({ exists: () => false });
+// Helper to simulate authenticated user
+const setAuthenticatedUser = (uid = "123") => {
+  if (mockAuthCallback) {
+    mockAuthCallback({ uid, email: "user@test.com" });
+  }
 };
 
-const renderComponent = async () => {
-  let result;
-  await act(async () => {
-    result = render(
-      <MemoryRouter>
-        <MyPurchases />
-      </MemoryRouter>
-    );
-  });
-  return result;
+// Helper to simulate transaction data from Firestore
+const setMockTransactions = (transactions) => {
+  if (mockSnapshotCallback) {
+    const snap = {
+      docs: transactions.map(tx => ({
+        id: tx.id,
+        data: () => tx,
+      })),
+    };
+    mockSnapshotCallback(snap);
+  }
 };
 
-// TODO: re-enable after deployment — skipped to prevent CI OOM while
-// the GitHub Actions runner doesn't have enough heap for this component.
-// To re-enable: change describe.skip → describe
-describe.skip("MyPurchases Component", () => {
+describe("MyPurchases Component", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    setupDefaultMocks();
+    mockSnapshotCallback = null;
+    mockAuthCallback = null;
   });
 
+  afterEach(() => {
+    vi.clearAllTimers();
+  });
+
+  // ── Basic Rendering Tests ─────────────────────
   test("renders NavBar", async () => {
-    await renderComponent();
+    await act(async () => {
+      render(
+        <MemoryRouter>
+          <MyPurchases />
+        </MemoryRouter>
+      );
+    });
+    setAuthenticatedUser();
     expect(screen.getByTestId("mock-navbar")).toBeInTheDocument();
   });
 
   test("displays header title", async () => {
-    await renderComponent();
+    await act(async () => {
+      render(
+        <MemoryRouter>
+          <MyPurchases />
+        </MemoryRouter>
+      );
+    });
+    setAuthenticatedUser();
     expect(screen.getByText("My Purchases & Offers")).toBeInTheDocument();
   });
 
   test("shows all filter buttons", async () => {
-    await renderComponent();
+    await act(async () => {
+      render(
+        <MemoryRouter>
+          <MyPurchases />
+        </MemoryRouter>
+      );
+    });
+    setAuthenticatedUser();
     expect(screen.getByText("All")).toBeInTheDocument();
     expect(screen.getByText("Pending")).toBeInTheDocument();
     expect(screen.getByText("Accepted")).toBeInTheDocument();
@@ -103,105 +128,417 @@ describe.skip("MyPurchases Component", () => {
     expect(screen.getByText("Declined")).toBeInTheDocument();
   });
 
-  test("filters section renders 6 buttons", async () => {
-    await renderComponent();
-    const filtersDiv = document.querySelector(".filters");
-    expect(filtersDiv).toBeInTheDocument();
-    expect(filtersDiv.children.length).toBe(6);
-  });
-
-  test("clicking a filter marks it active", async () => {
-    await renderComponent();
-    const pendingFilter = screen.getByText("Pending");
-    fireEvent.click(pendingFilter);
-    expect(pendingFilter).toHaveClass("filterBtnActive");
-  });
-
-  test("clicking All filter marks it active", async () => {
-    await renderComponent();
-    fireEvent.click(screen.getByText("Pending"));
-    fireEvent.click(screen.getByText("All"));
-    expect(screen.getByText("All")).toHaveClass("filterBtnActive");
-  });
-
   test("back button is present and navigates back", async () => {
-    await renderComponent();
+    await act(async () => {
+      render(
+        <MemoryRouter>
+          <MyPurchases />
+        </MemoryRouter>
+      );
+    });
+    setAuthenticatedUser();
     const backButton = screen.getByText("Back");
     expect(backButton).toBeInTheDocument();
     fireEvent.click(backButton);
     expect(mockNavigateBack).toHaveBeenCalled();
   });
 
-  test("back button has arrow-left icon", async () => {
-    await renderComponent();
-    const icon = screen.getByText("Back").querySelector("i");
-    expect(icon).toHaveClass("fa-arrow-left");
-  });
-
+  // ── Empty State Tests ─────────────────────────
   test("shows empty state when no transactions", async () => {
-    await renderComponent();
+    await act(async () => {
+      render(
+        <MemoryRouter>
+          <MyPurchases />
+        </MemoryRouter>
+      );
+    });
+    setAuthenticatedUser();
+    setMockTransactions([]);
+
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 100));
+    });
+
     expect(screen.getByText("You haven't made any offers yet")).toBeInTheDocument();
   });
 
-  test("empty state has shopping-bag icon", async () => {
-    await renderComponent();
-    const emptyDiv = document.querySelector(".emptyState");
-    expect(emptyDiv).toBeInTheDocument();
-    expect(emptyDiv.querySelector("i")).toHaveClass("fa-shopping-bag");
-  });
+  test("Browse Listings button navigates to /view-listing", async () => {
+    await act(async () => {
+      render(
+        <MemoryRouter>
+          <MyPurchases />
+        </MemoryRouter>
+      );
+    });
+    setAuthenticatedUser();
+    setMockTransactions([]);
 
-  test("Browse Listings button is visible in empty state", async () => {
-    await renderComponent();
-    expect(screen.getByText("Browse Listings")).toBeInTheDocument();
-  });
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 100));
+    });
 
-  test("Browse Listings navigates to /view-listing", async () => {
-    await renderComponent();
     fireEvent.click(screen.getByText("Browse Listings"));
     expect(mockNavigate).toHaveBeenCalledWith("/view-listing");
   });
 
-  test("no count badges shown when empty", async () => {
-    await renderComponent();
-    expect(screen.queryByText("1")).not.toBeInTheDocument();
-  });
+  // ── Transaction Display Tests ─────────────────
+  test("displays transaction cards when transactions exist", async () => {
+    const mockTx = [{
+      id: "tx1",
+      listingTitle: "Test Item",
+      status: "pending",
+      type: "sale",
+      sellerName: "Test Seller",
+      listingPrice: 100,
+      createdAt: { toDate: () => new Date() },
+    }];
 
-  test("no active count badge when empty", async () => {
-    await renderComponent();
-    expect(screen.queryByText(/\d+ active/)).not.toBeInTheDocument();
-  });
-
-  test("correct top-level CSS classes exist", async () => {
-    await renderComponent();
-    expect(document.querySelector(".page")).toBeInTheDocument();
-    expect(document.querySelector(".container")).toBeInTheDocument();
-    expect(document.querySelector(".header")).toBeInTheDocument();
-  });
-
-  test("redirects to /login when unauthenticated", async () => {
-    mockOnAuthStateChanged.mockImplementation((_auth, cb) => {
-      cb(null);
-      return () => {};
+    await act(async () => {
+      render(
+        <MemoryRouter>
+          <MyPurchases />
+        </MemoryRouter>
+      );
     });
-    await renderComponent();
+    setAuthenticatedUser();
+    setMockTransactions(mockTx);
+
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 100));
+    });
+
+    expect(screen.getByText("Test Item")).toBeInTheDocument();
+    expect(screen.getByText("Test Seller")).toBeInTheDocument();
+  });
+
+  test("shows Pending status badge for pending transactions", async () => {
+    const mockTx = [{
+      id: "tx1",
+      listingTitle: "Test Item",
+      status: "pending",
+      type: "sale",
+      sellerName: "Test Seller",
+      listingPrice: 100,
+      createdAt: { toDate: () => new Date() },
+    }];
+
+    await act(async () => {
+      render(
+        <MemoryRouter>
+          <MyPurchases />
+        </MemoryRouter>
+      );
+    });
+    setAuthenticatedUser();
+    setMockTransactions(mockTx);
+
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 100));
+    });
+
+    expect(screen.getByText("Pending")).toBeInTheDocument();
+  });
+
+  test("shows Accepted status badge for accepted transactions", async () => {
+    const mockTx = [{
+      id: "tx1",
+      listingTitle: "Test Item",
+      status: "accepted",
+      type: "sale",
+      sellerName: "Test Seller",
+      listingPrice: 100,
+      createdAt: { toDate: () => new Date() },
+    }];
+
+    await act(async () => {
+      render(
+        <MemoryRouter>
+          <MyPurchases />
+        </MemoryRouter>
+      );
+    });
+    setAuthenticatedUser();
+    setMockTransactions(mockTx);
+
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 100));
+    });
+
+    expect(screen.getByText("Accepted")).toBeInTheDocument();
+  });
+
+  test("shows Completed status badge for completed transactions", async () => {
+    const mockTx = [{
+      id: "tx1",
+      listingTitle: "Test Item",
+      status: "completed",
+      type: "sale",
+      sellerName: "Test Seller",
+      listingPrice: 100,
+      createdAt: { toDate: () => new Date() },
+    }];
+
+    await act(async () => {
+      render(
+        <MemoryRouter>
+          <MyPurchases />
+        </MemoryRouter>
+      );
+    });
+    setAuthenticatedUser();
+    setMockTransactions(mockTx);
+
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 100));
+    });
+
+    expect(screen.getByText("Completed")).toBeInTheDocument();
+  });
+
+  test("shows Declined status badge for declined transactions", async () => {
+    const mockTx = [{
+      id: "tx1",
+      listingTitle: "Test Item",
+      status: "declined",
+      type: "sale",
+      sellerName: "Test Seller",
+      listingPrice: 100,
+      createdAt: { toDate: () => new Date() },
+    }];
+
+    await act(async () => {
+      render(
+        <MemoryRouter>
+          <MyPurchases />
+        </MemoryRouter>
+      );
+    });
+    setAuthenticatedUser();
+    setMockTransactions(mockTx);
+
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 100));
+    });
+
+    expect(screen.getByText("Declined")).toBeInTheDocument();
+  });
+
+  // ── Filter Tests ──────────────────────────────
+  test("filtering by Pending shows only pending transactions", async () => {
+    const mockTxs = [
+      { id: "tx1", listingTitle: "Pending Item", status: "pending", type: "sale", sellerName: "Seller 1", listingPrice: 100, createdAt: { toDate: () => new Date() } },
+      { id: "tx2", listingTitle: "Accepted Item", status: "accepted", type: "sale", sellerName: "Seller 2", listingPrice: 200, createdAt: { toDate: () => new Date() } },
+    ];
+
+    await act(async () => {
+      render(
+        <MemoryRouter>
+          <MyPurchases />
+        </MemoryRouter>
+      );
+    });
+    setAuthenticatedUser();
+    setMockTransactions(mockTxs);
+
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 100));
+    });
+
+    fireEvent.click(screen.getByText("Pending"));
+    
+    expect(screen.getByText("Pending Item")).toBeInTheDocument();
+    expect(screen.queryByText("Accepted Item")).not.toBeInTheDocument();
+  });
+
+  test("filtering by All shows all transactions", async () => {
+    const mockTxs = [
+      { id: "tx1", listingTitle: "Pending Item", status: "pending", type: "sale", sellerName: "Seller 1", listingPrice: 100, createdAt: { toDate: () => new Date() } },
+      { id: "tx2", listingTitle: "Accepted Item", status: "accepted", type: "sale", sellerName: "Seller 2", listingPrice: 200, createdAt: { toDate: () => new Date() } },
+    ];
+
+    await act(async () => {
+      render(
+        <MemoryRouter>
+          <MyPurchases />
+        </MemoryRouter>
+      );
+    });
+    setAuthenticatedUser();
+    setMockTransactions(mockTxs);
+
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 100));
+    });
+
+    fireEvent.click(screen.getByText("Pending"));
+    fireEvent.click(screen.getByText("All"));
+    
+    expect(screen.getByText("Pending Item")).toBeInTheDocument();
+    expect(screen.getByText("Accepted Item")).toBeInTheDocument();
+  });
+
+  // ── Auth Tests ────────────────────────────────
+  test("redirects to /login when unauthenticated", async () => {
+    await act(async () => {
+      render(
+        <MemoryRouter>
+          <MyPurchases />
+        </MemoryRouter>
+      );
+    });
+    // No user set - auth callback with null
+    if (mockAuthCallback) {
+      mockAuthCallback(null);
+    }
     expect(mockNavigate).toHaveBeenCalledWith("/login");
   });
 
+  test("does not redirect when authenticated", async () => {
+    await act(async () => {
+      render(
+        <MemoryRouter>
+          <MyPurchases />
+        </MemoryRouter>
+      );
+    });
+    setAuthenticatedUser();
+    expect(mockNavigate).not.toHaveBeenCalledWith("/login");
+  });
+
+  // ── Cleanup Tests ─────────────────────────────
   test("unsubscribes snapshot listener on unmount", async () => {
-    const { unmount } = await renderComponent();
-    unmount();
+    let unmountFn;
+    await act(async () => {
+      const { unmount } = render(
+        <MemoryRouter>
+          <MyPurchases />
+        </MemoryRouter>
+      );
+      unmountFn = unmount;
+    });
+    setAuthenticatedUser();
+    
+    await act(async () => {
+      unmountFn();
+    });
+    
     expect(mockUnsubscribe).toHaveBeenCalled();
   });
 
-  test("non-all filter hides Browse Listings button", async () => {
-    await renderComponent();
-    fireEvent.click(screen.getByText("Pending"));
-    expect(screen.queryByText("Browse Listings")).not.toBeInTheDocument();
+  // ── Payment Button Tests ──────────────────────
+  test("shows payment button for accepted transactions", async () => {
+    const mockTx = [{
+      id: "tx1",
+      listingTitle: "Test Item",
+      status: "accepted",
+      type: "sale",
+      sellerName: "Test Seller",
+      listingPrice: 100,
+      createdAt: { toDate: () => new Date() },
+    }];
+
+    await act(async () => {
+      render(
+        <MemoryRouter>
+          <MyPurchases />
+        </MemoryRouter>
+      );
+    });
+    setAuthenticatedUser();
+    setMockTransactions(mockTx);
+
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 100));
+    });
+
+    const paymentButton = document.querySelector(`.${"viewBtnPay"}`);
+    expect(paymentButton).toBeInTheDocument();
   });
 
-  test("non-all filter shows correct empty message", async () => {
-    await renderComponent();
-    fireEvent.click(screen.getByText("Declined"));
-    expect(screen.getByText("No declined offers")).toBeInTheDocument();
+  test("payment button navigates to payment page", async () => {
+    const mockTx = [{
+      id: "tx1",
+      listingTitle: "Test Item",
+      status: "accepted",
+      type: "sale",
+      sellerName: "Test Seller",
+      listingPrice: 100,
+      createdAt: { toDate: () => new Date() },
+    }];
+
+    await act(async () => {
+      render(
+        <MemoryRouter>
+          <MyPurchases />
+        </MemoryRouter>
+      );
+    });
+    setAuthenticatedUser();
+    setMockTransactions(mockTx);
+
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 100));
+    });
+
+    const paymentButton = document.querySelector(`.${"viewBtnPay"}`);
+    fireEvent.click(paymentButton);
+    expect(mockNavigate).toHaveBeenCalledWith("/payment/tx1");
+  });
+
+  // ── Status Message Tests ──────────────────────
+  test("shows waiting message for pending seller response", async () => {
+    const mockTx = [{
+      id: "tx1",
+      listingTitle: "Test Item",
+      status: "pending",
+      type: "sale",
+      sellerName: "Test Seller",
+      listingPrice: 100,
+      createdAt: { toDate: () => new Date() },
+    }];
+
+    await act(async () => {
+      render(
+        <MemoryRouter>
+          <MyPurchases />
+        </MemoryRouter>
+      );
+    });
+    setAuthenticatedUser();
+    setMockTransactions(mockTx);
+
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 100));
+    });
+
+    expect(screen.getByText(/Waiting for the seller to respond/i)).toBeInTheDocument();
+  });
+
+  test("shows acceptance message for accepted offers", async () => {
+    const mockTx = [{
+      id: "tx1",
+      listingTitle: "Test Item",
+      status: "accepted",
+      type: "sale",
+      sellerName: "Test Seller",
+      listingPrice: 100,
+      createdAt: { toDate: () => new Date() },
+    }];
+
+    await act(async () => {
+      render(
+        <MemoryRouter>
+          <MyPurchases />
+        </MemoryRouter>
+      );
+    });
+    setAuthenticatedUser();
+    setMockTransactions(mockTx);
+
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 100));
+    });
+
+    expect(screen.getByText(/Your offer was accepted/i)).toBeInTheDocument();
   });
 });
