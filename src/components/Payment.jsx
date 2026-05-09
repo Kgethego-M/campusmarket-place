@@ -161,7 +161,7 @@ export default function Payment() {
           listingTitle: tx.listingTitle || listing?.title || 'Campus Item',
         },
         buyerEmail:       currentUser.email,
-        createSessionUrl: '/api/stripe/create-checkout-session',
+        createSessionUrl: `${import.meta.env.VITE_API_URL}/api/stripe/create-checkout-session`,
         successUrl:       `${window.location.origin}/payment-success?tx=${tx.id}`,
         cancelUrl:        `${window.location.origin}/payment-cancelled?tx=${tx.id}`,
       });
