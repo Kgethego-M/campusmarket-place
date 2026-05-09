@@ -1,7 +1,7 @@
 import { render, screen, fireEvent, act, waitFor } from "@testing-library/react";
 import { vi, describe, test, beforeEach, afterEach } from "vitest";
 import { MemoryRouter } from "react-router-dom";
-import MyPurchases from "../components/MyPurchases";  // ← ADD THIS LINE
+import MyPurchases from "../components/MyPurchases";
 
 // ── Router mock ─────────────────────────────────
 const mockNavigate = vi.fn();
@@ -87,15 +87,6 @@ const setTransactions = (transactions) => {
       snapshotHandler(snap);
     });
   }
-};
-
-// Helper for getDoc mock
-const setGetDocResponse = (data) => {
-  mockGetDocImpl = () => Promise.resolve({ exists: () => true, data: () => data });
-};
-
-const resetGetDocMock = () => {
-  mockGetDocImpl = null;
 };
 
 describe("MyPurchases Component", () => {
@@ -319,7 +310,10 @@ describe("MyPurchases Component", () => {
       expect(screen.getByText("Accepted Item")).toBeInTheDocument();
     });
     
-    fireEvent.click(screen.getByText("Pending"));
+    // Use getAllByText and pick the filter button (first element with "Pending")
+    const pendingButtons = screen.getAllByText("Pending");
+    const pendingFilterButton = pendingButtons[0]; // The filter button is first
+    fireEvent.click(pendingFilterButton);
     
     await waitFor(() => {
       expect(screen.getByText("Pending Item")).toBeInTheDocument();
@@ -342,8 +336,15 @@ describe("MyPurchases Component", () => {
       expect(screen.getByText("Accepted Item")).toBeInTheDocument();
     });
     
-    fireEvent.click(screen.getByText("Pending"));
-    fireEvent.click(screen.getByText("All"));
+    // Click Pending filter first
+    const pendingButtons = screen.getAllByText("Pending");
+    const pendingFilterButton = pendingButtons[0];
+    fireEvent.click(pendingFilterButton);
+    
+    // Then click All filter
+    const allButtons = screen.getAllByText("All");
+    const allFilterButton = allButtons[0];
+    fireEvent.click(allFilterButton);
     
     await waitFor(() => {
       expect(screen.getByText("Pending Item")).toBeInTheDocument();
