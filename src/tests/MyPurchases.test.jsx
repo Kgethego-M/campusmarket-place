@@ -319,16 +319,20 @@ describe("Buggy Code Pattern Tests", () => {
     });
     
     test("should format price with correct South African currency format", () => {
+      // South Africa (en-ZA) uses:
+      // - Spaces for thousand separators
+      // - Commas for decimal separators
       const formatPrice = (price) => {
         if (price === null || price === undefined) return null;
         return `R ${Number(price).toLocaleString('en-ZA')}`;
       };
       
-      // FIXED: Normalize spaces to handle non-breaking space vs regular space
+      // Normalize spaces to handle non-breaking space vs regular space
       const normalizeSpaces = (str) => str.replace(/\s/g, ' ');
       
       expect(normalizeSpaces(formatPrice(1000))).toBe("R 1 000");
-      expect(normalizeSpaces(formatPrice(1250.50))).toBe("R 1 250.5");
+      // en-ZA uses comma as decimal separator
+      expect(normalizeSpaces(formatPrice(1250.50))).toBe("R 1 250,5");
       expect(formatPrice(0)).toBe("R 0");
       expect(formatPrice(null)).toBe(null);
     });
@@ -505,7 +509,6 @@ describe("Buggy Code Pattern Tests", () => {
     });
     
     test("should properly check for hasPayment condition", () => {
-      // FIXED: Handle undefined properly and ensure trade type excludes payment
       const testCases = [
         { input: { paymentType: "full_online" }, expected: true },
         { input: { paymentMethod: "cash" }, expected: true },
