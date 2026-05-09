@@ -243,12 +243,25 @@
 }
 
 /* ── Loading / error ── */
+.loadingScreen {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    gap: 1rem;
+    background: #F5F6F8;
+    color: #888;
+    font-size: 0.95rem;
+}
+
 .loadingWrap {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 14px;
-    padding: 80px 0;
+    justify-content: center;
+    min-height: calc(100vh - 64px); /* full viewport minus the navbar height */
+    gap: 1rem;
     color: #888;
     font-size: 0.95rem;
 }
@@ -573,4 +586,42 @@
     align-items: center;
     justify-content: center;
     margin-left: 4px;
+}
+/* ── Mobile responsive additions ── */
+@media (max-width: 768px) {
+    .main {
+        padding: 20px 16px 48px;
+    }
+    .statsRow {
+        grid-template-columns: repeat(2, 1fr);
+    }
+    .grid2 {
+        grid-template-columns: 1fr;
+    }
+    .pageTitle h1 {
+        font-size: 1.3rem;
+    }
+    .horizLabel {
+        min-width: 80px;
+        font-size: 0.75rem;
+    }
+    .horizBarTrack {
+        min-width: 60px;
+    }
+}
+
+@media (max-width: 480px) {
+    .statsRow {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 10px;
+    }
+    .statCard {
+        padding: 14px 12px 12px;
+    }
+    .statValue {
+        font-size: 1.2rem;
+    }
+    .card {
+        padding: 16px;
+    }
 }

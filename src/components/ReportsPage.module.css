@@ -569,3 +569,52 @@
   font-weight: 500;
   color: #374151;
 }
+/* ── Mobile responsive additions ── */
+@media (max-width: 768px) {
+    .main {
+        padding: 20px 16px 48px;
+    }
+    .pageTitle h1 {
+        font-size: 1.3rem;
+    }
+    .modRow {
+        flex-wrap: wrap;
+        gap: 10px;
+    }
+    .reportActions {
+        flex-direction: row;
+        flex-wrap: wrap;
+        width: 100%;
+    }
+    .searchInput {
+        width: 140px;
+    }
+}
+
+/* ── Mobile responsive additions ── */
+@media (max-width: 768px) {
+    .main {
+        padding: 20px 16px 48px;
+    }
+    .statsGrid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+    .periodSelector {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    .pageTitle h1 {
+        font-size: 1.3rem;
+    }
+    .reasonRow {
+        flex-wrap: wrap;
+        gap: 6px;
+    }
+    .reasonBarTrack {
+        width: 80px;
+    }
+    .table th, .table td {
+        padding: 8px 10px;
+        font-size: 0.75rem;
+    }
+}

@@ -64,7 +64,7 @@
     border-radius: 99px;
 }
 
-/* ── Drop zone (empty state) ── */
+/* ── Drop zone ── */
 .dropZone {
     width: 100%;
     min-height: 130px;
@@ -133,12 +133,10 @@
     border-color: #6AA6DA;
 }
 
-/* Entrance animation */
 .previewEntering {
     animation: previewIn 0.25s ease both;
 }
 
-/* Removal animation */
 .previewRemoving {
     animation: previewOut 0.22s ease forwards;
     pointer-events: none;
@@ -161,7 +159,7 @@
     display: block;
 }
 
-/* ✕ Remove button */
+/* Remove button */
 .removeBtn {
     position: absolute;
     top: 5px;
@@ -184,7 +182,7 @@
 .removeBtn:hover { background: rgba(220, 38, 38, 0.85); transform: scale(1.1); }
 .removeBtn:disabled { opacity: 0.5; cursor: not-allowed; }
 
-/* "Main" label on first photo */
+/* "Main" label */
 .mainLabel {
     position: absolute;
     bottom: 5px;
@@ -352,7 +350,27 @@
 
 /* ── Responsive ── */
 @media (max-width: 620px) {
+    .page { padding: 0 12px 74px; }
+
     .headingWrapper,
     .form { width: 100%; }
+
+    .headingWrapper { margin-top: 20px; }
+
+    .form { padding: 20px 16px; }
+    .heading { font-size: 1.3rem; }
+
+    /* Stack the two-column rows on mobile */
+    .row { grid-template-columns: 1fr; gap: 0; }
+
     .previewGrid { grid-template-columns: repeat(3, 1fr); }
+
+    .submitBtn { height: 48px; font-size: 0.95rem; }
+}
+
+@media (max-width: 380px) {
+    .page { padding: 0 10px 74px; }
+    .previewGrid { grid-template-columns: repeat(2, 1fr); }
+    .form { padding: 16px 12px; }
+    .heading { font-size: 1.15rem; }
 }

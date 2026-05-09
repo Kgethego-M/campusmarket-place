@@ -21,9 +21,9 @@ export default function TradeFacility() {
   const navigate = useNavigate();
 
   useEffect(() => {
-  document.body.style.background = "#f5f7fa";
-  return () => { document.body.style.background = ""; };
-}, []);
+    document.body.style.background = "#f5f7fa";
+    return () => { document.body.style.background = ""; };
+  }, []);
 
   useEffect(() => {
     const unsubscribe = auth.onAuthStateChanged((currentUser) => {
@@ -43,10 +43,12 @@ export default function TradeFacility() {
   async function fetchTransactions(uid) {
     setLoading(true);
     try {
+      // CHANGE: Use "waiting" instead of "accepted"
+      // (or whichever status your team set after buyer confirms payment)
       const q = query(
         collection(db, "transactions"),
         where("sellerId", "==", uid),
-        where("status", "==", "accepted")
+        where("status", "==", "waiting")   // ✅ buyer has confirmed payment
       );
       const snapshot = await getDocs(q);
 
@@ -84,8 +86,9 @@ export default function TradeFacility() {
       return { label: "Item dropped off",   color: "#166534", bg: "#dcfce7" };
     if (txn.dropOffStatus === "scheduled")
       return { label: "Drop-off scheduled", color: "#92400e", bg: "#fef3c7" };
-    if (txn.status === "accepted")
-      return { label: "Book drop-off",      color: "#1e40af", bg: "#dbeafe" };
+    // For waiting status (buyer confirmed)
+    if (txn.status === "waiting")
+      return { label: "Waiting for drop-off", color: "#1e40af", bg: "#dbeafe" };
     return   { label: txn.status,           color: "#374151", bg: "#f3f4f6" };
   }
 
@@ -165,9 +168,9 @@ export default function TradeFacility() {
                 <polyline points="9 22 9 12 15 12 15 22"/>
               </svg>
             </div>
-            <p className={styles.emptyTitle}>No transactions yet</p>
+            <p className={styles.emptyTitle}>No transactions waiting</p>
             <p className={styles.emptySub}>
-              Once a buyer accepts your offer you'll manage the drop-off here.
+              When a buyer confirms payment, you'll be able to book a drop‑off here.
             </p>
             <button className={styles.primaryBtn}
                     onClick={() => navigate("/view-listing")}>
@@ -223,7 +226,8 @@ export default function TradeFacility() {
                       </p>
                     )}
 
-                    {txn.status === "accepted" && !txn.dropOffStatus && (
+                    {/* Show book button only if drop‑off not already scheduled */}
+                    {txn.status === "waiting" && !txn.dropOffStatus && (
                       <button className={styles.dropOffBtn}
                               onClick={() => navigate(`/book-dropoff/${txn.id}`)}>
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none"

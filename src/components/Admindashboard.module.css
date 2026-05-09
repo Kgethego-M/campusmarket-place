@@ -1178,3 +1178,421 @@
     font-size: 1.1rem;
   }
 }
+
+/* Add these missing styles to your Admindashboard.module.css file */
+
+/* ── Hamburger menu for mobile ── */
+.hamburgerBtn {
+    background: none;
+    border: none;
+    font-size: 1.3rem;
+    color: #555;
+    cursor: pointer;
+    padding: 8px;
+    border-radius: 8px;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s;
+}
+
+.hamburgerBtn:hover {
+    background: #e8f0f8;
+    color: #6AA6DA;
+}
+
+/* Mobile menu overlay for navigation links */
+.mobileMenuOverlay {
+    position: fixed;
+    top: 64px;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 150;
+    display: none;
+}
+
+.mobileMenu {
+    position: fixed;
+    top: 64px;
+    left: 0;
+    right: 0;
+    background: #fff;
+    border-bottom: 1px solid #e8eaed;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    padding: 16px;
+    display: none;
+    flex-direction: column;
+    gap: 8px;
+    z-index: 151;
+}
+
+.mobileNavLink {
+    background: none;
+    border: none;
+    font-family: inherit;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: #555;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    border-radius: 8px;
+    transition: background 0.15s, color 0.15s;
+    width: 100%;
+    text-align: left;
+}
+
+.mobileNavLink:hover {
+    background: #e8f0f8;
+    color: #6AA6DA;
+}
+
+.mobileNavLinkActive {
+    background: #6AA6DA;
+    color: #fff;
+}
+
+.mobileNavLinkActive:hover {
+    background: #5A95C8;
+    color: #fff;
+}
+
+/* Pagination styles */
+.pagination {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    margin-top: 24px;
+    padding: 16px 0;
+}
+
+.pageBtn {
+    background: #fff;
+    border: 1px solid #e2e6ea;
+    border-radius: 6px;
+    padding: 6px 12px;
+    font-family: inherit;
+    font-size: 0.8rem;
+    color: #555;
+    cursor: pointer;
+    transition: all 0.15s;
+    min-width: 36px;
+}
+
+.pageBtn:hover:not(:disabled) {
+    background: #6AA6DA;
+    border-color: #6AA6DA;
+    color: #fff;
+}
+
+.pageBtn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.pageBtnActive {
+    background: #6AA6DA;
+    border-color: #6AA6DA;
+    color: #fff;
+}
+
+/* Tooltip styles */
+.tooltip {
+    position: relative;
+    display: inline-block;
+}
+
+.tooltipText {
+    visibility: hidden;
+    background-color: #333;
+    color: #fff;
+    text-align: center;
+    padding: 5px 10px;
+    border-radius: 6px;
+    font-size: 0.7rem;
+    white-space: nowrap;
+    position: absolute;
+    z-index: 1;
+    bottom: 125%;
+    left: 50%;
+    transform: translateX(-50%);
+    opacity: 0;
+    transition: opacity 0.3s;
+}
+
+.tooltip:hover .tooltipText {
+    visibility: visible;
+    opacity: 1;
+}
+
+/* Modal styles for confirmations */
+.modalOverlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    backdrop-filter: blur(4px);
+}
+
+.modal {
+    background: #fff;
+    border-radius: 16px;
+    padding: 24px;
+    max-width: 400px;
+    width: 90%;
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+}
+
+.modalTitle {
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: #1a1a1a;
+    margin-bottom: 12px;
+}
+
+.modalMessage {
+    font-size: 0.9rem;
+    color: #555;
+    margin-bottom: 24px;
+    line-height: 1.5;
+}
+
+.modalActions {
+    display: flex;
+    gap: 12px;
+    justify-content: flex-end;
+}
+
+.modalBtnCancel {
+    padding: 8px 16px;
+    border: 1.5px solid #e2e6ea;
+    border-radius: 8px;
+    background: #fff;
+    color: #555;
+    font-family: inherit;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.modalBtnCancel:hover {
+    background: #f0f2f5;
+}
+
+.modalBtnConfirm {
+    padding: 8px 16px;
+    border: none;
+    border-radius: 8px;
+    background: #dc2626;
+    color: #fff;
+    font-family: inherit;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+
+.modalBtnConfirm:hover {
+    background: #b91c1c;
+}
+
+/* Toast notification styles */
+.toast {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    background: #fff;
+    border-radius: 8px;
+    padding: 12px 20px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    z-index: 1100;
+    animation: slideIn 0.3s ease;
+    border-left: 4px solid #6AA6DA;
+}
+
+.toastSuccess {
+    border-left-color: #10b981;
+}
+
+.toastError {
+    border-left-color: #dc2626;
+}
+
+.toastWarning {
+    border-left-color: #f59e0b;
+}
+
+.toastMessage {
+    font-size: 0.85rem;
+    color: #1a1a1a;
+}
+
+.toastClose {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: #999;
+    font-size: 1rem;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+@keyframes slideIn {
+    from {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #c1c1c1;
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #a8a8a8;
+}
+
+/* Focus visible for accessibility */
+:focus-visible {
+    outline: 2px solid #6AA6DA;
+    outline-offset: 2px;
+}
+
+/* Animation for loading states */
+@keyframes pulse {
+    0%, 100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.5;
+    }
+}
+
+.loadingPulse {
+    animation: pulse 1.5s ease-in-out infinite;
+}
+
+/* Badge for unread notifications */
+.unreadBadge {
+    background: #dc2626;
+    color: #fff;
+    border-radius: 50%;
+    width: 18px;
+    height: 18px;
+    font-size: 0.65rem;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: absolute;
+    top: -2px;
+    right: -2px;
+}
+
+/* Empty state illustration */
+.emptyState {
+    text-align: center;
+    padding: 48px 24px;
+    background: #fafbfc;
+    border-radius: 12px;
+    border: 1px dashed #c8cfd6;
+}
+
+.emptyStateIcon {
+    font-size: 3rem;
+    color: #c8cfd6;
+    margin-bottom: 16px;
+}
+
+.emptyStateTitle {
+    font-size: 1rem;
+    font-weight: 700;
+    color: #1a1a1a;
+    margin-bottom: 8px;
+}
+
+.emptyStateText {
+    font-size: 0.85rem;
+    color: #999;
+}
+
+/* Responsive additions for mobile menu */
+@media (max-width: 480px) {
+    .hamburgerBtn {
+        display: flex;
+    }
+    
+    .mobileMenuOverlay,
+    .mobileMenu {
+        display: block;
+    }
+    
+    .mobileMenu {
+        display: flex;
+    }
+}
+
+/* Print styles for reports */
+@media print {
+    .navbar,
+    .tabs,
+    .pagination,
+    .modalOverlay,
+    .toast,
+    .logoutOverlay,
+    .btnApprove,
+    .btnReject,
+    .btnSuspend,
+    .btnUnsuspend {
+        display: none !important;
+    }
+    
+    .main {
+        padding: 0;
+        margin: 0;
+        max-width: 100%;
+    }
+    
+    .card {
+        break-inside: avoid;
+        box-shadow: none;
+        border: 1px solid #ddd;
+    }
+    
+    .statsRow {
+        break-inside: avoid;
+    }
+}

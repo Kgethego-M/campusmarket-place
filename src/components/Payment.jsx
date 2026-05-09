@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { doc, getDoc, onSnapshot } from 'firebase/firestore';
+import { doc, getDoc, onSnapshot, collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth, db } from '../firebase';
 import NavBar from './NavBarTemp';
@@ -15,29 +15,49 @@ import {
 } from '../utils/payment.utils';
 import styles from './Payment.module.css';
 
-// ─── Paystack public key ──────────────────────────────────────────────────────
-// Replace with your actual test key or pull from env:
-// const PAYSTACK_PUBLIC_KEY = import.meta.env.VITE_PAYSTACK_PUBLIC_KEY;
 const PAYSTACK_PUBLIC_KEY = import.meta.env.VITE_PAYSTACK_PUBLIC_KEY;
+
+// ─── Helper: write a notification doc for the seller ─────────────────────────
+async function notifySellerPaymentConfirmed({ sellerId, buyerName, listingId, listingTitle, transactionId }) {
+  try {
+    await addDoc(collection(db, 'notifications'), {
+      userId:        sellerId,
+      type:          'buyer_paid',
+      read:          false,
+      buyerName,
+      listingId,
+      listingTitle:  listingTitle || 'your item',
+      transactionId,
+      createdAt:     serverTimestamp(),
+    });
+  } catch (err) {
+    console.error('[Payment] Failed to create seller notification:', err);
+  }
+}
 
 // ─── Component ────────────────────────────────────────────────────────────────
 export default function Payment() {
   const { txId } = useParams();
   const navigate = useNavigate();
 
-  const [currentUser, setCurrentUser]   = useState(null);
-  const [tx, setTx]                     = useState(null);
-  const [listing, setListing]           = useState(null);
-  const [loading, setLoading]           = useState(true);
-  const [error, setError]               = useState('');
-  const [processing, setProcessing]     = useState(false);
-  const [step, setStep]                 = useState('summary'); // 'summary' | 'success' | 'cash_waiting'
-  const [paystackRef, setPaystackRef]   = useState('');
-  const [sdkReady, setSdkReady]         = useState(false);
+  const [currentUser, setCurrentUser]     = useState(null);
+  const [tx, setTx]                       = useState(null);
+  const [listing, setListing]             = useState(null);
+  const [loading, setLoading]             = useState(true);
+  const [error, setError]                 = useState('');
+  const [processing, setProcessing]       = useState(false);
+  const [step, setStep]                   = useState('summary');
+  const [paystackRef, setPaystackRef]     = useState('');
+  const [sdkReady, setSdkReady]           = useState(false);
   const [cashConfirmed, setCashConfirmed] = useState(false);
   const [sellerName, setSellerName]       = useState('');
 
-  // ── Auth ────────────────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!PAYSTACK_PUBLIC_KEY) {
+      console.error('[Payment] VITE_PAYSTACK_PUBLIC_KEY is not set.');
+    }
+  }, []);
+
   useEffect(() => {
     return onAuthStateChanged(auth, (user) => {
       if (!user) { navigate('/login'); return; }
@@ -45,24 +65,19 @@ export default function Payment() {
     });
   }, [navigate]);
 
-  // ── Load SDK ────────────────────────────────────────────────────────────────
   useEffect(() => {
     loadPaystackSDK()
       .then(() => setSdkReady(true))
       .catch(() => setError('Could not load payment SDK. Check your connection.'));
   }, []);
 
-  // ── Load transaction (real-time) ────────────────────────────────────────────
   useEffect(() => {
     if (!txId) return;
-
     const unsub = onSnapshot(doc(db, 'transactions', txId), async (snap) => {
       if (!snap.exists()) { setError('Transaction not found.'); setLoading(false); return; }
-
       const data = { id: snap.id, ...snap.data() };
       setTx(data);
 
-      // Load listing details
       if (data.listingId) {
         try {
           const ls = await getDoc(doc(db, 'listings', data.listingId));
@@ -70,10 +85,8 @@ export default function Payment() {
         } catch (_) {}
       }
 
-      // Load seller name
-      const existingName = data.sellerName;
-      if (existingName) {
-        setSellerName(existingName);
+      if (data.sellerName) {
+        setSellerName(data.sellerName);
       } else if (data.sellerId) {
         try {
           const us = await getDoc(doc(db, 'users', data.sellerId));
@@ -83,31 +96,38 @@ export default function Payment() {
           }
         } catch (_) {}
       }
-
       setLoading(false);
     });
-
     return () => unsub();
   }, [txId]);
 
-  // ── Handle cash (no online payment needed) ──────────────────────────────────
+  // ── Cash confirm ────────────────────────────────────────────────────────────
   const handleCashPayment = useCallback(async () => {
-    if (!tx) return;
+    if (!tx || !currentUser) return;
     setProcessing(true);
     setError('');
     try {
       await updateTransactionStatus(tx.id, 'waiting', { paymentSettled: false });
+      await notifySellerPaymentConfirmed({
+        sellerId:      tx.sellerId,
+        buyerName:     currentUser.displayName || currentUser.email || 'The buyer',
+        listingId:     tx.listingId,
+        listingTitle:  tx.listingTitle || listing?.title || 'your item',
+        transactionId: tx.id,
+      });
       setStep('cash_waiting');
     } catch (e) {
       setError('Something went wrong. Please try again.');
     } finally {
       setProcessing(false);
     }
-  }, [tx]);
+  }, [tx, currentUser, listing]);
 
-  // ── Handle online payment ───────────────────────────────────────────────────
+  // ── Online payment ──────────────────────────────────────────────────────────
   const handleOnlinePayment = useCallback(async () => {
     if (!tx || !currentUser || !sdkReady) return;
+    if (!PAYSTACK_PUBLIC_KEY) { setError('Payment is not configured. Please contact support.'); return; }
+
     setProcessing(true);
     setError('');
 
@@ -118,33 +138,40 @@ export default function Payment() {
 
     try {
       const response = await openPaystackPopup({
-        publicKey: PAYSTACK_PUBLIC_KEY,
-        email:     currentUser.email,
+        publicKey:  PAYSTACK_PUBLIC_KEY,
+        email:      currentUser.email,
         amountRand: onlineAmount,
         ref,
         metadata: {
           custom_fields: [
-            { display_name: 'Item',           variable_name: 'item',    value: tx.listingTitle || listing?.title || 'Campus Item' },
-            { display_name: 'Transaction ID', variable_name: 'tx_id',   value: tx.id },
-            { display_name: 'Buyer',          variable_name: 'buyer',   value: currentUser.displayName || currentUser.email },
+            { display_name: 'Item',           variable_name: 'item',  value: tx.listingTitle || listing?.title || 'Campus Item' },
+            { display_name: 'Transaction ID', variable_name: 'tx_id', value: tx.id },
+            { display_name: 'Buyer',          variable_name: 'buyer', value: currentUser.displayName || currentUser.email },
           ],
         },
       });
 
-      // Payment successful — update Firestore
       await updateTransactionStatus(tx.id, 'waiting', {
         paystackRef:    response.reference,
         onlinePaid:     onlineAmount,
-        paymentSettled: getCashAmount(tx) === 0, // fully settled if no cash remaining
+        paymentSettled: getCashAmount(tx) === 0,
+      });
+
+      await notifySellerPaymentConfirmed({
+        sellerId:      tx.sellerId,
+        buyerName:     currentUser.displayName || currentUser.email || 'The buyer',
+        listingId:     tx.listingId,
+        listingTitle:  tx.listingTitle || listing?.title || 'your item',
+        transactionId: tx.id,
       });
 
       setPaystackRef(response.reference);
       setStep('success');
-
     } catch (e) {
       if (e?.cancelled) {
         setError('Payment was cancelled. You can try again.');
       } else {
+        console.error('[Payment] Paystack error:', e);
         setError('Payment failed. Please try again.');
       }
     } finally {
@@ -152,7 +179,7 @@ export default function Payment() {
     }
   }, [tx, currentUser, sdkReady, listing]);
 
-  // ── Derived values ──────────────────────────────────────────────────────────
+  // ── Derived ─────────────────────────────────────────────────────────────────
   const paymentType  = tx ? (tx.paymentType || tx.paymentMethod || 'cash') : null;
   const onlineAmount = tx ? getOnlineAmount(tx) : 0;
   const cashAmount   = tx ? getCashAmount(tx) : 0;
@@ -163,142 +190,84 @@ export default function Payment() {
   const itemTitle    = tx?.listingTitle || listing?.title || 'Campus Item';
 
   // ── Guards ──────────────────────────────────────────────────────────────────
-  if (loading) {
-    return (
-      <>
-        <NavBar />
-        <div className={styles.page}>
-          <div className={styles.loadingState}>
-            <i className="fas fa-spinner fa-spin" />
-            <p>Loading payment details...</p>
-          </div>
-        </div>
-      </>
-    );
-  }
+  if (loading) return (
+    <><NavBar /><div className={styles.page}><div className={styles.loadingState}><i className="fas fa-spinner fa-spin" /><p>Loading payment details...</p></div></div></>
+  );
 
-  if (error && !tx) {
-    return (
-      <>
-        <NavBar />
-        <div className={styles.page}>
-          <div className={styles.errorState}>
-            <i className="fas fa-circle-exclamation" />
-            <p>{error}</p>
-            <button className={styles.backBtn} onClick={() => navigate(-1)}>Go back</button>
-          </div>
-        </div>
-      </>
-    );
-  }
+  if (error && !tx) return (
+    <><NavBar /><div className={styles.page}><div className={styles.errorState}><i className="fas fa-circle-exclamation" /><p>{error}</p><button className={styles.backBtn} onClick={() => navigate(-1)}>Go back</button></div></div></>
+  );
 
-  if (tx && tx.status !== 'accepted') {
-    return (
-      <>
-        <NavBar />
-        <div className={styles.page}>
-          <div className={styles.container}>
-            <div className={styles.alreadyProcessed}>
-              <i className="fas fa-info-circle" />
-              <p>This transaction has already been processed (status: <strong>{tx.status}</strong>).</p>
-              <button className={styles.backBtn} onClick={() => navigate('/my-purchases')}>Back to purchases</button>
-            </div>
-          </div>
-        </div>
-      </>
-    );
-  }
+  if (tx && tx.status !== 'accepted') return (
+    <><NavBar /><div className={styles.page}><div className={styles.container}><div className={styles.alreadyProcessed}><i className="fas fa-info-circle" /><p>This transaction has already been processed (status: <strong>{tx.status}</strong>).</p><button className={styles.backBtn} onClick={() => navigate('/my-purchases')}>Back to purchases</button></div></div></div></>
+  );
 
-  // ── Success screen ──────────────────────────────────────────────────────────
-  if (step === 'success') {
-    return (
-      <>
-        <NavBar />
-        <div className={styles.page}>
-          <div className={styles.container}>
-            <div className={styles.successCard}>
-              <div className={styles.successIconWrap}>
-                <i className="fas fa-check" />
+  // ── Success ─────────────────────────────────────────────────────────────────
+  if (step === 'success') return (
+    <>
+      <NavBar />
+      <div className={styles.page}><div className={styles.container}>
+        <div className={styles.successCard}>
+          <div className={styles.successIconWrap}><i className="fas fa-check" /></div>
+          <h2>Payment received!</h2>
+          <p className={styles.successSub}>
+            Your online payment of <strong>R {onlineAmount.toLocaleString('en-ZA')}</strong> has been processed
+            and is held in escrow until you collect your item.
+          </p>
+          {paystackRef && <div className={styles.refTag}><i className="fas fa-receipt" /> Ref: {paystackRef}</div>}
+          {cashAmount > 0 && (
+            <div className={styles.cashReminderBox}>
+              <i className="fas fa-coins" />
+              <div>
+                <p className={styles.cashReminderTitle}>Cash still due at drop-off</p>
+                <p className={styles.cashReminderAmt}>R {cashAmount.toLocaleString('en-ZA')}</p>
               </div>
-              <h2>Payment received!</h2>
-              <p className={styles.successSub}>
-                Your online payment of <strong>R {onlineAmount.toLocaleString('en-ZA')}</strong> has been processed
-                and is held in escrow until you collect your item.
+            </div>
+          )}
+          <div className={styles.successActions}>
+            <button className={styles.primaryBtn} onClick={() => navigate('/my-purchases')}>View my purchases</button>
+            <button className={styles.ghostBtn} onClick={() => navigate(`/listing/${tx.listingId}`)}>View listing</button>
+          </div>
+        </div>
+      </div></div>
+    </>
+  );
+
+  // ── Cash waiting ────────────────────────────────────────────────────────────
+  if (step === 'cash_waiting') return (
+    <>
+      <NavBar />
+      <div className={styles.page}><div className={styles.container}>
+        <div className={styles.successCard}>
+          <div className={styles.waitingIconWrap}><i className="fas fa-handshake" /></div>
+          <h2>You're confirmed!</h2>
+          <p className={styles.successSub}>
+            Your transaction is now marked as <strong>waiting</strong>. Bring
+            <strong> R {cashAmount.toLocaleString('en-ZA')}</strong> in cash to the drop-off point to collect your item.
+          </p>
+          <div className={styles.cashReminderBox}>
+            <i className="fas fa-map-marker-alt" />
+            <div>
+              <p className={styles.cashReminderTitle}>Arrange drop-off with the seller</p>
+              <p className={styles.cashReminderAmt} style={{ fontSize: '0.8rem', fontWeight: 500 }}>
+                Payment is settled in person — funds release once both parties confirm.
               </p>
-              {paystackRef && (
-                <div className={styles.refTag}>
-                  <i className="fas fa-receipt" /> Ref: {paystackRef}
-                </div>
-              )}
-              {cashAmount > 0 && (
-                <div className={styles.cashReminderBox}>
-                  <i className="fas fa-coins" />
-                  <div>
-                    <p className={styles.cashReminderTitle}>Cash still due at drop-off</p>
-                    <p className={styles.cashReminderAmt}>R {cashAmount.toLocaleString('en-ZA')}</p>
-                  </div>
-                </div>
-              )}
-              <div className={styles.successActions}>
-                <button className={styles.primaryBtn} onClick={() => navigate('/my-purchases')}>
-                  View my purchases
-                </button>
-                <button className={styles.ghostBtn} onClick={() => navigate(`/listing/${tx.listingId}`)}>
-                  View listing
-                </button>
-              </div>
             </div>
           </div>
-        </div>
-      </>
-    );
-  }
-
-  // ── Cash waiting screen ─────────────────────────────────────────────────────
-  if (step === 'cash_waiting') {
-    return (
-      <>
-        <NavBar />
-        <div className={styles.page}>
-          <div className={styles.container}>
-            <div className={styles.successCard}>
-              <div className={styles.waitingIconWrap}>
-                <i className="fas fa-handshake" />
-              </div>
-              <h2>You're confirmed!</h2>
-              <p className={styles.successSub}>
-                Your transaction is now marked as <strong>waiting</strong>. Bring
-                <strong> R {cashAmount.toLocaleString('en-ZA')}</strong> in cash to the drop-off point to collect your item.
-              </p>
-              <div className={styles.cashReminderBox}>
-                <i className="fas fa-map-marker-alt" />
-                <div>
-                  <p className={styles.cashReminderTitle}>Arrange drop-off with the seller</p>
-                  <p className={styles.cashReminderAmt} style={{ fontSize: '0.8rem', fontWeight: 500 }}>
-                    Payment is settled in person — funds release once both parties confirm.
-                  </p>
-                </div>
-              </div>
-              <div className={styles.successActions}>
-                <button className={styles.primaryBtn} onClick={() => navigate('/my-purchases')}>
-                  View my purchases
-                </button>
-              </div>
-            </div>
+          <div className={styles.successActions}>
+            <button className={styles.primaryBtn} onClick={() => navigate('/my-purchases')}>View my purchases</button>
           </div>
         </div>
-      </>
-    );
-  }
+      </div></div>
+    </>
+  );
 
-  // ── Main payment summary ────────────────────────────────────────────────────
+  // ── Main summary ────────────────────────────────────────────────────────────
   return (
     <>
       <NavBar />
       <div className={styles.page}>
         <div className={styles.container}>
-
-          {/* Header */}
           <div className={styles.header}>
             <button className={styles.backBtn} onClick={() => navigate(-1)}>
               <i className="fas fa-arrow-left" /> Back
@@ -310,98 +279,66 @@ export default function Payment() {
           </div>
 
           <div className={styles.layout}>
-
-            {/* ── Left: Order Summary ── */}
             <div className={styles.summaryCol}>
-
               <div className={styles.card}>
                 <p className={styles.cardLabel}>Item</p>
                 <div className={styles.itemRow}>
                   <div className={styles.itemImg}>
-                    {itemImage
-                      ? <img src={itemImage} alt={itemTitle} />
-                      : <i className="fas fa-image" />
-                    }
+                    {itemImage ? <img src={itemImage} alt={itemTitle} /> : <i className="fas fa-image" />}
                   </div>
                   <div className={styles.itemInfo}>
                     <p className={styles.itemTitle}>{itemTitle}</p>
-                    <p className={styles.itemSeller}>
-                      <i className="fas fa-user" /> {sellerName || tx.sellerName || 'Unknown Seller'}
-                    </p>
-                    <span className={styles.payTypeBadge}>
-                      {PAYMENT_LABELS[paymentType] || paymentType}
-                    </span>
+                    <p className={styles.itemSeller}><i className="fas fa-user" /> {sellerName || tx.sellerName || 'Unknown Seller'}</p>
+                    <span className={styles.payTypeBadge}>{PAYMENT_LABELS[paymentType] || paymentType}</span>
                   </div>
                 </div>
               </div>
 
               <div className={styles.card}>
                 <p className={styles.cardLabel}>Payment breakdown</p>
-                <div className={styles.breakdownRow}>
-                  <span>Agreed price</span>
-                  <span>R {totalAmount.toLocaleString('en-ZA')}</span>
-                </div>
+                <div className={styles.breakdownRow}><span>Agreed price</span><span>R {totalAmount.toLocaleString('en-ZA')}</span></div>
                 {isPartial && (
                   <>
                     <div className={styles.breakdownRow}>
-                      <span className={styles.breakdownOnline}>
-                        <i className="fas fa-credit-card" /> Online now
-                      </span>
+                      <span className={styles.breakdownOnline}><i className="fas fa-credit-card" /> Online now</span>
                       <span className={styles.breakdownOnlineAmt}>R {onlineAmount.toLocaleString('en-ZA')}</span>
                     </div>
                     <div className={styles.breakdownRow}>
-                      <span className={styles.breakdownCash}>
-                        <i className="fas fa-coins" /> Cash at drop-off
-                      </span>
+                      <span className={styles.breakdownCash}><i className="fas fa-coins" /> Cash at drop-off</span>
                       <span className={styles.breakdownCashAmt}>R {cashAmount.toLocaleString('en-ZA')}</span>
                     </div>
                   </>
                 )}
                 <div className={styles.breakdownDivider} />
-                <div className={`${styles.breakdownRow} ${styles.breakdownTotal}`}>
-                  <span>Total</span>
-                  <span>R {totalAmount.toLocaleString('en-ZA')}</span>
-                </div>
+                <div className={`${styles.breakdownRow} ${styles.breakdownTotal}`}><span>Total</span><span>R {totalAmount.toLocaleString('en-ZA')}</span></div>
               </div>
 
-              {/* Drop-off note */}
               {cashAmount > 0 && (
                 <div className={styles.infoBox}>
                   <i className="fas fa-circle-info" />
                   <p>
                     {isCashOnly
                       ? 'This is a cash-on-delivery transaction. Your status will move to waiting once you confirm below — pay the seller in person at the drop-off point.'
-                      : `R ${cashAmount.toLocaleString('en-ZA')} cash is due at drop-off. The item will only be released once all payments are settled.`
-                    }
+                      : `R ${cashAmount.toLocaleString('en-ZA')} cash is due at drop-off. The item will only be released once all payments are settled.`}
                   </p>
                 </div>
               )}
             </div>
 
-            {/* ── Right: Action Panel ── */}
             <div className={styles.actionCol}>
               <div className={styles.card}>
-                <p className={styles.cardLabel}>
-                  {isCashOnly ? 'Confirm & proceed' : 'Pay online'}
-                </p>
+                <p className={styles.cardLabel}>{isCashOnly ? 'Confirm & proceed' : 'Pay online'}</p>
 
                 {!isCashOnly && (
                   <>
                     <div className={styles.testCardBox}>
-                      <p className={styles.testCardTitle}>
-                        <i className="fas fa-flask" /> Test card
-                      </p>
+                      <p className={styles.testCardTitle}><i className="fas fa-flask" /> Paystack test card</p>
                       <code>4084 0840 8408 4081</code>
                       <code>Exp: 01/99 · CVV: 408 · PIN: 0000 · OTP: 123456</code>
                     </div>
-
                     <div className={styles.amountDisplay}>
-                      <span className={styles.amountLabel}>
-                        {isPartial ? 'Online portion' : 'Amount due'}
-                      </span>
-                      <span className={styles.amountValue}>
-                        R {onlineAmount.toLocaleString('en-ZA')}
-                      </span>
+                      <span className={styles.amountLabel}>{isPartial ? 'Online portion' : 'Amount due'}</span>
+                      <span className={styles.amountValue}>R {onlineAmount.toLocaleString('en-ZA')}</span>
                     </div>
                   </>
                 )}
@@ -409,54 +346,27 @@ export default function Payment() {
                 {isCashOnly && (
                   <div className={styles.amountDisplay}>
                     <span className={styles.amountLabel}>Cash to bring</span>
-                    <span className={styles.amountValue}>
-                      R {cashAmount.toLocaleString('en-ZA')}
-                    </span>
+                    <span className={styles.amountValue}>R {cashAmount.toLocaleString('en-ZA')}</span>
                   </div>
                 )}
 
-                {error && (
-                  <div className={styles.errorMsg}>
-                    <i className="fas fa-circle-exclamation" /> {error}
-                  </div>
-                )}
+                {error && <div className={styles.errorMsg}><i className="fas fa-circle-exclamation" /> {error}</div>}
 
                 {isCashOnly ? (
                   <>
                     <label className={styles.confirmCheck}>
-                      <input
-                        type="checkbox"
-                        checked={cashConfirmed}
-                        onChange={e => setCashConfirmed(e.target.checked)}
-                      />
-                      <span>
-                        I confirm I have seen and verified the amount of{' '}
-                        <strong>R {cashAmount.toLocaleString('en-ZA')}</strong> and will bring this cash to the drop-off point.
-                      </span>
+                      <input type="checkbox" checked={cashConfirmed} onChange={e => setCashConfirmed(e.target.checked)} />
+                      <span>I confirm I have seen and verified the amount of <strong>R {cashAmount.toLocaleString('en-ZA')}</strong> and will bring this cash to the drop-off point.</span>
                     </label>
-                    <button
-                      className={styles.primaryBtn}
-                      onClick={handleCashPayment}
-                      disabled={processing || !cashConfirmed}
-                    >
-                      {processing
-                        ? <><i className="fas fa-spinner fa-spin" /> Processing...</>
-                        : <><i className="fas fa-check" /> Confirm &amp; mark as waiting</>
-                      }
+                    <button className={styles.primaryBtn} onClick={handleCashPayment} disabled={processing || !cashConfirmed}>
+                      {processing ? <><i className="fas fa-spinner fa-spin" /> Processing...</> : <><i className="fas fa-check" /> Confirm &amp; mark as waiting</>}
                     </button>
                   </>
                 ) : (
-                  <button
-                    className={styles.paystackBtn}
-                    onClick={handleOnlinePayment}
-                    disabled={processing || !sdkReady}
-                  >
-                    {processing
-                      ? <><i className="fas fa-spinner fa-spin" /> Opening Paystack...</>
-                      : !sdkReady
-                        ? <><i className="fas fa-spinner fa-spin" /> Loading SDK...</>
-                        : <><i className="fas fa-lock" /> Pay R {onlineAmount.toLocaleString('en-ZA')} via Paystack</>
-                    }
+                  <button className={styles.paystackBtn} onClick={handleOnlinePayment} disabled={processing || !sdkReady || !PAYSTACK_PUBLIC_KEY}>
+                    {processing ? <><i className="fas fa-spinner fa-spin" /> Opening Paystack...</>
+                      : !sdkReady ? <><i className="fas fa-spinner fa-spin" /> Loading SDK...</>
+                      : <><i className="fas fa-lock" /> Pay R {onlineAmount.toLocaleString('en-ZA')} via Paystack</>}
                   </button>
                 )}
 
@@ -464,12 +374,10 @@ export default function Payment() {
                   <i className="fas fa-shield-halved" />
                   {isCashOnly
                     ? 'Your transaction is tracked and protected by Campus Marketplace.'
-                    : 'Payments are processed securely by Paystack. Funds are held in escrow until collection is confirmed.'
-                  }
+                    : 'Payments are processed securely by Paystack. Funds are held in escrow until collection is confirmed.'}
                 </p>
               </div>
             </div>
-
           </div>
         </div>
       </div>

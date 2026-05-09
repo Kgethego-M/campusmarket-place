@@ -7,6 +7,7 @@ import styles from "./ReportsPage.module.css";
 import ConfirmModal from "./ConfirmModal";
 import ReportCard from "./ReportCard";
 import useExportReport from "../hooks/useExportReport";
+import AdminNavbar from "./AdminNavbar";
 
 function Toast({ message, type = "success", onDismiss }) {
   useEffect(() => {
@@ -35,7 +36,8 @@ export default function ReportsPage() {
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [adminUser, setAdminUser] = useState({ name: "Admin", email: "", photoURL: "", initials: "A" });
   const [reports, setReports] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [authReady, setAuthReady] = useState(false);
+  const [reportsReady, setReportsReady] = useState(false);
   const [unreadReports, setUnreadReports] = useState(0);
   const [reportSearch, setReportSearch] = useState("");
   const [confirm, setConfirm] = useState({ open: false, title: "", message: "", onConfirm: null, variant: "danger" });
@@ -95,8 +97,8 @@ export default function ReportsPage() {
           photoURL: data.photoURL || user.photoURL || "",
           initials: `${fn[0] || "A"}${ln[0] || ""}`.toUpperCase(),
         });
-        setLoading(false);
-      } catch (e) { console.error(e); setLoading(false); }
+        setAuthReady(true);
+      } catch (e) { console.error(e); setAuthReady(true); }
     });
     return () => unsub();
   }, [navigate]);
@@ -124,6 +126,7 @@ export default function ReportsPage() {
       setReports(data);
       const pending = data.filter(r => r.status === "pending").length;
       setUnreadReports(pending);
+      setReportsReady(true);
     });
     return () => unsub();
   }, []);
@@ -207,10 +210,12 @@ export default function ReportsPage() {
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
+  const loading = !authReady || !reportsReady;
+
   if (loading) return (
     <div className={styles.loadingScreen}>
       <div className={styles.spinner} />
-      <p>Loading reports...</p>
+      <p>Loading reports…</p>
     </div>
   );
 
@@ -227,54 +232,7 @@ export default function ReportsPage() {
       />
       {toast && <Toast message={toast.message} type={toast.type} onDismiss={hideToast} />}
 
-      {/* Navbar */}
-      <header className={styles.navbar}>
-        <div className={styles.navLeft}>
-          <div className={styles.logoBox}><i className="fa-solid fa-shop" /></div>
-          <span className={styles.logoText}>CampusMarket</span>
-          <span className={styles.adminPill}>Admin</span>
-        </div>
-        <div className={styles.navCenter}>
-          <button className={styles.navLink} onClick={() => navigate("/admin")}>
-            <i className="fas fa-th-large" /> Dashboard
-          </button>
-          <button className={styles.navLink} onClick={() => navigate("/admin/analytics")}>
-            <i className="fas fa-chart-bar" /> Analytics
-          </button>
-          <button className={`${styles.navLink} ${styles.navLinkActive}`}>
-            <i className="fas fa-flag" /> Reports
-          </button>
-          <button className={styles.navLink} onClick={() => navigate("/admin/moderation-summary")}>
-            <i className="fas fa-chart-simple" /> Moderation Summary
-          </button>
-        </div>
-        <div className={styles.navRight}>
-          <div className={styles.menuWrap} ref={dropdownRef}>
-            <button className={styles.iconButton} onClick={() => !isLoggingOut && setDropdownOpen(v => !v)} title={adminUser.name}>
-              <i className="fa-solid fa-bars" />
-            </button>
-            {dropdownOpen && !isLoggingOut && (
-              <div className={styles.dropdown}>
-                <div className={styles.ddHeader}>
-                  <span className={styles.ddName}>{adminUser.name}</span>
-                  <span className={styles.ddRole}>Administrator</span>
-                </div>
-                <div className={styles.ddDivider} />
-                <button className={styles.ddItem} onClick={() => { navigate("/profile"); setDropdownOpen(false); }}>
-                  <i className="fas fa-user" /> My Profile
-                </button>
-                <button className={styles.ddItem} onClick={() => { navigate("/settings"); setDropdownOpen(false); }}>
-                  <i className="fas fa-cog" /> Settings
-                </button>
-                <div className={styles.ddDivider} />
-                <button className={`${styles.ddItem} ${styles.ddLogout}`} onClick={handleLogout}>
-                  <i className="fas fa-right-from-bracket" /> Logout
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
-      </header>
+      <AdminNavbar activePage="reports" adminUser={adminUser} unreadReports={unreadReports} />
 
       <main className={styles.main}>
         <div className={styles.pageTitle}>
@@ -284,8 +242,8 @@ export default function ReportsPage() {
               <p>Manage reported content from users</p>
             </div>
             <div style={{ display: "flex", gap: "8px" }}>
-              <button onClick={exportReportsCSV} className={styles.exportBtn}>📄 Export CSV</button>
-              <button onClick={exportReportsPDF} className={styles.exportBtn}>📑 Export PDF</button>
+              <button onClick={exportReportsCSV} className={styles.exportBtn}>Export CSV</button>
+              <button onClick={exportReportsPDF} className={styles.exportBtn}>Export PDF</button>
             </div>
           </div>
         </div>
@@ -366,14 +324,7 @@ export default function ReportsPage() {
         </div>
       </main>
 
-      {isLoggingOut && (
-        <div className={styles.logoutOverlay}>
-          <div className={styles.logoutBox}>
-            <i className="fas fa-spinner fa-spin" />
-            <p>Logging out…</p>
-          </div>
-        </div>
-      )}
+
     </div>
   );
 }
