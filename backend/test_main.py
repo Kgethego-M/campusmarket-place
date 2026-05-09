@@ -29,7 +29,10 @@ def make_mock_db(fetchall_return=None):
 def test_read_root():
     response = client.get("/")
     assert response.status_code == 200
-    assert response.json() == {"message": "Campus Marketplace API"}
+    # Root returns {"message": "Campus Marketplace API", "status": "running"}
+    data = response.json()
+    assert data["message"] == "Campus Marketplace API"
+    assert data["status"] == "running"
 
 def test_app_exists():
     assert app is not None
@@ -60,7 +63,10 @@ def test_multiple_requests_to_root():
     for _ in range(3):
         response = client.get("/")
         assert response.status_code == 200
-        assert response.json() == {"message": "Campus Marketplace API"}
+        # Root returns {"message": "Campus Marketplace API", "status": "running"}
+        data = response.json()
+        assert data["message"] == "Campus Marketplace API"
+        assert data["status"] == "running"
 
 def test_404_response_structure():
     response = client.get("/nonexistent")
@@ -92,7 +98,8 @@ def test_stripe_checkout_requires_secret_key():
         response = client.post("/api/stripe/create-checkout-session", json=payload)
 
     assert response.status_code == 500
-    assert "Stripe secret key" in response.json()["detail"]
+    # Message is "STRIPE_SECRET_KEY is missing. Check your root .env file."
+    assert "STRIPE_SECRET_KEY is missing" in response.json()["detail"]
 
 
 def test_stripe_checkout_creates_session():
@@ -113,26 +120,14 @@ def test_stripe_checkout_creates_session():
         "metadata": {"buyerId": "buyer123", "sellerId": "seller123"},
     }
 
+    fake_session = MagicMock()
+    fake_session.id  = "cs_test_123"
+    fake_session.url = "https://checkout.stripe.com/c/pay/cs_test_123"
+
     fake_stripe = MagicMock()
-    fake_stripe.checkout.Session.create.return_value = MagicMock(
-        id="cs_test_123",
-        url="https://checkout.stripe.com/c/pay/cs_test_123",
-    )
+    fake_stripe.checkout.Session.create.return_value = fake_session
 
-    trusted_amounts = {
-        "amount": 30000,
-        "amountRand": 300,
-        "cashAmount": 0,
-        "totalAmount": 300,
-        "paymentType": "online",
-        "listingId": "listing123",
-        "listingTitle": "Calculator",
-        "buyerId": "buyer123",
-        "sellerId": "seller123",
-    }
-
-    with patch("backend.routes.stripe_payments._stripe_client", return_value=fake_stripe), \
-         patch("backend.routes.stripe_payments._checkout_amounts_from_firestore", return_value=trusted_amounts):
+    with patch("backend.routes.stripe_payments.get_stripe", return_value=fake_stripe):
         response = client.post("/api/stripe/create-checkout-session", json=payload)
 
     assert response.status_code == 200
@@ -188,7 +183,6 @@ class TestGetListings:
         mock_db, mock_cursor = make_mock_db()
         with patch("backend.routes.listings.get_db", return_value=mock_db):
             client.get("/listings/")
-        # Verify execute was called (i.e. the SELECT ran)
         mock_cursor.execute.assert_called_once()
         sql = mock_cursor.execute.call_args[0][0]
         assert "listings" in sql.lower()
@@ -276,7 +270,6 @@ class TestCreateListingValidation:
         assert response.status_code == 200
 
     def test_listing_type_normalised_to_lowercase(self):
-        """Input 'SELL' should be normalised and accepted."""
         mock_db, mock_cursor = make_mock_db()
         mock_cursor.lastrowid = 1
         with patch("backend.routes.listings.get_db", return_value=mock_db):
@@ -284,7 +277,6 @@ class TestCreateListingValidation:
         assert response.status_code == 200
 
     def test_condition_normalised_to_lowercase(self):
-        """Input 'GOOD' should be normalised and accepted."""
         mock_db, mock_cursor = make_mock_db()
         mock_cursor.lastrowid = 1
         with patch("backend.routes.listings.get_db", return_value=mock_db):
@@ -474,7 +466,6 @@ class TestUploadImageHelper:
         mock_file.filename = "photo.jpg"
 
         with patch.dict("os.environ", {}, clear=True):
-            # Remove Azure env vars so they are absent
             import os
             os.environ.pop("AZURE_STORAGE_CONNECTION_STRING", None)
             os.environ.pop("AZURE_CONTAINER_NAME", None)
@@ -510,7 +501,7 @@ class TestUploadImageHelper:
         from backend.routes.listings import upload_image
 
         mock_file = MagicMock()
-        mock_file.filename = ""  # no extension
+        mock_file.filename = ""
         mock_file.file = MagicMock()
 
         mock_blob_client = MagicMock()
