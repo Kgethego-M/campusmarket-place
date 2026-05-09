@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 # Load .env from the project root
 # backend/main.py -> backend -> project root
-ROOT_DIR = Path(__file__).resolve().parent.parent
+ROOT_DIR = Path(__file__).resolve().parent
 load_dotenv(ROOT_DIR / ".env")
 
 from routes.listings import router as listings_router

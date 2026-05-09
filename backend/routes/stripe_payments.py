@@ -27,7 +27,7 @@ def get_firestore_client():
     return firestore.client()
 
 
-# ─── Request model ────────────────────────────────────────────────────────────
+# ─── Request models ───────────────────────────────────────────────────────────
 
 class CheckoutSessionRequest(BaseModel):
     transactionId: str = Field(..., min_length=1)
@@ -44,6 +44,11 @@ class CheckoutSessionRequest(BaseModel):
     successUrl: str = Field(..., min_length=1)
     cancelUrl: str = Field(..., min_length=1)
     metadata: dict = Field(default_factory=dict)
+
+
+class VerifySessionRequest(BaseModel):
+    sessionId: str = Field(..., min_length=1)
+    transactionId: str = Field(..., min_length=1)
 
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -125,12 +130,73 @@ async def create_checkout_session(payload: CheckoutSessionRequest):
         ) from exc
 
 
+# ─── Verify Session (replaces webhook for status updates) ────────────────────
+
+@router.post("/verify-session")
+async def verify_session(payload: VerifySessionRequest):
+    """
+    Called by the frontend on the payment-success page.
+    Retrieves the Stripe session directly and updates Firestore if paid.
+    This means the webhook is no longer needed for status updates.
+    """
+    stripe_client = get_stripe()
+
+    # ── Retrieve session from Stripe ──────────────────────────────────────────
+    try:
+        session = stripe_client.checkout.Session.retrieve(payload.sessionId)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Could not retrieve Stripe session: {str(exc)}",
+        ) from exc
+
+    # ── Not paid yet ──────────────────────────────────────────────────────────
+    if session.payment_status != "paid":
+        print(f"[verify-session] Session {payload.sessionId} not paid — status: {session.payment_status}")
+        return {"paid": False, "status": session.payment_status}
+
+    # ── Paid — update Firestore ───────────────────────────────────────────────
+    try:
+        db  = get_firestore_client()
+        ref = db.collection("transactions").document(payload.transactionId)
+
+        # Check if already updated to avoid duplicate writes
+        tx_snap = ref.get()
+        if tx_snap.exists:
+            tx_data = tx_snap.to_dict()
+            if tx_data.get("paymentStatus") == "paid":
+                print(f"[verify-session] tx={payload.transactionId} already marked paid — skipping update")
+                return {"paid": True, "alreadyUpdated": True}
+
+        ref.update({
+            "status":                  "waiting",
+            "paymentStatus":           "paid",
+            "paymentProvider":         "stripe",
+            "paymentSettled":          True,
+            "stripeRef":               session.id,
+            "stripeCheckoutSessionId": session.id,
+            "updatedAt":               firestore.SERVER_TIMESTAMP,
+        })
+
+        print(f"[verify-session] Firestore updated — tx={payload.transactionId} → status=waiting, paymentStatus=paid")
+        return {"paid": True, "alreadyUpdated": False}
+
+    except Exception as exc:
+        print(f"[verify-session] ERROR updating Firestore for tx={payload.transactionId}: {exc}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Firestore update failed: {str(exc)}",
+        ) from exc
+
+
+# ─── Webhook (kept for other systems — harmless duplicate write if fired) ─────
+
 @router.post("/webhook")
 async def stripe_webhook(request: Request):
     stripe_client = get_stripe()
 
-    payload   = await request.body()
-    signature = request.headers.get("stripe-signature")
+    payload        = await request.body()
+    signature      = request.headers.get("stripe-signature")
     webhook_secret = os.getenv("STRIPE_WEBHOOK_SECRET")
 
     if not webhook_secret:
@@ -160,8 +226,14 @@ async def stripe_webhook(request: Request):
             db  = get_firestore_client()
             ref = db.collection("transactions").document(transaction_id)
 
+            # Check if verify-session already updated this transaction
+            tx_snap = ref.get()
+            if tx_snap.exists and tx_snap.to_dict().get("paymentStatus") == "paid":
+                print(f"[Webhook] tx={transaction_id} already marked paid by verify-session — skipping")
+                return {"received": True}
+
             ref.update({
-                "status":                  "waiting",   # ← was staying 'accepted' before
+                "status":                  "waiting",
                 "paymentStatus":           "paid",
                 "paymentProvider":         "stripe",
                 "paymentSettled":          True,
@@ -173,7 +245,6 @@ async def stripe_webhook(request: Request):
             print(f"[Webhook] Firestore updated — tx={transaction_id} → status=waiting, paymentStatus=paid")
 
         except Exception as exc:
-            # Log but don't raise — Stripe will retry if we return non-200
             print(f"[Webhook] ERROR updating Firestore for tx={transaction_id}: {exc}")
             raise HTTPException(status_code=500, detail=f"Firestore update failed: {str(exc)}") from exc
 
