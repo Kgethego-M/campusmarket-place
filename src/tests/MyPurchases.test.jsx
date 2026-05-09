@@ -319,15 +319,16 @@ describe("Buggy Code Pattern Tests", () => {
     });
     
     test("should format price with correct South African currency format", () => {
-      // FIXED: South Africa uses spaces as thousand separators
       const formatPrice = (price) => {
         if (price === null || price === undefined) return null;
         return `R ${Number(price).toLocaleString('en-ZA')}`;
       };
       
-      // en-ZA locale uses spaces for thousand separators, not commas
-      expect(formatPrice(1000)).toBe("R 1 000");
-      expect(formatPrice(1250.50)).toBe("R 1 250.5");
+      // FIXED: Normalize spaces to handle non-breaking space vs regular space
+      const normalizeSpaces = (str) => str.replace(/\s/g, ' ');
+      
+      expect(normalizeSpaces(formatPrice(1000))).toBe("R 1 000");
+      expect(normalizeSpaces(formatPrice(1250.50))).toBe("R 1 250.5");
       expect(formatPrice(0)).toBe("R 0");
       expect(formatPrice(null)).toBe(null);
     });
