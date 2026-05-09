@@ -495,7 +495,6 @@ export default function AdminDashboard() {
                         <span className={styles.userName}>{u.firstName} {u.lastName}</span>
                         <span className={styles.userMeta}>{u.email}</span>
                       </div>
-                      <span style={{ fontSize: "0.72rem", color: "#dc2626", fontWeight: 700, background: "#fef2f2", padding: "3px 10px", borderRadius: 20 }}>SUSPENDED</span>
                       <button className={styles.btnUnsuspend} onClick={() => handleToggleSuspend(u)}>Unsuspend</button>
                     </div>
                   ))}
