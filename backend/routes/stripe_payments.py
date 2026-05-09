@@ -48,7 +48,7 @@ class CheckoutSessionRequest(BaseModel):
 
 class VerifySessionRequest(BaseModel):
     sessionId: str = Field(..., min_length=1)
-    transactionId: str = Field(..., min_length=1)
+    transactionId: str = Field(default="")  # Optional — recovered from session metadata if missing
 
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -130,14 +130,14 @@ async def create_checkout_session(payload: CheckoutSessionRequest):
         ) from exc
 
 
-# ─── Verify Session (replaces webhook for status updates) ────────────────────
+# ─── Verify Session ───────────────────────────────────────────────────────────
 
 @router.post("/verify-session")
 async def verify_session(payload: VerifySessionRequest):
     """
     Called by the frontend on the payment-success page.
     Retrieves the Stripe session directly and updates Firestore if paid.
-    This means the webhook is no longer needed for status updates.
+    transactionId is recovered from session metadata if not supplied by the frontend.
     """
     stripe_client = get_stripe()
 
@@ -155,18 +155,50 @@ async def verify_session(payload: VerifySessionRequest):
         print(f"[verify-session] Session {payload.sessionId} not paid — status: {session.payment_status}")
         return {"paid": False, "status": session.payment_status}
 
-    # ── Paid — update Firestore ───────────────────────────────────────────────
+    # ── Resolve transactionId — payload first, then session metadata/client_reference_id ──
+    transaction_id = payload.transactionId.strip() if payload.transactionId else ""
+
+    if not transaction_id:
+        meta = session.get("metadata") or {}
+        transaction_id = (
+            meta.get("transactionId")
+            or session.get("client_reference_id")
+            or ""
+        )
+        print(f"[verify-session] transactionId missing from payload — resolved from session: '{transaction_id}'")
+
+    if not transaction_id:
+        print(f"[verify-session] ERROR: Could not resolve transactionId for session {payload.sessionId}")
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot resolve transactionId — not in payload or session metadata.",
+        )
+
+    # ── Update Firestore ──────────────────────────────────────────────────────
     try:
         db  = get_firestore_client()
-        ref = db.collection("transactions").document(payload.transactionId)
+        ref = db.collection("transactions").document(transaction_id)
 
-        # Check if already updated to avoid duplicate writes
         tx_snap = ref.get()
-        if tx_snap.exists:
-            tx_data = tx_snap.to_dict()
-            if tx_data.get("paymentStatus") == "paid":
-                print(f"[verify-session] tx={payload.transactionId} already marked paid — skipping update")
-                return {"paid": True, "alreadyUpdated": True}
+
+        if not tx_snap.exists:
+            print(f"[verify-session] ERROR: transactions/{transaction_id} does not exist in Firestore")
+            raise HTTPException(
+                status_code=404,
+                detail=f"Transaction '{transaction_id}' not found in Firestore.",
+            )
+
+        tx_data = tx_snap.to_dict()
+        print(
+            f"[verify-session] Found tx={transaction_id} | "
+            f"status={tx_data.get('status')} | "
+            f"paymentStatus={tx_data.get('paymentStatus')}"
+        )
+
+        # Already updated — idempotent return
+        if tx_data.get("paymentStatus") == "paid":
+            print(f"[verify-session] tx={transaction_id} already marked paid — skipping update")
+            return {"paid": True, "alreadyUpdated": True}
 
         ref.update({
             "status":                  "waiting",
@@ -178,18 +210,20 @@ async def verify_session(payload: VerifySessionRequest):
             "updatedAt":               firestore.SERVER_TIMESTAMP,
         })
 
-        print(f"[verify-session] Firestore updated — tx={payload.transactionId} → status=waiting, paymentStatus=paid")
+        print(f"[verify-session] ✅ tx={transaction_id} → status=waiting, paymentStatus=paid")
         return {"paid": True, "alreadyUpdated": False}
 
+    except HTTPException:
+        raise  # Re-raise 400/404 without wrapping
     except Exception as exc:
-        print(f"[verify-session] ERROR updating Firestore for tx={payload.transactionId}: {exc}")
+        print(f"[verify-session] ERROR updating Firestore for tx={transaction_id}: {exc}")
         raise HTTPException(
             status_code=500,
             detail=f"Firestore update failed: {str(exc)}",
         ) from exc
 
 
-# ─── Webhook (kept for other systems — harmless duplicate write if fired) ─────
+# ─── Webhook (kept for redundancy — harmless duplicate write if fired) ────────
 
 @router.post("/webhook")
 async def stripe_webhook(request: Request):
@@ -226,7 +260,6 @@ async def stripe_webhook(request: Request):
             db  = get_firestore_client()
             ref = db.collection("transactions").document(transaction_id)
 
-            # Check if verify-session already updated this transaction
             tx_snap = ref.get()
             if tx_snap.exists and tx_snap.to_dict().get("paymentStatus") == "paid":
                 print(f"[Webhook] tx={transaction_id} already marked paid by verify-session — skipping")
