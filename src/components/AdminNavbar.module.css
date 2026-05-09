@@ -142,7 +142,7 @@
   background: none;
   border: none;
   color: #4b5563;
-  font-size: 1.2rem;
+  font-size: 1.3rem;
   cursor: pointer;
   padding: 8px;
   border-radius: 8px;
@@ -227,100 +227,82 @@
 .ddLogout { color: #e53935; }
 .ddLogout:hover { background: #fff5f5; color: #c62828; }
 
-/* ── Mobile hamburger (nav links) ── */
-.mobileMenuWrap {
-  position: relative;
+/* ─────────────────────────────────────────────
+   MOBILE BOTTOM NAVIGATION BAR (Icons Only)
+   ───────────────────────────────────────────── */
+.bottomNav {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
   display: none;
+  justify-content: space-around;
+  align-items: center;
+  background: #fff;
+  border-top: 1px solid #e8eaed;
+  padding: 8px 12px 12px;
+  z-index: 100;
+  box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.05);
 }
 
-.mobileHamburger {
+.bottomNavItem {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
   background: none;
   border: none;
-  color: #4b5563;
-  font-size: 1.2rem;
+  font-family: inherit;
+  font-size: 0.7rem;
+  font-weight: 500;
+  color: #888;
   cursor: pointer;
-  padding: 8px;
+  padding: 6px 12px;
   border-radius: 8px;
-  transition: all 0.2s;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  transition: all 0.2s ease;
+  position: relative;
+  flex: 1;
+  max-width: 80px;
 }
 
-.mobileHamburger:hover {
+.bottomNavItem i {
+  font-size: 1.25rem;
+  margin-bottom: 2px;
+}
+
+.bottomNavLabel {
+  font-size: 0.65rem;
+  font-weight: 500;
+}
+
+.bottomNavItemActive {
+  color: #6AA6DA;
+}
+
+.bottomNavItemActive i {
+  color: #6AA6DA;
+}
+
+.bottomNavItem:hover {
   background: #e8f0f8;
   color: #6AA6DA;
 }
 
-.mobileDropdown {
+.bottomNavBadge {
   position: absolute;
-  top: calc(100% + 10px);
-  right: 0;
-  background: #fff;
-  border: 1.5px solid #e2e6ea;
-  border-radius: 12px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.14);
-  min-width: 220px;
-  z-index: 300;
-  overflow: hidden;
-  animation: ddFade 0.15s ease;
-}
-
-.mobileDropdownSection {
-  padding: 10px 0 6px;
-}
-
-.mobileSectionLabel {
-  display: block;
-  font-size: 0.65rem;
+  top: 0;
+  right: 8px;
+  background: #dc2626;
+  color: #fff;
+  border-radius: 50%;
+  min-width: 16px;
+  height: 16px;
+  font-size: 0.55rem;
   font-weight: 700;
-  color: #aaa;
-  text-transform: uppercase;
-  letter-spacing: 0.07em;
-  padding: 0 16px 6px;
-}
-
-.mobileNavItem {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 10px;
-  width: 100%;
-  padding: 10px 16px;
-  border: none;
-  background: transparent;
-  font-family: inherit;
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: #374151;
-  cursor: pointer;
-  text-align: left;
-  transition: background 0.12s;
-}
-
-.mobileNavItem i {
-  width: 16px;
-  font-size: 0.85rem;
-  color: #6AA6DA;
-}
-
-.mobileNavItem:hover { background: #f0f6fd; }
-
-.mobileNavItemActive {
-  background: #eff6ff;
-  color: #6AA6DA;
-}
-
-.mobileNavItemLogout {
-  color: #e53935;
-}
-
-.mobileNavItemLogout i { color: #e53935; }
-.mobileNavItemLogout:hover { background: #fff5f5; }
-
-.mobileDivider {
-  height: 1px;
-  background: #f0f2f5;
-  margin: 4px 0;
+  justify-content: center;
+  padding: 0 2px;
 }
 
 /* ── Logout overlay ── */
@@ -368,35 +350,43 @@
     display: none;
   }
 
-  .mobileMenuWrap {
-    display: block;
+  /* Show bottom navigation on mobile/tablet */
+  .bottomNav {
+    display: flex;
   }
 
-  .desktopOnly {
-    display: none !important;
-  }
-
-  /* Lock logo at full size — no shrinking at this breakpoint */
-  .logoBox {
-    width: 42px;
-    height: 42px;
-    min-width: 42px;
-    min-height: 42px;
-    font-size: 1.1rem;
-  }
-
-  .logoText {
-    font-size: 1.5rem;
+  /* Add padding to main content to prevent overlap with bottom nav */
+  body {
+    padding-bottom: 65px;
   }
 }
 
-/* Only hide text/pill on very small screens — logo box stays full size always */
+/* Adjust main content for bottom nav - you may need to add this to your main container */
+@media (max-width: 950px) {
+  :global(main) {
+    margin-bottom: 65px;
+  }
+}
+
+/* Hide text/pill on very small screens */
 @media (max-width: 480px) {
   .logoText {
     display: none;
   }
   .adminPill {
     display: none;
+  }
+  
+  .bottomNavItem {
+    padding: 6px 8px;
+  }
+  
+  .bottomNavLabel {
+    font-size: 0.6rem;
+  }
+  
+  .bottomNavItem i {
+    font-size: 1.1rem;
   }
 }
 
