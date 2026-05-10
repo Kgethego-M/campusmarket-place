@@ -52,6 +52,7 @@ export default function Chat() {
   const [isUploading, setIsUploading]     = useState(false);
   const [userProfiles, setUserProfiles]   = useState({});
   const [convsLoading, setConvsLoading]   = useState(true);
+  const [lightboxSrc, setLightboxSrc]     = useState(null);
 
   // 3-dot menu
   const [menuOpen, setMenuOpen]         = useState(false);
@@ -91,6 +92,15 @@ export default function Chat() {
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  // Close lightbox on Escape key
+  useEffect(() => {
+    const handler = (e) => {
+      if (e.key === "Escape") setLightboxSrc(null);
+    };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
   }, []);
 
   // Resolve user profile
@@ -331,7 +341,7 @@ export default function Chat() {
                   {mediaItems.map((item) => (
                     <div key={item.id} className={styles.mediaItem}>
                       {item.type === "image"
-                        ? <img src={item.content} alt="Shared" />
+                        ? <img src={item.content} alt="Shared" onClick={() => setLightboxSrc(item.content)} />
                         : <video src={item.content} controls />}
                     </div>
                   ))}
@@ -424,9 +434,20 @@ export default function Chat() {
                             <Avatar name={otherProfile.name} photoURL={otherProfile.photoURL} size={28} />
                           )}
                           <div className={`${styles.bubble} ${isMe ? styles.bubbleMe : styles.bubbleThem}`}>
-                            {msg.type === "text"  && <span className={styles.bubbleText}>{msg.content}</span>}
-                            {msg.type === "image" && <img src={msg.content} alt="attachment" className={styles.bubbleImg} />}
-                            {msg.type === "video" && <video src={msg.content} controls className={styles.bubbleVideo} />}
+                            {msg.type === "text" && (
+                              <span className={styles.bubbleText}>{msg.content}</span>
+                            )}
+                            {msg.type === "image" && (
+                              <img
+                                src={msg.content}
+                                alt="attachment"
+                                className={styles.bubbleImg}
+                                onClick={() => setLightboxSrc(msg.content)}
+                              />
+                            )}
+                            {msg.type === "video" && (
+                              <video src={msg.content} controls className={styles.bubbleVideo} />
+                            )}
                             {time && <span className={styles.msgTime}>{time}</span>}
                           </div>
                         </div>
@@ -470,6 +491,19 @@ export default function Chat() {
                     <i className="fa-solid fa-paper-plane" />
                   </button>
                 </div>
+
+                {/* Lightbox */}
+                {lightboxSrc && (
+                  <div className={styles.lightboxOverlay} onClick={() => setLightboxSrc(null)}>
+                    <img
+                      src={lightboxSrc}
+                      alt="full size"
+                      className={styles.lightboxImg}
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                    <button className={styles.lightboxClose} onClick={() => setLightboxSrc(null)}>✕</button>
+                  </div>
+                )}
               </>
             );
           })()}
