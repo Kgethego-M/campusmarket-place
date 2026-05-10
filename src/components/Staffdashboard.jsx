@@ -82,6 +82,37 @@ const STATUS_META = {
     completed:           { label: "Completed",           cls: "done",     icon: "fa-check-double"    },
 };
 
+// ─── Date/Time helpers ────────────────────────────────────────────────────────
+
+/**
+ * Parses a time-slot string like "09:00 – 10:00" or "14:30-15:30"
+ * and returns the START hour and minute as numbers.
+ */
+function parseSlotStart(timeSlot) {
+    if (!timeSlot) return null;
+    // grab the first time-like token, e.g. "09:00"
+    const match = timeSlot.match(/(\d{1,2}):(\d{2})/);
+    if (!match) return null;
+    return { hour: parseInt(match[1], 10), minute: parseInt(match[2], 10) };
+}
+
+/**
+ * Returns true when the booked date + time-slot start has already arrived
+ * (i.e. it is now ON or AFTER the booked moment).
+ */
+function isBookingTimeReached(dateStr, timeSlot) {
+    if (!dateStr) return false;
+    const slotStart = parseSlotStart(timeSlot);
+    const now = new Date();
+
+    // Build the booked moment (local midnight of that date + slot start time)
+    const booked = new Date(dateStr + "T00:00:00");
+    if (slotStart) {
+        booked.setHours(slotStart.hour, slotStart.minute, 0, 0);
+    }
+    return now >= booked;
+}
+
 // ─── Confirm Dialog ───────────────────────────────────────────────────────────
 function ConfirmDialog({ title, message, confirmLabel, confirmClass, onConfirm, onCancel }) {
     return (
@@ -119,327 +150,461 @@ function StaffNavbar() {
     );
 }
 
-// ─── Transaction Card ─────────────────────────────────────────────────────────
-function TransactionCard({ txn, onConfirmDropOff, onConfirmCollection, onRelease, onMarkStep, onAlertOverdue }) {
+// ─── Transaction Detail Panel (full-page overlay) ────────────────────────────
+function TransactionDetailPanel({ txn, onClose, onConfirmDropOff, onConfirmCollection, onRelease, onMarkStep, onAlertOverdue }) {
     const todayStr = new Date().toISOString().split("T")[0];
-    const isOverdueDropOff   = txn.status === "pending"             && !!txn.dropOffDate && txn.dropOffDate < todayStr;
-    const isOverdueCollection= (txn.status === "awaiting_collection" || txn.status === "ready_to_release")
-                                && !!txn.dropOffDate && txn.dropOffDate < todayStr;
+    const isOverdueDropOff    = txn.status === "pending"             && !!txn.dropOffDate && txn.dropOffDate < todayStr;
+    const isOverdueCollection = (txn.status === "awaiting_collection" || txn.status === "ready_to_release")
+                                 && !!txn.dropOffDate && txn.dropOffDate < todayStr;
     const isOverdue = isOverdueDropOff || isOverdueCollection;
 
-    const meta       = isOverdue
+    const meta = isOverdue
         ? { ...STATUS_META[txn.status] || STATUS_META.pending, label: "Overdue", cls: (STATUS_META[txn.status] || STATUS_META.pending).cls }
         : (STATUS_META[txn.status] || STATUS_META.pending);
-    const allChecked = txn.checklist.every(c => c.done);
 
-    const shortfall    = txn.cashShortfall ?? 0;
-    const hasShortfall = shortfall > 0;
-    const [cashConfirmed, setCashConfirmed] = useState(
-        txn.paymentStatus === "Fully Paid" || shortfall === 0
-    );
-    const [saving, setSaving] = useState(false);
-    const [alertSending, setAlertSending] = useState(false);
-    const [alertSent,    setAlertSent]    = useState(false);
+    const allChecked    = txn.checklist.every(c => c.done);
+    const shortfall     = txn.cashShortfall ?? 0;
+    const hasShortfall  = shortfall > 0;
+    const [cashConfirmed, setCashConfirmed] = useState(txn.paymentStatus === "Fully Paid" || shortfall === 0);
+    const [saving,        setSaving]        = useState(false);
+    const [alertSending,  setAlertSending]  = useState(false);
+    const [alertSent,     setAlertSent]     = useState(false);
+    const [dropOffLoading,    setDropOffLoading]    = useState(false);
+    const [collectionLoading, setCollectionLoading] = useState(false);
 
     const canConfirmCash = allChecked && hasShortfall && !cashConfirmed;
     const canRelease     = allChecked && (!hasShortfall || cashConfirmed);
 
-    const [dropOffLoading,    setDropOffLoading]    = useState(false);
-    const [collectionLoading, setCollectionLoading] = useState(false);
+    const waitingForDropOff    = txn.status === "pending" && !txn.dropOffBooked;
+    const waitingForCollection = ["in_facility", "ready_to_release"].includes(txn.status) && !txn.collectionBooked;
+    const showConfirmDropOff   = txn.status === "pending" && txn.dropOffBooked;
+    const showConfirmCollection = txn.status === "awaiting_collection" && txn.collectionBooked;
 
-    // ── Waiting states ────────────────────────────────────────────────────────
-    const waitingForDropOff = txn.status === "pending" && !txn.dropOffBooked;
+    const dropOffTimeReached    = isBookingTimeReached(txn.dropOffDate,    txn.dropOffTimeSlot);
+    const collectionTimeReached = isBookingTimeReached(txn.collectionDate, txn.collectionTimeSlot);
 
-    const waitingForCollection =
-        ["in_facility", "ready_to_release"].includes(txn.status) &&
-        !txn.collectionBooked;
+    // Close on Escape key
+    useEffect(() => {
+        const handler = (e) => { if (e.key === "Escape") onClose(); };
+        document.addEventListener("keydown", handler);
+        return () => document.removeEventListener("keydown", handler);
+    }, [onClose]);
 
-    const showConfirmDropOff = txn.status === "pending" && txn.dropOffBooked;
-
-    // ── FIXED: Only show Confirm Collection after buyer has booked
-    //    a collection slot AND status is awaiting_collection ──────
-    const showConfirmCollection =
-        txn.status === "awaiting_collection" && txn.collectionBooked;
+    // Prevent body scroll while open
+    useEffect(() => {
+        document.body.style.overflow = "hidden";
+        return () => { document.body.style.overflow = ""; };
+    }, []);
 
     async function handleConfirmCash() {
-        setCashConfirmed(true);
-        setSaving(true);
+        setCashConfirmed(true); setSaving(true);
         try {
-            await updateDoc(doc(db, "transactions", txn.id), {
-                cashShortfall:   0,
-                paymentStatus:   "Fully Paid",
-                cashConfirmedAt: serverTimestamp(),
-            });
-        } catch (err) {
-            console.error("Failed to update cash status:", err);
-        } finally {
-            setSaving(false);
-        }
+            await updateDoc(doc(db, "transactions", txn.id), { cashShortfall: 0, paymentStatus: "Fully Paid", cashConfirmedAt: serverTimestamp() });
+        } catch (err) { console.error(err); } finally { setSaving(false); }
     }
-
     async function handleAlertOverdue() {
         setAlertSending(true);
-        try {
-            await onAlertOverdue(txn, isOverdueDropOff ? "drop_off" : "collection");
-            setAlertSent(true);
-        } catch (err) {
-            console.error("Alert failed:", err);
-        } finally {
-            setAlertSending(false);
-        }
+        try { await onAlertOverdue(txn, isOverdueDropOff ? "drop_off" : "collection"); setAlertSent(true); }
+        catch (err) { console.error(err); } finally { setAlertSending(false); }
     }
-
     async function handleDropOff() {
         setDropOffLoading(true);
-        try {
-            await onConfirmDropOff(txn.id);
-        } finally {
-            setDropOffLoading(false);
-        }
+        try { await onConfirmDropOff(txn.id); onClose(); } finally { setDropOffLoading(false); }
     }
-
     async function handleCollection() {
         setCollectionLoading(true);
-        try {
-            await onConfirmCollection(txn.id);
-        } finally {
-            setCollectionLoading(false);
-        }
+        try { await onConfirmCollection(txn.id); onClose(); } finally { setCollectionLoading(false); }
     }
 
     return (
-        <div className={`${styles.txnCard} ${styles[`txnCard_${meta.cls}`]} ${isOverdue ? styles.txnCard_overdue : ""}`}>
+        <div className={styles.detailOverlay} onClick={onClose}>
+            <div className={styles.detailPanel} onClick={e => e.stopPropagation()}>
 
-            {/* Overdue banner — full width above row */}
-            {isOverdue && (
-                <div className={styles.overdueBannerWrap}>
-                    <div className={styles.overdueBanner}>
-                        <i className="fa-solid fa-triangle-exclamation" />
-                        <span>
-                            {isOverdueDropOff
-                                ? `"${txn.item}" drop-off was due ${new Date(txn.dropOffDate + "T00:00:00").toLocaleDateString("en-ZA", { day: "numeric", month: "short" })} — not yet received at facility`
-                                : `"${txn.item}" collection was due ${new Date(txn.dropOffDate + "T00:00:00").toLocaleDateString("en-ZA", { day: "numeric", month: "short" })} — buyer has not collected`
+                {/* ── Header ── */}
+                <div className={`${styles.detailHeader} ${isOverdue ? styles.detailHeaderOverdue : styles[`detailHeader_${meta.cls}`]}`}>
+                    <div className={styles.detailHeaderLeft}>
+                        <div className={styles.detailThumb}>
+                            {txn.itemImage
+                                ? <img src={txn.itemImage} alt={txn.item} />
+                                : <i className="fa-solid fa-box-open" />
                             }
-                        </span>
+                        </div>
+                        <div className={styles.detailHeaderInfo}>
+                            <h2 className={styles.detailTitle}>{txn.item}</h2>
+                            <div className={styles.detailHeaderBadges}>
+                                <span className={`${styles.statusBadge} ${isOverdue ? styles.status_overdue : styles[`status_${meta.cls}`]}`}>
+                                    <i className={`fa-solid ${isOverdue ? "fa-circle-exclamation" : meta.icon}`} />
+                                    {isOverdue ? "Overdue" : meta.label}
+                                </span>
+                                {txn.dropOffDate && (
+                                    <span className={styles.dateBadge}>
+                                        <i className="fa-regular fa-calendar" />
+                                        {new Date(txn.dropOffDate + "T00:00:00").toLocaleDateString("en-ZA", { day: "numeric", month: "short", year: "numeric" })}
+                                    </span>
+                                )}
+                                <span className={styles.timeBadge}>
+                                    <i className="fa-regular fa-clock" /> {txn.timeSlot}
+                                </span>
+                            </div>
+                        </div>
                     </div>
+                    <button className={styles.detailClose} onClick={onClose} title="Close (Esc)">
+                        <i className="fa-solid fa-xmark" />
+                    </button>
                 </div>
-            )}
 
-            {/* Inner row: thumb always left, content always right */}
-            <div className={styles.txnInnerRow}>
+                {/* ── Scrollable body ── */}
+                <div className={styles.detailBody}>
 
-            {/* Left thumb */}
-            <div className={styles.txnThumb}>
-                {txn.itemImage
-                    ? <img src={txn.itemImage} alt={txn.item} />
-                    : <i className="fa-solid fa-box-open" />
-                }
-            </div>
-
-            {/* Main info */}
-            <div className={styles.txnMain}>
-                <div className={styles.txnTopRow}>
-                    <span className={styles.txnTitle}>{txn.item}</span>
-                    <div className={styles.txnBadges}>
-                        {txn.dropOffDate && (
-                            <span className={styles.dateBadge}>
-                                <i className="fa-regular fa-calendar" />
-                                {new Date(txn.dropOffDate + "T00:00:00").toLocaleDateString("en-ZA", { day: "numeric", month: "short", year: "numeric" })}
+                    {/* Overdue alert */}
+                    {isOverdue && (
+                        <div className={styles.overdueBanner}>
+                            <i className="fa-solid fa-triangle-exclamation" />
+                            <span>
+                                {isOverdueDropOff
+                                    ? `Drop-off was due ${new Date(txn.dropOffDate + "T00:00:00").toLocaleDateString("en-ZA", { day: "numeric", month: "short" })} — item not yet received at facility`
+                                    : `Collection was due ${new Date(txn.dropOffDate + "T00:00:00").toLocaleDateString("en-ZA", { day: "numeric", month: "short" })} — buyer has not collected`
+                                }
                             </span>
-                        )}
-                        <span className={styles.timeBadge}>
-                            <i className="fa-regular fa-clock" /> {txn.timeSlot}
-                        </span>
-                        <span className={`${styles.statusBadge} ${isOverdue ? styles.status_overdue : styles[`status_${meta.cls}`]}`}>
-                            <i className={`fa-solid ${isOverdue ? "fa-circle-exclamation" : meta.icon}`} />
-                            {isOverdue ? "Overdue" : meta.label}
-                        </span>
-                    </div>
-                </div>
-
-                <div className={styles.txnParties}>
-                    <span className={styles.txnParty}>{txn.seller}</span>
-                    <i className="fa-solid fa-arrow-right" style={{ color: "#bbb", fontSize: "0.7rem" }} />
-                    <span className={styles.txnParty}>{txn.buyer}</span>
-                </div>
-
-                <div className={styles.txnMeta}>
-                    {txn.type === "Purchase" ? (
-                        <span className={styles.txnTag}>
-                            Purchase · R{txn.price?.toLocaleString()}
-                            {cashConfirmed || !hasShortfall ? (
-                                <span className={styles.paidChip}>
-                                    <i className="fa-solid fa-circle-check" /> Paid
-                                </span>
+                            {!alertSent ? (
+                                <button className={styles.alertBtn} onClick={handleAlertOverdue} disabled={alertSending}>
+                                    <i className={`fa-solid ${alertSending ? "fa-spinner fa-spin" : "fa-bell"}`} />
+                                    {alertSending ? "Sending…" : "Send Alert"}
+                                </button>
                             ) : (
-                                <span className={styles.shortfallChip}>
-                                    <i className="fa-solid fa-triangle-exclamation" /> Cash owed: R{shortfall.toLocaleString()}
-                                </span>
+                                <span className={styles.alertSentChip}><i className="fa-solid fa-circle-check" /> Alert sent</span>
                             )}
-                        </span>
-                    ) : (
-                        <span className={styles.txnTag}>Trade · {txn.tradeFor}</span>
+                        </div>
+                    )}
+
+                    {/* ── Two-column info grid ── */}
+                    <div className={styles.detailGrid}>
+                        <div className={styles.detailSection}>
+                            <h3 className={styles.detailSectionTitle}><i className="fa-solid fa-users" /> Parties</h3>
+                            <div className={styles.detailInfoRow}>
+                                <span className={styles.detailInfoLabel}>Seller</span>
+                                <span className={styles.detailInfoValue}>{txn.seller}</span>
+                            </div>
+                            <div className={styles.detailInfoRow}>
+                                <span className={styles.detailInfoLabel}>Buyer</span>
+                                <span className={styles.detailInfoValue}>{txn.buyer}</span>
+                            </div>
+                        </div>
+
+                        <div className={styles.detailSection}>
+                            <h3 className={styles.detailSectionTitle}><i className="fa-solid fa-receipt" /> Transaction</h3>
+                            <div className={styles.detailInfoRow}>
+                                <span className={styles.detailInfoLabel}>Type</span>
+                                <span className={styles.detailInfoValue}>{txn.type}</span>
+                            </div>
+                            {txn.type === "Purchase" ? (
+                                <div className={styles.detailInfoRow}>
+                                    <span className={styles.detailInfoLabel}>Amount</span>
+                                    <span className={styles.detailInfoValue}>
+                                        R{txn.price?.toLocaleString()}
+                                        {cashConfirmed || !hasShortfall ? (
+                                            <span className={styles.paidChip}><i className="fa-solid fa-circle-check" /> Paid</span>
+                                        ) : (
+                                            <span className={styles.shortfallChip}><i className="fa-solid fa-triangle-exclamation" /> Owed: R{shortfall.toLocaleString()}</span>
+                                        )}
+                                    </span>
+                                </div>
+                            ) : (
+                                <div className={styles.detailInfoRow}>
+                                    <span className={styles.detailInfoLabel}>Trade For</span>
+                                    <span className={styles.detailInfoValue}>{txn.tradeFor}</span>
+                                </div>
+                            )}
+                        </div>
+
+                        <div className={styles.detailSection}>
+                            <h3 className={styles.detailSectionTitle}><i className="fa-solid fa-truck-arrow-right" /> Drop-off</h3>
+                            <div className={styles.detailInfoRow}>
+                                <span className={styles.detailInfoLabel}>Date</span>
+                                <span className={styles.detailInfoValue}>{txn.dropOffDate || "—"}</span>
+                            </div>
+                            <div className={styles.detailInfoRow}>
+                                <span className={styles.detailInfoLabel}>Time Slot</span>
+                                <span className={styles.detailInfoValue}>{txn.dropOffTimeSlot || txn.timeSlot || "—"}</span>
+                            </div>
+                            <div className={styles.detailInfoRow}>
+                                <span className={styles.detailInfoLabel}>Booked</span>
+                                <span className={styles.detailInfoValue}>{txn.dropOffBooked ? "Yes" : "Not yet"}</span>
+                            </div>
+                        </div>
+
+                        <div className={styles.detailSection}>
+                            <h3 className={styles.detailSectionTitle}><i className="fa-solid fa-person-walking" /> Collection</h3>
+                            <div className={styles.detailInfoRow}>
+                                <span className={styles.detailInfoLabel}>Date</span>
+                                <span className={styles.detailInfoValue}>{txn.collectionDate || "—"}</span>
+                            </div>
+                            <div className={styles.detailInfoRow}>
+                                <span className={styles.detailInfoLabel}>Time Slot</span>
+                                <span className={styles.detailInfoValue}>{txn.collectionTimeSlot || "—"}</span>
+                            </div>
+                            <div className={styles.detailInfoRow}>
+                                <span className={styles.detailInfoLabel}>Booked</span>
+                                <span className={styles.detailInfoValue}>{txn.collectionBooked ? "Yes" : "Not yet"}</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* ── Status banners ── */}
+                    {waitingForDropOff && (
+                        <div className={styles.waitingBanner}>
+                            <i className="fa-solid fa-hourglass-half" />
+                            <span>Waiting for <strong>{txn.seller}</strong> to book a drop-off slot. No action required yet.</span>
+                        </div>
+                    )}
+                    {txn.status === "pending" && txn.dropOffBooked && (
+                        <div className={styles.bookedBanner}>
+                            <i className="fa-solid fa-calendar-check" />
+                            <span>Drop-off booked by <strong>{txn.seller}</strong> for <strong>{txn.dropOffDate}</strong> at <strong>{txn.dropOffTimeSlot}</strong>. Confirm once item is received.</span>
+                        </div>
+                    )}
+                    {waitingForCollection && (
+                        <div className={styles.waitingBanner}>
+                            <i className="fa-solid fa-hourglass-half" />
+                            <span>Waiting for <strong>{txn.buyer}</strong> to book a collection slot before the item can be released.</span>
+                        </div>
+                    )}
+                    {txn.collectionBooked && txn.collectionDate && (
+                        <div className={styles.bookedBanner}>
+                            <i className="fa-solid fa-calendar-check" />
+                            <span>Collection booked by <strong>{txn.buyer}</strong> for <strong>{txn.collectionDate}</strong> at <strong>{txn.collectionTimeSlot}</strong>.</span>
+                        </div>
+                    )}
+                    {txn.status === "pending" && txn.dropOffBooked && (
+                        <div className={styles.dropOffBanner}>
+                            <i className="fa-solid fa-truck-arrow-right" />
+                            <span>Awaiting item drop-off from seller. Click <strong>Confirm Drop-Off</strong> once you have physically received the item.</span>
+                        </div>
+                    )}
+                    {hasShortfall && !cashConfirmed && txn.status !== "pending" && (
+                        <div className={styles.shortfallBanner}>
+                            <i className="fa-solid fa-coins" />
+                            <span>Outstanding cash shortfall of <strong>R{shortfall.toLocaleString()}</strong>. Collect from buyer before releasing the item.</span>
+                        </div>
+                    )}
+                    {hasShortfall && cashConfirmed && (
+                        <div className={styles.cashConfirmedBanner}>
+                            <i className="fa-solid fa-circle-check" />
+                            <span>Cash of <strong>R{shortfall.toLocaleString()}</strong> confirmed received.</span>
+                        </div>
+                    )}
+
+                    {/* ── Checklist ── */}
+                    {txn.status !== "pending" && (
+                        <div className={styles.detailSection} style={{ marginTop: 8 }}>
+                            <h3 className={styles.detailSectionTitle}><i className="fa-solid fa-clipboard-check" /> Inspection Checklist</h3>
+                            {!dropOffTimeReached && (
+                                <div className={styles.timeGateBanner}>
+                                    <i className="fa-solid fa-lock" />
+                                    <span>Inspection available from <strong>{txn.dropOffDate}</strong>{txn.dropOffTimeSlot && <> at <strong>{txn.dropOffTimeSlot}</strong></>}.</span>
+                                </div>
+                            )}
+                            <div className={styles.checklist}>
+                                {txn.checklist.map((step, i) => (
+                                    <button
+                                        key={i}
+                                        className={`${styles.checkItem} ${step.done ? styles.checkDone : styles.checkPending} ${!dropOffTimeReached ? styles.checkLocked : ""}`}
+                                        onClick={() => dropOffTimeReached && onMarkStep && onMarkStep(txn.id, i)}
+                                        disabled={step.done || !dropOffTimeReached}
+                                        title={!dropOffTimeReached ? `Locked until ${txn.dropOffDate}${txn.dropOffTimeSlot ? ` at ${txn.dropOffTimeSlot}` : ""}` : undefined}
+                                    >
+                                        <i className={`fa-solid ${!dropOffTimeReached ? "fa-lock" : step.done ? "fa-circle-check" : "fa-circle"}`} />
+                                        {step.label}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
                     )}
                 </div>
 
-                {/* ── Waiting for seller to book drop-off ── */}
-                {waitingForDropOff && (
-                    <div className={styles.waitingBanner}>
-                        <i className="fa-solid fa-hourglass-half" />
-                        <span>
-                            Waiting for <strong>{txn.seller}</strong> to book a drop-off slot.
-                            No action required yet.
-                        </span>
-                    </div>
-                )}
-
-                {/* ── Drop-off booked — show scheduled info ── */}
-                {txn.status === "pending" && txn.dropOffBooked && (
-                    <div className={styles.bookedBanner}>
-                        <i className="fa-solid fa-calendar-check" />
-                        <span>
-                            Drop-off booked by <strong>{txn.seller}</strong> for{" "}
-                            <strong>{txn.dropOffDate}</strong> at <strong>{txn.dropOffTimeSlot}</strong>.
-                            Click <strong>Confirm Drop-Off</strong> once item is received.
-                        </span>
-                    </div>
-                )}
-
-                {/* ── Waiting for buyer to book collection ── */}
-                {waitingForCollection && (
-                    <div className={styles.waitingBanner} style={{ marginTop: 6 }}>
-                        <i className="fa-solid fa-hourglass-half" />
-                        <span>
-                            Waiting for <strong>{txn.buyer}</strong> to book a collection slot
-                            before the item can be released.
-                        </span>
-                    </div>
-                )}
-
-                {/* ── Collection booked — show scheduled info ── */}
-                {txn.collectionBooked && txn.collectionDate && (
-                    <div className={styles.bookedBanner} style={{ marginTop: 6 }}>
-                        <i className="fa-solid fa-calendar-check" />
-                        <span>
-                            Collection booked by <strong>{txn.buyer}</strong> for{" "}
-                            <strong>{txn.collectionDate}</strong> at <strong>{txn.collectionTimeSlot}</strong>.
-                        </span>
-                    </div>
-                )}
-
-                {/* Pending drop-off notice */}
-                {txn.status === "pending" && txn.dropOffBooked && (
-                    <div className={styles.dropOffBanner}>
-                        <i className="fa-solid fa-truck-arrow-right" />
-                        <span>
-                            Awaiting item drop-off from seller. Click <strong>Confirm Drop-Off</strong> once
-                            you have physically received the item.
-                        </span>
-                    </div>
-                )}
-
-                {/* Cash shortfall banners */}
-                {hasShortfall && !cashConfirmed && txn.status !== "pending" && (
-                    <div className={styles.shortfallBanner}>
-                        <i className="fa-solid fa-coins" />
-                        <span>
-                            Outstanding cash shortfall of <strong>R{shortfall.toLocaleString()}</strong>.
-                            Collect from buyer before releasing the item.
-                        </span>
-                    </div>
-                )}
-                {hasShortfall && cashConfirmed && (
-                    <div className={styles.cashConfirmedBanner}>
-                        <i className="fa-solid fa-circle-check" />
-                        <span>Cash of <strong>R{shortfall.toLocaleString()}</strong> confirmed received.</span>
-                    </div>
-                )}
-
-                {/* Checklist — only show after drop-off confirmed */}
-                {txn.status !== "pending" && (
-                    <div className={styles.checklist}>
-                        {txn.checklist.map((step, i) => (
+                {/* ── Sticky action footer ── */}
+                <div className={styles.detailFooter}>
+                    {showConfirmDropOff && (
+                        <>
+                            {!dropOffTimeReached && (
+                                <div className={styles.timeGateBanner} style={{ marginBottom: 8 }}>
+                                    <i className="fa-solid fa-lock" />
+                                    <span>Drop-off confirmation unlocks on <strong>{txn.dropOffDate}</strong>{txn.dropOffTimeSlot && <> at <strong>{txn.dropOffTimeSlot}</strong></>}.</span>
+                                </div>
+                            )}
                             <button
-                                key={i}
-                                className={`${styles.checkItem} ${step.done ? styles.checkDone : styles.checkPending}`}
-                                onClick={() => onMarkStep && onMarkStep(txn.id, i)}
-                                disabled={step.done}
+                                className={styles.dropOffBtn}
+                                onClick={handleDropOff}
+                                disabled={dropOffLoading || !dropOffTimeReached}
+                                style={!dropOffTimeReached ? { opacity: 0.45, cursor: "not-allowed" } : undefined}
                             >
-                                <i className={`fa-solid ${step.done ? "fa-circle-check" : "fa-circle"}`} />
-                                {step.label}
+                                <i className={`fa-solid ${dropOffLoading ? "fa-spinner fa-spin" : !dropOffTimeReached ? "fa-lock" : "fa-box-archive"}`} />
+                                {dropOffLoading ? "Confirming…" : !dropOffTimeReached ? "Confirm Drop-Off (Locked)" : "Confirm Drop-Off"}
                             </button>
-                        ))}
+                        </>
+                    )}
+                    {!showConfirmDropOff && !waitingForDropOff && hasShortfall && (
+                        <button
+                            className={`${styles.confirmCashBtn} ${!canConfirmCash ? styles.confirmCashBtnDisabled : ""}`}
+                            onClick={handleConfirmCash}
+                            disabled={!canConfirmCash || saving}
+                        >
+                            <i className={`fa-solid ${cashConfirmed ? "fa-circle-check" : "fa-hand-holding-dollar"}`} />
+                            {saving ? "Saving…" : cashConfirmed ? "Cash Received" : "Confirm Cash Received"}
+                        </button>
+                    )}
+                    {(txn.status === "ready_to_release" || txn.status === "in_facility") && txn.collectionBooked && (
+                        <button
+                            className={`${styles.releaseBtn} ${!canRelease ? styles.releaseBtnDisabled : ""}`}
+                            onClick={() => canRelease && onRelease(txn.id)}
+                            disabled={!canRelease}
+                        >
+                            <i className="fa-solid fa-arrow-up-from-bracket" />
+                            Release for Collection
+                        </button>
+                    )}
+                    {showConfirmCollection && (
+                        <>
+                            {!collectionTimeReached && (
+                                <div className={styles.timeGateBanner} style={{ marginBottom: 8 }}>
+                                    <i className="fa-solid fa-lock" />
+                                    <span>Collection confirmation unlocks on <strong>{txn.collectionDate}</strong>{txn.collectionTimeSlot && <> at <strong>{txn.collectionTimeSlot}</strong></>}.</span>
+                                </div>
+                            )}
+                            <button
+                                className={styles.confirmCollectionBtn}
+                                onClick={handleCollection}
+                                disabled={collectionLoading || !collectionTimeReached}
+                                style={!collectionTimeReached ? { opacity: 0.45, cursor: "not-allowed" } : undefined}
+                            >
+                                <i className={`fa-solid ${collectionLoading ? "fa-spinner fa-spin" : !collectionTimeReached ? "fa-lock" : "fa-handshake"}`} />
+                                {collectionLoading ? "Confirming…" : !collectionTimeReached ? "Confirm Collection (Locked)" : "Confirm Collection"}
+                            </button>
+                        </>
+                    )}
+                    <button className={styles.detailCloseFooterBtn} onClick={onClose}>
+                        <i className="fa-solid fa-chevron-left" /> Back to List
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+// ─── Transaction Card (compact summary row) ───────────────────────────────────
+function TransactionCard({ txn, onConfirmDropOff, onConfirmCollection, onRelease, onMarkStep, onAlertOverdue }) {
+    const [panelOpen, setPanelOpen] = useState(false);
+
+    const todayStr = new Date().toISOString().split("T")[0];
+    const isOverdueDropOff    = txn.status === "pending"             && !!txn.dropOffDate && txn.dropOffDate < todayStr;
+    const isOverdueCollection = (txn.status === "awaiting_collection" || txn.status === "ready_to_release")
+                                 && !!txn.dropOffDate && txn.dropOffDate < todayStr;
+    const isOverdue = isOverdueDropOff || isOverdueCollection;
+
+    const meta = isOverdue
+        ? { ...STATUS_META[txn.status] || STATUS_META.pending, label: "Overdue", cls: (STATUS_META[txn.status] || STATUS_META.pending).cls }
+        : (STATUS_META[txn.status] || STATUS_META.pending);
+
+    const shortfall    = txn.cashShortfall ?? 0;
+    const hasShortfall = shortfall > 0;
+    const isPaid       = txn.paymentStatus === "Fully Paid" || shortfall === 0;
+
+    return (
+        <>
+            <div
+                className={`${styles.txnCard} ${styles[`txnCard_${meta.cls}`]} ${isOverdue ? styles.txnCard_overdue : ""}`}
+                onClick={() => setPanelOpen(true)}
+                role="button"
+                tabIndex={0}
+                onKeyDown={e => e.key === "Enter" && setPanelOpen(true)}
+                title="Click to view details"
+            >
+                {/* Overdue strip */}
+                {isOverdue && (
+                    <div className={styles.overdueBannerWrap}>
+                        <div className={styles.overdueBanner}>
+                            <i className="fa-solid fa-triangle-exclamation" />
+                            <span>
+                                {isOverdueDropOff
+                                    ? `Drop-off was due ${new Date(txn.dropOffDate + "T00:00:00").toLocaleDateString("en-ZA", { day: "numeric", month: "short" })} — not yet received`
+                                    : `Collection was due ${new Date(txn.dropOffDate + "T00:00:00").toLocaleDateString("en-ZA", { day: "numeric", month: "short" })} — buyer has not collected`
+                                }
+                            </span>
+                        </div>
                     </div>
                 )}
+
+                <div className={styles.txnInnerRow}>
+                    {/* Thumbnail */}
+                    <div className={styles.txnThumb}>
+                        {txn.itemImage
+                            ? <img src={txn.itemImage} alt={txn.item} />
+                            : <i className="fa-solid fa-box-open" />
+                        }
+                    </div>
+
+                    {/* Main summary */}
+                    <div className={styles.txnMain}>
+                        <div className={styles.txnTopRow}>
+                            <span className={styles.txnTitle}>{txn.item}</span>
+                            <div className={styles.txnBadges}>
+                                {txn.dropOffDate && (
+                                    <span className={styles.dateBadge}>
+                                        <i className="fa-regular fa-calendar" />
+                                        {new Date(txn.dropOffDate + "T00:00:00").toLocaleDateString("en-ZA", { day: "numeric", month: "short", year: "numeric" })}
+                                    </span>
+                                )}
+                                <span className={styles.timeBadge}>
+                                    <i className="fa-regular fa-clock" /> {txn.timeSlot}
+                                </span>
+                                <span className={`${styles.statusBadge} ${isOverdue ? styles.status_overdue : styles[`status_${meta.cls}`]}`}>
+                                    <i className={`fa-solid ${isOverdue ? "fa-circle-exclamation" : meta.icon}`} />
+                                    {isOverdue ? "Overdue" : meta.label}
+                                </span>
+                            </div>
+                        </div>
+
+                        <div className={styles.txnParties}>
+                            <span className={styles.txnParty}>{txn.seller}</span>
+                            <i className="fa-solid fa-arrow-right" style={{ color: "#bbb", fontSize: "0.7rem" }} />
+                            <span className={styles.txnParty}>{txn.buyer}</span>
+                        </div>
+
+                        <div className={styles.txnMeta}>
+                            {txn.type === "Purchase" ? (
+                                <span className={styles.txnTag}>
+                                    Purchase · R{txn.price?.toLocaleString()}
+                                    {isPaid ? (
+                                        <span className={styles.paidChip}><i className="fa-solid fa-circle-check" /> Paid</span>
+                                    ) : (
+                                        <span className={styles.shortfallChip}><i className="fa-solid fa-triangle-exclamation" /> Cash owed: R{shortfall.toLocaleString()}</span>
+                                    )}
+                                </span>
+                            ) : (
+                                <span className={styles.txnTag}>Trade · {txn.tradeFor}</span>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Chevron hint */}
+                    <div className={styles.txnChevron}>
+                        <i className="fa-solid fa-chevron-right" />
+                    </div>
+                </div>
             </div>
 
-            {/* Action buttons */}
-            <div className={styles.txnAction}>
-
-                {/* Confirm Drop-Off — only when seller has booked */}
-                {showConfirmDropOff && (
-                    <button
-                        className={styles.dropOffBtn}
-                        onClick={handleDropOff}
-                        disabled={dropOffLoading}
-                        title="Confirm you have physically received this item from the seller"
-                    >
-                        <i className={`fa-solid ${dropOffLoading ? "fa-spinner fa-spin" : "fa-box-archive"}`} />
-                        {dropOffLoading ? "Confirming…" : "Confirm Drop-Off"}
-                    </button>
-                )}
-
-                {/* Confirm Cash Received */}
-                {!showConfirmDropOff && !waitingForDropOff && hasShortfall && (
-                    <button
-                        className={`${styles.confirmCashBtn} ${!canConfirmCash ? styles.confirmCashBtnDisabled : ""}`}
-                        onClick={handleConfirmCash}
-                        disabled={!canConfirmCash || saving}
-                        title={
-                            !allChecked   ? "Complete all checklist steps first" :
-                            cashConfirmed ? "Cash already confirmed" :
-                            "Confirm you have received the cash shortfall"
-                        }
-                    >
-                        <i className={`fa-solid ${cashConfirmed ? "fa-circle-check" : "fa-hand-holding-dollar"}`} />
-                        {saving ? "Saving…" : cashConfirmed ? "Cash Received" : "Confirm Cash Received"}
-                    </button>
-                )}
-
-                {/* Release button — only when checklist done, cash settled,
-                    AND buyer has already booked a collection slot */}
-                {(txn.status === "ready_to_release" || txn.status === "in_facility") && txn.collectionBooked && (
-                    <button
-                        className={`${styles.releaseBtn} ${!canRelease ? styles.releaseBtnDisabled : ""}`}
-                        onClick={() => canRelease && onRelease(txn.id)}
-                        disabled={!canRelease}
-                        title={
-                            !allChecked                    ? "Complete all checklist steps first" :
-                            hasShortfall && !cashConfirmed ? "Confirm cash received first" :
-                            "Release to buyer"
-                        }
-                    >
-                        <i className="fa-solid fa-arrow-up-from-bracket" />
-                        Release for Collection
-                    </button>
-                )}
-
-                {/* Confirm Collection — ONLY after buyer has booked a slot
-                    AND status is awaiting_collection */}
-                {showConfirmCollection && (
-                    <button
-                        className={styles.confirmCollectionBtn}
-                        onClick={handleCollection}
-                        disabled={collectionLoading}
-                        title="Confirm the buyer has collected this item"
-                    >
-                        <i className={`fa-solid ${collectionLoading ? "fa-spinner fa-spin" : "fa-handshake"}`} />
-                        {collectionLoading ? "Confirming…" : "Confirm Collection"}
-                    </button>
-                )}
-            </div>
-            </div> {/* end txnInnerRow */}
-        </div>
+            {panelOpen && (
+                <TransactionDetailPanel
+                    txn={txn}
+                    onClose={() => setPanelOpen(false)}
+                    onConfirmDropOff={onConfirmDropOff}
+                    onConfirmCollection={onConfirmCollection}
+                    onRelease={onRelease}
+                    onMarkStep={onMarkStep}
+                    onAlertOverdue={onAlertOverdue}
+                />
+            )}
+        </>
     );
 }
 
@@ -965,6 +1130,7 @@ export default function StaffDashboard() {
             }
             if (activeTab === "all" || activeTab === "time_slots") {
                 // Sort by drop-off date ascending, then by time slot ascending
+                // Transactions with no date fall to the bottom
                 const dateA = a.dropOffDate || "9999-99-99";
                 const dateB = b.dropOffDate || "9999-99-99";
                 if (dateA !== dateB) return dateA.localeCompare(dateB);

@@ -47,9 +47,8 @@ export default function BookDropOff() {
   }, []);
 
   useEffect(() => {
-    const tomorrow = new Date();
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    setMinDate(tomorrow.toISOString().split("T")[0]);
+    const today = new Date();
+    setMinDate(today.toISOString().split("T")[0]);
   }, []);
 
   // ── Load facility config once on mount ────────────────────────
@@ -140,7 +139,7 @@ export default function BookDropOff() {
   // ── Build slot counts when date changes ───────────────────────
   useEffect(() => {
     if (!selectedDate) return;
-    setSelectedTimeSlot("");
+    setSelectedTimeSlot(""); // always reset slot on date change
 
     (async () => {
       setSlotsLoading(true);
@@ -245,43 +244,77 @@ export default function BookDropOff() {
   }
 
   function renderSlotGrid() {
-    const allSlots = generateTimeSlots(facilityConfig.openTime, facilityConfig.closeTime);
+    const todayStr = new Date().toISOString().split("T")[0];
+    const isToday  = selectedDate === todayStr;
+    const now      = new Date();
+
+    // For same-day bookings, hide slots whose start time has already passed
+    function slotStartHasPassed(slot) {
+      if (!isToday) return false;
+      // slot format: "09:00 – 10:00" or "09:00-10:00" — grab first HH:MM
+      const match = slot.match(/(\d{1,2}):(\d{2})/);
+      if (!match) return false;
+      const slotStart = new Date();
+      slotStart.setHours(parseInt(match[1], 10), parseInt(match[2], 10), 0, 0);
+      return now >= slotStart;
+    }
+
+    const allSlots      = generateTimeSlots(facilityConfig.openTime, facilityConfig.closeTime);
+    const visibleSlots  = allSlots.filter(slot => !slotStartHasPassed(slot));
+    const hiddenCount   = allSlots.length - visibleSlots.length;
+
     if (slotsLoading) {
       return (
         <div className={styles.slotGrid}>
-          {allSlots.map(s => (
+          {(isToday ? visibleSlots : allSlots).map(s => (
             <div key={s} className={`${styles.slotPill} ${styles.slotShimmer}`} />
           ))}
         </div>
       );
     }
+
+    if (isToday && visibleSlots.length === 0) {
+      return (
+        <p className={styles.noSlots}>
+          No more slots available for today — all time slots have passed. Please select a future date.
+        </p>
+      );
+    }
+
     return (
-      <div className={styles.slotGrid}>
-        {allSlots.map(slot => {
-          const remaining = slotCounts[slot] ?? facilityConfig.slotsPerHour;
-          const full      = remaining === 0;
-          const selected  = selectedTimeSlot === slot;
-          return (
-            <button
-              key={slot}
-              type="button"
-              disabled={full}
-              onClick={() => setSelectedTimeSlot(slot)}
-              className={[
-                styles.slotPill,
-                full     ? styles.slotFull     : "",
-                selected ? styles.slotSelected : "",
-                !full && !selected ? styles.slotAvailable : "",
-              ].join(" ")}
-            >
-              <span className={styles.slotTime}>{slot}</span>
-              <span className={styles.slotCount}>
-                {full ? "Full" : `${remaining} slot${remaining !== 1 ? "s" : ""} left`}
-              </span>
-            </button>
-          );
-        })}
-      </div>
+      <>
+        {isToday && hiddenCount > 0 && (
+          <p className={styles.slotHint}>
+            Showing today's remaining slots only — {hiddenCount} earlier slot{hiddenCount !== 1 ? "s have" : " has"} passed.
+          </p>
+        )}
+        <div className={styles.slotGrid}>
+          {visibleSlots.map(slot => {
+            const remaining = slotCounts[slot] ?? facilityConfig.slotsPerHour;
+            const full      = remaining === 0;
+            const selected  = selectedTimeSlot === slot;
+            return (
+              <button
+                key={slot}
+                type="button"
+                disabled={full}
+                onClick={() => setSelectedTimeSlot(slot)}
+                className={[
+                  styles.slotPill,
+                  full     ? styles.slotFull     : "",
+                  selected ? styles.slotSelected : "",
+                  !full && !selected ? styles.slotAvailable : "",
+                ].join(" ")}
+              >
+                <span className={styles.slotTime}>{slot}</span>
+                <span className={styles.slotCount}>
+                  {full ? "Full" : `${remaining} slot${remaining !== 1 ? "s" : ""} left`}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </>
     );
   }
 
