@@ -388,6 +388,13 @@
     border-radius: 20px;
     line-height: 1;
 }
+.tabDot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #ef4444;
+    flex-shrink: 0;
+}
 
 /* ── Transaction list ── */
 .txnList { display: flex; flex-direction: column; gap: 12px; }
@@ -398,11 +405,18 @@
     border-radius: 14px;
     padding: 18px 20px;
     display: flex;
-    gap: 16px;
-    align-items: flex-start;
+    flex-direction: column;
+    gap: 12px;
     transition: border-color 0.15s, box-shadow 0.15s;
 }
 .txnCard:hover { border-color: #c8d8e8; box-shadow: 0 2px 12px rgba(0,0,0,0.06); }
+
+/* Inner row: always thumb-left + content-right, regardless of banner */
+.txnInnerRow {
+    display: flex;
+    gap: 16px;
+    align-items: flex-start;
+}
 
 /* Left color accent based on status */
 .txnCard_ready    { border-left: 4px solid #10b981; }
@@ -413,8 +427,8 @@
 
 /* Thumbnail */
 .txnThumb {
-    width: 52px;
-    height: 52px;
+    width: 72px;
+    height: 72px;
     border-radius: 10px;
     background: #f0f2f5;
     overflow: hidden;
@@ -423,7 +437,7 @@
     align-items: center;
     justify-content: center;
     color: #bbb;
-    font-size: 1.3rem;
+    font-size: 1.6rem;
 }
 .txnThumb img { width: 100%; height: 100%; object-fit: cover; }
 
@@ -1119,3 +1133,80 @@
 .dialogConfirm:hover { background: #059669; }
 .dialogConfirm.dialogConfirmAmber { background: #f59e0b; }
 .dialogConfirm.dialogConfirmAmber:hover { background: #d97706; }
+
+/* ── Refresh button ── */
+.refreshBtn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 9px 14px;
+    border: 1.5px solid #e2e6ea;
+    border-radius: 8px;
+    background: #fff;
+    color: #666;
+    font-family: inherit;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: border-color 0.15s, color 0.15s, background 0.15s;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+.refreshBtn:hover:not(:disabled) {
+    border-color: #6AA6DA;
+    color: #3d87c8;
+    background: #f0f6fb;
+}
+.refreshBtn:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+.refreshBtn i { font-size: 0.85rem; }
+.refreshTime {
+    font-size: 0.78rem;
+    color: #999;
+    font-variant-numeric: tabular-nums;
+}
+
+/* ── Due Today sub-tabs ── */
+.subTabs {
+    display: flex;
+    gap: 2px;
+    background: #f4f6f8;
+    border: 1px solid #e8eaed;
+    border-radius: 9px;
+    padding: 4px;
+    margin-bottom: 16px;
+    width: fit-content;
+}
+.subTab {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 6px 15px;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    font-family: inherit;
+    font-size: 0.83rem;
+    color: #666;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+    white-space: nowrap;
+}
+.subTab:hover { background: #fff; color: #333; }
+.subTabActive {
+    background: #fff;
+    color: #333;
+    font-weight: 600;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.10);
+}
+.subTab i { font-size: 0.78rem; }
+.subTabBadge {
+    background: #ef4444;
+    color: #fff;
+    font-size: 0.63rem;
+    font-weight: 700;
+    padding: 2px 6px;
+    border-radius: 20px;
+    line-height: 1;
+}

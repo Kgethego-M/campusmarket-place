@@ -1,11 +1,11 @@
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { auth, db } from "../firebase.js";
 import { signOut, onAuthStateChanged } from "firebase/auth";
 import {
     doc, getDoc, updateDoc, serverTimestamp,
-    collection, addDoc, query, where, onSnapshot,
+    collection, addDoc, query, where, getDocs, onSnapshot,
 } from "firebase/firestore";
 import styles from "./Staffdashboard.module.css";
 
@@ -67,7 +67,6 @@ async function notifyBothParties(txn, stage) {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const CAMPUSES = ["All Campuses", "Main Campus", "Education Campus", "Health Sciences Campus", "Business School Campus"];
 const TABS = [
     { key: "due_today",  label: "Due Today",        icon: "fa-calendar-day"      },
     { key: "all",        label: "All Transactions",  icon: "fa-list"              },
@@ -105,25 +104,8 @@ function ConfirmDialog({ title, message, confirmLabel, confirmClass, onConfirm, 
 }
 
 // ─── Navbar ───────────────────────────────────────────────────────────────────
-function StaffNavbar({ staffName, staffInitials, staffPhoto }) {
+function StaffNavbar() {
     const navigate = useNavigate();
-    const location = useLocation();
-    const [notifOpen, setNotifOpen] = useState(false);
-    const notifRef = useRef(null);
-
-    useEffect(() => {
-        function outside(e) {
-            if (notifRef.current && !notifRef.current.contains(e.target)) setNotifOpen(false);
-        }
-        document.addEventListener("mousedown", outside);
-        return () => document.removeEventListener("mousedown", outside);
-    }, []);
-
-    const STAFF_LINKS = [
-        { label: "Dashboard", path: "/staff",  icon: "fa-gauge"    },
-        { label: "Time Slots", path: null,      icon: "fa-clock"    },
-        { label: "Reports",    path: null,      icon: "fa-chart-bar"},
-    ];
 
     return (
         <header className={styles.navbar}>
@@ -133,63 +115,21 @@ function StaffNavbar({ staffName, staffInitials, staffPhoto }) {
                 </div>
                 <span className={styles.logoText}>CampusMarket</span>
             </div>
-            <nav className={styles.navLinks}>
-                {STAFF_LINKS.map((link) => {
-                    const isActive = link.path && location.pathname === link.path;
-                    return (
-                        <button
-                            key={link.label}
-                            className={`${styles.navLink} ${isActive ? styles.navLinkActive : ""} ${!link.path ? styles.navLinkDisabled : ""}`}
-                            onClick={() => link.path && navigate(link.path)}
-                            disabled={!link.path}
-                        >
-                            {link.label}
-                        </button>
-                    );
-                })}
-            </nav>
-            <div className={styles.navRight}>
-                <span className={styles.staffPill}>
-                    <i className="fa-solid fa-shield-halved" /> Staff
-                </span>
-                <div className={styles.notificationWrapper} ref={notifRef}>
-                    <button className={styles.iconButton} onClick={() => setNotifOpen(v => !v)} title="Notifications">
-                        <i className="fa-solid fa-bell" />
-                        <span className={styles.notificationBadge}>2</span>
-                    </button>
-                    {notifOpen && (
-                        <div className={styles.notificationDropdown}>
-                            <div className={styles.notificationHeader}>
-                                <span>Notifications</span>
-                                <button className={styles.markAllRead}>Mark all read</button>
-                            </div>
-                            <div className={styles.notificationList}>
-                                <div className={styles.notificationItem}>
-                                    <i className="fas fa-box" />
-                                    <div className={styles.notificationContent}>
-                                        <p>New item drop-off: North Face Jacket</p>
-                                        <span>10 minutes ago</span>
-                                    </div>
-                                </div>
-                                <div className={styles.notificationItem}>
-                                    <i className="fas fa-clock" />
-                                    <div className={styles.notificationContent}>
-                                        <p>Time slot starting in 30 minutes</p>
-                                        <span>30 minutes ago</span>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-                </div>
-            </div>
         </header>
     );
 }
 
 // ─── Transaction Card ─────────────────────────────────────────────────────────
-function TransactionCard({ txn, onConfirmDropOff, onConfirmCollection, onRelease, onMarkStep }) {
-    const meta       = STATUS_META[txn.status] || STATUS_META.pending;
+function TransactionCard({ txn, onConfirmDropOff, onConfirmCollection, onRelease, onMarkStep, onAlertOverdue }) {
+    const todayStr = new Date().toISOString().split("T")[0];
+    const isOverdueDropOff   = txn.status === "pending"             && !!txn.dropOffDate && txn.dropOffDate < todayStr;
+    const isOverdueCollection= (txn.status === "awaiting_collection" || txn.status === "ready_to_release")
+                                && !!txn.dropOffDate && txn.dropOffDate < todayStr;
+    const isOverdue = isOverdueDropOff || isOverdueCollection;
+
+    const meta       = isOverdue
+        ? { ...STATUS_META[txn.status] || STATUS_META.pending, label: "Overdue", cls: (STATUS_META[txn.status] || STATUS_META.pending).cls }
+        : (STATUS_META[txn.status] || STATUS_META.pending);
     const allChecked = txn.checklist.every(c => c.done);
 
     const shortfall    = txn.cashShortfall ?? 0;
@@ -198,6 +138,8 @@ function TransactionCard({ txn, onConfirmDropOff, onConfirmCollection, onRelease
         txn.paymentStatus === "Fully Paid" || shortfall === 0
     );
     const [saving, setSaving] = useState(false);
+    const [alertSending, setAlertSending] = useState(false);
+    const [alertSent,    setAlertSent]    = useState(false);
 
     const canConfirmCash = allChecked && hasShortfall && !cashConfirmed;
     const canRelease     = allChecked && (!hasShortfall || cashConfirmed);
@@ -235,6 +177,18 @@ function TransactionCard({ txn, onConfirmDropOff, onConfirmCollection, onRelease
         }
     }
 
+    async function handleAlertOverdue() {
+        setAlertSending(true);
+        try {
+            await onAlertOverdue(txn, isOverdueDropOff ? "drop_off" : "collection");
+            setAlertSent(true);
+        } catch (err) {
+            console.error("Alert failed:", err);
+        } finally {
+            setAlertSending(false);
+        }
+    }
+
     async function handleDropOff() {
         setDropOffLoading(true);
         try {
@@ -254,7 +208,25 @@ function TransactionCard({ txn, onConfirmDropOff, onConfirmCollection, onRelease
     }
 
     return (
-        <div className={`${styles.txnCard} ${styles[`txnCard_${meta.cls}`]}`}>
+        <div className={`${styles.txnCard} ${styles[`txnCard_${meta.cls}`]} ${isOverdue ? styles.txnCard_overdue : ""}`}>
+
+            {/* Overdue banner — full width above row */}
+            {isOverdue && (
+                <div className={styles.overdueBannerWrap}>
+                    <div className={styles.overdueBanner}>
+                        <i className="fa-solid fa-triangle-exclamation" />
+                        <span>
+                            {isOverdueDropOff
+                                ? `"${txn.item}" drop-off was due ${new Date(txn.dropOffDate + "T00:00:00").toLocaleDateString("en-ZA", { day: "numeric", month: "short" })} — not yet received at facility`
+                                : `"${txn.item}" collection was due ${new Date(txn.dropOffDate + "T00:00:00").toLocaleDateString("en-ZA", { day: "numeric", month: "short" })} — buyer has not collected`
+                            }
+                        </span>
+                    </div>
+                </div>
+            )}
+
+            {/* Inner row: thumb always left, content always right */}
+            <div className={styles.txnInnerRow}>
 
             {/* Left thumb */}
             <div className={styles.txnThumb}>
@@ -269,11 +241,18 @@ function TransactionCard({ txn, onConfirmDropOff, onConfirmCollection, onRelease
                 <div className={styles.txnTopRow}>
                     <span className={styles.txnTitle}>{txn.item}</span>
                     <div className={styles.txnBadges}>
+                        {txn.dropOffDate && (
+                            <span className={styles.dateBadge}>
+                                <i className="fa-regular fa-calendar" />
+                                {new Date(txn.dropOffDate + "T00:00:00").toLocaleDateString("en-ZA", { day: "numeric", month: "short", year: "numeric" })}
+                            </span>
+                        )}
                         <span className={styles.timeBadge}>
                             <i className="fa-regular fa-clock" /> {txn.timeSlot}
                         </span>
-                        <span className={`${styles.statusBadge} ${styles[`status_${meta.cls}`]}`}>
-                            <i className={`fa-solid ${meta.icon}`} /> {meta.label}
+                        <span className={`${styles.statusBadge} ${isOverdue ? styles.status_overdue : styles[`status_${meta.cls}`]}`}>
+                            <i className={`fa-solid ${isOverdue ? "fa-circle-exclamation" : meta.icon}`} />
+                            {isOverdue ? "Overdue" : meta.label}
                         </span>
                     </div>
                 </div>
@@ -459,6 +438,7 @@ function TransactionCard({ txn, onConfirmDropOff, onConfirmCollection, onRelease
                     </button>
                 )}
             </div>
+            </div> {/* end txnInnerRow */}
         </div>
     );
 }
@@ -575,15 +555,20 @@ function StaffProfilePanel({ staffName, staffEmail, staffInitials, staffPhoto, o
 // ─── Main Dashboard ───────────────────────────────────────────────────────────
 export default function StaffDashboard() {
     const navigate = useNavigate();
-    const [activeTab, setActiveTab]       = useState("due_today");
-    const [search, setSearch]             = useState("");
-    const [campus, setCampus]             = useState("All Campuses");
-    const [transactions, setTransactions] = useState([]);
+    const [activeTab, setActiveTab]           = useState("due_today");
+    const [dueTodaySubTab, setDueTodaySubTab] = useState("drop_off");
+    const [search, setSearch]                 = useState("");
+    const [transactions, setTransactions]     = useState([]);
+    const [campus, setCampus]                 = useState("All Campuses");
     const [isLoggingOut, setIsLoggingOut] = useState(false);
     const [showProfile, setShowProfile]   = useState(false);
     const [staffUser, setStaffUser]       = useState({
         name: "", email: "", photoURL: "", initials: "",
     });
+    const [loadingTxns, setLoadingTxns]   = useState(false);
+    const [lastFetched, setLastFetched]   = useState(null);
+    const sellerCacheRef  = useRef({});
+    const listingCacheRef = useRef({});
 
     useEffect(() => {
         const unsub = onAuthStateChanged(auth, async (user) => {
@@ -627,6 +612,97 @@ export default function StaffDashboard() {
         );
 
         const unsub = onSnapshot(q, async (snapshot) => {
+            try {
+                const base = snapshot.docs.map(d => ({ _ref: d.id, _data: d.data() }));
+
+                const sellerIds  = [...new Set(base.map(b => b._data.sellerId).filter(Boolean))];
+                const listingIds = [...new Set(base.map(b => b._data.listingId).filter(Boolean))];
+
+                const [sellerSnaps, listingSnaps] = await Promise.all([
+                    Promise.all(sellerIds.map(id  => getDoc(doc(db, "users",    id)))),
+                    Promise.all(listingIds.map(id => getDoc(doc(db, "listings", id)))),
+                ]);
+
+                sellerSnaps.forEach(snap => {
+                    if (snap.exists()) {
+                        const d = snap.data();
+                        sellerCacheRef.current[snap.id] = `${d.firstName || ""} ${d.lastName || ""}`.trim() || "Seller";
+                    }
+                });
+                listingSnaps.forEach(snap => {
+                    if (snap.exists()) {
+                        const d = snap.data();
+                        listingCacheRef.current[snap.id] =
+                            (Array.isArray(d.photos) && d.photos[0]) ||
+                            (Array.isArray(d.images) && d.images[0]) ||
+                            d.imageUrl || d.image || d.itemImage || null;
+                    }
+                });
+
+                const live = base.map(({ _ref: id, _data: data }) => ({
+                    id,
+                    item:          data.listingTitle || "Item",
+                    itemImage:     listingCacheRef.current[data.listingId] ?? data.itemImage ?? null,
+                    seller:        sellerCacheRef.current[data.sellerId] || data.sellerName || "Seller",
+                    sellerId:      data.sellerId,
+                    buyer:         data.buyerName || "Buyer",
+                    buyerId:       data.buyerId,
+                    listingId:     data.listingId    || null,
+                    listingTitle:  data.listingTitle || "Item",
+                    type:          data.type === "sale" || data.type === "Purchase" ? "Purchase" : "Trade",
+                    price:         data.agreedPrice  || data.price || 0,
+                    cashShortfall: data.cashShortfall ?? 0,
+                    paymentStatus: data.paymentStatus || (data.cashShortfall > 0 ? "Partially Paid" : "Fully Paid"),
+                    tradeFor:      data.tradeItem    || null,
+                    timeSlot:      data.dropOffTimeSlot || data.timeSlot || "TBD",
+
+                    // FIX: Map both "waiting" and "accepted" to the local "pending" status
+                    status: (data.status === "accepted" || data.status === "waiting")
+                        ? "pending"
+                        : (data.status || "pending"),
+
+                    campus: data.campus || "Main Campus",
+
+                    dropOffBooked:   !!(data.bookingId || data.dropOffStatus === "scheduled"),
+                    dropOffDate:     data.dropOffDate     || null,
+                    dropOffTimeSlot: data.dropOffTimeSlot || null,
+
+                    collectionBooked:   !!(data.collectionBookingId || data.collectionStatus === "scheduled"),
+                    collectionDate:     data.collectionDate     || null,
+                    collectionTimeSlot: data.collectionTimeSlot || null,
+
+                    checklist: data.checklist || [
+                        { label: "Confirmed Drop-off", done: data.dropOffConfirmed || false },
+                        { label: "Inspected Item",     done: data.itemInspected    || false },
+                        { label: "Confirmed Payment",  done: data.paymentConfirmed || false },
+                    ],
+                    date: data.createdAt?.toDate ? data.createdAt.toDate() : new Date(),
+                }));
+
+                setTransactions(live);
+                setLastFetched(new Date());
+            } catch (err) {
+                console.error("Failed to process snapshot:", err);
+            } finally {
+                setLoadingTxns(false);
+            }
+        });
+
+        return () => unsub();
+    }, []);
+
+    // Manual refresh — re-fetches a snapshot on demand (button in the toolbar)
+    const fetchTransactions = useCallback(async () => {
+        setLoadingTxns(true);
+        try {
+            const q = query(
+                collection(db, "transactions"),
+                where("status", "in", [
+                    "waiting", "accepted", "in_facility",
+                    "ready_to_release", "awaiting_collection", "completed",
+                ])
+            );
+            const snapshot = await getDocs(q);
             const base = snapshot.docs.map(d => ({ _ref: d.id, _data: d.data() }));
 
             const sellerIds  = [...new Set(base.map(b => b._data.sellerId).filter(Boolean))];
@@ -637,19 +713,16 @@ export default function StaffDashboard() {
                 Promise.all(listingIds.map(id => getDoc(doc(db, "listings", id)))),
             ]);
 
-            const sellerMap = {};
             sellerSnaps.forEach(snap => {
                 if (snap.exists()) {
                     const d = snap.data();
-                    sellerMap[snap.id] = `${d.firstName || ""} ${d.lastName || ""}`.trim() || "Seller";
+                    sellerCacheRef.current[snap.id] = `${d.firstName || ""} ${d.lastName || ""}`.trim() || "Seller";
                 }
             });
-
-            const listingImageMap = {};
             listingSnaps.forEach(snap => {
                 if (snap.exists()) {
                     const d = snap.data();
-                    listingImageMap[snap.id] =
+                    listingCacheRef.current[snap.id] =
                         (Array.isArray(d.photos) && d.photos[0]) ||
                         (Array.isArray(d.images) && d.images[0]) ||
                         d.imageUrl || d.image || d.itemImage || null;
@@ -659,35 +732,29 @@ export default function StaffDashboard() {
             const live = base.map(({ _ref: id, _data: data }) => ({
                 id,
                 item:          data.listingTitle || "Item",
-                itemImage:     listingImageMap[data.listingId] || data.itemImage || null,
-                seller:        sellerMap[data.sellerId] || data.sellerName || "Seller",
+                itemImage:     listingCacheRef.current[data.listingId] ?? data.itemImage ?? null,
+                seller:        sellerCacheRef.current[data.sellerId] || data.sellerName || "Seller",
                 sellerId:      data.sellerId,
                 buyer:         data.buyerName || "Buyer",
                 buyerId:       data.buyerId,
                 listingId:     data.listingId    || null,
                 listingTitle:  data.listingTitle || "Item",
-                type:          data.type === "sale" ? "Purchase" : "Trade",
+                type:          data.type === "sale" || data.type === "Purchase" ? "Purchase" : "Trade",
                 price:         data.agreedPrice  || data.price || 0,
                 cashShortfall: data.cashShortfall ?? 0,
                 paymentStatus: data.paymentStatus || (data.cashShortfall > 0 ? "Partially Paid" : "Fully Paid"),
                 tradeFor:      data.tradeItem    || null,
                 timeSlot:      data.dropOffTimeSlot || data.timeSlot || "TBD",
-
-                // FIX: Map both "waiting" and "accepted" to the local "pending" status
                 status: (data.status === "accepted" || data.status === "waiting")
                     ? "pending"
                     : (data.status || "pending"),
-
-                campus: data.campus || "Main Campus",
-
-                dropOffBooked:   !!(data.bookingId || data.dropOffStatus === "scheduled"),
-                dropOffDate:     data.dropOffDate     || null,
-                dropOffTimeSlot: data.dropOffTimeSlot || null,
-
-                collectionBooked:   !!(data.collectionBookingId || data.collectionStatus === "scheduled"),
-                collectionDate:     data.collectionDate     || null,
+                campus:            data.campus || "Main Campus",
+                dropOffBooked:     !!(data.bookingId || data.dropOffStatus === "scheduled"),
+                dropOffDate:       data.dropOffDate     || null,
+                dropOffTimeSlot:   data.dropOffTimeSlot || null,
+                collectionBooked:  !!(data.collectionBookingId || data.collectionStatus === "scheduled"),
+                collectionDate:    data.collectionDate     || null,
                 collectionTimeSlot: data.collectionTimeSlot || null,
-
                 checklist: data.checklist || [
                     { label: "Confirmed Drop-off", done: data.dropOffConfirmed || false },
                     { label: "Inspected Item",     done: data.itemInspected    || false },
@@ -697,9 +764,30 @@ export default function StaffDashboard() {
             }));
 
             setTransactions(live);
-        });
-        return () => unsub();
+            setLastFetched(new Date());
+        } catch (err) {
+            console.error("Failed to refresh transactions:", err);
+        } finally {
+            setLoadingTxns(false);
+        }
     }, []);
+
+    const handleAlertOverdue = async (txn, type) => {
+        if (type === "drop_off") {
+            await notifyOverdueDropOff(txn);
+        } else {
+            await notifyOverdueCollection(txn);
+        }
+        // Mark that alerts were sent so staff don't spam
+        try {
+            await updateDoc(doc(db, "transactions", txn.id), {
+                overdueAlertSentAt: serverTimestamp(),
+                overdueAlertType:   type,
+            });
+        } catch (err) {
+            console.error("Failed to record overdue alert:", err);
+        }
+    };
 
     const handleLogout = async () => {
         setIsLoggingOut(true);
@@ -830,6 +918,16 @@ export default function StaffDashboard() {
     const completed      = transactions.filter(t => t.status === "completed");
     const pendingDropOff = transactions.filter(t => t.status === "pending");
 
+    const todayStr = new Date().toISOString().split("T")[0]; // "YYYY-MM-DD"
+
+    // Parse "HH:MM" or "HH:MM - HH:MM" time slot strings into a sortable minute count
+    const timeSlotToMinutes = (slot) => {
+        if (!slot || slot === "TBD") return Infinity;
+        const match = (slot || "").match(/(\d{1,2}):(\d{2})/);
+        if (!match) return Infinity;
+        return parseInt(match[1], 10) * 60 + parseInt(match[2], 10);
+    };
+
     const visibleTxns = transactions
         .filter(t => {
             const matchSearch = !search ||
@@ -837,13 +935,44 @@ export default function StaffDashboard() {
                 t.seller.toLowerCase().includes(search.toLowerCase()) ||
                 t.buyer.toLowerCase().includes(search.toLowerCase());
             const matchCampus = campus === "All Campuses" || t.campus === campus;
-            if (activeTab === "due_today")  return matchSearch && matchCampus && isDueToday(t) && t.status !== "completed";
+            if (activeTab === "due_today") {
+                if (!matchSearch || !matchCampus) return false;
+                if (t.status === "completed") return false;
+                if (dueTodaySubTab === "drop_off") {
+                    // Items booked for drop-off today that haven't been received yet
+                    return t.dropOffDate === today && t.dropOffBooked &&
+                        (t.status === "pending" || t.status === "waiting" || t.status === "accepted");
+                }
+                if (dueTodaySubTab === "collection") {
+                    // Items awaiting collection (with or without a booked slot today)
+                    return t.status === "awaiting_collection" ||
+                        t.status === "ready_to_release" ||
+                        (t.status === "in_facility" && t.collectionBooked && t.collectionDate === today);
+                }
+                return false;
+            }
             if (activeTab === "history")    return matchSearch && matchCampus && t.status === "completed";
             if (activeTab === "time_slots") return matchSearch && matchCampus && t.status !== "completed";
             if (activeTab === "all")        return matchSearch && matchCampus && t.status !== "completed";
             return matchSearch && matchCampus && t.status !== "completed";
         })
-        .sort((a, b) => b.date - a.date); // newest first
+        .sort((a, b) => {
+            if (activeTab === "due_today") {
+                // Sort by the relevant time slot for this sub-tab
+                const slotA = dueTodaySubTab === "drop_off" ? a.dropOffTimeSlot : (a.collectionTimeSlot || a.timeSlot);
+                const slotB = dueTodaySubTab === "drop_off" ? b.dropOffTimeSlot : (b.collectionTimeSlot || b.timeSlot);
+                return timeSlotToMinutes(slotA) - timeSlotToMinutes(slotB);
+            }
+            if (activeTab === "all" || activeTab === "time_slots") {
+                // Sort by drop-off date ascending, then by time slot ascending
+                const dateA = a.dropOffDate || "9999-99-99";
+                const dateB = b.dropOffDate || "9999-99-99";
+                if (dateA !== dateB) return dateA.localeCompare(dateB);
+                return timeSlotToMinutes(a.dropOffTimeSlot || a.timeSlot) - timeSlotToMinutes(b.dropOffTimeSlot || b.timeSlot);
+            }
+            // History: newest first
+            return b.date - a.date;
+        });
 
     const STATS = [
         { label: "Pending Drop-off",    value: pendingDropOff.length, icon: "fa-truck-arrow-right", color: "#f59e0b" },
@@ -854,11 +983,7 @@ export default function StaffDashboard() {
 
     return (
         <div className={styles.shell}>
-            <StaffNavbar
-                staffName={staffUser.name}
-                staffInitials={staffUser.initials}
-                staffPhoto={staffUser.photoURL}
-            />
+            <StaffNavbar />
 
             <main className={styles.main}>
                 <div className={styles.pageTitle}>
@@ -898,7 +1023,7 @@ export default function StaffDashboard() {
                     ))}
                 </div>
 
-                {/* Search + campus filter */}
+                {/* Search + Refresh */}
                 <div className={styles.controlRow}>
                     <div className={styles.searchWrap}>
                         <i className="fa-solid fa-magnifying-glass" />
@@ -910,17 +1035,19 @@ export default function StaffDashboard() {
                             onChange={e => setSearch(e.target.value)}
                         />
                     </div>
-                    <div className={styles.selectWrap}>
-                        <i className="fa-solid fa-building" />
-                        <select
-                            className={styles.campusSelect}
-                            value={campus}
-                            onChange={e => setCampus(e.target.value)}
-                        >
-                            {CAMPUSES.map(c => <option key={c}>{c}</option>)}
-                        </select>
-                        <i className="fa-solid fa-chevron-down" style={{ pointerEvents: "none" }} />
-                    </div>
+                    <button
+                        className={styles.refreshBtn}
+                        onClick={fetchTransactions}
+                        disabled={loadingTxns}
+                        title="Refresh transactions"
+                    >
+                        <i className={`fa-solid fa-rotate-right ${loadingTxns ? "fa-spin" : ""}`} />
+                        {lastFetched && (
+                            <span className={styles.refreshTime}>
+                                {lastFetched.toLocaleTimeString("en-ZA", { hour: "2-digit", minute: "2-digit" })}
+                            </span>
+                        )}
+                    </button>
                 </div>
 
                 {/* Tabs */}
@@ -934,13 +1061,46 @@ export default function StaffDashboard() {
                             <i className={`fa-solid ${tab.icon}`} />
                             {tab.label}
                             {tab.key === "due_today" && todayTxns.filter(t => t.status !== "completed").length > 0 && (
-                                <span className={styles.tabBadge}>
-                                    {todayTxns.filter(t => t.status !== "completed").length}
-                                </span>
+                                <span className={styles.tabDot} />
                             )}
                         </button>
                     ))}
                 </div>
+
+                {/* Due Today sub-tabs */}
+                {activeTab === "due_today" && (
+                    <div className={styles.subTabs}>
+                        <button
+                            className={`${styles.subTab} ${dueTodaySubTab === "drop_off" ? styles.subTabActive : ""}`}
+                            onClick={() => setDueTodaySubTab("drop_off")}
+                        >
+                            <i className="fa-solid fa-truck-arrow-right" />
+                            Drop-offs
+                            {(() => {
+                                const count = transactions.filter(t =>
+                                    t.dropOffDate === today && t.dropOffBooked &&
+                                    (t.status === "pending" || t.status === "waiting" || t.status === "accepted")
+                                ).length;
+                                return count > 0 ? <span className={styles.subTabBadge}>{count}</span> : null;
+                            })()}
+                        </button>
+                        <button
+                            className={`${styles.subTab} ${dueTodaySubTab === "collection" ? styles.subTabActive : ""}`}
+                            onClick={() => setDueTodaySubTab("collection")}
+                        >
+                            <i className="fa-solid fa-person-walking" />
+                            Collections
+                            {(() => {
+                                const count = transactions.filter(t =>
+                                    t.status === "awaiting_collection" ||
+                                    t.status === "ready_to_release" ||
+                                    (t.status === "in_facility" && t.collectionBooked && t.collectionDate === today)
+                                ).length;
+                                return count > 0 ? <span className={styles.subTabBadge}>{count}</span> : null;
+                            })()}
+                        </button>
+                    </div>
+                )}
 
                 {/* Content */}
                 {activeTab === "time_slots" ? (
@@ -965,6 +1125,7 @@ export default function StaffDashboard() {
                                 onConfirmCollection={handleConfirmCollection}
                                 onRelease={handleRelease}
                                 onMarkStep={handleMarkStep}
+                                onAlertOverdue={handleAlertOverdue}
                             />
                         ))}
                     </div>
