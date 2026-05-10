@@ -9,7 +9,7 @@ import NavBar from "./NavBarTemp.jsx";
 import styles from "./BookDropOff.module.css";
 import { generateTimeSlots } from "../utils/facilityConfig.utils";
 
-const FALLBACK_CONFIG = { openTime: "08:00", closeTime: "18:00", slotsPerHour: 1 };
+const FALLBACK_CONFIG = { openTime: "09:00", closeTime: "16:00", slotsPerHour: 1 };
 
 function formatPrice(value) {
   const num = Number(String(value ?? "0").replace(/\s/g, ""));
@@ -18,62 +18,6 @@ function formatPrice(value) {
     minimumFractionDigits: 0,
     maximumFractionDigits: 2,
   });
-}
-
-/* ── Human-readable status label ───────────────────────────────── */
-function getStatusLabel(status) {
-  switch (status) {
-    case "waiting":            return "Payment confirmed";
-    case "dropoff_scheduled":  return "Drop-off scheduled";
-    case "pending":            return "Pending buyer";
-    case "completed":          return "Completed";
-    case "cancelled":          return "Cancelled";
-    default:                   return status ?? "Unknown";
-  }
-}
-
-/* ── Payment method display label ──────────────────────────────── */
-function getPaymentLabel(method) {
-  switch (method) {
-    case "online":  return "Online (paid)";
-    case "cod":     return "Cash on delivery";
-    case "partial": return "Partial online + cash";
-    default:        return "Unknown";
-  }
-}
-
-/* ── Payment banner content by method ─────────────────────────── */
-function getPaymentBanner(method, price) {
-  switch (method) {
-    case "online":
-      return {
-        variant:   "online",
-        icon:      "shield-check",
-        headline:  "No cash needed at drop-off",
-        detail:    `The buyer already paid R${price} in full online. Bring the item and the facility will handle the rest.`,
-      };
-    case "cod":
-      return {
-        variant:   "cod",
-        icon:      "cash",
-        headline:  `Collect R${price} cash at the facility`,
-        detail:    "This is a cash-on-delivery order. The buyer will pay when they collect the item — facility staff will verify the payment.",
-      };
-    case "partial":
-      return {
-        variant:   "partial",
-        icon:      "credit-card",
-        headline:  "Partial payment — confirm the split with the buyer",
-        detail:    `Part of the R${price} was paid online. Clarify with the buyer how much cash remains before you drop off.`,
-      };
-    default:
-      return {
-        variant:   "unknown",
-        icon:      "info-circle",
-        headline:  `Transaction amount: R${price}`,
-        detail:    "Confirm payment details with the buyer before your drop-off.",
-      };
-  }
 }
 
 export default function BookDropOff() {
@@ -108,6 +52,7 @@ export default function BookDropOff() {
     setMinDate(tomorrow.toISOString().split("T")[0]);
   }, []);
 
+  // ── Load facility config once on mount ────────────────────────
   useEffect(() => {
     (async () => {
       try {
@@ -138,22 +83,18 @@ export default function BookDropOff() {
 
       const txn = { id: transSnap.id, ...transSnap.data() };
 
-      // Only the seller can book a drop-off
       if (txn.sellerId !== uid)
         return setError("You can only book a drop-off for your own sales.");
 
-      // ✅ "waiting" is the status set when buyer agrees to pay
       const ALLOWED_STATUSES = ["waiting", "accepted", "in_facility"];
       if (!ALLOWED_STATUSES.includes(txn.status))
         return setError(`Cannot book drop-off. Current status: ${txn.status}`);
 
-      // Prevent double-booking
       if (txn.bookingId)
         return setError("A drop-off has already been booked for this transaction.");
 
       setTransaction(txn);
 
-      // Resolve payment method
       let pm = txn.paymentMethod;
       if (!pm && txn.paymentType) {
         pm = txn.paymentType === "full_online" ? "online"
@@ -235,7 +176,6 @@ export default function BookDropOff() {
     setError("");
 
     try {
-      // Guard against race conditions
       const latest = await getDoc(doc(db, "transactions", transaction.id));
       if (latest.data().bookingId)
         return setError("A drop-off was already booked for this transaction.");
@@ -262,21 +202,23 @@ export default function BookDropOff() {
         }),
         // Notify seller
         addDoc(collection(db, "notifications"), {
-          userId:    transaction.sellerId,
-          type:      "dropoff_booked",
-          title:     "Drop-off booked",
-          message:   `Your drop-off for "${listing?.title}" is scheduled on ${selectedDate} at ${selectedTimeSlot}.`,
-          read:      false,
-          createdAt: serverTimestamp(),
+          userId:        transaction.sellerId,
+          type:          "dropoff_booked",
+          transactionId: transaction.id,
+          title:         "Drop-off booked",
+          message:       `Your drop-off for "${listing?.title}" is scheduled on ${selectedDate} at ${selectedTimeSlot}.`,
+          read:          false,
+          createdAt:     serverTimestamp(),
         }),
         // Notify buyer
         addDoc(collection(db, "notifications"), {
-          userId:    transaction.buyerId,
-          type:      "dropoff_booked",
-          title:     "Seller booked drop-off",
-          message:   `The seller has scheduled a drop-off for "${listing?.title}" on ${selectedDate} at ${selectedTimeSlot}.`,
-          read:      false,
-          createdAt: serverTimestamp(),
+          userId:        transaction.buyerId,
+          type:          "dropoff_booked",
+          transactionId: transaction.id,
+          title:         "Seller booked drop-off",
+          message:       `The seller has scheduled a drop-off for "${listing?.title}" on ${selectedDate} at ${selectedTimeSlot}.`,
+          read:          false,
+          createdAt:     serverTimestamp(),
         }),
       ]);
 
@@ -286,6 +228,16 @@ export default function BookDropOff() {
       setError("Failed to book drop-off: " + err.message);
     } finally {
       setSubmitting(false);
+    }
+  }
+
+  function getPaymentMessage() {
+    const price = formatPrice(listing?.price);
+    switch (paymentMethod) {
+      case "online":  return `Buyer paid R${price} online — no cash needed at drop-off.`;
+      case "cod":     return `Buyer pays R${price} cash on delivery. Collect at the facility.`;
+      case "partial": return `Partial online + cash payment. Confirm the split with the buyer before dropping off.`;
+      default:        return `Transaction amount: R${price}. Confirm payment details with the buyer.`;
     }
   }
 
@@ -329,16 +281,6 @@ export default function BookDropOff() {
       </div>
     );
   }
-
-  // Calculate price for display
-  const price = transaction?.price 
-    ? formatPrice(transaction.price) 
-    : listing?.price 
-      ? formatPrice(listing.price) 
-      : "0";
-
-  // Get payment banner based on payment method and price
-  const banner = getPaymentBanner(paymentMethod, price);
 
   // ── Loading skeleton ──────────────────────────────────────────
   if (loading) {
@@ -397,8 +339,6 @@ export default function BookDropOff() {
     <>
       <NavBar />
       <div className={styles.page}>
-
-        {/* ── Page header ── */}
         <div className={styles.pageHeader}>
           <button className={styles.backLink}
                   onClick={() => navigate("/trade-facility")}>
@@ -416,86 +356,45 @@ export default function BookDropOff() {
 
         {/* Item summary */}
         <div className={styles.summaryCard}>
-          <div className={styles.summaryTop}>
-            <div className={styles.summaryImgWrap}>
-              {listing?.photos?.[0]
-                ? <img src={listing.photos[0]} alt={listing.title} className={styles.summaryImg} />
-                : <div className={styles.summaryImgPlaceholder}>
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none"
-                         stroke="currentColor" strokeWidth="1.5" opacity="0.4">
-                      <rect x="2" y="7" width="20" height="14" rx="2"/>
-                      <polyline points="16 7 12 3 8 7"/>
-                    </svg>
-                  </div>}
-            </div>
-            <div className={styles.summaryInfo}>
-              <p className={styles.summaryTitle}>{listing?.title ?? "Loading…"}</p>
-              <div className={styles.summaryPriceRow}>
-                <span className={styles.summaryPrice}>R{price}</span>
-                <span className={`${styles.statusChip} ${styles[`status_${transaction?.status}`]}`}>
-                  {getStatusLabel(transaction?.status)}
-                </span>
-              </div>
+          <div className={styles.summaryImgWrap}>
+            {listing?.photos?.[0]
+              ? <img src={listing.photos[0]} alt={listing.title} className={styles.summaryImg} />
+              : <div className={styles.summaryImgPlaceholder}>
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none"
+                       stroke="#9ca3af" strokeWidth="1.5">
+                    <rect x="3" y="3" width="18" height="18" rx="2"/>
+                    <circle cx="8.5" cy="8.5" r="1.5"/>
+                    <polyline points="21 15 16 10 5 21"/>
+                  </svg>
+                </div>
+            }
+          </div>
+          <div className={styles.summaryInfo}>
+            <p className={styles.summaryTitle}>{listing?.title ?? "Loading…"}</p>
+            <div className={styles.summaryMeta}>
+              <span className={styles.summaryPrice}>R{formatPrice(listing?.price)}</span>
+              <span className={styles.summaryDot}>·</span>
+              <span className={styles.summaryBuyer}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
+                     stroke="currentColor" strokeWidth="2">
+                  <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/>
+                  <circle cx="12" cy="7" r="4"/>
+                </svg>
+                Buyer: {buyerName}
+              </span>
             </div>
           </div>
-
-          <div className={styles.summaryDivider} />
-
-          {/* Transaction detail row */}
-          <div className={styles.txnGrid}>
-            <div className={styles.txnCell}>
-              <span className={styles.txnLabel}>Buyer</span>
-              <span className={styles.txnValue}>{buyerName}</span>
-            </div>
-            <div className={styles.txnCell}>
-              <span className={styles.txnLabel}>Amount</span>
-              <span className={`${styles.txnValue} ${styles.txnValueBlue}`}>R{price}</span>
-            </div>
-            <div className={styles.txnCell}>
-              <span className={styles.txnLabel}>Payment</span>
-              <span className={`${styles.txnValue} ${
-                paymentMethod === "online"  ? styles.txnValueGreen :
-                paymentMethod === "cod"     ? styles.txnValueAmber :
-                styles.txnValueBlue
-              }`}>{getPaymentLabel(paymentMethod)}</span>
-            </div>
-          </div>
+          <span className={styles.statusChip}>{transaction?.status}</span>
         </div>
 
-        {/* ── Payment banner ── */}
-        <div className={`${styles.paymentBanner} ${styles[`banner_${banner.variant}`]}`}>
-          <div className={styles.bannerIcon}>
-            {banner.variant === "online" && (
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
-                   stroke="currentColor" strokeWidth="2">
-                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-                <polyline points="9 12 11 14 15 10"/>
-              </svg>
-            )}
-            {banner.variant === "cod" && (
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
-                   stroke="currentColor" strokeWidth="2">
-                <rect x="2" y="6" width="20" height="12" rx="2"/>
-                <circle cx="12" cy="12" r="3"/>
-                <line x1="6" y1="12" x2="6" y2="12"/>
-                <line x1="18" y1="12" x2="18" y2="12"/>
-              </svg>
-            )}
-            {(banner.variant === "partial" || banner.variant === "unknown") && (
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
-                   stroke="currentColor" strokeWidth="2">
-                <rect x="2" y="5" width="20" height="14" rx="2"/>
-                <line x1="2" y1="10" x2="22" y2="10"/>
-              </svg>
-            )}
-          </div>
-          <div className={styles.bannerBody}>
-            <p className={styles.bannerHeadline}>{banner.headline}</p>
-            <p className={styles.bannerDetail}>{banner.detail}</p>
-          </div>
+        <div className={styles.paymentNotice}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+               stroke="currentColor" strokeWidth="2">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+          </svg>
+          {getPaymentMessage()}
         </div>
 
-        {/* ── Form ── */}
         <form className={styles.form} onSubmit={handleSubmit}>
           <div className={styles.fieldGroup}>
             <label className={styles.label}>Drop-off date</label>

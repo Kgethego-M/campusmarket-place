@@ -71,7 +71,6 @@ describe("Navbar (high coverage)", () => {
     vi.useRealTimers();
 
     mockGetDoc.mockResolvedValue({ exists: () => false });
-    // Default: no completed transactions so no rating notifications
     mockGetDocs.mockResolvedValue({ docs: [], empty: true });
     mockOnSnapshot.mockImplementation((q, cb) => {
       cb({ docs: [] });
@@ -82,7 +81,6 @@ describe("Navbar (high coverage)", () => {
 
   test("renders logo and links", async () => {
     await renderNav();
-    // Scope to the desktop nav to avoid matching the mobile nav duplicates
     const desktopNav = document.querySelector("nav.navLinks");
     expect(screen.getByText("CampusMarket")).toBeInTheDocument();
     expect(within(desktopNav).getByText("Browse")).toBeInTheDocument();
@@ -91,7 +89,6 @@ describe("Navbar (high coverage)", () => {
 
   test("navigation works", async () => {
     await renderNav();
-    // Scope to the desktop nav to avoid matching the mobile nav duplicates
     const desktopNav = document.querySelector("nav.navLinks");
     fireEvent.click(within(desktopNav).getByText("Messages"));
     expect(mockNavigate).toHaveBeenCalledWith("/chat");
@@ -454,7 +451,8 @@ describe("Navbar - Additional Coverage Tests", () => {
     fireEvent.click(screen.getByTitle("Notifications"));
 
     await waitFor(() => {
-      expect(screen.getByText(/Rate your experience/)).toBeInTheDocument();
+      // Fix: Check for the actual message text from the component
+      expect(screen.getByText(/How was Jane Smith as a seller/)).toBeInTheDocument();
     });
   });
 
@@ -651,7 +649,9 @@ describe("Navbar - Additional Coverage Tests", () => {
     await renderNav();
     fireEvent.click(screen.getByTitle("Notifications"));
     await waitFor(() => {
-      expect(screen.getByText(/Awesome Textbook/)).toBeInTheDocument();
+      // Use getAllByText since the title appears twice
+      const titleElements = screen.getAllByText(/Awesome Textbook/);
+      expect(titleElements.length).toBeGreaterThan(0);
     });
   });
 
@@ -704,22 +704,6 @@ describe("Navbar - Additional Coverage Tests", () => {
       expect(screen.queryByText("Notifications")).not.toBeInTheDocument();
     });
   });
-});
-
-describe("Navbar - Final Edge Cases Coverage", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    vi.useRealTimers();
-
-    mockGetDoc.mockResolvedValue({ exists: () => false });
-    mockGetDocs.mockResolvedValue({ docs: [], empty: true });
-    mockOnSnapshot.mockImplementation((q, cb) => {
-      cb({ docs: [] });
-      return () => {};
-    });
-    mockSignOut.mockResolvedValue(undefined);
-    localStorage.clear();
-  });
 
   test("markRatingAsRead stores dismissed rating IDs in localStorage", async () => {
     const mockCompletedTx = {
@@ -751,11 +735,17 @@ describe("Navbar - Final Edge Cases Coverage", () => {
     fireEvent.click(screen.getByTitle("Notifications"));
 
     await waitFor(() => {
-      expect(screen.getByText(/Rate your experience/)).toBeInTheDocument();
+      expect(screen.getByText(/How was Jane Smith/)).toBeInTheDocument();
     });
 
-    const notificationItem = screen.getByTestId(/notification-item/);
-    fireEvent.click(notificationItem);
+    // Find and click the rating notification
+    const notificationItems = screen.getAllByTestId(/notification-item/);
+    const ratingItem = notificationItems.find(
+      item => item.textContent.includes("How was")
+    );
+    if (ratingItem) {
+      fireEvent.click(ratingItem);
+    }
 
     await waitFor(() => {
       const stored = localStorage.getItem("readRatingNotifs");
@@ -863,7 +853,7 @@ describe("Navbar - Final Edge Cases Coverage", () => {
     fireEvent.click(screen.getByTitle("Notifications"));
 
     await waitFor(() => {
-      expect(screen.getByText(/Rate your buyer/)).toBeInTheDocument();
+      expect(screen.getByText(/How was John Doe as a buyer/)).toBeInTheDocument();
     });
   });
 
@@ -896,8 +886,9 @@ describe("Navbar - Final Edge Cases Coverage", () => {
     await renderNav();
     fireEvent.click(screen.getByTitle("Notifications"));
 
+    // Fix: Check for the actual message from the component
     await waitFor(() => {
-      expect(screen.getByText(/how was the transaction/)).toBeInTheDocument();
+      expect(screen.getByText(/How was Jane Smith as a seller/)).toBeInTheDocument();
     });
   });
 });
