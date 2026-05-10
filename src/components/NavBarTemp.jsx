@@ -68,7 +68,7 @@ async function resolveAndNavigate(notification, currentUser, navigate) {
     const BUYER_TYPES = [
         'item_at_facility',
         'item_ready_for_collection',
-        'collection_booked',
+       
         'item_collected',
     ];
     const isBuyerNotification = BUYER_TYPES.includes(notification.type);

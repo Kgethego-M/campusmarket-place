@@ -14,6 +14,173 @@ function formatPrice(value) {
   });
 }
 
+/* ── Derive pipeline stage from transaction ───────────────────── */
+function getPipelineStage(txn) {
+  const status       = txn.status;
+  const dropOffStatus = txn.dropOffStatus;
+
+  if (status === "completed" || status === "awaiting_collection") return 5;
+  if (status === "ready_for_release")                             return 4;
+  if (status === "in_facility")                                   return 3;
+  if (dropOffStatus === "scheduled")                              return 2;
+  return 1;
+}
+
+const PIPELINE_STEPS = [
+  { label: "Waiting for seller to book drop-off" },
+  { label: "Drop-off booked — awaiting delivery" },
+  { label: "Item received — being inspected"     },
+  { label: "Evaluation complete — ready for pick-up" },
+  { label: "Collected"                            },
+];
+
+/* ── Seller badge ─────────────────────────────────────────────── */
+function getSellerStatusBadge(txn) {
+  const s = txn.dropOffStatus;
+  if (s === "inspection_pass")           return { label: "Inspection passed", color: "#166534", bg: "#dcfce7" };
+  if (s === "inspection_fail")           return { label: "Inspection failed",  color: "#791F1F", bg: "#FCEBEB" };
+  if (txn.status === "in_facility")      return { label: "In Facility",        color: "#0369a1", bg: "#e0f2fe" };
+  if (s === "dropped_off")               return { label: "Item dropped off",   color: "#166534", bg: "#dcfce7" };
+  if (s === "scheduled")                 return { label: "Drop-off scheduled", color: "#92400e", bg: "#fef3c7" };
+  return                                        { label: "Awaiting drop-off",  color: "#1e40af", bg: "#dbeafe" };
+}
+
+/* ── Buyer tracker card ───────────────────────────────────────── */
+function BuyerTrackerCard({ txn, idx }) {
+  const stage    = getPipelineStage(txn);
+  const failed   = txn.dropOffStatus === "inspection_fail";
+  const price    = formatPrice(txn.agreedPrice ?? txn.listing?.price);
+  const imageUrl = txn.listing?.photos?.[0] ?? null;
+
+  return (
+    <div
+      className={`${styles.trackerCard} ${failed ? styles.trackerCardFailed : ""}`}
+      style={{ animationDelay: `${idx * 0.06}s` }}
+    >
+      {/* ── Item summary ── */}
+      <div className={styles.trackerTop}>
+        <div className={styles.imgWrap}>
+          {imageUrl
+            ? <img src={imageUrl} alt={txn.listing?.title} className={styles.img} />
+            : <div className={styles.imgPlaceholder}>
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none"
+                     stroke="#9ca3af" strokeWidth="1.5">
+                  <rect x="3" y="3" width="18" height="18" rx="2"/>
+                  <circle cx="8.5" cy="8.5" r="1.5"/>
+                  <polyline points="21 15 16 10 5 21"/>
+                </svg>
+              </div>
+          }
+        </div>
+        <div className={styles.trackerInfo}>
+          <p className={styles.itemTitle}>{txn.listing?.title ?? "Item"}</p>
+          <div className={styles.metaRow}>
+            <span className={styles.metaPrice}>R{price}</span>
+            <span className={styles.metaDot}>·</span>
+            <span className={styles.metaItem}>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
+                   stroke="currentColor" strokeWidth="2">
+                <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/>
+                <circle cx="12" cy="7" r="4"/>
+              </svg>
+              {txn.sellerName || txn.counterpartyName}
+            </span>
+          </div>
+          {txn.dropOffDate && (
+            <p className={styles.dropOffDate}>
+              Drop-off: {txn.dropOffDate} · {txn.dropOffTimeSlot}
+            </p>
+          )}
+        </div>
+      </div>
+
+      {/* ── Divider ── */}
+      <div className={styles.trackerDivider} />
+
+      {/* ── Pipeline or failed banner ── */}
+      {failed ? (
+        <div className={styles.failedBanner}>
+          <div className={styles.failedIcon}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
+                 stroke="currentColor" strokeWidth="2">
+              <circle cx="12" cy="12" r="10"/>
+              <line x1="12" y1="8" x2="12" y2="12"/>
+              <line x1="12" y1="16" x2="12.01" y2="16"/>
+            </svg>
+          </div>
+          <div>
+            <p className={styles.failedTitle}>Evaluation failed</p>
+            <p className={styles.failedSub}>
+              This item did not pass inspection. Please contact support to resolve this transaction.
+            </p>
+          </div>
+        </div>
+      ) : (
+        <div className={styles.pipeline}>
+          {PIPELINE_STEPS.map((step, i) => {
+            const stepNum   = i + 1;
+            const completed = stage > stepNum;
+            const active    = stage === stepNum;
+            const pending   = !completed && !active;
+            const isLast    = i === PIPELINE_STEPS.length - 1;
+
+            return (
+              <div key={i} className={styles.pipelineStep}>
+                <div className={styles.pipelineLeft}>
+                  {/* Dot */}
+                  <div className={`${styles.pipelineDot}
+                    ${completed ? styles.pipelineDotDone    : ""}
+                    ${active    ? styles.pipelineDotActive  : ""}
+                    ${pending   ? styles.pipelineDotPending : ""}
+                  `}>
+                    {completed && (
+                      <svg width="9" height="9" viewBox="0 0 24 24" fill="none"
+                           stroke="currentColor" strokeWidth="3.5">
+                        <polyline points="20 6 9 17 4 12"/>
+                      </svg>
+                    )}
+                    {active && <span className={styles.pipelinePulse} />}
+                  </div>
+                  {/* Connector line (skip last) */}
+                  {!isLast && (
+                    <div className={`${styles.pipelineConnector}
+                      ${completed ? styles.pipelineConnectorDone : ""}
+                    `} />
+                  )}
+                </div>
+
+                <div className={styles.pipelineRight}>
+                  <div className={styles.pipelineLabelRow}>
+                    <span className={`${styles.pipelineLabel}
+                      ${completed ? styles.pipelineLabelDone    : ""}
+                      ${active    ? styles.pipelineLabelActive  : ""}
+                      ${pending   ? styles.pipelineLabelPending : ""}
+                    `}>
+                      {step.label}
+                    </span>
+                    {active && stage < 4 && (
+                      <span className={styles.pipelineInProgressBadge}>In progress</span>
+                    )}
+                    {active && stage === 4 && (
+                      <span className={styles.pipelineReadyBadge}>Ready ✓</span>
+                    )}
+                    {active && stage === 5 && (
+                      <span className={styles.pipelineReadyBadge}>Collected ✓</span>
+                    )}
+                  </div>
+                  {/* Extra spacing below label except last */}
+                  {!isLast && <div style={{ height: 14 }} />}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ── Main ─────────────────────────────────────────────────────── */
 export default function TradeFacility() {
   const [user, setUser]               = useState(null);
   const [loading, setLoading]         = useState(true);
