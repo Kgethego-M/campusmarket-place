@@ -37,11 +37,12 @@ const PIPELINE_STEPS = [
 /* ── Seller badge ─────────────────────────────────────────────── */
 function getSellerStatusBadge(txn) {
   const s = txn.dropOffStatus;
-  if (s === "inspection_pass") return { label: "Inspection passed",  color: "#166534", bg: "#dcfce7" };
-  if (s === "inspection_fail") return { label: "Inspection failed",  color: "#791F1F", bg: "#FCEBEB" };
-  if (s === "dropped_off")     return { label: "Item dropped off",   color: "#166534", bg: "#dcfce7" };
-  if (s === "scheduled")       return { label: "Drop-off scheduled", color: "#92400e", bg: "#fef3c7" };
-  return                              { label: "Awaiting drop-off",  color: "#1e40af", bg: "#dbeafe" };
+  if (s === "inspection_pass")           return { label: "Inspection passed", color: "#166534", bg: "#dcfce7" };
+  if (s === "inspection_fail")           return { label: "Inspection failed",  color: "#791F1F", bg: "#FCEBEB" };
+  if (txn.status === "in_facility")      return { label: "In Facility",        color: "#0369a1", bg: "#e0f2fe" };
+  if (s === "dropped_off")               return { label: "Item dropped off",   color: "#166534", bg: "#dcfce7" };
+  if (s === "scheduled")                 return { label: "Drop-off scheduled", color: "#92400e", bg: "#fef3c7" };
+  return                                        { label: "Awaiting drop-off",  color: "#1e40af", bg: "#dbeafe" };
 }
 
 /* ── Buyer tracker card ───────────────────────────────────────── */

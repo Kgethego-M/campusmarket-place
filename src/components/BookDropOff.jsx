@@ -138,22 +138,18 @@ export default function BookDropOff() {
 
       const txn = { id: transSnap.id, ...transSnap.data() };
 
-      // Only the seller can book a drop-off
       if (txn.sellerId !== uid)
         return setError("You can only book a drop-off for your own sales.");
 
-      // ✅ "waiting" is the status set when buyer agrees to pay
       const ALLOWED_STATUSES = ["waiting", "accepted", "in_facility"];
       if (!ALLOWED_STATUSES.includes(txn.status))
         return setError(`Cannot book drop-off. Current status: ${txn.status}`);
 
-      // Prevent double-booking
       if (txn.bookingId)
         return setError("A drop-off has already been booked for this transaction.");
 
       setTransaction(txn);
 
-      // Resolve payment method
       let pm = txn.paymentMethod;
       if (!pm && txn.paymentType) {
         pm = txn.paymentType === "full_online" ? "online"
@@ -235,7 +231,6 @@ export default function BookDropOff() {
     setError("");
 
     try {
-      // Guard against race conditions
       const latest = await getDoc(doc(db, "transactions", transaction.id));
       if (latest.data().bookingId)
         return setError("A drop-off was already booked for this transaction.");
@@ -262,21 +257,23 @@ export default function BookDropOff() {
         }),
         // Notify seller
         addDoc(collection(db, "notifications"), {
-          userId:    transaction.sellerId,
-          type:      "dropoff_booked",
-          title:     "Drop-off booked",
-          message:   `Your drop-off for "${listing?.title}" is scheduled on ${selectedDate} at ${selectedTimeSlot}.`,
-          read:      false,
-          createdAt: serverTimestamp(),
+          userId:        transaction.sellerId,
+          type:          "dropoff_booked",
+          transactionId: transaction.id,
+          title:         "Drop-off booked",
+          message:       `Your drop-off for "${listing?.title}" is scheduled on ${selectedDate} at ${selectedTimeSlot}.`,
+          read:          false,
+          createdAt:     serverTimestamp(),
         }),
         // Notify buyer
         addDoc(collection(db, "notifications"), {
-          userId:    transaction.buyerId,
-          type:      "dropoff_booked",
-          title:     "Seller booked drop-off",
-          message:   `The seller has scheduled a drop-off for "${listing?.title}" on ${selectedDate} at ${selectedTimeSlot}.`,
-          read:      false,
-          createdAt: serverTimestamp(),
+          userId:        transaction.buyerId,
+          type:          "dropoff_booked",
+          transactionId: transaction.id,
+          title:         "Seller booked drop-off",
+          message:       `The seller has scheduled a drop-off for "${listing?.title}" on ${selectedDate} at ${selectedTimeSlot}.`,
+          read:          false,
+          createdAt:     serverTimestamp(),
         }),
       ]);
 
