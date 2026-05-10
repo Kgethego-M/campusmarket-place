@@ -1,4 +1,4 @@
-// src/components/ListingDetailView.jsx
+// src/components/ListingDetail.jsx
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
@@ -11,7 +11,7 @@ import { createTransaction } from '../services/transactionService';
 import { notifySellerOfOffer } from '../services/notificationService';
 import NavBarTemp from './NavBarTemp';
 import ReportModal from './ReportModal';
-import PromoteListingModal from './PromoteListingModal';   // ✅ ADD THIS IMPORT
+import PromoteListingModal from './PromoteListingModal';
 
 // ── Toast ─────────────────────────────────────────────────────────────────────
 function Toast({ toast }) {
@@ -226,7 +226,7 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
   const [inCart, setInCart]               = useState(false);
   const [cartLoading, setCartLoading]     = useState(false);
   const [toast, setToast]                 = useState(null);
-  const [showPromoteModal, setShowPromoteModal] = useState(false);   // ✅ STATE FOR PROMOTE MODAL
+  const [showPromoteModal, setShowPromoteModal] = useState(false);
 
   const showToast = (msg, type = 'success') => {
     setToast({ msg, type });
@@ -428,7 +428,6 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
         reportedName={listing.title}
       />
 
-      {/* ✅ Promote modal */}
       {showPromoteModal && (
         <PromoteListingModal
           listing={listing}
@@ -511,7 +510,7 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
             </div>
           )}
 
-          {/* ✅ PROMOTE LISTING BUTTON (only for owner) */}
+          {/* Promote button */}
           {isOwnListing && (
             <button
               onClick={() => setShowPromoteModal(true)}
@@ -546,7 +545,6 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
             </div>
             <span style={styles.sellerChevron}>›</span>
           </div>
-
         </div>
 
         {/* Purchase modal */}
@@ -722,25 +720,25 @@ const styles = {
   cartBtn:          { width: '100%', padding: '12px', border: '1.5px solid', borderRadius: '10px', fontSize: '0.9rem', fontWeight: '600', cursor: 'pointer', fontFamily: 'Segoe UI, system-ui, sans-serif', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', transition: 'all 0.18s' },
   messageBtn:       { width: '100%', padding: '11px', backgroundColor: 'transparent', color: '#444', border: '1px solid #6aa6da57', borderRadius: '10px', fontSize: '0.875rem', fontWeight: '500', cursor: 'pointer', fontFamily: 'Segoe UI, system-ui, sans-serif', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' },
   reportBtn:        { width: '100%', padding: '10px', backgroundColor: 'transparent', color: '#dc2626', border: '1.5px solid #fca5a5', borderRadius: '10px', fontSize: '0.82rem', fontWeight: '500', cursor: 'pointer', fontFamily: 'Segoe UI, system-ui, sans-serif', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '7px' },
-  pendingBanner:    { display: 'flex', alignItems: 'center', gap: '12px', padding: '16px', backgroundColor: '#fff8e1', border: '1px solid #ffe082', borderRadius: '10px', fontFamily: 'Segoe UI, system-ui, sans-serif' },
-  pendingTitle:     { margin: '0 0 4px', fontWeight: '700', fontSize: '0.95rem', color: '#b45309' },
-  pendingSubtitle:  { margin: '0', fontSize: '0.85rem', color: '#92400e' },
-  ownerBanner:      { display: 'flex', alignItems: 'center', gap: '12px', padding: '16px', backgroundColor: '#e8f4fd', border: '1px solid #90caf9', borderRadius: '10px', fontFamily: 'Segoe UI, system-ui, sans-serif' },
-  ownerBannerTitle: { margin: '0 0 4px', fontWeight: '700', fontSize: '0.95rem', color: '#0d47a1' },
+  pendingBanner:       { display: 'flex', alignItems: 'center', gap: '12px', padding: '16px', backgroundColor: '#fff8e1', border: '1px solid #ffe082', borderRadius: '10px', fontFamily: 'Segoe UI, system-ui, sans-serif' },
+  pendingTitle:        { margin: '0 0 4px', fontWeight: '700', fontSize: '0.95rem', color: '#b45309' },
+  pendingSubtitle:     { margin: '0', fontSize: '0.85rem', color: '#92400e' },
+  ownerBanner:         { display: 'flex', alignItems: 'center', gap: '12px', padding: '16px', backgroundColor: '#e8f4fd', border: '1px solid #90caf9', borderRadius: '10px', fontFamily: 'Segoe UI, system-ui, sans-serif' },
+  ownerBannerTitle:    { margin: '0 0 4px', fontWeight: '700', fontSize: '0.95rem', color: '#0d47a1' },
   ownerBannerSubtitle: { margin: '0', fontSize: '0.85rem', color: '#1565c0' },
-  sellerCard:       { display: 'flex', alignItems: 'center', gap: '14px', padding: '14px', border: '1px solid #dde3ea', borderRadius: '12px', marginTop: '4px', cursor: 'pointer', backgroundColor: '#fff', transition: 'box-shadow 0.15s', outline: 'none', userSelect: 'none' },
-  sellerAvatar:     { width: '46px', height: '46px', borderRadius: '50%', backgroundColor: '#166bc0', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', flexShrink: 0 },
-  sellerInitial:    { fontSize: '1.1rem', fontWeight: '700', color: '#fff' },
-  sellerName:       { margin: '0 0 2px', fontWeight: '600', fontSize: '0.9rem', color: '#1a1a1a', fontFamily: 'Segoe UI, system-ui, sans-serif' },
-  sellerSub:        { margin: '0', fontSize: '0.78rem', color: '#6AA6DA', fontFamily: 'Segoe UI, system-ui, sans-serif' },
-  sellerChevron:    { fontSize: '1.5rem', color: '#bbb', flexShrink: 0 },
-  backBtn:          { background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.9rem', color: '#555', padding: '0', fontFamily: 'Segoe UI, system-ui, sans-serif' },
-  specBox:          { backgroundColor: '#f0f6ff', border: '1px solid #bdd6f0', borderLeft: '4px solid #6AA6DA', borderRadius: '10px', padding: '12px 14px' },
-  specLabel:        { fontSize: '0.7rem', fontWeight: '700', color: '#6AA6DA', textTransform: 'uppercase', letterSpacing: '0.07em', margin: '0 0 6px', display: 'flex', alignItems: 'center', fontFamily: 'Segoe UI, system-ui, sans-serif' },
-  specText:         { fontSize: '0.85rem', color: '#1e3a5f', lineHeight: '1.6', fontFamily: 'Segoe UI, system-ui, sans-serif', margin: '0', whiteSpace: 'pre-wrap' },
-  descBox:          { backgroundColor: '#fdf6ee', border: '1px solid #f0dfc0', borderLeft: '4px solid #e8a838', borderRadius: '10px', padding: '12px 14px' },
-  descLabel:        { fontSize: '0.7rem', fontWeight: '700', color: '#c07a10', textTransform: 'uppercase', letterSpacing: '0.07em', margin: '0 0 6px', display: 'flex', alignItems: 'center', fontFamily: 'Segoe UI, system-ui, sans-serif' },
-  descText:         { fontSize: '0.85rem', color: '#4a3000', lineHeight: '1.6', fontFamily: 'Segoe UI, system-ui, sans-serif', margin: '0', whiteSpace: 'pre-wrap' },
+  sellerCard:    { display: 'flex', alignItems: 'center', gap: '14px', padding: '14px', border: '1px solid #dde3ea', borderRadius: '12px', marginTop: '4px', cursor: 'pointer', backgroundColor: '#fff', transition: 'box-shadow 0.15s', outline: 'none', userSelect: 'none' },
+  sellerAvatar:  { width: '46px', height: '46px', borderRadius: '50%', backgroundColor: '#166bc0', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', flexShrink: 0 },
+  sellerInitial: { fontSize: '1.1rem', fontWeight: '700', color: '#fff' },
+  sellerName:    { margin: '0 0 2px', fontWeight: '600', fontSize: '0.9rem', color: '#1a1a1a', fontFamily: 'Segoe UI, system-ui, sans-serif' },
+  sellerSub:     { margin: '0', fontSize: '0.78rem', color: '#6AA6DA', fontFamily: 'Segoe UI, system-ui, sans-serif' },
+  sellerChevron: { fontSize: '1.5rem', color: '#bbb', flexShrink: 0 },
+  backBtn:       { background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.9rem', color: '#555', padding: '0', fontFamily: 'Segoe UI, system-ui, sans-serif' },
+  specBox:   { backgroundColor: '#f0f6ff', border: '1px solid #bdd6f0', borderLeft: '4px solid #6AA6DA', borderRadius: '10px', padding: '12px 14px' },
+  specLabel: { fontSize: '0.7rem', fontWeight: '700', color: '#6AA6DA', textTransform: 'uppercase', letterSpacing: '0.07em', margin: '0 0 6px', display: 'flex', alignItems: 'center', fontFamily: 'Segoe UI, system-ui, sans-serif' },
+  specText:  { fontSize: '0.85rem', color: '#1e3a5f', lineHeight: '1.6', fontFamily: 'Segoe UI, system-ui, sans-serif', margin: '0', whiteSpace: 'pre-wrap' },
+  descBox:   { backgroundColor: '#fdf6ee', border: '1px solid #f0dfc0', borderLeft: '4px solid #e8a838', borderRadius: '10px', padding: '12px 14px' },
+  descLabel: { fontSize: '0.7rem', fontWeight: '700', color: '#c07a10', textTransform: 'uppercase', letterSpacing: '0.07em', margin: '0 0 6px', display: 'flex', alignItems: 'center', fontFamily: 'Segoe UI, system-ui, sans-serif' },
+  descText:  { fontSize: '0.85rem', color: '#4a3000', lineHeight: '1.6', fontFamily: 'Segoe UI, system-ui, sans-serif', margin: '0', whiteSpace: 'pre-wrap' },
 };
 
 const modalStyles = {

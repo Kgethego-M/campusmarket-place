@@ -8,16 +8,12 @@ import {
   getOnlineAmount,
   getCashAmount,
   updateTransactionStatus,
-  loadPaystackSDK,
-  openPaystackPopup,
-  generateRef,
+  redirectToStripeCheckout,
   PAYMENT_LABELS,
 } from '../utils/payment.utils';
 import styles from './Payment.module.css';
 
-const PAYSTACK_PUBLIC_KEY = import.meta.env.VITE_PAYSTACK_PUBLIC_KEY;
-
-// ─── Helper: write a notification doc for the seller ─────────────────────────
+// ─── Helper: notify seller ────────────────────────────────────────────────────
 async function notifySellerPaymentConfirmed({ sellerId, buyerName, listingId, listingTitle, transactionId }) {
   try {
     await addDoc(collection(db, 'notifications'), {
@@ -35,7 +31,6 @@ async function notifySellerPaymentConfirmed({ sellerId, buyerName, listingId, li
   }
 }
 
-// ─── Component ────────────────────────────────────────────────────────────────
 export default function Payment() {
   const { txId } = useParams();
   const navigate = useNavigate();
@@ -46,18 +41,12 @@ export default function Payment() {
   const [loading, setLoading]             = useState(true);
   const [error, setError]                 = useState('');
   const [processing, setProcessing]       = useState(false);
-  const [step, setStep]                   = useState('summary');
-  const [paystackRef, setPaystackRef]     = useState('');
-  const [sdkReady, setSdkReady]           = useState(false);
+  const [step, setStep]                   = useState('summary'); // 'summary' | 'redirecting' | 'success' | 'cash_waiting'
+  const [stripeRef, setStripeRef]         = useState('');
   const [cashConfirmed, setCashConfirmed] = useState(false);
   const [sellerName, setSellerName]       = useState('');
 
-  useEffect(() => {
-    if (!PAYSTACK_PUBLIC_KEY) {
-      console.error('[Payment] VITE_PAYSTACK_PUBLIC_KEY is not set.');
-    }
-  }, []);
-
+  // ── Auth ──────────────────────────────────────────────────────────────────────
   useEffect(() => {
     return onAuthStateChanged(auth, (user) => {
       if (!user) { navigate('/login'); return; }
@@ -65,12 +54,7 @@ export default function Payment() {
     });
   }, [navigate]);
 
-  useEffect(() => {
-    loadPaystackSDK()
-      .then(() => setSdkReady(true))
-      .catch(() => setError('Could not load payment SDK. Check your connection.'));
-  }, []);
-
+  // ── Load transaction (real-time) ──────────────────────────────────────────────
   useEffect(() => {
     if (!txId) return;
     const unsub = onSnapshot(doc(db, 'transactions', txId), async (snap) => {
@@ -96,18 +80,52 @@ export default function Payment() {
           }
         } catch (_) {}
       }
+
+      // ── FIX 1: Detect Stripe payment already completed via webhook ────────────
+      // If Firestore already has status=waiting + paymentStatus=paid,
+      // jump straight to success screen (handles webhook arriving before redirect)
+      if (
+        data.paymentProvider === 'stripe' &&
+        data.paymentStatus === 'paid'
+      ) {
+        setStripeRef(
+          data.stripeRef ||
+          data.stripeCheckoutSessionId ||
+          data.stripePaymentIntentId ||
+          ''
+        );
+        setStep('success');
+        setLoading(false);
+        return;
+      }
+
+      // Persist cash_waiting screen if Firestore re-fires
+      if (
+        data.status === 'waiting' &&
+        data.paymentProvider === 'cash' &&
+        data.paymentStatus === 'cash_pending'
+      ) {
+        setStep('cash_waiting');
+      }
+
       setLoading(false);
     });
     return () => unsub();
   }, [txId]);
 
-  // ── Cash confirm ────────────────────────────────────────────────────────────
+  // ── Cash payment ──────────────────────────────────────────────────────────────
   const handleCashPayment = useCallback(async () => {
     if (!tx || !currentUser) return;
     setProcessing(true);
     setError('');
     try {
-      await updateTransactionStatus(tx.id, 'waiting', { paymentSettled: false });
+      await updateTransactionStatus(tx.id, 'waiting', {
+        paymentProvider: 'cash',
+        paymentStatus:   'cash_pending',
+        paymentSettled:  false,
+        onlineAmount:    0,
+        cashAmount:      getCashAmount(tx),
+      });
       await notifySellerPaymentConfirmed({
         sellerId:      tx.sellerId,
         buyerName:     currentUser.displayName || currentUser.email || 'The buyer',
@@ -117,69 +135,49 @@ export default function Payment() {
       });
       setStep('cash_waiting');
     } catch (e) {
+      console.error(e);
       setError('Something went wrong. Please try again.');
     } finally {
       setProcessing(false);
     }
   }, [tx, currentUser, listing]);
 
-  // ── Online payment ──────────────────────────────────────────────────────────
+  // ── Stripe: user clicks button, THEN redirects ────────────────────────────────
   const handleOnlinePayment = useCallback(async () => {
-    if (!tx || !currentUser || !sdkReady) return;
-    if (!PAYSTACK_PUBLIC_KEY) { setError('Payment is not configured. Please contact support.'); return; }
-
+    if (!tx || !currentUser) return;
     setProcessing(true);
+    setStep('redirecting');
     setError('');
 
     const onlineAmount = getOnlineAmount(tx);
-    if (onlineAmount <= 0) { setError('No online payment amount found.'); setProcessing(false); return; }
-
-    const ref = generateRef(tx.id);
+    if (onlineAmount <= 0) {
+      setError('No online payment amount found.');
+      setProcessing(false);
+      setStep('summary');
+      return;
+    }
 
     try {
-      const response = await openPaystackPopup({
-        publicKey:  PAYSTACK_PUBLIC_KEY,
-        email:      currentUser.email,
-        amountRand: onlineAmount,
-        ref,
-        metadata: {
-          custom_fields: [
-            { display_name: 'Item',           variable_name: 'item',  value: tx.listingTitle || listing?.title || 'Campus Item' },
-            { display_name: 'Transaction ID', variable_name: 'tx_id', value: tx.id },
-            { display_name: 'Buyer',          variable_name: 'buyer', value: currentUser.displayName || currentUser.email },
-          ],
+      await redirectToStripeCheckout({
+        tx: {
+          ...tx,
+          listingTitle: tx.listingTitle || listing?.title || 'Campus Item',
         },
+        buyerEmail:       currentUser.email,
+        createSessionUrl: `${import.meta.env.VITE_API_URL}/api/stripe/create-checkout-session`,
+        successUrl:       `${window.location.origin}/payment-success?tx=${tx.id}`,
+        cancelUrl:        `${window.location.origin}/payment-cancelled?tx=${tx.id}`,
       });
-
-      await updateTransactionStatus(tx.id, 'waiting', {
-        paystackRef:    response.reference,
-        onlinePaid:     onlineAmount,
-        paymentSettled: getCashAmount(tx) === 0,
-      });
-
-      await notifySellerPaymentConfirmed({
-        sellerId:      tx.sellerId,
-        buyerName:     currentUser.displayName || currentUser.email || 'The buyer',
-        listingId:     tx.listingId,
-        listingTitle:  tx.listingTitle || listing?.title || 'your item',
-        transactionId: tx.id,
-      });
-
-      setPaystackRef(response.reference);
-      setStep('success');
+      // Browser navigates away to Stripe — nothing runs after this
     } catch (e) {
-      if (e?.cancelled) {
-        setError('Payment was cancelled. You can try again.');
-      } else {
-        console.error('[Payment] Paystack error:', e);
-        setError('Payment failed. Please try again.');
-      }
-    } finally {
+      console.error('Stripe redirect failed:', e);
+      setError(e?.message || 'Could not redirect to Stripe. Please try again.');
       setProcessing(false);
+      setStep('summary');
     }
-  }, [tx, currentUser, sdkReady, listing]);
+  }, [tx, currentUser, listing]);
 
-  // ── Derived ─────────────────────────────────────────────────────────────────
+  // ── Derived values ────────────────────────────────────────────────────────────
   const paymentType  = tx ? (tx.paymentType || tx.paymentMethod || 'cash') : null;
   const onlineAmount = tx ? getOnlineAmount(tx) : 0;
   const cashAmount   = tx ? getCashAmount(tx) : 0;
@@ -189,20 +187,22 @@ export default function Payment() {
   const itemImage    = listing?.photos?.[0] || listing?.imageUrl || null;
   const itemTitle    = tx?.listingTitle || listing?.title || 'Campus Item';
 
-  // ── Guards ──────────────────────────────────────────────────────────────────
+  // ── Loading ───────────────────────────────────────────────────────────────────
   if (loading) return (
-    <><NavBar /><div className={styles.page}><div className={styles.loadingState}><i className="fas fa-spinner fa-spin" /><p>Loading payment details...</p></div></div></>
+    <><NavBar /><div className={styles.page}><div className={styles.loadingState}>
+      <i className="fas fa-spinner fa-spin" /><p>Loading payment details...</p>
+    </div></div></>
   );
 
+  // ── Missing transaction ───────────────────────────────────────────────────────
   if (error && !tx) return (
-    <><NavBar /><div className={styles.page}><div className={styles.errorState}><i className="fas fa-circle-exclamation" /><p>{error}</p><button className={styles.backBtn} onClick={() => navigate(-1)}>Go back</button></div></div></>
+    <><NavBar /><div className={styles.page}><div className={styles.errorState}>
+      <i className="fas fa-circle-exclamation" /><p>{error}</p>
+      <button className={styles.backBtn} onClick={() => navigate(-1)}>Go back</button>
+    </div></div></>
   );
 
-  if (tx && tx.status !== 'accepted') return (
-    <><NavBar /><div className={styles.page}><div className={styles.container}><div className={styles.alreadyProcessed}><i className="fas fa-info-circle" /><p>This transaction has already been processed (status: <strong>{tx.status}</strong>).</p><button className={styles.backBtn} onClick={() => navigate('/my-purchases')}>Back to purchases</button></div></div></div></>
-  );
-
-  // ── Success ─────────────────────────────────────────────────────────────────
+  // ── Success screen — BEFORE already-processed guard ───────────────────────────
   if (step === 'success') return (
     <>
       <NavBar />
@@ -211,10 +211,12 @@ export default function Payment() {
           <div className={styles.successIconWrap}><i className="fas fa-check" /></div>
           <h2>Payment received!</h2>
           <p className={styles.successSub}>
-            Your online payment of <strong>R {onlineAmount.toLocaleString('en-ZA')}</strong> has been processed
-            and is held in escrow until you collect your item.
+            Your payment of <strong>R {onlineAmount.toLocaleString('en-ZA')}</strong> has been processed.
+            Your transaction is now <strong>waiting for collection</strong>.
           </p>
-          {paystackRef && <div className={styles.refTag}><i className="fas fa-receipt" /> Ref: {paystackRef}</div>}
+          {stripeRef && (
+            <div className={styles.refTag}><i className="fas fa-receipt" /> Stripe Ref: {stripeRef}</div>
+          )}
           {cashAmount > 0 && (
             <div className={styles.cashReminderBox}>
               <i className="fas fa-coins" />
@@ -226,14 +228,16 @@ export default function Payment() {
           )}
           <div className={styles.successActions}>
             <button className={styles.primaryBtn} onClick={() => navigate('/my-purchases')}>View my purchases</button>
-            <button className={styles.ghostBtn} onClick={() => navigate(`/listing/${tx.listingId}`)}>View listing</button>
+            {tx?.listingId && (
+              <button className={styles.ghostBtn} onClick={() => navigate(`/listing/${tx.listingId}`)}>View listing</button>
+            )}
           </div>
         </div>
       </div></div>
     </>
   );
 
-  // ── Cash waiting ────────────────────────────────────────────────────────────
+  // ── Cash waiting screen — BEFORE already-processed guard ─────────────────────
   if (step === 'cash_waiting') return (
     <>
       <NavBar />
@@ -242,8 +246,8 @@ export default function Payment() {
           <div className={styles.waitingIconWrap}><i className="fas fa-handshake" /></div>
           <h2>You're confirmed!</h2>
           <p className={styles.successSub}>
-            Your transaction is now marked as <strong>waiting</strong>. Bring
-            <strong> R {cashAmount.toLocaleString('en-ZA')}</strong> in cash to the drop-off point to collect your item.
+            Your transaction is now marked as <strong>waiting</strong>. Bring{' '}
+            <strong>R {cashAmount.toLocaleString('en-ZA')}</strong> in cash to the drop-off point.
           </p>
           <div className={styles.cashReminderBox}>
             <i className="fas fa-map-marker-alt" />
@@ -262,7 +266,56 @@ export default function Payment() {
     </>
   );
 
-  // ── Main summary ────────────────────────────────────────────────────────────
+  // ── Redirecting to Stripe screen ──────────────────────────────────────────────
+  if (step === 'redirecting') return (
+    <>
+      <NavBar />
+      <div className={styles.page}><div className={styles.container}>
+        <div className={styles.successCard}>
+          <div className={styles.successIconWrap}><i className="fas fa-spinner fa-spin" /></div>
+          <h2>Redirecting to Stripe...</h2>
+          <p className={styles.successSub}>Please wait while we open the secure payment page.</p>
+          {error && (
+            <>
+              <div className={styles.errorMsg}><i className="fas fa-circle-exclamation" /> {error}</div>
+              <div className={styles.successActions}>
+                <button className={styles.primaryBtn} onClick={handleOnlinePayment} disabled={processing}>
+                  <i className="fas fa-rotate-right" /> Try again
+                </button>
+                <button className={styles.ghostBtn} onClick={() => navigate('/my-purchases')}>
+                  Back to purchases
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      </div></div>
+    </>
+  );
+
+  // ── FIX 2: Already processed guard — blocks re-entry after Stripe OR cash paid
+  // Checks paymentStatus=paid first, then falls back to status check
+  if (tx && (
+    tx.paymentStatus === 'paid' ||
+    tx.paymentStatus === 'cash_pending' ||
+    (tx.status !== 'accepted' && tx.status !== 'pending_payment')
+  )) return (
+    <><NavBar /><div className={styles.page}><div className={styles.container}>
+      <div className={styles.alreadyProcessed}>
+        <i className="fas fa-info-circle" />
+        <p>
+          {tx.paymentStatus === 'paid'
+            ? 'This payment has already been completed.'
+            : tx.paymentStatus === 'cash_pending'
+            ? 'You have already confirmed this cash transaction.'
+            : `This transaction has already been processed (status: ${tx.status}).`}
+        </p>
+        <button className={styles.backBtn} onClick={() => navigate('/my-purchases')}>Back to purchases</button>
+      </div>
+    </div></div></>
+  );
+
+  // ── Main summary page ─────────────────────────────────────────────────────────
   return (
     <>
       <NavBar />
@@ -279,6 +332,7 @@ export default function Payment() {
           </div>
 
           <div className={styles.layout}>
+            {/* ── Left: item + breakdown ── */}
             <div className={styles.summaryCol}>
               <div className={styles.card}>
                 <p className={styles.cardLabel}>Item</p>
@@ -288,7 +342,9 @@ export default function Payment() {
                   </div>
                   <div className={styles.itemInfo}>
                     <p className={styles.itemTitle}>{itemTitle}</p>
-                    <p className={styles.itemSeller}><i className="fas fa-user" /> {sellerName || tx.sellerName || 'Unknown Seller'}</p>
+                    <p className={styles.itemSeller}>
+                      <i className="fas fa-user" /> {sellerName || tx.sellerName || 'Unknown Seller'}
+                    </p>
                     <span className={styles.payTypeBadge}>{PAYMENT_LABELS[paymentType] || paymentType}</span>
                   </div>
                 </div>
@@ -296,7 +352,9 @@ export default function Payment() {
 
               <div className={styles.card}>
                 <p className={styles.cardLabel}>Payment breakdown</p>
-                <div className={styles.breakdownRow}><span>Agreed price</span><span>R {totalAmount.toLocaleString('en-ZA')}</span></div>
+                <div className={styles.breakdownRow}>
+                  <span>Agreed price</span><span>R {totalAmount.toLocaleString('en-ZA')}</span>
+                </div>
                 {isPartial && (
                   <>
                     <div className={styles.breakdownRow}>
@@ -310,7 +368,9 @@ export default function Payment() {
                   </>
                 )}
                 <div className={styles.breakdownDivider} />
-                <div className={`${styles.breakdownRow} ${styles.breakdownTotal}`}><span>Total</span><span>R {totalAmount.toLocaleString('en-ZA')}</span></div>
+                <div className={`${styles.breakdownRow} ${styles.breakdownTotal}`}>
+                  <span>Total</span><span>R {totalAmount.toLocaleString('en-ZA')}</span>
+                </div>
               </div>
 
               {cashAmount > 0 && (
@@ -325,24 +385,21 @@ export default function Payment() {
               )}
             </div>
 
+            {/* ── Right: payment action ── */}
             <div className={styles.actionCol}>
-              <div className={styles.card}>
+              {/* FIX 3: card has overflow:hidden to keep button inside */}
+              <div className={styles.card} style={{ overflow: 'hidden' }}>
                 <p className={styles.cardLabel}>{isCashOnly ? 'Confirm & proceed' : 'Pay online'}</p>
 
+                {/* Online amount display */}
                 {!isCashOnly && (
-                  <>
-                    <div className={styles.testCardBox}>
-                      <p className={styles.testCardTitle}><i className="fas fa-flask" /> Paystack test card</p>
-                      <code>4084 0840 8408 4081</code>
-                      <code>Exp: 01/99 · CVV: 408 · PIN: 0000 · OTP: 123456</code>
-                    </div>
-                    <div className={styles.amountDisplay}>
-                      <span className={styles.amountLabel}>{isPartial ? 'Online portion' : 'Amount due'}</span>
-                      <span className={styles.amountValue}>R {onlineAmount.toLocaleString('en-ZA')}</span>
-                    </div>
-                  </>
+                  <div className={styles.amountDisplay}>
+                    <span className={styles.amountLabel}>{isPartial ? 'Online portion' : 'Amount due'}</span>
+                    <span className={styles.amountValue}>R {onlineAmount.toLocaleString('en-ZA')}</span>
+                  </div>
                 )}
 
+                {/* Cash amount display */}
                 {isCashOnly && (
                   <div className={styles.amountDisplay}>
                     <span className={styles.amountLabel}>Cash to bring</span>
@@ -350,31 +407,69 @@ export default function Payment() {
                   </div>
                 )}
 
-                {error && <div className={styles.errorMsg}><i className="fas fa-circle-exclamation" /> {error}</div>}
+                {error && (
+                  <div className={styles.errorMsg}><i className="fas fa-circle-exclamation" /> {error}</div>
+                )}
 
+                {/* Cash flow */}
                 {isCashOnly ? (
                   <>
                     <label className={styles.confirmCheck}>
-                      <input type="checkbox" checked={cashConfirmed} onChange={e => setCashConfirmed(e.target.checked)} />
-                      <span>I confirm I have seen and verified the amount of <strong>R {cashAmount.toLocaleString('en-ZA')}</strong> and will bring this cash to the drop-off point.</span>
+                      <input
+                        type="checkbox"
+                        checked={cashConfirmed}
+                        onChange={e => setCashConfirmed(e.target.checked)}
+                      />
+                      <span>
+                        I confirm I have seen and verified the amount of{' '}
+                        <strong>R {cashAmount.toLocaleString('en-ZA')}</strong> and will bring this cash to the drop-off point.
+                      </span>
                     </label>
-                    <button className={styles.primaryBtn} onClick={handleCashPayment} disabled={processing || !cashConfirmed}>
-                      {processing ? <><i className="fas fa-spinner fa-spin" /> Processing...</> : <><i className="fas fa-check" /> Confirm &amp; mark as waiting</>}
+                    <button
+                      className={styles.primaryBtn}
+                      onClick={handleCashPayment}
+                      disabled={processing || !cashConfirmed}
+                    >
+                      {processing
+                        ? <><i className="fas fa-spinner fa-spin" /> Processing...</>
+                        : <><i className="fas fa-check" /> Confirm &amp; mark as waiting</>}
                     </button>
                   </>
                 ) : (
-                  <button className={styles.paystackBtn} onClick={handleOnlinePayment} disabled={processing || !sdkReady || !PAYSTACK_PUBLIC_KEY}>
-                    {processing ? <><i className="fas fa-spinner fa-spin" /> Opening Paystack...</>
-                      : !sdkReady ? <><i className="fas fa-spinner fa-spin" /> Loading SDK...</>
-                      : <><i className="fas fa-lock" /> Pay R {onlineAmount.toLocaleString('en-ZA')} via Paystack</>}
-                  </button>
+                  /* Stripe flow */
+                  <>
+                    <div className={styles.stripeInfoBox}>
+                      <i className="fab fa-stripe" style={{ fontSize: '1.5rem', color: '#6772e5', flexShrink: 0 }} />
+                      <p style={{ margin: 0, fontSize: '0.85rem', lineHeight: '1.4' }}>
+                        You will be securely redirected to Stripe to complete your payment.
+                        No card details are stored by Campus Marketplace.
+                      </p>
+                    </div>
+                    <button
+                      className={styles.primaryBtn}
+                      onClick={handleOnlinePayment}
+                      disabled={processing}
+                      style={{
+                        background:  '#6772e5',
+                        width:       '100%',
+                        boxSizing:   'border-box',
+                        whiteSpace:  'nowrap',
+                        overflow:    'hidden',
+                        textOverflow:'ellipsis',
+                      }}
+                    >
+                      {processing
+                        ? <><i className="fas fa-spinner fa-spin" /> Redirecting...</>
+                        : <><i className="fas fa-lock" /> Pay R {onlineAmount.toLocaleString('en-ZA')} via Stripe</>}
+                    </button>
+                  </>
                 )}
 
                 <p className={styles.secureNote}>
                   <i className="fas fa-shield-halved" />
                   {isCashOnly
                     ? 'Your transaction is tracked and protected by Campus Marketplace.'
-                    : 'Payments are processed securely by Paystack. Funds are held in escrow until collection is confirmed.'}
+                    : 'Payments are processed securely by Stripe. Funds are held in escrow until collection is confirmed.'}
                 </p>
               </div>
             </div>

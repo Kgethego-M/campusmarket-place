@@ -1188,3 +1188,176 @@
 .historyBadgeSold   { background: #dcfce7; color: #15803d; }
 .historyBadgeBought { background: #dbeafe; color: #1d4ed8; }
 .historyBadgeTrade  { background: #ede9fe; color: #6d28d9; }
+/* =====================================================
+   MOBILE RESPONSIVE — Profile.module.css
+   ===================================================== */
+
+/* ── profileContainer padding shrinks on small screens ── */
+@media (max-width: 768px) {
+  .profileContainer {
+    padding: 1rem;
+  }
+
+  .header h1 {
+    font-size: 1.3rem;
+  }
+
+  /* profileCard: side-by-side → stacked */
+  .profileCard {
+    grid-template-columns: 1fr;
+    gap: 1.25rem;
+    padding: 1.25rem;
+  }
+
+  /* profileLeft: picture + info stacks vertically */
+  .profileLeft {
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 1rem;
+  }
+
+  .profilePictureWrapper {
+    width: 110px;
+    height: 110px;
+  }
+
+  .userInfo h2 {
+    font-size: 1.2rem;
+  }
+
+  /* statsSection: remove left border, add top border */
+  .statsSection {
+    padding-left: 0;
+    border-left: none;
+    border-top: 1px solid #e5e7eb;
+    padding-top: 1.25rem;
+  }
+
+  /* statsGrid: 3 cols → 3 cols but smaller, or wrap */
+  .statsGrid {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.6rem;
+  }
+
+  .statItem {
+    padding: 0.6rem;
+    gap: 0.5rem;
+  }
+
+  .statItem i {
+    font-size: 1.1rem;
+  }
+
+  .statValue {
+    font-size: 1.1rem;
+  }
+
+  /* rating row wraps nicely */
+  .rating {
+    flex-wrap: wrap;
+    gap: 0.4rem;
+  }
+
+  /* editActions buttons stack */
+  .editActions {
+    flex-direction: column;
+  }
+
+  /* tabs: smaller text, shrink padding */
+  .tab {
+    font-size: 0.8rem;
+    padding: 0.75rem 0.5rem;
+    gap: 0.3rem;
+  }
+
+  .tabContent {
+    padding: 1rem;
+  }
+}
+
+/* ── Phone (≤ 480px) ── */
+@media (max-width: 480px) {
+  .profileContainer {
+    padding: 0.75rem;
+  }
+
+  .profileCard {
+    padding: 1rem;
+  }
+
+  .profilePictureWrapper {
+    width: 90px;
+    height: 90px;
+  }
+
+  /* statsGrid: 3 cols → 1 row of 3 tiny cards */
+  .statsGrid {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.5rem;
+  }
+
+  .statItem {
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    padding: 0.5rem 0.25rem;
+    gap: 0.25rem;
+  }
+
+  .statItem i { font-size: 1rem; }
+  .statValue  { font-size: 1rem; }
+  .statLabel  { font-size: 0.65rem; }
+
+  /* tabs: icon only, hide text via font-size trick isn't reliable —
+     instead allow horizontal scroll if all 3 don't fit */
+  .tabs {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .tab {
+    font-size: 0.75rem;
+    padding: 0.65rem 0.6rem;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  .tabContent {
+    padding: 0.75rem;
+  }
+
+  /* history item: tighter */
+  .historyImg {
+    width: 68px;
+    min-width: 68px;
+  }
+
+  .historyImgPlaceholder {
+    min-height: 68px;
+  }
+
+  .historyDetails {
+    padding: 10px 10px 10px 10px;
+  }
+
+  .historyItemTitle {
+    font-size: 0.82rem;
+  }
+
+  /* Listings compact grid: 2 col → 1 col on very small */
+  .listingsGridCompact {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+  }
+}
+
+@media (max-width: 360px) {
+  .listingsGridCompact {
+    grid-template-columns: 1fr;
+  }
+
+  .statsGrid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}

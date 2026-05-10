@@ -1,7 +1,7 @@
 # Sprint 2 — Planning Document
 
 **Campus Marketplace** | Software Design 2026  
-**Prepared:** April 2026 | **Duration:** 1 Weeks
+**Prepared:** April 2026 | **Duration:** 1 Week
 
 ---
 

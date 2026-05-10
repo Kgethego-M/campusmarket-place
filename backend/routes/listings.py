@@ -1,7 +1,7 @@
 # listings.py
 
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException
-from backend.database import get_db
+from database import get_db
 from azure.storage.blob import BlobServiceClient
 import os, uuid
 

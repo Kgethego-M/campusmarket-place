@@ -156,20 +156,6 @@ export default function ViewCart() {
             </div>
           </div>
         </div>
-
-        {/* Mobile bottom nav */}
-        <nav className={styles.mobileNav}>
-          {NAV_LINKS.map(link => (
-            <button
-              key={link.label}
-              className={`${styles.mobileNavBtn} ${location.pathname === link.path ? styles.mobileNavBtnActive : ''}`}
-              onClick={() => navigate(link.path)}
-            >
-              <i className={`fas ${link.icon}`} />
-              <span>{link.label}</span>
-            </button>
-          ))}
-        </nav>
       </>
     );
   }
@@ -312,20 +298,6 @@ export default function ViewCart() {
           )}
         </div>
       </div>
-
-      {/* Mobile bottom nav */}
-      <nav className={styles.mobileNav}>
-        {NAV_LINKS.map(link => (
-          <button
-            key={link.label}
-            className={`${styles.mobileNavBtn} ${location.pathname === link.path ? styles.mobileNavBtnActive : ''}`}
-            onClick={() => navigate(link.path)}
-          >
-            <i className={`fas ${link.icon}`} />
-            <span>{link.label}</span>
-          </button>
-        ))}
-      </nav>
     </>
   );
 }

@@ -2,5 +2,7 @@
 
 ## Sprint 4
 
-## US22 — Export Reports
-As an admin, I want to export reports as CSV or PDF so that I can share data externally.
+## US26 — Cancel Initiation of Purchase
+As a student buyer, I want to cancel the purchase process before confirming payment so that I can back out without completing a transaction if I change my mind or spot a mistake.
+
+
