@@ -57,10 +57,6 @@
   align-items: start;
 }
 
-@media (max-width: 600px) {
-  .layout { grid-template-columns: 1fr; }
-}
-
 /* ── Card ── */
 .card {
   background: white;
@@ -68,6 +64,8 @@
   border: 1.5px solid #e2e8f0;
   padding: 1rem 1.125rem;
   margin-bottom: 1rem;
+  box-sizing: border-box;
+  width: 100%;
 }
 
 .card:last-child { margin-bottom: 0; }
@@ -267,6 +265,10 @@
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
+  box-sizing: border-box;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .primaryBtn:hover:not(:disabled) { background: #5A95C8; }
@@ -288,6 +290,7 @@
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
+  box-sizing: border-box;
 }
 
 .paystackBtn:hover:not(:disabled) { background: #0a3b56; }
@@ -303,6 +306,8 @@
   cursor: pointer;
   font-family: inherit;
   transition: border-color 0.15s, color 0.15s;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .ghostBtn:hover { border-color: #6AA6DA; color: #6AA6DA; }
@@ -320,6 +325,28 @@
 
 .secureNote i { flex-shrink: 0; margin-top: 0.15rem; color: #22c55e; }
 
+/* ── Stripe info box ── */
+.stripeInfoBox {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  background: #f5f3ff;
+  border: 1px solid #ddd6fe;
+  border-radius: 8px;
+  padding: 0.75rem 0.875rem;
+  margin-bottom: 0.875rem;
+  box-sizing: border-box;
+  width: 100%;
+}
+
+.stripeInfoBox p {
+  margin: 0;
+  font-size: 0.82rem;
+  color: #4c1d95;
+  line-height: 1.5;
+  word-break: break-word;
+}
+
 /* ── Cash confirm checkbox ── */
 .confirmCheck {
   display: flex;
@@ -334,6 +361,8 @@
   font-size: 0.8rem;
   color: #4c1d95;
   line-height: 1.55;
+  box-sizing: border-box;
+  width: 100%;
 }
 
 .confirmCheck input[type="checkbox"] {
@@ -358,6 +387,7 @@
   text-align: center;
   max-width: 480px;
   margin: 0 auto;
+  box-sizing: border-box;
 }
 
 .successIconWrap {
@@ -412,6 +442,7 @@
   padding: 0.3rem 0.75rem;
   color: #64748b;
   margin-bottom: 1.25rem;
+  word-break: break-all;
 }
 
 .cashReminderBox {
@@ -477,4 +508,168 @@
   font-size: 1rem;
   max-width: 360px;
   line-height: 1.6;
+}
+
+/* ── MOBILE ─────────────────────────────────────────────────────────────────── */
+@media (max-width: 600px) {
+
+  .page {
+    padding: 1rem 0.75rem;
+  }
+
+  /* Stack columns vertically */
+  .layout {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+
+  /* Remove bottom margin on last card in summary col since actionCol follows */
+  .summaryCol .card:last-child {
+    margin-bottom: 1rem;
+  }
+
+  /* Header: stack back button above title on very small screens */
+  .header {
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-bottom: 1.25rem;
+  }
+
+  .pageTitle {
+    font-size: 1.2rem;
+  }
+
+  .pageSub {
+    font-size: 0.78rem;
+  }
+
+  /* Card padding tighter on mobile */
+  .card {
+    padding: 0.875rem 0.875rem;
+    border-radius: 10px;
+    margin-bottom: 0.75rem;
+  }
+
+  /* Item image slightly smaller */
+  .itemImg {
+    width: 52px;
+    height: 52px;
+  }
+
+  .itemTitle {
+    font-size: 0.85rem;
+  }
+
+  /* Amount display: stack label and value on narrow screens */
+  .amountDisplay {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.25rem;
+    padding: 0.6rem 0.75rem;
+  }
+
+  .amountValue {
+    font-size: 1.35rem;
+  }
+
+  /* Stripe info box: ensure icon doesn't push text off */
+  .stripeInfoBox {
+    align-items: flex-start;
+    gap: 0.6rem;
+    padding: 0.7rem 0.75rem;
+  }
+
+  .stripeInfoBox p {
+    font-size: 0.8rem;
+  }
+
+  /* Primary button: ensure full width and text doesn't overflow */
+  .primaryBtn {
+    height: 46px;
+    font-size: 0.85rem;
+    border-radius: 10px;
+  }
+
+  .ghostBtn {
+    height: 40px;
+    font-size: 0.8rem;
+  }
+
+  /* Success card: less padding, full width feel */
+  .successCard {
+    padding: 1.75rem 1.25rem;
+    border-radius: 12px;
+  }
+
+  .successCard h2 {
+    font-size: 1.15rem;
+  }
+
+  .successSub {
+    font-size: 0.82rem;
+  }
+
+  /* Stripe ref tag: allow wrapping so it doesn't overflow */
+  .refTag {
+    font-size: 0.65rem;
+    word-break: break-all;
+    text-align: left;
+    display: flex;
+    flex-wrap: wrap;
+  }
+
+  /* Cash reminder: slightly tighter */
+  .cashReminderBox {
+    padding: 0.65rem 0.75rem;
+    gap: 0.5rem;
+    font-size: 0.85rem;
+  }
+
+  .cashReminderAmt {
+    font-size: 1rem;
+  }
+
+  /* Confirm checkbox label: readable on small screens */
+  .confirmCheck {
+    font-size: 0.78rem;
+    padding: 0.65rem 0.75rem;
+  }
+
+  /* Breakdown rows: smaller text */
+  .breakdownRow {
+    font-size: 0.78rem;
+  }
+
+  .breakdownTotal {
+    font-size: 0.85rem;
+  }
+
+  /* Info box */
+  .infoBox {
+    font-size: 0.75rem;
+    padding: 0.5rem 0.75rem;
+  }
+
+  /* Loading / error states */
+  .loadingState,
+  .errorState,
+  .alreadyProcessed {
+    padding: 3rem 1rem;
+  }
+
+  .loadingState i,
+  .errorState i,
+  .alreadyProcessed i {
+    font-size: 2rem;
+  }
+
+  .loadingState p,
+  .errorState p,
+  .alreadyProcessed p {
+    font-size: 0.875rem;
+  }
+
+  .secureNote {
+    font-size: 0.68rem;
+  }
 }

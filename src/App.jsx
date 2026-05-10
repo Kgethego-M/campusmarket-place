@@ -4,7 +4,7 @@ import {
   Routes,
   Route,
   Navigate,
-  useNavigate
+  useNavigate,
 } from 'react-router-dom';
 import { onAuthStateChanged } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
@@ -27,25 +27,33 @@ import ReviewForm from './components/ReviewForm.jsx';
 import Notificationspage from './components/Notificationspage.jsx';
 import MyPurchases from './components/MyPurchases.jsx';
 import Payment from './components/Payment.jsx';
-import ReportsPage from "./components/ReportsPage";
 import AdminProfile from "./components/adminProfile";
-import ModerationSummaryPage from "./components/ModerationSummaryPage";
+import PaymentSuccess from './components/PaymentSuccess.jsx';
+import PaymentCancelled from './components/PaymentCancelled.jsx';
+import ReportsPage from './components/ReportsPage';
+import ModerationSummaryPage from './components/ModerationSummaryPage';
 
 import CreateListingAzure from './components/CreateListingAzure';
-//import EditListingAzure from './pages/EditListingAzure';
+// import EditListingAzure from './pages/EditListingAzure';
+
 import Chat from './components/Chat';
-import Profile from './components/Profile'
+import Profile from './components/Profile';
 import StaffDashboard from './components/Staffdashboard.jsx';
 import ProfileListingCard from './components/ProfileListingCard';
+
 // SPRINT 2 IMPORTS
 import TradeFacility from './components/TradeFacility';
 import BookDropOff from './components/BookDropOff';
+import BookPickUp from './components/BookPickUp';
+
+import BookCollection from './components/BookCollection';
 
 // SPRINT 3 IMPORTS
 import AdminAnalytics from './components/AdminAnalytics';
 import ViewCart from './components/ViewCart';
+
 // -------------------------
-// Protected Route (CLEAN)
+// Protected Route
 // -------------------------
 function ProtectedRoute({ children, allowedRoles }) {
   const [loading, setLoading] = useState(true);
@@ -53,12 +61,12 @@ function ProtectedRoute({ children, allowedRoles }) {
   const [roleAllowed, setRoleAllowed] = useState(false);
   const [isSuspended, setIsSuspended] = useState(false);
 
-
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (!user) {
         setFirebaseUser(null);
         setRoleAllowed(false);
+        setIsSuspended(false);
         setLoading(false);
         return;
       }
@@ -71,13 +79,13 @@ function ProtectedRoute({ children, allowedRoles }) {
 
         if (!userSnap.exists()) {
           setRoleAllowed(false);
+          setIsSuspended(false);
           setLoading(false);
           return;
         }
 
         const userData = userSnap.data();
 
-        // Suspended users get blocked from every protected route
         if (userData.suspended) {
           setIsSuspended(true);
           setRoleAllowed(false);
@@ -85,9 +93,10 @@ function ProtectedRoute({ children, allowedRoles }) {
           return;
         }
 
-        setRoleAllowed(
-          allowedRoles.includes(userData.role)
-        );
+        const userRole = userData.role || userData.userType;
+
+        setIsSuspended(false);
+        setRoleAllowed(allowedRoles.includes(userRole));
       } catch (err) {
         console.error('Role check failed:', err);
         setRoleAllowed(false);
@@ -101,20 +110,22 @@ function ProtectedRoute({ children, allowedRoles }) {
 
   if (loading) {
     return (
-      <div style={{
-        display: 'flex',
-        justifyContent: 'center',
-        alignItems: 'center',
-        minHeight: '100vh'
-      }}>
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          minHeight: '100vh',
+        }}
+      >
         Loading...
       </div>
     );
   }
 
-  if (!firebaseUser) return <Navigate to="/login" />;
-  if (isSuspended)   return <Navigate to="/suspended" />;
-  if (!roleAllowed)  return <AccessDenied />;
+  if (!firebaseUser) return <Navigate to="/login" replace />;
+  if (isSuspended) return <Navigate to="/suspended" replace />;
+  if (!roleAllowed) return <AccessDenied />;
 
   return children;
 }
@@ -124,6 +135,7 @@ function ProtectedRoute({ children, allowedRoles }) {
 // -------------------------
 function LandingPageWrapper() {
   const navigate = useNavigate();
+
   return <LandingPage onGetStarted={() => navigate('/login')} />;
 }
 
@@ -131,28 +143,29 @@ function LoginWrapper() {
   const navigate = useNavigate();
 
   return (
-    <div style={{
-      display: 'flex',
-      justifyContent: 'center',
-      alignItems: 'center',
-      minHeight: '100vh'
-    }}>
+    <div
+      style={{
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        minHeight: '100vh',
+      }}
+    >
       <LoginForm
         onSwitchToSignup={() => navigate('/signup')}
         onLoginSuccess={(userData) => {
-          // Block suspended users immediately at login
           if (userData.suspended) {
             navigate('/suspended');
             return;
           }
+
           const role = userData.role || userData.userType;
-          if (role === 'admin'){
+
+          if (role === 'admin') {
             navigate('/admin');
-          }
-          else if (role === 'staff'){
+          } else if (role === 'staff') {
             navigate('/staff');
-          }
-          else{
+          } else {
             navigate('/view-listing');
           }
         }}
@@ -165,12 +178,14 @@ function SignupWrapper() {
   const navigate = useNavigate();
 
   return (
-    <div style={{
-      display: 'flex',
-      justifyContent: 'center',
-      alignItems: 'center',
-      minHeight: '100vh'
-    }}>
+    <div
+      style={{
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        minHeight: '100vh',
+      }}
+    >
       <SignupForm
         onSwitchToLogin={() => navigate('/login')}
         onLoginSuccess={() => navigate('/view-listing')}
@@ -185,15 +200,17 @@ function SignupWrapper() {
 export function AppRoutes() {
   return (
     <Routes>
+      {/* Public Routes */}
       <Route path="/" element={<LandingPageWrapper />} />
       <Route path="/login" element={<LoginWrapper />} />
       <Route path="/signup" element={<SignupWrapper />} />
       <Route path="/suspended" element={<SuspendedPage />} />
+      <Route path="/access-denied" element={<AccessDenied />} />
+
+      {/* General */}
       <Route path="/dashboard" element={<Dashboard />} />
       <Route path="/profile" element={<Profile />} />
-      <Route path="/view-listing" element={<ProtectedRoute allowedRoles={['student']}><ViewListing /></ProtectedRoute>} />
-      <Route path="/create-listing" element={<ProtectedRoute allowedRoles={['student']}><CreateListing /></ProtectedRoute>} />
-      <Route path="/cart" element={<ProtectedRoute allowedRoles={['student']}><ViewCart /></ProtectedRoute>} />
+      <Route path="/profile/:userId" element={<ViewRating />} />
       <Route path="/view-rating" element={<ViewRating userId="sampleUserId" />} />
       <Route path="/chat" element={<ProtectedRoute allowedRoles={['student']}><Chat/></ProtectedRoute>} />
       <Route path="/chat/:transactionId" element={<Chat />} />
@@ -205,22 +222,186 @@ export function AppRoutes() {
       {/* SPRINT 2 ROUTES */}
       <Route path="/trade-facility" element={<ProtectedRoute allowedRoles={['student']}><TradeFacility /></ProtectedRoute>} />
       <Route path="/book-dropoff/:transactionId" element={<ProtectedRoute allowedRoles={['student']}><BookDropOff /></ProtectedRoute>} />
+      <Route path="/book-pickup/:transactionId" element={<ProtectedRoute allowedRoles={['student']}><BookPickUp /></ProtectedRoute>} />
       <Route path="/payment/:txId" element={<ProtectedRoute allowedRoles={['student']}><Payment /></ProtectedRoute>} />
 
       <Route path="/azure/create-listing" element={<CreateListingAzure/>} />
       <Route path="/listing/:id" element={<ListingDetail />} />
-      <Route path="/profile/:userId" element={<ViewRating />} />
-
       <Route path="/review/:transactionId" element={<ReviewForm />} />
-      <Route path="/notifications" element={<ProtectedRoute allowedRoles={['student']}><Notificationspage /></ProtectedRoute>} />
-      <Route path="/my-purchases" element={<ProtectedRoute allowedRoles={['student']}><MyPurchases /></ProtectedRoute>} />
+      <Route path="/edit-listing/:id" element={<EditListing />} />
+      <Route path="/azure/create-listing" element={<CreateListingAzure />} />
 
-      {/* Sprint 3 Routes */}
-      <Route path="/admin/analytics" element={<ProtectedRoute allowedRoles={['admin']}><AdminAnalytics /></ProtectedRoute>} />
-      <Route path="/admin/reports" element={<ProtectedRoute allowedRoles={['admin']}><ReportsPage /></ProtectedRoute>} />
-      <Route path="/admin/moderation-summary" element={<ProtectedRoute allowedRoles={['admin']}><ModerationSummaryPage /></ProtectedRoute>} />
       <Route path="/admin/profile" element={<ProtectedRoute allowedRoles={['admin']}><AdminProfile /></ProtectedRoute>} />
 
+      {/* Student Routes */}
+      <Route
+        path="/view-listing"
+        element={
+          <ProtectedRoute allowedRoles={['student']}>
+            <ViewListing />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/create-listing"
+        element={
+          <ProtectedRoute allowedRoles={['student']}>
+            <CreateListing />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/cart"
+        element={
+          <ProtectedRoute allowedRoles={['student']}>
+            <ViewCart />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/chat"
+        element={
+          <ProtectedRoute allowedRoles={['student']}>
+            <Chat />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/chat/:transactionId"
+        element={
+          <ProtectedRoute allowedRoles={['student']}>
+            <Chat />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/trade-facility"
+        element={
+          <ProtectedRoute allowedRoles={['student']}>
+            <TradeFacility />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/book-dropoff/:transactionId"
+        element={
+          <ProtectedRoute allowedRoles={['student']}>
+            <BookDropOff />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Added from your stash — was missing from develop */}
+      <Route
+        path="/book-collection/:transactionId"
+        element={
+          <ProtectedRoute allowedRoles={['student']}>
+            <BookCollection />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/payment/:txId"
+        element={
+          <ProtectedRoute allowedRoles={['student']}>
+            <Payment />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Stripe return routes */}
+      <Route
+        path="/payment-success"
+        element={
+          <ProtectedRoute allowedRoles={['student']}>
+            <PaymentSuccess />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/payment-cancelled"
+        element={
+          <ProtectedRoute allowedRoles={['student']}>
+            <PaymentCancelled />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/notifications"
+        element={
+          <ProtectedRoute allowedRoles={['student']}>
+            <Notificationspage />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/my-purchases"
+        element={
+          <ProtectedRoute allowedRoles={['student']}>
+            <MyPurchases />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Staff Routes */}
+      <Route
+        path="/staff"
+        element={
+          <ProtectedRoute allowedRoles={['staff']}>
+            <StaffDashboard />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Admin Routes */}
+      <Route
+        path="/admin"
+        element={
+          <ProtectedRoute allowedRoles={['admin']}>
+            <AdminDashboard />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/admin/analytics"
+        element={
+          <ProtectedRoute allowedRoles={['admin']}>
+            <AdminAnalytics />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/admin/reports"
+        element={
+          <ProtectedRoute allowedRoles={['admin']}>
+            <ReportsPage />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/admin/moderation-summary"
+        element={
+          <ProtectedRoute allowedRoles={['admin']}>
+            <ModerationSummaryPage />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Fallback */}
+      <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
 }

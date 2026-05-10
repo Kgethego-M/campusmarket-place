@@ -322,21 +322,17 @@
     overscroll-behavior: contain;
 }
 
-.notificationSectionLabel {
+.notificationItem {
     display: flex;
+    gap: 1rem;
+    padding: 1rem;
+    border-bottom: 1px solid #f3f4f6;
+    transition: all 0.2s;
+    cursor: pointer;
     align-items: center;
-    gap: 0.4rem;
-    padding: 0.5rem 1rem 0.3rem;
-    font-size: 0.68rem;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.07em;
-    color: #9ca3af;
-    background-color: #f9fafb;
-    border-top: 1px solid #f1f5f9;
 }
 
-.notificationSectionLabel:first-child { border-top: none; }
+.notificationItem:hover { background-color: #f9fafb; }
 
 .notificationIconWrap {
     display: flex;
@@ -361,40 +357,24 @@
     gap: 0.4rem;
 }
 
-.notificationItem {
-    display: flex;
-    gap: 1rem;
-    padding: 1rem;
-    border-bottom: 1px solid #f3f4f6;
-    transition: all 0.2s;
-    cursor: pointer;
-    align-items: center;
-}
-
-.notificationItem:hover { background-color: #f9fafb; }
-
 .notificationContent { flex: 1; }
-.notificationContent p { margin: 0 0 0.25rem 0; font-size: 0.875rem; color: #374151; }
+.notificationContent p { margin: 0 0 0.2rem 0; font-size: 0.875rem; color: #374151; line-height: 1.4; }
 .notificationContent span { font-size: 0.75rem; color: #9ca3af; }
+
+/* Listing title subline shown below the main message */
+.notificationSubline {
+    font-size: 0.75rem !important;
+    color: #9ca3af !important;
+    margin: 0 0 0.2rem 0 !important;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
 
 @keyframes slideDown {
     from { opacity: 0; transform: translateY(-10px); }
     to   { opacity: 1; transform: translateY(0); }
 }
-
-.viewOfferButton {
-    background-color: #e1e5Ac;
-    color: #000;
-    border: none;
-    padding: 4px 12px;
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 12px;
-    margin-top: 8px;
-    transition: background-color 0.2s;
-}
-
-.viewOfferButton:hover { background-color: #dadb75; }
 
 /* ── Mobile bottom nav ── */
 .mobileNav {
@@ -412,7 +392,6 @@
     .logoText { font-size: 1.15rem; }
     .logoBox { width: 36px; height: 36px; }
 
-    /* Hide desktop nav links on tablet — shown in bottom nav instead */
     .navLinks { display: none; }
 
     .notificationDropdown {
@@ -425,7 +404,6 @@
         right: -1rem;
     }
 
-    /* ── Bottom nav bar ── */
     .mobileNav {
         display: flex;
         position: fixed;
@@ -473,13 +451,11 @@
 @media (max-width: 480px) {
     .navbar { padding: 0 12px; height: 52px; }
 
-    /* Hide logo text on very small screens to save space */
     .logoBox { width: 34px; height: 34px; }
 
     .navRight { gap: 6px; }
     .iconButton { font-size: 1rem; padding: 0.4rem; }
 
-    /* Full-width dropdowns on small screens */
     .notificationDropdown {
         position: fixed;
         top: 52px;
@@ -498,15 +474,7 @@
         border-radius: 0 0 12px 12px;
     }
 
-    .mobileNav {
-        height: 56px;
-    }
-
-    .mobileNavBtn {
-        font-size: 0.52rem;
-    }
-
-    .mobileNavBtn i {
-        font-size: 0.95rem;
-    }
+    .mobileNav { height: 56px; }
+    .mobileNavBtn { font-size: 0.52rem; }
+    .mobileNavBtn i { font-size: 0.95rem; }
 }
