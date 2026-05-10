@@ -330,6 +330,16 @@ export default function BookDropOff() {
     );
   }
 
+  // Calculate price for display
+  const price = transaction?.price 
+    ? formatPrice(transaction.price) 
+    : listing?.price 
+      ? formatPrice(listing.price) 
+      : "0";
+
+  // Get payment banner based on payment method and price
+  const banner = getPaymentBanner(paymentMethod, price);
+
   // ── Loading skeleton ──────────────────────────────────────────
   if (loading) {
     return (
@@ -450,7 +460,6 @@ export default function BookDropOff() {
               }`}>{getPaymentLabel(paymentMethod)}</span>
             </div>
           </div>
-          <span className={styles.statusChip}>{transaction?.status}</span>
         </div>
 
         {/* ── Payment banner ── */}
@@ -526,8 +535,6 @@ export default function BookDropOff() {
           )}
 
           <div className={styles.actions}>
-            <button type="button" className={styles.cancelBtn}
-                    onClick={() => navigate("/trade-facility")}>
             <button type="button" className={styles.cancelBtn}
                     onClick={() => navigate("/trade-facility")}>
               Cancel

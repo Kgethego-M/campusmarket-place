@@ -50,8 +50,10 @@ const fetchListingTitle = async (listingId) => {
                 price: d.price || d.Price || null,
             };
         }
-    } catch (_) {}
-    return {};
+    } catch (_) {
+        console.error('Error fetching listing title:', _);
+    }
+    return null;
 };
 
 // ── Try every possible field name for the transaction ID,
@@ -91,17 +93,15 @@ async function resolveAndNavigate(notification, currentUser, navigate) {
     const isBuyerNotification = BUYER_TYPES.includes(notification.type);
     navigate(isBuyerNotification ? '/my-purchases' : '/trade-facility');
 }
-    return null;
-};
 
 // Picks the first truthy listing-id field from a notification document,
 // covering every field name that has been used across the codebase.
 const resolveListingId = (n) =>
     n.listingId || n.relatedListingId || n.listing_id || n.ListingId || null;
 
-// ── Notification content helpers ───────────────────────────────────────────
+// ── Notification content helpers (single definition) ─────────────────────
 
-const notificationIcon = (type) => {
+const getNotificationIcon = (type) => {
     switch (type) {
         case 'buyer_paid':                  return 'fa-money-bill-wave';
         case 'new_offer':                   return 'fa-shopping-cart';
@@ -121,7 +121,7 @@ const notificationIcon = (type) => {
     }
 };
 
-const notificationIconColor = (type) => {
+const getNotificationIconColor = (type) => {
     switch (type) {
         case 'buyer_paid':
         case 'payment_received':            return '#16a34a';
@@ -143,7 +143,7 @@ const notificationIconColor = (type) => {
 
 // Produces a specific, human-readable message for every notification type.
 // `n.listingTitle` should already be resolved before calling this.
-const notificationMessage = (n) => {
+const getNotificationMessage = (n) => {
     const item   = n.listingTitle ? `"${n.listingTitle}"` : 'your item';
     const buyer  = n.buyerName  || 'Your buyer';
     const seller = n.sellerName || 'Your seller';
@@ -285,67 +285,6 @@ export default function Navbar() {
         setRatingNotifications([]);
     };
 
-    const notificationIcon = (type) => {
-        if (type === 'buyer_paid')                           return 'fa-money-bill-wave';
-        if (type === 'new_offer')                            return 'fa-shopping-cart';
-        if (type === 'offer_accepted')                       return 'fa-circle-check';
-        if (type === 'offer_declined')                       return 'fa-circle-xmark';
-        if (type === 'rate_seller' || type === 'rate_buyer') return 'fa-star';
-        if (type === 'item_received_at_facility')            return 'fa-box-archive';
-        if (type === 'item_at_facility')                     return 'fa-warehouse';
-        if (type === 'item_ready_for_collection')            return 'fa-person-walking';
-        if (type === 'item_collected')                       return 'fa-handshake';
-        if (type === 'transaction_complete')                 return 'fa-circle-check';
-        if (type === 'collection_booked')                    return 'fa-calendar-check';
-        if (type === 'dropoff_booked')                       return 'fa-calendar-check';
-        return 'fa-bell';
-    };
-
-    const notificationIconColor = (type) => {
-        if (type === 'buyer_paid')                           return '#16a34a';
-        if (type === 'new_offer')                            return '#3b82f6';
-        if (type === 'offer_accepted')                       return '#22c55e';
-        if (type === 'offer_declined')                       return '#ef4444';
-        if (type === 'rate_seller' || type === 'rate_buyer') return '#f59e0b';
-        if (type === 'item_received_at_facility')            return '#f59e0b';
-        if (type === 'item_at_facility')                     return '#6AA6DA';
-        if (type === 'item_ready_for_collection')            return '#8b5cf6';
-        if (type === 'item_collected')                       return '#22c55e';
-        if (type === 'transaction_complete')                 return '#22c55e';
-        if (type === 'collection_booked')                    return '#6d28d9';
-        if (type === 'dropoff_booked')                       return '#92400e';
-        return '#94a3b8';
-    };
-
-    const notificationMessage = (n) => {
-        const title = n.listingTitle ? `"${n.listingTitle}"` : 'your item';
-        const price = n.listingPrice ? ` · R${Number(n.listingPrice).toLocaleString('en-ZA')}` : '';
-        const buyer = n.buyerName || 'A student';
-
-        if (n.type === 'buyer_paid')                return `${buyer} has paid for ${title}. Book a drop-off slot now.`;
-        if (n.type === 'new_offer')                 return `${buyer} made an offer on ${title}${price}`;
-        if (n.type === 'offer_accepted')            return `Your offer on ${title} was accepted!${price}`;
-        if (n.type === 'offer_declined')            return `Your offer on ${title} was declined.`;
-        if (n.type === 'item_received_at_facility') return `${title} has been received at the trade facility.${price}`;
-        if (n.type === 'item_at_facility')          return `${title} is now at the trade facility. Book your collection slot.${price}`;
-        if (n.type === 'item_ready_for_collection') return `${title} is ready for collection at the trade facility.${price}`;
-        if (n.type === 'item_collected')            return `${title} has been collected. Transaction complete!${price}`;
-        if (n.type === 'transaction_complete')      return `Your sale of ${title} is complete${price}.`;
-        if (n.type === 'collection_booked')         return n.message || `Collection slot booked for ${title}.`;
-        if (n.type === 'dropoff_booked')            return n.message || `Drop-off slot booked for ${title}.`;
-
-        if (n.type === 'rate_seller') {
-            const itemPart = n.listingTitle ? ` for "${n.listingTitle}"${price}` : '';
-            return `Rate your experience with ${n.reviewedUserName} as a seller${itemPart}`;
-        }
-        if (n.type === 'rate_buyer') {
-            const itemPart = n.listingTitle ? ` — "${n.listingTitle}"${price}` : '';
-            return `Rate your buyer ${n.reviewedUserName}${itemPart}`;
-        }
-
-        return n.message || 'Notification';
-    };
-
     // ── Auth + profile ────────────────────────────────────────────────────────
 
     useEffect(() => {
@@ -441,7 +380,8 @@ export default function Navbar() {
                     // Resolve the listing id using every possible field name, then
                     // fetch the title from Firestore if it wasn't stored on the doc.
                     const listingId    = resolveListingId(n);
-                    const listingTitle = n.listingTitle || await fetchListingTitle(listingId) || null;
+                    const listingData = n.listingTitle ? null : await fetchListingTitle(listingId);
+                    const listingTitle = n.listingTitle || (listingData?.title) || null;
 
                     // Resolve buyer/seller display names if not stored on the doc
                     let buyerName  = n.buyerName  || null;
@@ -686,12 +626,12 @@ export default function Navbar() {
                                         >
                                             <div
                                                 className={styles.notificationIconWrap}
-                                                style={{ color: notificationIconColor(n.type) }}
+                                                style={{ color: getNotificationIconColor(n.type) }}
                                             >
-                                                <i className={`fas ${notificationIcon(n.type)}`} />
+                                                <i className={`fas ${getNotificationIcon(n.type)}`} />
                                             </div>
                                             <div className={styles.notificationContent}>
-                                                <p>{notificationMessage(n)}</p>
+                                                <p>{getNotificationMessage(n)}</p>
                                                 {n.listingTitle && (
                                                     <p className={styles.notificationSubline}>
                                                         {n.listingTitle}
