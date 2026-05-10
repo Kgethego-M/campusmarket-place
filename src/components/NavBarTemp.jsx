@@ -41,10 +41,18 @@ const fetchListingDetails = async (listingId) => {
     return {};
 };
 
-// ── Resolve whether the current user is the seller or buyer for a
-//    given transaction, then route to the correct page.
-//    Seller → /trade-facility   |   Buyer → /my-purchases
-async function resolveAndNavigate(transactionId, currentUser, navigate) {
+// ── Try every possible field name for the transaction ID,
+//    look it up, check sellerId vs currentUser.uid, and route.
+//    Seller → /trade-facility  |  Buyer → /my-purchases
+async function resolveAndNavigate(notification, currentUser, navigate) {
+    // Grab the transaction ID from whichever field it's stored under
+    const transactionId =
+        notification.transactionId  ||
+        notification.transaction_id ||
+        notification.txnId          ||
+        notification.txId           ||
+        null;
+
     if (transactionId && currentUser) {
         try {
             const txSnap = await getDoc(doc(db, 'transactions', transactionId));
@@ -54,11 +62,21 @@ async function resolveAndNavigate(transactionId, currentUser, navigate) {
                 return;
             }
         } catch (err) {
-            console.error('NavBar: could not resolve transaction for routing', err);
+            console.error('NavBar: resolveAndNavigate error', err);
         }
     }
-    // Hard fallback — should rarely be reached
-    navigate('/trade-facility');
+
+    // No transaction ID or lookup failed — use the notification type to guess
+    // Buyer-facing types → My Purchases, seller-facing → Trade Facility
+    const BUYER_TYPES = [
+        'item_at_facility',
+        'item_ready_for_collection',
+        'collection_booked',
+        'item_collected',
+        'offer_accepted',
+    ];
+    const isBuyerNotification = BUYER_TYPES.includes(notification.type);
+    navigate(isBuyerNotification ? '/my-purchases' : '/trade-facility');
 }
 
 export default function Navbar() {
@@ -103,33 +121,20 @@ export default function Navbar() {
         if (n.source === 'offer') {
             await markOfferAsRead(n.id);
 
-            if (n.type === 'buyer_paid') {
-                // Seller gets this notification → always Trade Facility
-                navigate('/trade-facility');
-
-            } else if (n.type === 'new_offer') {
-                navigate('/profile?tab=offers&highlight=' + (n.transactionId || n.listingId));
-
-            } else if (n.type === 'offer_accepted') {
-                navigate(n.transactionId ? `/payment/${n.transactionId}` : '/my-purchases');
+            if (n.type === 'new_offer') {
+                // Seller's listing got an offer
+                navigate('/profile?tab=offers&highlight=' + (n.transactionId || n.listingId || ''));
 
             } else if (n.type === 'offer_declined') {
                 navigate('/view-listing');
 
-            } else if (
-                n.type === 'dropoff_booked'             ||
-                n.type === 'item_received_at_facility'  ||
-                n.type === 'item_at_facility'           ||
-                n.type === 'item_ready_for_collection'  ||
-                n.type === 'collection_booked'          ||
-                n.type === 'transaction_complete'
-            ) {
-                // ── KEY FIX ──────────────────────────────────────────────────
-                // Look up the transaction and check sellerId vs currentUser.uid.
-                // Seller → Trade Facility, Buyer → My Purchases.
-                // This correctly handles dropoff_booked (seller action) so the
-                // seller is never sent to My Purchases.
-                await resolveAndNavigate(n.transactionId, currentUser, navigate);
+            } else {
+                // Everything else: look up the transaction and route by role
+                // Covers: buyer_paid, offer_accepted, dropoff_booked,
+                // item_received_at_facility, item_at_facility,
+                // item_ready_for_collection, collection_booked,
+                // item_collected, transaction_complete
+                await resolveAndNavigate(n, currentUser, navigate);
             }
 
         } else if (n.source === 'rating') {
@@ -163,6 +168,7 @@ export default function Navbar() {
         if (type === 'item_received_at_facility')            return 'fa-box-archive';
         if (type === 'item_at_facility')                     return 'fa-warehouse';
         if (type === 'item_ready_for_collection')            return 'fa-person-walking';
+        if (type === 'item_collected')                       return 'fa-handshake';
         if (type === 'transaction_complete')                 return 'fa-circle-check';
         if (type === 'collection_booked')                    return 'fa-calendar-check';
         if (type === 'dropoff_booked')                       return 'fa-calendar-check';
@@ -178,6 +184,7 @@ export default function Navbar() {
         if (type === 'item_received_at_facility')            return '#f59e0b';
         if (type === 'item_at_facility')                     return '#6AA6DA';
         if (type === 'item_ready_for_collection')            return '#8b5cf6';
+        if (type === 'item_collected')                       return '#22c55e';
         if (type === 'transaction_complete')                 return '#22c55e';
         if (type === 'collection_booked')                    return '#6d28d9';
         if (type === 'dropoff_booked')                       return '#92400e';
@@ -189,10 +196,17 @@ export default function Navbar() {
         const price = n.listingPrice ? ` · R${Number(n.listingPrice).toLocaleString('en-ZA')}` : '';
         const buyer = n.buyerName || 'A student';
 
-        if (n.type === 'buyer_paid')     return `${buyer} has paid for ${title}. Book a drop-off slot now.`;
-        if (n.type === 'new_offer')      return `${buyer} made an offer on ${title}${price}`;
-        if (n.type === 'offer_accepted') return `Your offer on ${title} was accepted!${price}`;
-        if (n.type === 'offer_declined') return `Your offer on ${title} was declined.`;
+        if (n.type === 'buyer_paid')                return `${buyer} has paid for ${title}. Book a drop-off slot now.`;
+        if (n.type === 'new_offer')                 return `${buyer} made an offer on ${title}${price}`;
+        if (n.type === 'offer_accepted')            return `Your offer on ${title} was accepted!${price}`;
+        if (n.type === 'offer_declined')            return `Your offer on ${title} was declined.`;
+        if (n.type === 'item_received_at_facility') return `${title} has been received at the trade facility.${price}`;
+        if (n.type === 'item_at_facility')          return `${title} is now at the trade facility. Book your collection slot.${price}`;
+        if (n.type === 'item_ready_for_collection') return `${title} is ready for collection at the trade facility.${price}`;
+        if (n.type === 'item_collected')            return `${title} has been collected. Transaction complete!${price}`;
+        if (n.type === 'transaction_complete')      return `Your sale of ${title} is complete${price}.`;
+        if (n.type === 'collection_booked')         return n.message || `Collection slot booked for ${title}.`;
+        if (n.type === 'dropoff_booked')            return n.message || `Drop-off slot booked for ${title}.`;
 
         if (n.type === 'rate_seller') {
             const itemPart = n.listingTitle ? ` for "${n.listingTitle}"${price}` : '';
@@ -203,13 +217,7 @@ export default function Navbar() {
             return `Rate your buyer ${n.reviewedUserName}${itemPart}`;
         }
 
-        if (n.type === 'item_received_at_facility') return `${title} has been received at the trade facility.${price}`;
-        if (n.type === 'item_at_facility')           return `${title} is now at the trade facility.${price}`;
-        if (n.type === 'item_ready_for_collection')  return `${title} is ready for collection at the trade facility.${price}`;
-        if (n.type === 'transaction_complete')       return `Your sale of ${title} is complete${price} — buyer notified to collect.`;
-        if (n.type === 'collection_booked')          return n.message || `Collection slot booked for ${title}.`;
-        if (n.type === 'dropoff_booked')             return n.message || `Drop-off slot booked for ${title}.`;
-        return 'Notification';
+        return n.message || 'Notification';
     };
 
     // ── Auth + profile ────────────────────────────────────────────────────────
@@ -329,10 +337,7 @@ export default function Navbar() {
                 for (const d of buyerSnap.docs) {
                     const data = d.data();
                     const listingId = data.listingId || data.ListingId || data.listing_id || null;
-                    if (!listingId) {
-                        console.warn('NavBar: transaction missing listingId', d.id);
-                        continue;
-                    }
+                    if (!listingId) continue;
 
                     let sellerName = 'Seller';
                     let listingTitle = data.listingTitle || '';
@@ -372,10 +377,7 @@ export default function Navbar() {
                 for (const d of sellerSnap.docs) {
                     const data = d.data();
                     const listingId = data.listingId || data.ListingId || data.listing_id || null;
-                    if (!listingId) {
-                        console.warn('NavBar: transaction missing listingId', d.id);
-                        continue;
-                    }
+                    if (!listingId) continue;
 
                     let buyerName = 'Buyer';
                     let listingTitle = data.listingTitle || '';
@@ -517,7 +519,6 @@ export default function Navbar() {
                                                 {offerNotifications.map((n) => (
                                                     <div
                                                         key={n.id}
-                                                        data-testid={`notification-item-${n.id}`}
                                                         className={styles.notificationItem}
                                                         onClick={() => handleNotificationClick(n)}
                                                         role="button"
@@ -544,7 +545,6 @@ export default function Navbar() {
                                                 {ratingNotifications.map((n) => (
                                                     <div
                                                         key={n.id}
-                                                        data-testid={`notification-item-${n.id}`}
                                                         className={styles.notificationItem}
                                                         onClick={() => handleNotificationClick(n)}
                                                         role="button"
@@ -632,10 +632,10 @@ export default function Navbar() {
                         onClick={() => link.path && navigate(link.path)}
                     >
                         <i className={`fas ${
-                            link.label === 'Browse'       ? 'fa-store' :
-                            link.label === 'Messages'     ? 'fa-comment' :
-                            link.label === 'My Purchases' ? 'fa-bag-shopping' :
-                            link.label === 'Cart'         ? 'fa-cart-shopping' :
+                            link.label === 'Browse'         ? 'fa-store' :
+                            link.label === 'Messages'       ? 'fa-comment' :
+                            link.label === 'My Purchases'   ? 'fa-bag-shopping' :
+                            link.label === 'Cart'           ? 'fa-cart-shopping' :
                             'fa-arrows-rotate'
                         }`} />
                         <span>{link.label}</span>
