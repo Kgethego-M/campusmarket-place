@@ -37,12 +37,156 @@ function Toast({ message, type = "success", onDismiss }) {
   );
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Moderation Summary — E9
+// ─────────────────────────────────────────────────────────────────────────────
+const PERIODS = [
+  { label: "Last 7 days",  days: 7  },
+  { label: "Last 30 days", days: 30 },
+  { label: "Last 90 days", days: 90 },
+  { label: "All time",     days: null },
+];
+
+function ModerationSummaryTab({ reports }) {
+  const [selectedDays, setSelectedDays] = React.useState(30);
+
+  const filtered = React.useMemo(() => {
+    if (selectedDays === null) return reports;
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - selectedDays);
+    return reports.filter(r => {
+      const d = r.createdAt?.toDate ? r.createdAt.toDate() : new Date(r.createdAt);
+      return d >= cutoff;
+    });
+  }, [reports, selectedDays]);
+
+  const total          = filtered.length;
+  const pending        = filtered.filter(r => r.status === "pending").length;
+  const resolved       = filtered.filter(r => r.status === "resolved").length;
+  const dismissed      = filtered.filter(r => r.resolution === "dismiss").length;
+  const removedReviews = filtered.filter(r => r.resolution === "remove_review").length;
+  const removedList    = filtered.filter(r => r.resolution === "remove_listing").length;
+  const suspended      = filtered.filter(r => r.resolution === "suspend_user").length;
+
+  const byType = ["user", "listing", "review"].map(type => {
+    const rows = filtered.filter(r => r.reportType === type);
+    return { type, total: rows.length, pending: rows.filter(r => r.status === "pending").length, resolved: rows.filter(r => r.status === "resolved").length, dismissed: rows.filter(r => r.resolution === "dismiss").length };
+  });
+
+  const reasonCounts = {};
+  filtered.forEach(r => { if (r.reason) reasonCounts[r.reason] = (reasonCounts[r.reason] || 0) + 1; });
+  const topReasons = Object.entries(reasonCounts).sort((a, b) => b[1] - a[1]).slice(0, 5);
+
+  const card = (icon, label, value, color = "#1e293b") => (
+    <div style={{ flex: "1 1 130px", background: "#fff", border: "1.5px solid #e2e8f0", borderRadius: 12, padding: "16px 14px", display: "flex", flexDirection: "column", gap: 5 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+        <i className={icon} style={{ color: "#6AA6DA", fontSize: "0.85rem" }} />
+        <span style={{ fontSize: "0.72rem", fontWeight: 600, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.05em" }}>{label}</span>
+      </div>
+      <span style={{ fontSize: "1.7rem", fontWeight: 800, color, lineHeight: 1 }}>{value}</span>
+    </div>
+  );
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      {/* Period selector */}
+      <div style={{ background: "#fff", border: "1.5px solid #e2e8f0", borderRadius: 12, padding: "14px 18px", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 10 }}>
+        <div>
+          <h3 style={{ margin: 0, fontSize: "0.95rem", fontWeight: 700, color: "#0f172a" }}><i className="fas fa-chart-bar" style={{ marginRight: 7, color: "#6AA6DA" }} />Moderation Summary</h3>
+          <p style={{ margin: "2px 0 0", fontSize: "0.78rem", color: "#64748b" }}>Overview of flagged content, actions taken and dismissals</p>
+        </div>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+          {PERIODS.map(p => (
+            <button key={p.label} onClick={() => setSelectedDays(p.days)} style={{ padding: "5px 13px", borderRadius: 20, border: "1.5px solid", fontSize: "0.76rem", fontWeight: 600, cursor: "pointer", fontFamily: "inherit", borderColor: selectedDays === p.days ? "#6AA6DA" : "#e2e8f0", background: selectedDays === p.days ? "#6AA6DA" : "#fff", color: selectedDays === p.days ? "#fff" : "#64748b" }}>
+              {p.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Stat cards */}
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+        {card("fas fa-flag",         "Total Reports",    total)}
+        {card("fas fa-clock",        "Pending",          pending,        pending  > 0 ? "#d97706" : "#1e293b")}
+        {card("fas fa-check-circle", "Resolved",         resolved,       "#16a34a")}
+        {card("fas fa-times-circle", "Dismissed",        dismissed)}
+        {card("fas fa-star",         "Reviews Removed",  removedReviews, removedReviews > 0 ? "#dc2626" : "#1e293b")}
+        {card("fas fa-store",        "Listings Removed", removedList,    removedList    > 0 ? "#dc2626" : "#1e293b")}
+        {card("fas fa-ban",          "Users Suspended",  suspended,      suspended      > 0 ? "#dc2626" : "#1e293b")}
+      </div>
+
+      {/* Breakdown table */}
+      <div style={{ background: "#fff", border: "1.5px solid #e2e8f0", borderRadius: 12, overflow: "hidden" }}>
+        <div style={{ padding: "12px 18px", borderBottom: "1px solid #f1f5f9" }}><h4 style={{ margin: 0, fontSize: "0.85rem", fontWeight: 700, color: "#0f172a" }}>Breakdown by Report Type</h4></div>
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.82rem" }}>
+          <thead><tr style={{ background: "#f8fafc" }}>
+            {["Type", "Total", "Pending", "Resolved", "Dismissed"].map(h => (
+              <th key={h} style={{ padding: "9px 14px", textAlign: "left", fontWeight: 700, color: "#64748b", fontSize: "0.72rem", textTransform: "uppercase", letterSpacing: "0.05em", borderBottom: "1px solid #f1f5f9" }}>{h}</th>
+            ))}
+          </tr></thead>
+          <tbody>
+            {byType.map(row => (
+              <tr key={row.type} style={{ borderBottom: "1px solid #f8fafc" }}>
+                <td style={{ padding: "11px 14px", fontWeight: 600, color: "#1e293b" }}>{{ user: "👤", listing: "🛍️", review: "⭐" }[row.type]} {row.type.charAt(0).toUpperCase() + row.type.slice(1)}</td>
+                <td style={{ padding: "11px 14px", fontWeight: 700, color: row.total > 0 ? "#1e293b" : "#94a3b8" }}>{row.total}</td>
+                <td style={{ padding: "11px 14px" }}>{row.pending > 0 ? <span style={{ background: "#fef3c7", color: "#d97706", borderRadius: 20, padding: "2px 9px", fontWeight: 700, fontSize: "0.72rem" }}>{row.pending}</span> : <span style={{ color: "#94a3b8" }}>0</span>}</td>
+                <td style={{ padding: "11px 14px" }}>{row.resolved > 0 ? <span style={{ background: "#f0fdf4", color: "#16a34a", borderRadius: 20, padding: "2px 9px", fontWeight: 700, fontSize: "0.72rem" }}>{row.resolved}</span> : <span style={{ color: "#94a3b8" }}>0</span>}</td>
+                <td style={{ padding: "11px 14px", color: row.dismissed > 0 ? "#64748b" : "#94a3b8", fontWeight: row.dismissed > 0 ? 600 : 400 }}>{row.dismissed}</td>
+              </tr>
+            ))}
+            <tr style={{ background: "#f8fafc", borderTop: "2px solid #e2e8f0" }}>
+              <td style={{ padding: "11px 14px", fontWeight: 800, color: "#0f172a" }}>Total</td>
+              <td style={{ padding: "11px 14px", fontWeight: 800 }}>{total}</td>
+              <td style={{ padding: "11px 14px", fontWeight: 800, color: "#d97706" }}>{pending}</td>
+              <td style={{ padding: "11px 14px", fontWeight: 800, color: "#16a34a" }}>{resolved}</td>
+              <td style={{ padding: "11px 14px", fontWeight: 800, color: "#64748b" }}>{dismissed}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      {/* Top reasons bar chart */}
+      {topReasons.length > 0 && (
+        <div style={{ background: "#fff", border: "1.5px solid #e2e8f0", borderRadius: 12, overflow: "hidden" }}>
+          <div style={{ padding: "12px 18px", borderBottom: "1px solid #f1f5f9" }}><h4 style={{ margin: 0, fontSize: "0.85rem", fontWeight: 700, color: "#0f172a" }}>Top Report Reasons</h4></div>
+          <div style={{ padding: "12px 18px", display: "flex", flexDirection: "column", gap: 10 }}>
+            {topReasons.map(([reason, count]) => {
+              const pct = total > 0 ? Math.round((count / total) * 100) : 0;
+              return (
+                <div key={reason} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <span style={{ flex: 1, fontSize: "0.8rem", color: "#374151", fontWeight: 500 }}>{reason}</span>
+                  <div style={{ width: 100, background: "#f1f5f9", borderRadius: 20, height: 7, overflow: "hidden", flexShrink: 0 }}>
+                    <div style={{ width: `${pct}%`, height: "100%", background: "#6AA6DA", borderRadius: 20 }} />
+                  </div>
+                  <span style={{ fontSize: "0.75rem", fontWeight: 700, color: "#64748b", minWidth: 24, textAlign: "right" }}>{count}</span>
+                  <span style={{ fontSize: "0.7rem", color: "#94a3b8", minWidth: 32, textAlign: "right" }}>{pct}%</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {total === 0 && (
+        <div style={{ background: "#fff", border: "1.5px solid #e2e8f0", borderRadius: 12, padding: "40px 20px", display: "flex", flexDirection: "column", alignItems: "center", gap: 8, color: "#94a3b8" }}>
+          <i className="fas fa-chart-bar" style={{ fontSize: "2.2rem" }} />
+          <p style={{ margin: 0, fontWeight: 600 }}>No reports in this period</p>
+          <p style={{ margin: 0, fontSize: "0.8rem" }}>Try selecting a wider time range.</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function AdminDashboard() {
   const navigate = useNavigate();
   const dropdownRef = useRef(null);
 
   // ── UI state ─────────────────────────────────────────────────────────────
-  const [activeTab, setActiveTab] = useState("users");
+  const [activeTab, setActiveTab]       = useState("users");
+  const [modSubTab, setModSubTab]       = useState("listings"); // "listings" | "reports" | "summary"
+  const [reportSearch, setReportSearch] = useState("");
+  const [expandedReport, setExpandedReport] = useState(null); // id of expanded report row
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [userSearch, setUserSearch] = useState("");
@@ -129,7 +273,26 @@ export default function AdminDashboard() {
 
   const suspendedUsers = allUsers.filter(u => u.suspended);
 
-  // ── Auth guard ───────────────────────────────────────────────────────────
+  const filteredReports = reports.filter(r =>
+    (r.reportedName || "").toLowerCase().includes(reportSearch.toLowerCase())
+  );
+  const reportsExportData = filteredReports.map(r => ({
+    Type: r.reportType || "",
+    ReportedItem: r.reportedName || r.reportedId,
+    Reason: r.reason || "",
+    Details: r.details || "",
+    ReportedBy: r.reporterName || "",
+    Status: r.status || "pending",
+    Resolution: r.resolution || "",
+    Date: r.createdAt?.toDate ? r.createdAt.toDate().toLocaleDateString() : "",
+  }));
+  const reportsHeaders = ["Type", "ReportedItem", "Reason", "Details", "ReportedBy", "Status", "Resolution", "Date"];
+
+  const reportTypeIcon = (type) => {
+    if (type === "listing") return "🛍️";
+    if (type === "review")  return "⭐";
+    return "👤";
+  };
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (user) => {
       if (!user) { navigate("/login"); return; }
@@ -278,9 +441,13 @@ export default function AdminDashboard() {
   };
 
   const doToggleSuspend = async (userId, currentlySuspended) => {
+    const adminUid = auth.currentUser?.uid;
     try {
-      await updateDoc(doc(db, "users", userId), { suspended: !currentlySuspended });
-      setAllUsers(prev => prev.map(u => u.id === userId ? { ...u, suspended: !currentlySuspended } : u));
+      const update = currentlySuspended
+        ? { suspended: false, suspendedBy: null, suspendedAt: null }
+        : { suspended: true,  suspendedBy: adminUid, suspendedAt: new Date() };
+      await updateDoc(doc(db, "users", userId), update);
+      setAllUsers(prev => prev.map(u => u.id === userId ? { ...u, ...update } : u));
       showToast(currentlySuspended ? "User unsuspended." : "User suspended.", currentlySuspended ? "success" : "warning");
     } catch (err) {
       console.error(err);
@@ -305,6 +472,28 @@ export default function AdminDashboard() {
         }
       },
     });
+  };
+
+  const handleResolveReport = async (report, resolution) => {
+    const adminUid = auth.currentUser?.uid;
+    if (!adminUid) return;
+    try {
+      await updateDoc(doc(db, "reports", report.id), {
+        status:     "resolved",
+        resolution,
+        resolvedBy: adminUid,
+        resolvedAt: new Date(),
+      });
+      setReports(prev => prev.map(r =>
+        r.id === report.id
+          ? { ...r, status: "resolved", resolution, resolvedBy: adminUid }
+          : r
+      ));
+      showToast("Report resolved.");
+    } catch (err) {
+      console.error(err);
+      showToast("Failed to resolve report.", "error");
+    }
   };
 
   const handleLogout = async () => {
@@ -504,45 +693,201 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* ── MODERATION TAB (Listings) ── */}
+        {/* ── MODERATION TAB (sub-tabbed: Listings / Reports / Summary) ── */}
         {activeTab === "moderation" && (
           <div className={styles.tabContent}>
-            <ReportCard title="Listing Moderation" headers={listingsHeaders} data={listingsExportData}>
-              <div className={styles.cardHeader}>
-                <div className={styles.searchWrap}>
-                  <i className="fas fa-search" />
-                  <input className={styles.searchInput} type="text" placeholder="Search listings…" value={listingSearch} onChange={e => setListingSearch(e.target.value)} />
+
+            {/* Sub-tab pill selector */}
+            <div style={{ display: "flex", gap: 8, marginBottom: 20, flexWrap: "wrap" }}>
+              {[
+                { key: "listings", icon: "fas fa-shield-alt", label: "Listings" },
+                { key: "reports",  icon: "fas fa-flag",       label: "Reports" },
+                { key: "summary",  icon: "fas fa-chart-bar",  label: "Moderation Summary" },
+              ].map(sub => (
+                <button
+                  key={sub.key}
+                  onClick={() => setModSubTab(sub.key)}
+                  style={{
+                    display: "flex", alignItems: "center", gap: 7,
+                    padding: "8px 18px", borderRadius: 24,
+                    border: "1.5px solid",
+                    borderColor: modSubTab === sub.key ? "#6AA6DA" : "#e2e8f0",
+                    background:  modSubTab === sub.key ? "#6AA6DA" : "#fff",
+                    color:       modSubTab === sub.key ? "#fff"    : "#64748b",
+                    fontSize: "0.83rem", fontWeight: 600,
+                    cursor: "pointer", fontFamily: "inherit", transition: "all 0.15s",
+                  }}
+                >
+                  <i className={sub.icon} style={{ fontSize: "0.78rem" }} />
+                  {sub.label}
+                  {sub.key === "reports" && unreadReports > 0 && (
+                    <span style={{ background: modSubTab === "reports" ? "rgba(255,255,255,0.35)" : "#dc2626", color: "#fff", borderRadius: 20, padding: "1px 7px", fontSize: "0.65rem", fontWeight: 700 }}>
+                      {unreadReports}
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+
+            {/* ── Listings sub-tab ── */}
+            {modSubTab === "listings" && (
+              <ReportCard title="Listing Moderation" headers={listingsHeaders} data={listingsExportData}>
+                <div className={styles.cardHeader}>
+                  <div className={styles.searchWrap}>
+                    <i className="fas fa-search" />
+                    <input className={styles.searchInput} type="text" placeholder="Search listings…" value={listingSearch} onChange={e => setListingSearch(e.target.value)} />
+                  </div>
                 </div>
-              </div>
-              {filteredListings.length === 0 ? (
-                <p className={styles.emptyNote}>{listingSearch ? "No listings match your search." : "No listings to moderate."}</p>
-              ) : (
-                <div className={styles.modList}>
-                  {filteredListings.map(l => {
-                    const img = l.imageUrl || l.photos?.[0] || null;
-                    return (
-                      <div key={l.id} className={styles.modRow}>
-                        <div className={styles.modThumb}>
-                          {img
-                            ? <img src={img} alt={l.title || "listing"} style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: 8 }} />
-                            : <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", background: "#f1f5f9", borderRadius: 8, color: "#94a3b8" }}><i className="fas fa-image" style={{ fontSize: "1.4rem" }} /></div>
-                          }
+                {filteredListings.length === 0 ? (
+                  <p className={styles.emptyNote}>{listingSearch ? "No listings match your search." : "No listings to moderate."}</p>
+                ) : (
+                  <div className={styles.modList}>
+                    {filteredListings.map(l => {
+                      const img = l.imageUrl || l.photos?.[0] || null;
+                      return (
+                        <div key={l.id} className={styles.modRow}>
+                          <div className={styles.modThumb}>
+                            {img
+                              ? <img src={img} alt={l.title || "listing"} style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: 8 }} />
+                              : <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", background: "#f1f5f9", borderRadius: 8, color: "#94a3b8" }}><i className="fas fa-image" style={{ fontSize: "1.4rem" }} /></div>
+                            }
+                          </div>
+                          <div className={styles.modInfo}>
+                            <span className={styles.modTitle}>{l.title}</span>
+                            <span className={styles.modMeta}>{l.category} · R {Number(l.price || 0).toLocaleString()}</span>
+                          </div>
+                          <span className={`${styles.modStatus} ${styles[l.status || "active"]}`}>{l.status || "active"}</span>
+                          <button className={styles.btnReject} onClick={() => handleRemoveListing(l)} disabled={l.status === "removed"}>Remove</button>
                         </div>
-                        <div className={styles.modInfo}>
-                          <span className={styles.modTitle}>{l.title}</span>
-                          <span className={styles.modMeta}>{l.category} · R {Number(l.price || 0).toLocaleString()}</span>
-                        </div>
-                        <span className={`${styles.modStatus} ${styles[l.status || "active"]}`}>{l.status || "active"}</span>
-                        <button className={styles.btnReject} onClick={() => handleRemoveListing(l)} disabled={l.status === "removed"}>Remove</button>
-                      </div>
-                    );
-                  })}
+                      );
+                    })}
+                  </div>
+                )}
+              </ReportCard>
+            )}
+
+            {/* ── Reports sub-tab ── */}
+            {modSubTab === "reports" && (
+              <ReportCard title="Reports" headers={reportsHeaders} data={reportsExportData}>
+                {/* Search */}
+                <div className={styles.cardHeader}>
+                  <div className={styles.searchWrap}>
+                    <i className="fas fa-search" />
+                    <input className={styles.searchInput} type="text" placeholder="Search reported names…" value={reportSearch} onChange={e => setReportSearch(e.target.value)} />
+                  </div>
                 </div>
-              )}
-            </ReportCard>
+
+                {/* Pending */}
+                <h3 className={styles.cardTitle} style={{ marginTop: 12 }}>
+                  Pending Reports
+                  {filteredReports.filter(r => r.status === "pending").length > 0 && (
+                    <span style={{ marginLeft: 10, background: "#dc2626", color: "#fff", borderRadius: 20, padding: "2px 10px", fontSize: "0.72rem", fontWeight: 700 }}>
+                      {filteredReports.filter(r => r.status === "pending").length}
+                    </span>
+                  )}
+                </h3>
+
+                {filteredReports.filter(r => r.status === "pending").length === 0 ? (
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, padding: "28px 0" }}>
+                    <i className="fas fa-check-circle" style={{ fontSize: "2rem", color: "#16a34a" }} />
+                    <p className={styles.emptyNote}>{reportSearch ? "No reports match your search." : "No pending reports — all clear!"}</p>
+                  </div>
+                ) : (
+                  <div className={styles.modList}>
+                    {filteredReports.filter(r => r.status === "pending").map(r => {
+                      const isExpanded = expandedReport === r.id;
+                      return (
+                        <div key={r.id} style={{ border: "1.5px solid", borderColor: isExpanded ? "#6AA6DA" : "#e2e8f0", borderRadius: 12, marginBottom: 10, overflow: "hidden", background: "#fff" }}>
+                          {/* Collapsed row — always visible */}
+                          <div
+                            onClick={() => setExpandedReport(isExpanded ? null : r.id)}
+                            style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 16px", cursor: "pointer", background: isExpanded ? "#f0f7ff" : "#fff" }}
+                          >
+                            <span style={{ fontSize: "1.3rem", flexShrink: 0 }}>{reportTypeIcon(r.reportType)}</span>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                                <span style={{ fontWeight: 700, fontSize: "0.88rem", color: "#0f172a" }}>{r.reportedName || r.reportedId}</span>
+                                <span style={{ fontSize: "0.68rem", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", background: "#eff6ff", color: "#2563eb", padding: "2px 8px", borderRadius: 20 }}>{r.reportType}</span>
+                              </div>
+                              <div style={{ display: "flex", alignItems: "center", gap: 5, fontSize: "0.78rem", color: "#dc2626", fontWeight: 600, marginTop: 2 }}>
+                                <i className="fas fa-flag" style={{ fontSize: "0.68rem" }} />{r.reason}
+                              </div>
+                              <span style={{ fontSize: "0.72rem", color: "#94a3b8" }}>
+                                Reported by {r.reporterName} · {r.createdAt?.toDate ? r.createdAt.toDate().toLocaleDateString("en-ZA", { day: "numeric", month: "short" }) : "Recently"}
+                              </span>
+                            </div>
+                            <i className={`fas fa-chevron-${isExpanded ? "up" : "down"}`} style={{ color: "#94a3b8", fontSize: "0.75rem", flexShrink: 0 }} />
+                          </div>
+
+                          {/* Expanded detail panel */}
+                          {isExpanded && (
+                            <div style={{ borderTop: "1px solid #e2e8f0", padding: "16px 16px 14px" }}>
+
+                              {/* Review content box */}
+                              {r.reportType === "review" && r.reviewComment && (
+                                <div style={{ marginBottom: 12, padding: "10px 14px", background: "#fef9f0", border: "1px solid #fed7aa", borderLeft: "3px solid #f97316", borderRadius: 8 }}>
+                                  <p style={{ margin: "0 0 4px", fontSize: "0.7rem", fontWeight: 700, color: "#c2410c", textTransform: "uppercase", letterSpacing: "0.05em" }}>Reported review content</p>
+                                  <p style={{ margin: 0, fontSize: "0.85rem", color: "#374151", fontStyle: "italic", lineHeight: 1.55 }}>"{r.reviewComment}"</p>
+                                  {r.reviewRating && (
+                                    <p style={{ margin: "5px 0 0", fontSize: "0.78rem", color: "#f59e0b", fontStyle: "normal" }}>
+                                      {"★".repeat(r.reviewRating)}{"☆".repeat(5 - r.reviewRating)}
+                                      <span style={{ color: "#94a3b8", marginLeft: 5 }}>({r.reviewRating}/5)</span>
+                                    </p>
+                                  )}
+                                </div>
+                              )}
+
+                              {/* Reporter's additional notes */}
+                              {r.details && (
+                                <div style={{ marginBottom: 12, padding: "8px 12px", background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 8 }}>
+                                  <p style={{ margin: "0 0 3px", fontSize: "0.7rem", fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.05em" }}>Reporter notes</p>
+                                  <p style={{ margin: 0, fontSize: "0.83rem", color: "#374151" }}>"{r.details}"</p>
+                                </div>
+                              )}
+
+                              {/* Action buttons */}
+                              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                                <button className={styles.btnApprove} onClick={() => handleResolveReport(r, "dismiss")}>Dismiss</button>
+                                {r.reportType === "user"    && <button className={styles.btnSuspend} onClick={() => handleResolveReport(r, "suspend_user")}>Suspend User</button>}
+                                {r.reportType === "listing" && <button className={styles.btnReject}  onClick={() => handleResolveReport(r, "remove_listing")}>Remove Listing</button>}
+                                {r.reportType === "review"  && <button className={styles.btnReject}  onClick={() => handleResolveReport(r, "remove_review")}>Delete Review</button>}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Resolved */}
+                {filteredReports.filter(r => r.status !== "pending").length > 0 && (
+                  <>
+                    <h3 className={styles.cardTitle} style={{ marginTop: 24 }}>Resolved Reports</h3>
+                    <div className={styles.modList}>
+                      {filteredReports.filter(r => r.status !== "pending").map(r => (
+                        <div key={r.id} className={styles.modRow} style={{ opacity: 0.6 }}>
+                          <div style={{ fontSize: "1.2rem", flexShrink: 0 }}>{reportTypeIcon(r.reportType)}</div>
+                          <div className={styles.modInfo}>
+                            <span className={styles.modTitle}>{r.reportedName || r.reportedId}</span>
+                            <span className={styles.modMeta}>{r.reason}</span>
+                          </div>
+                          <span style={{ fontSize: "0.75rem", fontWeight: 700, color: "#16a34a", background: "#f0fdf4", padding: "4px 10px", borderRadius: 20 }}>✓ {r.resolution || "resolved"}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </ReportCard>
+            )}
+
+            {/* ── Moderation Summary sub-tab ── */}
+            {modSubTab === "summary" && (
+              <ModerationSummaryTab reports={reports} />
+            )}
+
           </div>
         )}
-
         {/* ── PAYMENTS TAB ── */}
         {activeTab === "payments" && (
           <div className={styles.tabContent}>

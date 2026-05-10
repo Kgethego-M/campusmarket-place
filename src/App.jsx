@@ -28,6 +28,7 @@ import Notificationspage from './components/Notificationspage.jsx';
 import MyPurchases from './components/MyPurchases.jsx';
 import Payment from './components/Payment.jsx';
 import ReportsPage from "./components/ReportsPage";
+import AdminProfile from "./components/adminProfile";
 import ModerationSummaryPage from "./components/ModerationSummaryPage";
 
 import CreateListingAzure from './components/CreateListingAzure';
@@ -218,6 +219,8 @@ export function AppRoutes() {
       <Route path="/admin/analytics" element={<ProtectedRoute allowedRoles={['admin']}><AdminAnalytics /></ProtectedRoute>} />
       <Route path="/admin/reports" element={<ProtectedRoute allowedRoles={['admin']}><ReportsPage /></ProtectedRoute>} />
       <Route path="/admin/moderation-summary" element={<ProtectedRoute allowedRoles={['admin']}><ModerationSummaryPage /></ProtectedRoute>} />
+      <Route path="/admin/profile" element={<ProtectedRoute allowedRoles={['admin']}><AdminProfile /></ProtectedRoute>} />
+
     </Routes>
   );
 }

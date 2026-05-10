@@ -1,6 +1,6 @@
 // src/components/ReportModal.jsx
 import { useState } from 'react';
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, getDocs, query, where } from 'firebase/firestore';
 import { db, auth } from '../firebase';
 import { notifyAdminsOfReport } from '../services/notificationService';
 import styles from './ReportModal.module.css';
@@ -49,6 +49,20 @@ export default function ReportModal({ open, onClose, reportType = 'user', report
     try {
       const user = auth.currentUser;
       const reporterName = user?.displayName || user?.email || 'Anonymous';
+
+      // ── Enforce: one report per item per user (regardless of status) ──────
+      const dupCheck = await getDocs(
+        query(
+          collection(db, 'reports'),
+          where('reportedId', '==', reportedId),
+          where('reporterId', '==', user?.uid || null),
+        )
+      );
+      if (!dupCheck.empty) {
+        setError('You have already reported this. Our team is reviewing it.');
+        setSubmitting(false);
+        return;
+      }
 
       // Save report to Firestore
       const reportRef = await addDoc(collection(db, 'reports'), {
