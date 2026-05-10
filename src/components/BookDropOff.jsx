@@ -87,8 +87,8 @@ export default function BookDropOff() {
       if (txn.sellerId !== uid)
         return setError("You can only book a drop-off for your own sales.");
 
-      // ✅ FIXED: Accept "accepted" status (not "waiting" which doesn't exist)
-      const ALLOWED_STATUSES = ["accepted", "in_facility"];
+      // ✅ "waiting" is the status set when buyer agrees to pay
+      const ALLOWED_STATUSES = ["waiting", "accepted", "in_facility"];
       if (!ALLOWED_STATUSES.includes(txn.status))
         return setError(`Cannot book drop-off. Current status: ${txn.status}`);
 

@@ -43,9 +43,14 @@ export default function TradeFacility() {
   async function fetchTransactions(uid) {
     setLoading(true);
     try {
-      const ACTIVE_STATUSES = ["accepted", "in_facility", "ready_to_release", "awaiting_collection"];
+      const ACTIVE_STATUSES = [
+        "waiting",             // ← buyer agreed to pay; seller must book drop-off
+        "accepted",
+        "in_facility",
+        "ready_to_release",
+        "awaiting_collection",
+      ];
 
-      // Fetch as seller AND as buyer across all statuses
       const [sellerSnaps, buyerSnaps] = await Promise.all([
         Promise.all(
           ACTIVE_STATUSES.map(status =>
@@ -107,8 +112,13 @@ export default function TradeFacility() {
         })
       );
 
-      // Sort: accepted first, then in_facility, ready_to_release, awaiting_collection
-      const ORDER = { accepted: 0, in_facility: 1, ready_to_release: 2, awaiting_collection: 3 };
+      const ORDER = {
+        waiting: 0,
+        accepted: 1,
+        in_facility: 2,
+        ready_to_release: 3,
+        awaiting_collection: 4,
+      };
       enriched.sort((a, b) => (ORDER[a.status] ?? 9) - (ORDER[b.status] ?? 9));
 
       setTransactions(enriched);
@@ -120,6 +130,8 @@ export default function TradeFacility() {
   }
 
   function getStatusBadge(txn) {
+    if (txn.status === "waiting")
+      return { label: "Book drop-off",       color: "#1e40af", bg: "#dbeafe" };
     if (txn.status === "awaiting_collection")
       return { label: "Awaiting Collection", color: "#6d28d9", bg: "#ede9fe" };
     if (txn.status === "ready_to_release")
@@ -129,26 +141,22 @@ export default function TradeFacility() {
     if (txn.dropOffStatus === "dropped_off")
       return { label: "Item dropped off",    color: "#166534", bg: "#dcfce7" };
     if (txn.dropOffStatus === "scheduled")
-      return { label: "In Facility",         color: "#92400e", bg: "#fef3c7" };
+      return { label: "Drop-off scheduled",  color: "#92400e", bg: "#fef3c7" };
     if (txn.status === "accepted")
       return { label: "Book drop-off",       color: "#1e40af", bg: "#dbeafe" };
     return   { label: txn.status,            color: "#374151", bg: "#f3f4f6" };
   }
 
-  // Seller needs to drop off - status accepted, no booking yet
-  // Note: don't gate on dropOffStatus since it may not be set yet
+  // ── "waiting" and "accepted" both mean seller must book drop-off ──
   const canBookDropOff = (txn) =>
     txn.isSeller &&
-    txn.status === "accepted" &&
+    ["waiting", "accepted"].includes(txn.status) &&
     !txn.bookingId;
 
-  // Drop-off already scheduled
   const hasDropOffBooked = (txn) =>
     txn.isSeller &&
     (txn.dropOffStatus === "scheduled" || !!txn.bookingId);
 
-  // Anyone involved can book collection once item is at facility and not yet booked.
-  // Buyers always can; sellers can if it's a trade (they also receive the buyer's item).
   const canBookCollection = (txn) => {
     const itemAtFacility = ["in_facility", "ready_to_release", "awaiting_collection"].includes(txn.status);
     if (!itemAtFacility || txn.collectionBookingId) return false;
@@ -156,7 +164,6 @@ export default function TradeFacility() {
     return txn.type === "trade";
   };
 
-  // Collection already booked - show confirmation to anyone involved
   const hasCollectionBooked = (txn) =>
     !!txn.collectionBookingId;
 
@@ -271,7 +278,6 @@ export default function TradeFacility() {
                   <div className={styles.cardBody}>
                     <p className={styles.itemTitle}>
                       {txn.listing?.title ?? "Item"}
-                      {/* Role pill — so user knows if they're buyer or seller */}
                       <span style={{
                         marginLeft: 6, fontSize: "0.7rem", borderRadius: 4,
                         padding: "1px 6px",
@@ -302,14 +308,12 @@ export default function TradeFacility() {
                       </span>
                     </div>
 
-                    {/* Drop-off schedule info */}
                     {txn.dropOffDate && (
                       <p className={styles.dropOffDate}>
                         Drop-off: {txn.dropOffDate} · {txn.dropOffTimeSlot}
                       </p>
                     )}
 
-                    {/* Collection schedule info */}
                     {txn.collectionDate && (
                       <p className={styles.dropOffDate} style={{ color: "#6d28d9" }}>
                         Collection: {txn.collectionDate} · {txn.collectionTimeSlot}
@@ -359,7 +363,7 @@ export default function TradeFacility() {
                       </button>
                     )}
 
-                    {/* ── BUYER: Collection already booked ── */}
+                    {/* ── Collection already booked ── */}
                     {hasCollectionBooked(txn) && (
                       <p style={{ fontSize: "0.75rem", color: "#6d28d9", marginTop: 4 }}>
                         <i className="fas fa-calendar-check" style={{ marginRight: 4 }} />
