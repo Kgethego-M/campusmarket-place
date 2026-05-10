@@ -243,12 +243,25 @@
 }
 
 /* ── Loading / error ── */
+.loadingScreen {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    gap: 1rem;
+    background: #F5F6F8;
+    color: #888;
+    font-size: 0.95rem;
+}
+
 .loadingWrap {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 14px;
-    padding: 80px 0;
+    justify-content: center;
+    min-height: calc(100vh - 64px); /* full viewport minus the navbar height */
+    gap: 1rem;
     color: #888;
     font-size: 0.95rem;
 }
@@ -528,4 +541,87 @@
     text-align: center; 
     padding: 24px 0; 
     margin: 0; 
+}
+
+.navLink {
+    background: none;
+    border: none;
+    font-family: inherit;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #555;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: 6px;
+    transition: background 0.15s, color 0.15s;
+}
+
+.navLink:hover {
+    background: #e8f0f8;
+    color: #6AA6DA;
+}
+
+.navLinkActive {
+    background: #6AA6DA;
+    color: #fff;
+}
+
+.navLinkActive:hover {
+    background: #5A95C8;
+    color: #fff;
+}
+
+.reportBadge {
+    background: #dc2626;
+    color: #fff;
+    border-radius: 50%;
+    width: 16px;
+    height: 16px;
+    font-size: 0.6rem;
+    font-weight: 700;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-left: 4px;
+}
+/* ── Mobile responsive additions ── */
+@media (max-width: 768px) {
+    .main {
+        padding: 20px 16px 48px;
+    }
+    .statsRow {
+        grid-template-columns: repeat(2, 1fr);
+    }
+    .grid2 {
+        grid-template-columns: 1fr;
+    }
+    .pageTitle h1 {
+        font-size: 1.3rem;
+    }
+    .horizLabel {
+        min-width: 80px;
+        font-size: 0.75rem;
+    }
+    .horizBarTrack {
+        min-width: 60px;
+    }
+}
+
+@media (max-width: 480px) {
+    .statsRow {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 10px;
+    }
+    .statCard {
+        padding: 14px 12px 12px;
+    }
+    .statValue {
+        font-size: 1.2rem;
+    }
+    .card {
+        padding: 16px;
+    }
 }

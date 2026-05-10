@@ -24,8 +24,8 @@
 /* ── Header row ───────────────────────────────────────────────── */
 .headerRow {
   display: flex;
-  align-items: center;
-  gap: 1rem;
+  flex-direction: column;  /* stack vertically */
+  gap: 8px;
   margin-bottom: 1.25rem;
   position: relative;
   z-index: 1;
@@ -42,23 +42,47 @@
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  background: white;
-  border: 1px solid #e5e7eb;
+  background: transparent;   /* no box */
+  border: none;              /* no border */
   border-radius: 8px;
   cursor: pointer;
   font-family: inherit;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 500;
   color: #6b7a8d;
-  padding: 7px 14px;
-  transition: color 0.2s, border-color 0.2s, transform 0.15s;
+  padding: 6px 0;            /* no horizontal padding */
+  transition: color 0.2s, transform 0.15s;
   flex-shrink: 0;
+  width: fit-content;
 }
 
 .backButton svg { transition: transform 0.2s; }
-.backButton:hover { color: #4094d4; border-color: #6AAADA; }
+.backButton:hover { color: #4094d4; }
 .backButton:hover svg { transform: translateX(-3px); }
 .backButton:active { transform: scale(0.98); }
+
+/* ── Responsive ───────────────────────────────────────────────── */
+@media (max-width: 600px) {
+  .page { padding: 16px 14px 48px; }
+  .profileCard { flex-direction: column; align-items: flex-start; gap: 16px; }
+  .distHeader { flex-direction: column; gap: 16px; align-items: flex-start; }
+  .distBars { width: 100%; }
+  .distRow { gap: 6px; }
+  .distStar { width: 24px; font-size: 11px; }
+  .distPct { width: 30px; font-size: 11px; flex-shrink: 0; display: block; }
+  .barTrack { min-width: 0; flex: 1; }
+  .drawerOverlay { padding: 12px; align-items: flex-end; }
+  .drawer { max-height: 88vh; border-radius: 22px 22px 0 0; transform: translateY(40px) scale(1); }
+  .drawerOpen { transform: translateY(0) scale(1); }
+  .tabGroup { width: auto; display: inline-flex; }
+  .tabBtn { flex: none; padding: 6px 14px; font-size: 12px; }
+  .pageTitle { font-size: 1.1rem; }
+
+  /* Review cards */
+  .txCard { padding: 12px; gap: 10px; align-items: flex-start; }
+  .txImage { width: 52px; height: 52px; min-width: 52px; border-radius: 8px; }
+  .txProductImage { width: 52px; height: 52px; object-fit: cover; border-radius: 8px; }
+}
 
 /* ── Loading ──────────────────────────────────────────────────── */
 .loaderWrap {
@@ -570,4 +594,58 @@
   .tabBtn { flex: 1; justify-content: center; }
   .headerRow { flex-wrap: wrap; }
   .pageTitle { font-size: 1.1rem; }
+}
+
+@media (max-width: 600px) {
+  /* Fix: shrink review card images to a sensible size */
+  .txImage {
+    width: 52px;
+    height: 52px;
+    min-width: 52px; /* prevent flex from stretching it */
+    border-radius: 8px;
+  }
+
+  .txProductImage {
+    width: 52px;
+    height: 52px;
+    object-fit: cover;
+    border-radius: 8px;
+  }
+
+  /* Prevent the card from stretching images via flex */
+  .txCard {
+    align-items: flex-start;
+  }
+}
+
+@media (max-width: 600px) {
+  .listingsGrid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+  }
+
+  /* Force uniform card image height */
+  .listingCardWrap img,
+  .listingCardWrap .txImage,
+  .listingCardWrap .txProductImage {
+    width: 100%;
+    height: 160px;        /* fixed height — tweak this value to taste */
+    object-fit: cover;
+    object-position: center top;  /* keeps faces/tops of items visible */
+    border-radius: 10px 10px 0 0;
+  }
+}
+
+@media (max-width: 600px) {
+  /* Tabs — don't stretch full width, stay compact */
+  .tabGroup {
+    width: auto;          /* was 100% */
+    display: inline-flex;
+  }
+
+  .tabBtn {
+    flex: none;           /* was flex: 1 */
+    padding: 6px 14px;
+    font-size: 12px;
+  }
 }

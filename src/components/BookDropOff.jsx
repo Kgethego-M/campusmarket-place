@@ -79,19 +79,26 @@ export default function BookDropOff() {
 
     try {
       const transSnap = await getDoc(doc(db, "transactions", transactionId));
-      if (!transSnap.exists()) return setError("Transaction not found");
+      if (!transSnap.exists()) return setError("Transaction not found.");
 
       const txn = { id: transSnap.id, ...transSnap.data() };
 
+      // Only the seller can book a drop-off
       if (txn.sellerId !== uid)
-        return setError("You can only book drop-off for your own sales");
-      if (txn.status !== "accepted")
-        return setError(`Transaction must be accepted. Current status: ${txn.status}`);
+        return setError("You can only book a drop-off for your own sales.");
+
+      // ✅ FIXED: Accept "accepted" status (not "waiting" which doesn't exist)
+      const ALLOWED_STATUSES = ["accepted", "in_facility"];
+      if (!ALLOWED_STATUSES.includes(txn.status))
+        return setError(`Cannot book drop-off. Current status: ${txn.status}`);
+
+      // Prevent double-booking
       if (txn.bookingId)
         return setError("A drop-off has already been booked for this transaction.");
 
       setTransaction(txn);
 
+      // Resolve payment method
       let pm = txn.paymentMethod;
       if (!pm && txn.paymentType) {
         pm = txn.paymentType === "full_online" ? "online"
@@ -109,7 +116,10 @@ export default function BookDropOff() {
       if (listingSnap.exists()) setListing({ id: listingSnap.id, ...listingSnap.data() });
       if (buyerSnap.exists()) {
         const b = buyerSnap.data();
-        setBuyerName(b.displayName || b.name || b.firstName || "Buyer");
+        setBuyerName(
+          (b.firstName && b.lastName) ? `${b.firstName} ${b.lastName}` :
+          b.displayName || b.name || b.firstName || "Buyer"
+        );
       }
     } catch (err) {
       console.error(err);
@@ -122,12 +132,12 @@ export default function BookDropOff() {
   useEffect(() => {
     const unsub = auth.onAuthStateChanged((user) => {
       if (user) fetchTransaction(user.uid);
-      else { setLoading(false); setError("Please log in to book a drop-off"); }
+      else { setLoading(false); setError("Please log in to book a drop-off."); }
     });
     return () => unsub();
   }, [fetchTransaction]);
 
-  // ── When date or config changes, build slot remaining counts ──
+  // ── Build slot counts when date changes ───────────────────────
   useEffect(() => {
     if (!selectedDate) return;
     setSelectedTimeSlot("");
@@ -136,17 +146,16 @@ export default function BookDropOff() {
       setSlotsLoading(true);
       try {
         const snap = await getDocs(query(
-          collection(db, "bookings"), where("date", "==", selectedDate)
+          collection(db, "bookings"),
+          where("date", "==", selectedDate)
         ));
 
-        // count bookings per slot
         const booked = {};
         snap.docs.forEach(d => {
           const slot = d.data().timeSlot;
           booked[slot] = (booked[slot] || 0) + 1;
         });
 
-        // remaining = slotsPerHour - booked (min 0)
         const allSlots = generateTimeSlots(facilityConfig.openTime, facilityConfig.closeTime);
         const counts   = {};
         allSlots.forEach(slot => {
@@ -164,27 +173,28 @@ export default function BookDropOff() {
 
   async function handleSubmit(e) {
     e.preventDefault();
-    if (!selectedDate)     return setError("Please select a date");
-    if (!selectedTimeSlot) return setError("Please select a time slot");
+    if (!selectedDate)     return setError("Please select a date.");
+    if (!selectedTimeSlot) return setError("Please select a time slot.");
 
     setSubmitting(true);
     setError("");
 
     try {
+      // Guard against race conditions
       const latest = await getDoc(doc(db, "transactions", transaction.id));
       if (latest.data().bookingId)
-        return setError("This transaction was already booked by someone else.");
+        return setError("A drop-off was already booked for this transaction.");
 
       const bookingRef = await addDoc(collection(db, "bookings"), {
-        transactionId: transaction.id,
-        listingId:     transaction.listingId,
-        sellerId:      transaction.sellerId,
-        buyerId:       transaction.buyerId,
-        date:          selectedDate,
-        timeSlot:      selectedTimeSlot,
-        status:        "scheduled",
-        createdAt:     serverTimestamp(),
-        updatedAt:     serverTimestamp(),
+        transactionId:  transaction.id,
+        listingId:      transaction.listingId,
+        sellerId:       transaction.sellerId,
+        buyerId:        transaction.buyerId,
+        date:           selectedDate,
+        timeSlot:       selectedTimeSlot,
+        status:         "scheduled",
+        createdAt:      serverTimestamp(),
+        updatedAt:      serverTimestamp(),
       });
 
       await Promise.all([
@@ -193,11 +203,23 @@ export default function BookDropOff() {
           dropOffStatus:   "scheduled",
           dropOffDate:     selectedDate,
           dropOffTimeSlot: selectedTimeSlot,
+          updatedAt:       serverTimestamp(),
         }),
+        // Notify seller
         addDoc(collection(db, "notifications"), {
           userId:    transaction.sellerId,
+          type:      "dropoff_booked",
           title:     "Drop-off booked",
-          message:   `Your drop-off for ${listing?.title} is scheduled on ${selectedDate} at ${selectedTimeSlot}.`,
+          message:   `Your drop-off for "${listing?.title}" is scheduled on ${selectedDate} at ${selectedTimeSlot}.`,
+          read:      false,
+          createdAt: serverTimestamp(),
+        }),
+        // Notify buyer
+        addDoc(collection(db, "notifications"), {
+          userId:    transaction.buyerId,
+          type:      "dropoff_booked",
+          title:     "Seller booked drop-off",
+          message:   `The seller has scheduled a drop-off for "${listing?.title}" on ${selectedDate} at ${selectedTimeSlot}.`,
           read:      false,
           createdAt: serverTimestamp(),
         }),
@@ -206,7 +228,7 @@ export default function BookDropOff() {
       navigate("/trade-facility");
     } catch (err) {
       console.error(err);
-      setError("Failed to book: " + err.message);
+      setError("Failed to book drop-off: " + err.message);
     } finally {
       setSubmitting(false);
     }
@@ -222,10 +244,8 @@ export default function BookDropOff() {
     }
   }
 
-  // ── Slot grid ─────────────────────────────────────────────────
   function renderSlotGrid() {
     const allSlots = generateTimeSlots(facilityConfig.openTime, facilityConfig.closeTime);
-
     if (slotsLoading) {
       return (
         <div className={styles.slotGrid}>
@@ -235,14 +255,12 @@ export default function BookDropOff() {
         </div>
       );
     }
-
     return (
       <div className={styles.slotGrid}>
         {allSlots.map(slot => {
           const remaining = slotCounts[slot] ?? facilityConfig.slotsPerHour;
           const full      = remaining === 0;
           const selected  = selectedTimeSlot === slot;
-
           return (
             <button
               key={slot}
@@ -267,7 +285,7 @@ export default function BookDropOff() {
     );
   }
 
-  // ── Skeleton ──────────────────────────────────────────────────
+  // ── Loading skeleton ──────────────────────────────────────────
   if (loading) {
     return (
       <>
@@ -333,12 +351,13 @@ export default function BookDropOff() {
             </svg>
             Trade Facility
           </button>
-          <h1 className={styles.heading}>Accept offer &amp; book drop-off</h1>
+          <h1 className={styles.heading}>Book drop-off slot</h1>
           <p className={styles.subheading}>
             Schedule when you'll drop off the item for {buyerName}.
           </p>
         </div>
 
+        {/* Item summary */}
         <div className={styles.summaryCard}>
           <div className={styles.summaryImgWrap}>
             {listing?.photos?.[0]
@@ -364,7 +383,7 @@ export default function BookDropOff() {
                   <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/>
                   <circle cx="12" cy="7" r="4"/>
                 </svg>
-                {buyerName}
+                Buyer: {buyerName}
               </span>
             </div>
           </div>
@@ -380,7 +399,6 @@ export default function BookDropOff() {
         </div>
 
         <form className={styles.form} onSubmit={handleSubmit}>
-
           <div className={styles.fieldGroup}>
             <label className={styles.label}>Drop-off date</label>
             <input
@@ -430,7 +448,7 @@ export default function BookDropOff() {
             >
               {submitting
                 ? <><span className={styles.spinner} /> Booking…</>
-                : "Accept & book drop-off"
+                : "Confirm drop-off slot"
               }
             </button>
           </div>

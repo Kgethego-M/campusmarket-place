@@ -8,6 +8,8 @@ import { validateListingData } from "../utils/view-listing.utils.js";
 import ListingCard from "./ListingCard.jsx";
 import NavBar from "./NavBarTemp.jsx";
 import styles from "./ViewListing.module.css";
+import AdBanner from "./AdBanner.jsx";
+import PremiumPopup from "./PremiumPopup.jsx";   // ✅ new import for premium popup
 
 const LISTING_TYPES = ["All", "For Sale", "For Trade", "For Sale or Trade"];
 const CONDITIONS    = ["All", "New", "Like New", "Good", "Fair", "Poor"];
@@ -42,7 +44,6 @@ export default function ViewListings() {
             setLoading(true);
             try {
                 // 1. Fetch listing IDs that are tied to accepted/completed transactions
-                //    — these should no longer appear in the browse page
                 let hiddenListingIds = new Set();
                 try {
                     const txSnap = await getDocs(
@@ -56,8 +57,6 @@ export default function ViewListings() {
                         if (lid) hiddenListingIds.add(lid);
                     });
                 } catch (txErr) {
-                    // Non-fatal: if the transactions collection doesn't exist yet
-                    // just continue with no hidden IDs
                     console.warn("Could not fetch transactions for filtering:", txErr);
                 }
 
@@ -112,10 +111,8 @@ export default function ViewListings() {
                     ...firebaseListings.filter(l => !storedIds.has(l.id)),
                 ];
 
-                // 4. Remove listings whose ID appears in an accepted/completed transaction,
-                //    and also remove listings whose own status field marks them unavailable
+                // 4. Remove listings that are hidden due to transaction or status
                 const UNAVAILABLE = new Set(["accepted", "completed", "sold", "traded", "inactive"]);
-
                 const visible = merged.filter(l => {
                     if (hiddenListingIds.has(l.id)) return false;
                     if (l.status && UNAVAILABLE.has(l.status.toLowerCase())) return false;
@@ -170,154 +167,156 @@ export default function ViewListings() {
 
     return (
         <>
-        <NavBar />
-        <div className={styles.page}>
-            <div className={styles.pageHeader}>
-                <h1 className={styles.heading}>Browse Listings</h1>
-                <p className={styles.subheading}>
-                    Discover items from students across the whole campus
-                </p>
-            </div>
-
-            <div className={styles.searchRow}>
-                <input
-                    className={styles.searchInput}
-                    type="text"
-                    placeholder="Search textbooks, electronics..."
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                />
-                <button
-                    className={`${styles.filterBtn} ${showFilters ? styles.filterBtnActive : ""}`}
-                    onClick={() => setShowFilters(v => !v)}
-                >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
-                         stroke="currentColor" strokeWidth="2.2"
-                         strokeLinecap="round" strokeLinejoin="round">
-                        <line x1="4"  y1="6"  x2="20" y2="6"/>
-                        <line x1="8"  y1="12" x2="16" y2="12"/>
-                        <line x1="11" y1="18" x2="13" y2="18"/>
-                    </svg>
-                    Filters
-                    {activeFilterCount > 0 && (
-                        <span className={styles.filterBadge}>{activeFilterCount}</span>
-                    )}
-                </button>
-            </div>
-
-            {showFilters && (
-                <div className={styles.filterPanel}>
-                    <div className={styles.filterGroup}>
-                        <span className={styles.filterLabel}>Listing type</span>
-                        <div className={styles.pills}>
-                            {LISTING_TYPES.map(t => (
-                                <button
-                                    key={t}
-                                    className={`${styles.pill} ${typeFilter === t ? styles.pillActive : ""}`}
-                                    onClick={() => setTypeFilter(t)}
-                                >
-                                    {t}
-                                </button>
-                            ))}
-                        </div>
-                    </div>
-
-                    <div className={styles.filterGroup}>
-                        <span className={styles.filterLabel}>Price range</span>
-                        <div className={styles.pills}>
-                            {PRICE_RANGES.map(r => (
-                                <button
-                                    key={r.label}
-                                    className={`${styles.pill} ${priceFilter === r.label ? styles.pillActive : ""}`}
-                                    onClick={() => setPriceFilter(r.label)}
-                                >
-                                    {r.label}
-                                </button>
-                            ))}
-                        </div>
-                    </div>
-
-                    <div className={styles.filterGroup}>
-                        <span className={styles.filterLabel}>Condition</span>
-                        <div className={styles.pills}>
-                            {CONDITIONS.map(c => (
-                                <button
-                                    key={c}
-                                    className={`${styles.pill} ${condFilter === c ? styles.pillActive : ""}`}
-                                    onClick={() => setCondFilter(c)}
-                                >
-                                    {c}
-                                </button>
-                            ))}
-                        </div>
-                    </div>
-
-                    <div className={styles.filterGroup}>
-                        <span className={styles.filterLabel}>Category</span>
-                        <div className={styles.pills}>
-                            {CATEGORIES.map(c => (
-                                <button
-                                    key={c}
-                                    className={`${styles.pill} ${catFilter === c ? styles.pillActive : ""}`}
-                                    onClick={() => setCatFilter(c)}
-                                >
-                                    {c}
-                                </button>
-                            ))}
-                        </div>
-                    </div>
-
-                    {activeFilterCount > 0 && (
-                        <button className={styles.clearBtn} onClick={clearFilters}>
-                            Clear all filters
-                        </button>
-                    )}
+            <PremiumPopup />    {/* ✅ premium popup appears first, overlays everything */}
+            <NavBar />
+            <div className={styles.page}>
+                <div className={styles.pageHeader}>
+                    <h1 className={styles.heading}>Browse Listings</h1>
+                    <p className={styles.subheading}>
+                        Discover items from students across the whole campus
+                    </p>
                 </div>
-            )}
 
-            {!loading && (
-                <p className={styles.resultsCount}>
-                    {filtered.length} {filtered.length === 1 ? "listing" : "listings"} found
-                </p>
-            )}
-
-            {loading ? (
-                <div className={styles.skeletonGrid}>
-                    {Array.from({ length: 8 }).map((_, i) => (
-                        <div key={i} className={styles.skeletonCard}>
-                            <div className={styles.skeletonImg} />
-                            <div className={styles.skeletonBody}>
-                                <div className={styles.skeletonLine} style={{ width: "60%" }} />
-                                <div className={styles.skeletonLine} style={{ width: "35%" }} />
-                                <div className={styles.skeletonLine} style={{ width: "45%" }} />
-                            </div>
-                        </div>
-                    ))}
-                </div>
-            ) : filtered.length === 0 ? (
-                <div className={styles.emptyState}>
-                    <svg width="40" height="40" viewBox="0 0 24 24" fill="none"
-                         stroke="#ccc" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                        <circle cx="11" cy="11" r="8"/>
-                        <line x1="21" y1="21" x2="16.65" y2="16.65"/>
-                    </svg>
-                    <p>No listings match your filters.</p>
-                    <button className={styles.clearBtn} onClick={() => { setSearch(""); clearFilters(); }}>
-                        Clear search &amp; filters
+                <div className={styles.searchRow}>
+                    <input
+                        className={styles.searchInput}
+                        type="text"
+                        placeholder="Search textbooks, electronics..."
+                        value={search}
+                        onChange={(e) => setSearch(e.target.value)}
+                    />
+                    <button
+                        className={`${styles.filterBtn} ${showFilters ? styles.filterBtnActive : ""}`}
+                        onClick={() => setShowFilters(v => !v)}
+                    >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+                             stroke="currentColor" strokeWidth="2.2"
+                             strokeLinecap="round" strokeLinejoin="round">
+                            <line x1="4"  y1="6"  x2="20" y2="6"/>
+                            <line x1="8"  y1="12" x2="16" y2="12"/>
+                            <line x1="11" y1="18" x2="13" y2="18"/>
+                        </svg>
+                        Filters
+                        {activeFilterCount > 0 && (
+                            <span className={styles.filterBadge}>{activeFilterCount}</span>
+                        )}
                     </button>
                 </div>
-            ) : (
-                <div className={styles.listingsGrid}>
-                    {filtered.map((listing, index) => (
-                        <ListingCard
-                            key={listing.id ?? index}
-                            listing={listing}
-                            visible={true}
-                        />
-                    ))}
-                </div>
-            )}
-        </div>
+
+                {showFilters && (
+                    <div className={styles.filterPanel}>
+                        <div className={styles.filterGroup}>
+                            <span className={styles.filterLabel}>Listing type</span>
+                            <div className={styles.pills}>
+                                {LISTING_TYPES.map(t => (
+                                    <button
+                                        key={t}
+                                        className={`${styles.pill} ${typeFilter === t ? styles.pillActive : ""}`}
+                                        onClick={() => setTypeFilter(t)}
+                                    >
+                                        {t}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        <div className={styles.filterGroup}>
+                            <span className={styles.filterLabel}>Price range</span>
+                            <div className={styles.pills}>
+                                {PRICE_RANGES.map(r => (
+                                    <button
+                                        key={r.label}
+                                        className={`${styles.pill} ${priceFilter === r.label ? styles.pillActive : ""}`}
+                                        onClick={() => setPriceFilter(r.label)}
+                                    >
+                                        {r.label}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        <div className={styles.filterGroup}>
+                            <span className={styles.filterLabel}>Condition</span>
+                            <div className={styles.pills}>
+                                {CONDITIONS.map(c => (
+                                    <button
+                                        key={c}
+                                        className={`${styles.pill} ${condFilter === c ? styles.pillActive : ""}`}
+                                        onClick={() => setCondFilter(c)}
+                                    >
+                                        {c}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        <div className={styles.filterGroup}>
+                            <span className={styles.filterLabel}>Category</span>
+                            <div className={styles.pills}>
+                                {CATEGORIES.map(c => (
+                                    <button
+                                        key={c}
+                                        className={`${styles.pill} ${catFilter === c ? styles.pillActive : ""}`}
+                                        onClick={() => setCatFilter(c)}
+                                    >
+                                        {c}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        {activeFilterCount > 0 && (
+                            <button className={styles.clearBtn} onClick={clearFilters}>
+                                Clear all filters
+                            </button>
+                        )}
+                    </div>
+                )}
+
+                {!loading && (
+                    <p className={styles.resultsCount}>
+                        {filtered.length} {filtered.length === 1 ? "listing" : "listings"} found
+                    </p>
+                )}
+
+                {loading ? (
+                    <div className={styles.skeletonGrid}>
+                        {Array.from({ length: 8 }).map((_, i) => (
+                            <div key={i} className={styles.skeletonCard}>
+                                <div className={styles.skeletonImg} />
+                                <div className={styles.skeletonBody}>
+                                    <div className={styles.skeletonLine} style={{ width: "60%" }} />
+                                    <div className={styles.skeletonLine} style={{ width: "35%" }} />
+                                    <div className={styles.skeletonLine} style={{ width: "45%" }} />
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                ) : filtered.length === 0 ? (
+                    <div className={styles.emptyState}>
+                        <svg width="40" height="40" viewBox="0 0 24 24" fill="none"
+                             stroke="#ccc" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                            <circle cx="11" cy="11" r="8"/>
+                            <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                        </svg>
+                        <p>No listings match your filters.</p>
+                        <button className={styles.clearBtn} onClick={() => { setSearch(""); clearFilters(); }}>
+                            Clear search &amp; filters
+                        </button>
+                    </div>
+                ) : (
+                    <div className={styles.listingsGrid}>
+                        {filtered.map((listing, index) => (
+                            <ListingCard
+                                key={listing.id ?? index}
+                                listing={listing}
+                                visible={true}
+                            />
+                        ))}
+                    </div>
+                )}
+            </div>
+            <AdBanner />
         </>
     );
 }

@@ -222,3 +222,98 @@
   .cardTitle { font-size: 0.82rem; }
   .cardMsg { font-size: 0.74rem; }
 }
+/* ── US19: Popular Categories date filter ── */
+.cardTitleRow {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+}
+
+.cardTitleRow .cardTitle {
+    margin-bottom: 0;
+}
+
+.cardSubtitle {
+    font-weight: 400;
+    font-size: 0.8rem;
+    color: #94a3b8;
+}
+
+.dateFilterRow {
+    display: flex;
+    align-items: flex-end;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+}
+
+.dateFilterGroup {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+}
+
+.dateFilterLabel {
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: #94a3b8;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.dateInput {
+    padding: 0.4rem 0.6rem;
+    border: 1.5px solid #e2e8f0;
+    border-radius: 7px;
+    font-size: 0.8rem;
+    color: #1e293b;
+    background: #f8fafc;
+    cursor: pointer;
+    transition: border-color 0.15s;
+    outline: none;
+}
+
+.dateInput:focus {
+    border-color: #6AA6DA;
+    background: #fff;
+}
+
+.clearDateBtn {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.4rem 0.75rem;
+    border: 1.5px solid #fca5a5;
+    border-radius: 7px;
+    background: #fff5f5;
+    color: #ef4444;
+    font-size: 0.78rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+    white-space: nowrap;
+}
+
+.clearDateBtn:hover {
+    background: #fee2e2;
+    border-color: #ef4444;
+}
+
+.filterSummary {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    border-radius: 8px;
+    padding: 0.45rem 0.8rem;
+    font-size: 0.8rem;
+    color: #3b82f6;
+    margin-bottom: 1rem;
+}
+
+.filterSummary i {
+    font-size: 0.75rem;
+}

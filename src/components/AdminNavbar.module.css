@@ -1,0 +1,408 @@
+/* AdminNavbar.module.css */
+
+.navbar {
+  display: flex;
+  align-items: center;
+  padding: 0 32px;
+  height: 64px;
+  background: #F5F6F8;
+  border-bottom: 2px solid #c8cfd6;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  box-sizing: border-box;
+  gap: 16px;
+}
+
+/* ── Left - FIXED SIZE, NO RESPONSIVE SHRINKING ── */
+.navLeft {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.logoBox {
+  width: 42px;
+  height: 42px;
+  min-width: 42px;
+  min-height: 42px;
+  background: #6AA6DA;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 1.1rem;
+  flex-shrink: 0;
+}
+
+.logoText {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #1a1a1a;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.adminPill {
+  background: #6AA6DA;
+  color: #fff;
+  font-size: 0.68rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 20px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* ── Center nav (desktop) ── */
+.navCenter {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  padding-left: 12px;
+  min-width: 0;
+  overflow-x: auto;
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.navCenter::-webkit-scrollbar {
+  display: none;
+}
+
+.navLink {
+  background: none;
+  border: none;
+  font-family: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #555;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  transition: background 0.15s, color 0.15s;
+  white-space: nowrap;
+  flex-shrink: 0;
+  position: relative;
+}
+
+.navLink:hover {
+  background: #e8f0f8;
+  color: #6AA6DA;
+}
+
+.navLinkActive {
+  background: #6AA6DA;
+  color: #fff !important;
+  cursor: default;
+}
+
+.navLinkActive:hover {
+  background: #5A95C8;
+}
+
+.navBadge {
+  background: #dc2626;
+  color: #fff;
+  border-radius: 50%;
+  min-width: 18px;
+  height: 18px;
+  font-size: 0.62rem;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 3px;
+  margin-left: 2px;
+}
+
+/* ── Right ── */
+.navRight {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+/* ── Profile dropdown (desktop) ── */
+.menuWrap {
+  position: relative;
+}
+
+.iconButton {
+  background: none;
+  border: none;
+  color: #4b5563;
+  font-size: 1.3rem;
+  cursor: pointer;
+  padding: 8px;
+  border-radius: 8px;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.iconButton:hover {
+  box-shadow: 0 0 0 3px rgba(106, 166, 218, 0.3);
+  color: #6AA6DA;
+}
+
+.dropdown {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  background: #fff;
+  border: 1.5px solid #e2e6ea;
+  border-radius: 10px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.12);
+  min-width: 210px;
+  z-index: 200;
+  overflow: hidden;
+  animation: ddFade 0.15s ease;
+}
+
+@keyframes ddFade {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.ddHeader {
+  padding: 14px 16px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.ddName {
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: #1a1a1a;
+}
+
+.ddRole {
+  font-size: 0.7rem;
+  color: #6AA6DA;
+  font-weight: 600;
+}
+
+.ddDivider {
+  height: 1px;
+  background: #f0f2f5;
+}
+
+.ddItem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 16px;
+  border: none;
+  background: transparent;
+  font-family: inherit;
+  font-size: 0.85rem;
+  color: #444;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.12s;
+}
+
+.ddItem:hover { background: #f4f8fc; }
+
+.ddItem i {
+  width: 14px;
+  color: #999;
+  font-size: 0.8rem;
+}
+
+.ddLogout { color: #e53935; }
+.ddLogout:hover { background: #fff5f5; color: #c62828; }
+
+/* ─────────────────────────────────────────────
+   MOBILE BOTTOM NAVIGATION BAR (Icons Only)
+   ───────────────────────────────────────────── */
+.bottomNav {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  display: none;
+  justify-content: space-around;
+  align-items: center;
+  background: #fff;
+  border-top: 1px solid #e8eaed;
+  padding: 6px 6px 6px;
+  z-index: 100;
+  box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.05);
+}
+
+.bottomNavItem {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  background: none;
+  border: none;
+  font-family: inherit;
+  font-size: 0.7rem;
+  font-weight: 500;
+  color: #888;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 8px;
+  transition: all 0.2s ease;
+  position: relative;
+  flex: 1;
+  max-width: 80px;
+}
+
+.bottomNavItem i {
+  font-size: 1.1rem;
+  margin-bottom: 2px;
+}
+
+.bottomNavLabel {
+  font-size: 0.65rem;
+  font-weight: 500;
+}
+
+.bottomNavItemActive {
+  color: #6AA6DA;
+}
+
+.bottomNavItemActive i {
+  color: #6AA6DA;
+}
+
+.bottomNavItem:hover {
+  background: #e8f0f8;
+  color: #6AA6DA;
+}
+
+.bottomNavBadge {
+  position: absolute;
+  top: 0;
+  right: 8px;
+  background: #dc2626;
+  color: #fff;
+  border-radius: 50%;
+  min-width: 16px;
+  height: 16px;
+  font-size: 0.55rem;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 2px;
+}
+
+/* ── Logout overlay ── */
+.logoutOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  backdrop-filter: blur(4px);
+}
+
+.logoutBox {
+  background: #fff;
+  padding: 2rem 3rem;
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+}
+
+.logoutBox i {
+  font-size: 2rem;
+  color: #6AA6DA;
+}
+
+.logoutBox p {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 500;
+  color: #374151;
+}
+
+/* ── Responsive breakpoints ── */
+@media (max-width: 950px) {
+  .navbar {
+    padding: 0 16px;
+  }
+
+  .navCenter {
+    display: none;
+  }
+
+  /* Show bottom navigation on mobile/tablet */
+  .bottomNav {
+    display: flex;
+  }
+
+  /* Add padding to main content to prevent overlap with bottom nav */
+  body {
+    padding-bottom: 60px;
+  }
+}
+
+/* Adjust main content for bottom nav - you may need to add this to your main container */
+@media (max-width: 950px) {
+  :global(main) {
+    margin-bottom: 0px;
+  }
+}
+
+/* Hide text/pill on very small screens */
+@media (max-width: 480px) {
+  .logoText {
+    display: none;
+  }
+  .adminPill {
+    display: none;
+  }
+  
+  .bottomNavItem {
+    padding: 6px 8px;
+  }
+  
+  .bottomNavLabel {
+    font-size: 0.6rem;
+  }
+  
+  .bottomNavItem i {
+    font-size: 1.1rem;
+  }
+}
+
+/* Mid-size screen — desktop nav with horizontal scroll */
+@media (min-width: 951px) and (max-width: 1100px) {
+  .navbar {
+    padding: 0 16px;
+  }
+
+  .navCenter {
+    gap: 4px;
+    padding-left: 8px;
+  }
+
+  .navLink {
+    padding: 6px 8px;
+    gap: 5px;
+  }
+}

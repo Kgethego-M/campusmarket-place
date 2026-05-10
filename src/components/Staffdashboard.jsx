@@ -1,120 +1,71 @@
+
 import { useState, useRef, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { auth, db } from "../firebase";
+import { auth, db } from "../firebase.js";
 import { signOut, onAuthStateChanged } from "firebase/auth";
-import { doc, getDoc, updateDoc, serverTimestamp } from "firebase/firestore";
+import {
+    doc, getDoc, updateDoc, serverTimestamp,
+    collection, addDoc, query, where, onSnapshot,
+} from "firebase/firestore";
 import styles from "./Staffdashboard.module.css";
 
-// ─── Mock Data ────────────────────────────────────────────────────────────────
-// cashShortfall: amount still owed in cash (0 means fully paid electronically)
-const MOCK_TRANSACTIONS = [
-    {
-        id: "txn001",
-        item: "Coach bag",
-        itemImage: null,
-        seller: "Mpeane Mphelane",
-        buyer: "James van der Merwe",
-        type: "Purchase",
-        price: 3000,
-        cashShortfall: 500,          // ← US15: R500 still owed in cash
-        paymentStatus: "Partially Paid",
-        tradeFor: null,
-        timeSlot: "09:00 - 10:00",
-        status: "ready_to_release",
-        campus: "Main Campus",
-        checklist: [
-            { label: "Confirmed Drop-off by Nontokozo Mbatha", done: true },
-            { label: "Inspected Item by Nontokozo Mbatha",     done: true },
-            { label: "Confirmed Payment by Nontokozo Mbatha",  done: true },
-        ],
-        date: new Date(),
-    },
-    {
-        id: "txn002",
-        item: "Headphones",
-        itemImage: null,
-        seller: "Tshepang Legodi",
-        buyer: "Samkelisiwe Mofokeng",
-        type: "Purchase",
-        price: 1500,
-        cashShortfall: 0,            // ← fully paid, no shortfall
-        paymentStatus: "Fully Paid",
-        tradeFor: null,
-        timeSlot: "10:00 - 11:00",
-        status: "ready_to_release",
-        campus: "Main Campus",
-        checklist: [
-            { label: "Confirmed Drop-off by Nontokozo Mbatha", done: true },
-            { label: "Inspected Item by Nontokozo Mbatha",     done: true },
-            { label: "Confirmed Payment by Nontokozo Mbatha",  done: false },
-        ],
-        date: new Date(),
-    },
-    {
-        id: "txn003",
-        item: "X-Ray Glasses",
-        itemImage: null,
-        seller: "Victor Hyginus",
-        buyer: "Wendy Khumalo",
-        type: "Purchase",
-        price: 200,
-        cashShortfall: 200,          // ← US15: full amount is cash shortfall
-        paymentStatus: "Partially Paid",
-        tradeFor: null,
-        timeSlot: "11:00 - 12:00",
-        status: "in_facility",
-        campus: "Education Campus",
-        checklist: [
-            { label: "Confirmed Drop-off by Nontokozo Matha", done: true },
-            { label: "Inspected Item by Nontokozo Matha",     done: false },
-            { label: "Confirmed Payment by Nontokozo Matha",  done: false },
-        ],
-        date: new Date(),
-    },
-    {
-        id: "txn004",
-        item: "ERD Textbook",
-        itemImage: null,
-        seller: "Tebogo sebopela",
-        buyer: "Sduduzo Mdlalose",
-        type: "Purchase",
-        price: 200,
-        cashShortfall: 0,
-        paymentStatus: "Fully Paid",
-        tradeFor: null,
-        timeSlot: "14:00 - 15:00",
-        status: "completed",
-        campus: "Main Campus",
-        checklist: [
-            { label: "Confirmed Drop-off", done: true },
-            { label: "Inspected Item",     done: true },
-            { label: "Confirmed Payment",  done: true },
-            { label: "Released to Buyer",  done: true },
-        ],
-        date: new Date(Date.now() - 86400000),
-    },
-    {
-        id: "txn005",
-        item: "Wired Earphones",
-        itemImage: null,
-        seller: "Ikho Nxazonke",
-        buyer: "Zanenkosi Mbatha",
-        type: "Purchase",
-        price: 100,
-        cashShortfall: 0,
-        paymentStatus: "Fully Paid",
-        tradeFor: null,
-        timeSlot: "15:00 - 16:00",
-        status: "awaiting_collection",
-        campus: "Health Sciences Campus",
-        checklist: [
-            { label: "Confirmed Drop-off", done: true },
-            { label: "Inspected Item",     done: true },
-            { label: "Confirmed Payment",  done: true },
-        ],
-        date: new Date(),
-    },
-];
+// ─── Firestore helpers ────────────────────────────────────────────────────────
+
+async function sendNotification(userId, payload) {
+    try {
+        await addDoc(collection(db, "notifications"), {
+            userId,
+            read: false,
+            createdAt: serverTimestamp(),
+            ...payload,
+        });
+    } catch (err) {
+        console.error("sendNotification failed:", err);
+    }
+}
+
+async function notifyBothParties(txn, stage) {
+    if (!txn.buyerId || !txn.sellerId) return;
+
+    const title = txn.listingTitle || txn.item;
+
+    if (stage === "drop_off") {
+        // Seller gets notified → they go to Trade Facility
+        await sendNotification(txn.sellerId, {
+            type:          "item_received_at_facility",
+            listingId:     txn.listingId || null,
+            transactionId: txn.id,
+            listingTitle:  title,
+            message:       `Your item "${title}" has been received at the trade facility.`,
+        });
+        // Buyer gets notified → they go to My Purchases to book collection
+        await sendNotification(txn.buyerId, {
+            type:          "item_at_facility",
+            listingId:     txn.listingId || null,
+            transactionId: txn.id,
+            listingTitle:  title,
+            message:       `The item "${title}" you purchased is now at the trade facility. Book a collection slot to pick it up.`,
+        });
+    } else {
+        // Collection confirmed
+        await sendNotification(txn.buyerId, {
+            type:          "item_collected",
+            listingId:     txn.listingId || null,
+            transactionId: txn.id,
+            listingTitle:  title,
+            message:       `"${title}" has been collected. Your transaction is complete!`,
+        });
+        await sendNotification(txn.sellerId, {
+            type:          "transaction_complete",
+            listingId:     txn.listingId || null,
+            transactionId: txn.id,
+            listingTitle:  title,
+            message:       `"${title}" has been collected by the buyer. Your transaction is complete!`,
+        });
+    }
+}
+
+// ─── Constants ────────────────────────────────────────────────────────────────
 
 const CAMPUSES = ["All Campuses", "Main Campus", "Education Campus", "Health Sciences Campus", "Business School Campus"];
 const TABS = [
@@ -125,12 +76,33 @@ const TABS = [
 ];
 
 const STATUS_META = {
-    ready_to_release:    { label: "Ready to Release",    cls: "ready",    icon: "fa-circle-check"    },
+    pending:             { label: "Pending Drop-off",    cls: "pending",  icon: "fa-hourglass-half"  },
     in_facility:         { label: "In Facility",         cls: "facility", icon: "fa-warehouse"       },
+    ready_to_release:    { label: "Ready to Release",    cls: "ready",    icon: "fa-circle-check"    },
     awaiting_collection: { label: "Awaiting Collection", cls: "awaiting", icon: "fa-person-walking"  },
     completed:           { label: "Completed",           cls: "done",     icon: "fa-check-double"    },
-    pending:             { label: "Pending",             cls: "pending",  icon: "fa-hourglass-half"  },
 };
+
+// ─── Confirm Dialog ───────────────────────────────────────────────────────────
+function ConfirmDialog({ title, message, confirmLabel, confirmClass, onConfirm, onCancel }) {
+    return (
+        <div className={styles.dialogOverlay} onClick={onCancel}>
+            <div className={styles.dialogBox} onClick={e => e.stopPropagation()}>
+                <div className={styles.dialogIcon}>
+                    <i className="fa-solid fa-circle-question" />
+                </div>
+                <h3 className={styles.dialogTitle}>{title}</h3>
+                <p className={styles.dialogMessage}>{message}</p>
+                <div className={styles.dialogActions}>
+                    <button className={styles.dialogCancel} onClick={onCancel}>Cancel</button>
+                    <button className={`${styles.dialogConfirm} ${styles[confirmClass] || ""}`} onClick={onConfirm}>
+                        {confirmLabel}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+}
 
 // ─── Navbar ───────────────────────────────────────────────────────────────────
 function StaffNavbar({ staffName, staffInitials, staffPhoto }) {
@@ -161,7 +133,6 @@ function StaffNavbar({ staffName, staffInitials, staffPhoto }) {
                 </div>
                 <span className={styles.logoText}>CampusMarket</span>
             </div>
-
             <nav className={styles.navLinks}>
                 {STAFF_LINKS.map((link) => {
                     const isActive = link.path && location.pathname === link.path;
@@ -177,7 +148,6 @@ function StaffNavbar({ staffName, staffInitials, staffPhoto }) {
                     );
                 })}
             </nav>
-
             <div className={styles.navRight}>
                 <span className={styles.staffPill}>
                     <i className="fa-solid fa-shield-halved" /> Staff
@@ -217,47 +187,71 @@ function StaffNavbar({ staffName, staffInitials, staffPhoto }) {
     );
 }
 
-// ─── Transaction Card (with US15 cash shortfall logic) ────────────────────────
-function TransactionCard({ txn, onRelease, onMarkStep }) {
+// ─── Transaction Card ─────────────────────────────────────────────────────────
+function TransactionCard({ txn, onConfirmDropOff, onConfirmCollection, onRelease, onMarkStep }) {
     const meta       = STATUS_META[txn.status] || STATUS_META.pending;
     const allChecked = txn.checklist.every(c => c.done);
 
-    // ── US15 state ──────────────────────────────────────────────────────────
-    const shortfall      = txn.cashShortfall ?? 0;
-    const hasShortfall   = shortfall > 0;
+    const shortfall    = txn.cashShortfall ?? 0;
+    const hasShortfall = shortfall > 0;
     const [cashConfirmed, setCashConfirmed] = useState(
         txn.paymentStatus === "Fully Paid" || shortfall === 0
     );
     const [saving, setSaving] = useState(false);
 
-    // "Confirm Cash Received" is enabled only when all checklist items are done
-    // AND there is an outstanding shortfall AND staff haven't confirmed yet
     const canConfirmCash = allChecked && hasShortfall && !cashConfirmed;
+    const canRelease     = allChecked && (!hasShortfall || cashConfirmed);
 
-    // Release button is enabled only when all checklist done
-    // AND (no shortfall OR cash already confirmed)
-    const canRelease = allChecked && (!hasShortfall || cashConfirmed);
+    const [dropOffLoading,    setDropOffLoading]    = useState(false);
+    const [collectionLoading, setCollectionLoading] = useState(false);
+
+    // ── Waiting states ────────────────────────────────────────────────────────
+    const waitingForDropOff = txn.status === "pending" && !txn.dropOffBooked;
+
+    const waitingForCollection =
+        ["in_facility", "ready_to_release"].includes(txn.status) &&
+        !txn.collectionBooked;
+
+    const showConfirmDropOff = txn.status === "pending" && txn.dropOffBooked;
+
+    // ── FIXED: Only show Confirm Collection after buyer has booked
+    //    a collection slot AND status is awaiting_collection ──────
+    const showConfirmCollection =
+        txn.status === "awaiting_collection" && txn.collectionBooked;
 
     async function handleConfirmCash() {
         setCashConfirmed(true);
-
-        // Persist to Firestore if this is a real transaction (not mock)
-        if (!txn.id.startsWith("txn00")) {
-            setSaving(true);
-            try {
-                await updateDoc(doc(db, "transactions", txn.id), {
-                    cashShortfall:  0,
-                    paymentStatus:  "Fully Paid",
-                    cashConfirmedAt: serverTimestamp(),
-                });
-            } catch (err) {
-                console.error("Failed to update cash status:", err);
-            } finally {
-                setSaving(false);
-            }
+        setSaving(true);
+        try {
+            await updateDoc(doc(db, "transactions", txn.id), {
+                cashShortfall:   0,
+                paymentStatus:   "Fully Paid",
+                cashConfirmedAt: serverTimestamp(),
+            });
+        } catch (err) {
+            console.error("Failed to update cash status:", err);
+        } finally {
+            setSaving(false);
         }
     }
-    // ── end US15 ────────────────────────────────────────────────────────────
+
+    async function handleDropOff() {
+        setDropOffLoading(true);
+        try {
+            await onConfirmDropOff(txn.id);
+        } finally {
+            setDropOffLoading(false);
+        }
+    }
+
+    async function handleCollection() {
+        setCollectionLoading(true);
+        try {
+            await onConfirmCollection(txn.id);
+        } finally {
+            setCollectionLoading(false);
+        }
+    }
 
     return (
         <div className={`${styles.txnCard} ${styles[`txnCard_${meta.cls}`]}`}>
@@ -294,7 +288,6 @@ function TransactionCard({ txn, onRelease, onMarkStep }) {
                     {txn.type === "Purchase" ? (
                         <span className={styles.txnTag}>
                             Purchase · R{txn.price?.toLocaleString()}
-                            {/* ── US15: show payment status chip ── */}
                             {cashConfirmed || !hasShortfall ? (
                                 <span className={styles.paidChip}>
                                     <i className="fa-solid fa-circle-check" /> Paid
@@ -310,8 +303,64 @@ function TransactionCard({ txn, onRelease, onMarkStep }) {
                     )}
                 </div>
 
-                {/* ── US15: Cash shortfall warning banner ── */}
-                {hasShortfall && !cashConfirmed && (
+                {/* ── Waiting for seller to book drop-off ── */}
+                {waitingForDropOff && (
+                    <div className={styles.waitingBanner}>
+                        <i className="fa-solid fa-hourglass-half" />
+                        <span>
+                            Waiting for <strong>{txn.seller}</strong> to book a drop-off slot.
+                            No action required yet.
+                        </span>
+                    </div>
+                )}
+
+                {/* ── Drop-off booked — show scheduled info ── */}
+                {txn.status === "pending" && txn.dropOffBooked && (
+                    <div className={styles.bookedBanner}>
+                        <i className="fa-solid fa-calendar-check" />
+                        <span>
+                            Drop-off booked by <strong>{txn.seller}</strong> for{" "}
+                            <strong>{txn.dropOffDate}</strong> at <strong>{txn.dropOffTimeSlot}</strong>.
+                            Click <strong>Confirm Drop-Off</strong> once item is received.
+                        </span>
+                    </div>
+                )}
+
+                {/* ── Waiting for buyer to book collection ── */}
+                {waitingForCollection && (
+                    <div className={styles.waitingBanner} style={{ marginTop: 6 }}>
+                        <i className="fa-solid fa-hourglass-half" />
+                        <span>
+                            Waiting for <strong>{txn.buyer}</strong> to book a collection slot
+                            before the item can be released.
+                        </span>
+                    </div>
+                )}
+
+                {/* ── Collection booked — show scheduled info ── */}
+                {txn.collectionBooked && txn.collectionDate && (
+                    <div className={styles.bookedBanner} style={{ marginTop: 6 }}>
+                        <i className="fa-solid fa-calendar-check" />
+                        <span>
+                            Collection booked by <strong>{txn.buyer}</strong> for{" "}
+                            <strong>{txn.collectionDate}</strong> at <strong>{txn.collectionTimeSlot}</strong>.
+                        </span>
+                    </div>
+                )}
+
+                {/* Pending drop-off notice */}
+                {txn.status === "pending" && txn.dropOffBooked && (
+                    <div className={styles.dropOffBanner}>
+                        <i className="fa-solid fa-truck-arrow-right" />
+                        <span>
+                            Awaiting item drop-off from seller. Click <strong>Confirm Drop-Off</strong> once
+                            you have physically received the item.
+                        </span>
+                    </div>
+                )}
+
+                {/* Cash shortfall banners */}
+                {hasShortfall && !cashConfirmed && txn.status !== "pending" && (
                     <div className={styles.shortfallBanner}>
                         <i className="fa-solid fa-coins" />
                         <span>
@@ -320,8 +369,6 @@ function TransactionCard({ txn, onRelease, onMarkStep }) {
                         </span>
                     </div>
                 )}
-
-                {/* ── US15: Cash confirmed success ── */}
                 {hasShortfall && cashConfirmed && (
                     <div className={styles.cashConfirmedBanner}>
                         <i className="fa-solid fa-circle-check" />
@@ -329,44 +376,60 @@ function TransactionCard({ txn, onRelease, onMarkStep }) {
                     </div>
                 )}
 
-                {/* Checklist */}
-                <div className={styles.checklist}>
-                    {txn.checklist.map((step, i) => (
-                        <button
-                            key={i}
-                            className={`${styles.checkItem} ${step.done ? styles.checkDone : styles.checkPending}`}
-                            onClick={() => onMarkStep && onMarkStep(txn.id, i)}
-                            disabled={step.done}
-                        >
-                            <i className={`fa-solid ${step.done ? "fa-circle-check" : "fa-circle"}`} />
-                            {step.label}
-                        </button>
-                    ))}
-                </div>
+                {/* Checklist — only show after drop-off confirmed */}
+                {txn.status !== "pending" && (
+                    <div className={styles.checklist}>
+                        {txn.checklist.map((step, i) => (
+                            <button
+                                key={i}
+                                className={`${styles.checkItem} ${step.done ? styles.checkDone : styles.checkPending}`}
+                                onClick={() => onMarkStep && onMarkStep(txn.id, i)}
+                                disabled={step.done}
+                            >
+                                <i className={`fa-solid ${step.done ? "fa-circle-check" : "fa-circle"}`} />
+                                {step.label}
+                            </button>
+                        ))}
+                    </div>
+                )}
             </div>
 
             {/* Action buttons */}
-            {(txn.status === "ready_to_release" || txn.status === "in_facility") && (
-                <div className={styles.txnAction}>
+            <div className={styles.txnAction}>
 
-                    {/* ── US15: Confirm Cash Received button ── */}
-                    {hasShortfall && (
-                        <button
-                            className={`${styles.confirmCashBtn} ${!canConfirmCash ? styles.confirmCashBtnDisabled : ""}`}
-                            onClick={handleConfirmCash}
-                            disabled={!canConfirmCash || saving}
-                            title={
-                                !allChecked     ? "Complete all checklist steps first" :
-                                cashConfirmed   ? "Cash already confirmed" :
-                                "Confirm you have received the cash shortfall"
-                            }
-                        >
-                            <i className={`fa-solid ${cashConfirmed ? "fa-circle-check" : "fa-hand-holding-dollar"}`} />
-                            {saving ? "Saving…" : cashConfirmed ? "Cash Received" : "Confirm Cash Received"}
-                        </button>
-                    )}
+                {/* Confirm Drop-Off — only when seller has booked */}
+                {showConfirmDropOff && (
+                    <button
+                        className={styles.dropOffBtn}
+                        onClick={handleDropOff}
+                        disabled={dropOffLoading}
+                        title="Confirm you have physically received this item from the seller"
+                    >
+                        <i className={`fa-solid ${dropOffLoading ? "fa-spinner fa-spin" : "fa-box-archive"}`} />
+                        {dropOffLoading ? "Confirming…" : "Confirm Drop-Off"}
+                    </button>
+                )}
 
-                    {/* Release button — locked until checklist done AND cash confirmed */}
+                {/* Confirm Cash Received */}
+                {!showConfirmDropOff && !waitingForDropOff && hasShortfall && (
+                    <button
+                        className={`${styles.confirmCashBtn} ${!canConfirmCash ? styles.confirmCashBtnDisabled : ""}`}
+                        onClick={handleConfirmCash}
+                        disabled={!canConfirmCash || saving}
+                        title={
+                            !allChecked   ? "Complete all checklist steps first" :
+                            cashConfirmed ? "Cash already confirmed" :
+                            "Confirm you have received the cash shortfall"
+                        }
+                    >
+                        <i className={`fa-solid ${cashConfirmed ? "fa-circle-check" : "fa-hand-holding-dollar"}`} />
+                        {saving ? "Saving…" : cashConfirmed ? "Cash Received" : "Confirm Cash Received"}
+                    </button>
+                )}
+
+                {/* Release button — only when checklist done, cash settled,
+                    AND buyer has already booked a collection slot */}
+                {(txn.status === "ready_to_release" || txn.status === "in_facility") && txn.collectionBooked && (
                     <button
                         className={`${styles.releaseBtn} ${!canRelease ? styles.releaseBtnDisabled : ""}`}
                         onClick={() => canRelease && onRelease(txn.id)}
@@ -380,8 +443,22 @@ function TransactionCard({ txn, onRelease, onMarkStep }) {
                         <i className="fa-solid fa-arrow-up-from-bracket" />
                         Release for Collection
                     </button>
-                </div>
-            )}
+                )}
+
+                {/* Confirm Collection — ONLY after buyer has booked a slot
+                    AND status is awaiting_collection */}
+                {showConfirmCollection && (
+                    <button
+                        className={styles.confirmCollectionBtn}
+                        onClick={handleCollection}
+                        disabled={collectionLoading}
+                        title="Confirm the buyer has collected this item"
+                    >
+                        <i className={`fa-solid ${collectionLoading ? "fa-spinner fa-spin" : "fa-handshake"}`} />
+                        {collectionLoading ? "Confirming…" : "Confirm Collection"}
+                    </button>
+                )}
+            </div>
         </div>
     );
 }
@@ -435,7 +512,6 @@ function StaffProfilePanel({ staffName, staffEmail, staffInitials, staffPhoto, o
                         <i className="fa-solid fa-xmark" />
                     </button>
                 </div>
-
                 <div className={styles.profileHero}>
                     <div className={styles.profileAvatarLg}>
                         {staffPhoto
@@ -449,7 +525,6 @@ function StaffProfilePanel({ staffName, staffEmail, staffInitials, staffPhoto, o
                     <h2 className={styles.profileHeroName}>{staffName}</h2>
                     <p className={styles.profileHeroEmail}>{staffEmail}</p>
                 </div>
-
                 <div className={styles.profileInfoList}>
                     <div className={styles.profileInfoRow}>
                         <i className="fa-solid fa-id-badge" />
@@ -480,7 +555,6 @@ function StaffProfilePanel({ staffName, staffEmail, staffInitials, staffPhoto, o
                         </div>
                     </div>
                 </div>
-
                 <div className={styles.profileLogoutSection}>
                     <button
                         className={styles.profileLogoutBtn}
@@ -504,14 +578,11 @@ export default function StaffDashboard() {
     const [activeTab, setActiveTab]       = useState("due_today");
     const [search, setSearch]             = useState("");
     const [campus, setCampus]             = useState("All Campuses");
-    const [transactions, setTransactions] = useState(MOCK_TRANSACTIONS);
+    const [transactions, setTransactions] = useState([]);
     const [isLoggingOut, setIsLoggingOut] = useState(false);
     const [showProfile, setShowProfile]   = useState(false);
     const [staffUser, setStaffUser]       = useState({
-        name: "Sipho Ndaba",
-        email: "s.ndaba@campus.ac.za",
-        photoURL: "",
-        initials: "SN",
+        name: "", email: "", photoURL: "", initials: "",
     });
 
     useEffect(() => {
@@ -538,6 +609,98 @@ export default function StaffDashboard() {
         return () => unsub();
     }, []);
 
+    // ── Live Firestore listener ───────────────────────────────────────────────
+    useEffect(() => {
+        // FIX: Added "waiting" to the status list so transactions where the
+        // seller has booked a drop-off (but status hasn't moved to "accepted")
+        // are included in the dashboard query.
+        const q = query(
+            collection(db, "transactions"),
+            where("status", "in", [
+                "waiting",            // ← ADDED
+                "accepted",
+                "in_facility",
+                "ready_to_release",
+                "awaiting_collection",
+                "completed",
+            ])
+        );
+
+        const unsub = onSnapshot(q, async (snapshot) => {
+            const base = snapshot.docs.map(d => ({ _ref: d.id, _data: d.data() }));
+
+            const sellerIds  = [...new Set(base.map(b => b._data.sellerId).filter(Boolean))];
+            const listingIds = [...new Set(base.map(b => b._data.listingId).filter(Boolean))];
+
+            const [sellerSnaps, listingSnaps] = await Promise.all([
+                Promise.all(sellerIds.map(id  => getDoc(doc(db, "users",    id)))),
+                Promise.all(listingIds.map(id => getDoc(doc(db, "listings", id)))),
+            ]);
+
+            const sellerMap = {};
+            sellerSnaps.forEach(snap => {
+                if (snap.exists()) {
+                    const d = snap.data();
+                    sellerMap[snap.id] = `${d.firstName || ""} ${d.lastName || ""}`.trim() || "Seller";
+                }
+            });
+
+            const listingImageMap = {};
+            listingSnaps.forEach(snap => {
+                if (snap.exists()) {
+                    const d = snap.data();
+                    listingImageMap[snap.id] =
+                        (Array.isArray(d.photos) && d.photos[0]) ||
+                        (Array.isArray(d.images) && d.images[0]) ||
+                        d.imageUrl || d.image || d.itemImage || null;
+                }
+            });
+
+            const live = base.map(({ _ref: id, _data: data }) => ({
+                id,
+                item:          data.listingTitle || "Item",
+                itemImage:     listingImageMap[data.listingId] || data.itemImage || null,
+                seller:        sellerMap[data.sellerId] || data.sellerName || "Seller",
+                sellerId:      data.sellerId,
+                buyer:         data.buyerName || "Buyer",
+                buyerId:       data.buyerId,
+                listingId:     data.listingId    || null,
+                listingTitle:  data.listingTitle || "Item",
+                type:          data.type === "sale" ? "Purchase" : "Trade",
+                price:         data.agreedPrice  || data.price || 0,
+                cashShortfall: data.cashShortfall ?? 0,
+                paymentStatus: data.paymentStatus || (data.cashShortfall > 0 ? "Partially Paid" : "Fully Paid"),
+                tradeFor:      data.tradeItem    || null,
+                timeSlot:      data.dropOffTimeSlot || data.timeSlot || "TBD",
+
+                // FIX: Map both "waiting" and "accepted" to the local "pending" status
+                status: (data.status === "accepted" || data.status === "waiting")
+                    ? "pending"
+                    : (data.status || "pending"),
+
+                campus: data.campus || "Main Campus",
+
+                dropOffBooked:   !!(data.bookingId || data.dropOffStatus === "scheduled"),
+                dropOffDate:     data.dropOffDate     || null,
+                dropOffTimeSlot: data.dropOffTimeSlot || null,
+
+                collectionBooked:   !!(data.collectionBookingId || data.collectionStatus === "scheduled"),
+                collectionDate:     data.collectionDate     || null,
+                collectionTimeSlot: data.collectionTimeSlot || null,
+
+                checklist: data.checklist || [
+                    { label: "Confirmed Drop-off", done: data.dropOffConfirmed || false },
+                    { label: "Inspected Item",     done: data.itemInspected    || false },
+                    { label: "Confirmed Payment",  done: data.paymentConfirmed || false },
+                ],
+                date: data.createdAt?.toDate ? data.createdAt.toDate() : new Date(),
+            }));
+
+            setTransactions(live);
+        });
+        return () => unsub();
+    }, []);
+
     const handleLogout = async () => {
         setIsLoggingOut(true);
         setTimeout(async () => {
@@ -551,61 +714,142 @@ export default function StaffDashboard() {
         }, 1800);
     };
 
-    // On release: mark completed in Firestore (real) and local state (mock + real)
-    const handleRelease = async (id) => {
+    const handleConfirmDropOff = async (id) => {
+        const txn = transactions.find(t => t.id === id);
+
         setTransactions(prev =>
-            prev.map(t => t.id === id ? { ...t, status: "completed" } : t)
+            prev.map(t => {
+                if (t.id !== id) return t;
+                const newChecklist = t.checklist.map((s, i) =>
+                    i === 0 ? { ...s, done: true } : s
+                );
+                return { ...t, status: "in_facility", checklist: newChecklist };
+            })
         );
-        // Persist for real transactions
-        if (!id.startsWith("txn00")) {
+
+        if (txn) {
             try {
                 await updateDoc(doc(db, "transactions", id), {
-                    status:      "completed",
-                    paymentStatus: "Fully Paid",
-                    cashShortfall: 0,
-                    releasedAt:  serverTimestamp(),
-                    releasedByStaff: true,
+                    status:             "in_facility",
+                    dropOffConfirmed:   true,
+                    dropOffConfirmedAt: serverTimestamp(),
+                    dropOffConfirmedBy: auth.currentUser?.uid || null,
                 });
+                await notifyBothParties(txn, "drop_off");
             } catch (err) {
-                console.error("Failed to update release status:", err);
+                console.error("Failed to confirm drop-off:", err);
             }
         }
     };
 
-    const handleMarkStep = (txnId, stepIdx) => {
+    const handleConfirmCollection = async (id) => {
+        const txn = transactions.find(t => t.id === id);
+
+        setTransactions(prev =>
+            prev.map(t => {
+                if (t.id !== id) return t;
+                const newChecklist = [
+                    ...t.checklist.map(s => ({ ...s, done: true })),
+                    ...(!t.checklist.some(s => s.label === "Released to Buyer")
+                        ? [{ label: "Released to Buyer", done: true }]
+                        : []),
+                ];
+                return { ...t, status: "completed", checklist: newChecklist };
+            })
+        );
+
+        if (txn) {
+            try {
+                await updateDoc(doc(db, "transactions", id), {
+                    status:                "completed",
+                    paymentStatus:         "Fully Paid",
+                    cashShortfall:         0,
+                    collectionConfirmed:   true,
+                    collectionConfirmedAt: serverTimestamp(),
+                    collectionConfirmedBy: auth.currentUser?.uid || null,
+                    releasedAt:            serverTimestamp(),
+                    releasedByStaff:       true,
+                });
+                await notifyBothParties(txn, "collection");
+            } catch (err) {
+                console.error("Failed to confirm collection:", err);
+            }
+        }
+    };
+
+    const handleRelease = async (id) => {
+        const txn = transactions.find(t => t.id === id);
+
+        setTransactions(prev =>
+            prev.map(t => t.id === id ? { ...t, status: "awaiting_collection" } : t)
+        );
+
+        try {
+            await updateDoc(doc(db, "transactions", id), {
+                status:          "awaiting_collection",
+                releasedAt:      serverTimestamp(),
+                releasedByStaff: true,
+            });
+            if (txn) await notifyBothParties(txn, "collection");
+        } catch (err) {
+            console.error("Failed to update release status:", err);
+        }
+    };
+
+    const handleMarkStep = async (txnId, stepIdx) => {
         setTransactions(prev => prev.map(t => {
             if (t.id !== txnId) return t;
             const newChecklist = t.checklist.map((s, i) => i === stepIdx ? { ...s, done: true } : s);
             const allDone      = newChecklist.every(s => s.done);
-            return { ...t, checklist: newChecklist, status: allDone ? "ready_to_release" : t.status };
+            return { ...t, checklist: newChecklist, status: allDone && t.status === "in_facility" ? "ready_to_release" : t.status };
         }));
+
+        try {
+            const txn = transactions.find(t => t.id === txnId);
+            if (!txn) return;
+            const newChecklist = txn.checklist.map((s, i) => i === stepIdx ? { ...s, done: true } : s);
+            const allDone      = newChecklist.every(s => s.done);
+            await updateDoc(doc(db, "transactions", txnId), {
+                checklist: newChecklist,
+                ...(allDone && txn.status === "in_facility" ? { status: "ready_to_release" } : {}),
+            });
+        } catch (err) {
+            console.error("Failed to update checklist step:", err);
+        }
     };
 
-    // Stats
-    const today        = new Date().toDateString();
-    const todayTxns    = transactions.filter(t => new Date(t.date).toDateString() === today);
-    const inFacility   = transactions.filter(t => t.status === "in_facility" || t.status === "ready_to_release");
-    const awaitingColl = transactions.filter(t => t.status === "awaiting_collection");
-    const completed    = transactions.filter(t => t.status === "completed");
+    const today = new Date().toISOString().split("T")[0];
 
-    const visibleTxns = transactions.filter(t => {
-        const matchSearch = !search ||
-            t.item.toLowerCase().includes(search.toLowerCase())   ||
-            t.seller.toLowerCase().includes(search.toLowerCase()) ||
-            t.buyer.toLowerCase().includes(search.toLowerCase());
-        const matchCampus = campus === "All Campuses" || t.campus === campus;
+    const isDueToday = (t) =>
+        (t.dropOffDate === today && t.dropOffBooked) ||
+        (t.collectionDate === today && t.collectionBooked);
 
-        if (activeTab === "due_today")  return matchSearch && matchCampus && new Date(t.date).toDateString() === today && t.status !== "completed";
-        if (activeTab === "history")    return matchSearch && matchCampus && t.status === "completed";
-        if (activeTab === "time_slots") return matchSearch && matchCampus;
-        return matchSearch && matchCampus;
-    });
+    const todayTxns      = transactions.filter(t => isDueToday(t));
+    const inFacility     = transactions.filter(t => t.status === "in_facility" || t.status === "ready_to_release");
+    const awaitingColl   = transactions.filter(t => t.status === "awaiting_collection");
+    const completed      = transactions.filter(t => t.status === "completed");
+    const pendingDropOff = transactions.filter(t => t.status === "pending");
+
+    const visibleTxns = transactions
+        .filter(t => {
+            const matchSearch = !search ||
+                t.item.toLowerCase().includes(search.toLowerCase())   ||
+                t.seller.toLowerCase().includes(search.toLowerCase()) ||
+                t.buyer.toLowerCase().includes(search.toLowerCase());
+            const matchCampus = campus === "All Campuses" || t.campus === campus;
+            if (activeTab === "due_today")  return matchSearch && matchCampus && isDueToday(t) && t.status !== "completed";
+            if (activeTab === "history")    return matchSearch && matchCampus && t.status === "completed";
+            if (activeTab === "time_slots") return matchSearch && matchCampus && t.status !== "completed";
+            if (activeTab === "all")        return matchSearch && matchCampus && t.status !== "completed";
+            return matchSearch && matchCampus && t.status !== "completed";
+        })
+        .sort((a, b) => b.date - a.date); // newest first
 
     const STATS = [
-        { label: "Due Today",           value: todayTxns.filter(t => t.status !== "completed").length, icon: "fa-calendar-day",  color: "#f59e0b" },
-        { label: "Items In Facility",   value: inFacility.length,   icon: "fa-warehouse",       color: "#6AA6DA" },
-        { label: "Awaiting Collection", value: awaitingColl.length, icon: "fa-person-walking",  color: "#8b5cf6" },
-        { label: "Completed",           value: completed.length,    icon: "fa-circle-check",    color: "#10b981" },
+        { label: "Pending Drop-off",    value: pendingDropOff.length, icon: "fa-truck-arrow-right", color: "#f59e0b" },
+        { label: "Items In Facility",   value: inFacility.length,     icon: "fa-warehouse",         color: "#6AA6DA" },
+        { label: "Awaiting Collection", value: awaitingColl.length,   icon: "fa-person-walking",    color: "#8b5cf6" },
+        { label: "Completed",           value: completed.length,      icon: "fa-circle-check",      color: "#10b981" },
     ];
 
     return (
@@ -717,6 +961,8 @@ export default function StaffDashboard() {
                             <TransactionCard
                                 key={txn.id}
                                 txn={txn}
+                                onConfirmDropOff={handleConfirmDropOff}
+                                onConfirmCollection={handleConfirmCollection}
                                 onRelease={handleRelease}
                                 onMarkStep={handleMarkStep}
                             />

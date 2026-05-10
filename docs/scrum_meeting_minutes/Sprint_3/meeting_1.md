@@ -16,7 +16,11 @@
 ## 3. Individual Updates
 
 ### Kgethego
+<<<<<<< HEAD
 **Work done:** Completed implementations for both US20 and US12 as well as their use case diagrams.  
+=======
+**Work done:** Completed implementations for both US20 and US12.  
+>>>>>>> 6c537711de7924d97c60e551d9e4ae606e9026f4
 **Work to be done:** Since all assigned work is complete, will focus on minutes documentation and assisting the team.  
 **Blockers:** None.
 
@@ -48,10 +52,14 @@
 ---
 
 ## 4. Summary
+<<<<<<< HEAD
 - Sprint 2 completed successfully  
 - Final integrations and testing done  
 - Retrospective conducted  
 - Sprint 3 planning initiated  
+=======
+The team has successfully transitioned from Sprint 2 into Sprint 3, with most members actively progressing on their assigned user stories. Key developments include completion of US20 and US12, significant progress on the staff dashboard and transaction workflows, implementation of export report functionality, and enhancements to both chat navigation and the admin dashboard. Documentation and retrospective tasks from Sprint 2 have been finalized, while new features such as reporting, cart functionality, and category reporting are underway. Overall, the sprint is on track, with no major blockers except pending payment integration approvals.
+>>>>>>> 6c537711de7924d97c60e551d9e4ae606e9026f4
 
 ---
 
