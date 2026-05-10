@@ -14,68 +14,29 @@ import NavBar from './NavBarTemp';
 import styles from './MyPurchases.module.css';
 
 const STATUS_CONFIG = {
-  pending: {
-    label: 'Pending',
-    color: '#f59e0b',
-    bg: '#fef3c7',
-    icon: 'fa-clock',
-  },
-  accepted: {
-    label: 'Accepted',
-    color: '#3b82f6',
-    bg: '#dbeafe',
-    icon: 'fa-circle-check',
-  },
-  // pending_payment is treated as accepted — no separate config
-  waiting: {
-    label: 'Waiting',
-    color: '#8b5cf6',
-    bg: '#ede9fe',
-    icon: 'fa-hourglass-half',
-  },
-  completed: {
-    label: 'Completed',
-    color: '#22c55e',
-    bg: '#dcfce7',
-    icon: 'fa-check-double',
-  },
-  declined: {
-    label: 'Declined',
-    color: '#ef4444',
-    bg: '#fee2e2',
-    icon: 'fa-circle-xmark',
-  },
-  cancelled: {
-    label: 'Cancelled',
-    color: '#94a3b8',
-    bg: '#f1f5f9',
-    icon: 'fa-ban',
-  },
+  pending:             { label: 'Pending',             color: '#f59e0b', bg: '#fef3c7', icon: 'fa-clock'          },
+  accepted:            { label: 'Accepted',            color: '#3b82f6', bg: '#dbeafe', icon: 'fa-circle-check'   },
+  waiting:             { label: 'Waiting',             color: '#8b5cf6', bg: '#ede9fe', icon: 'fa-hourglass-half' },
+  in_facility:         { label: 'At Facility',         color: '#0ea5e9', bg: '#e0f2fe', icon: 'fa-warehouse'      },
+  ready_to_release:    { label: 'Ready to Collect',    color: '#f97316', bg: '#ffedd5', icon: 'fa-circle-check'   },
+  awaiting_collection: { label: 'Awaiting Collection', color: '#8b5cf6', bg: '#ede9fe', icon: 'fa-person-walking' },
+  completed:           { label: 'Completed',           color: '#22c55e', bg: '#dcfce7', icon: 'fa-check-double'   },
+  declined:            { label: 'Declined',            color: '#ef4444', bg: '#fee2e2', icon: 'fa-circle-xmark'   },
+  cancelled:           { label: 'Cancelled',           color: '#94a3b8', bg: '#f1f5f9', icon: 'fa-ban'            },
 };
 
 const TYPE_CONFIG = {
-  sale: { label: 'Purchase', icon: 'fa-shopping-cart', color: '#e07b3a' },
-  trade: { label: 'Trade', icon: 'fa-exchange-alt', color: '#3a7be0' },
-  either: { label: 'Offer', icon: 'fa-handshake', color: '#7b3ae0' },
+  sale:   { label: 'Purchase', icon: 'fa-shopping-cart', color: '#e07b3a' },
+  trade:  { label: 'Trade',    icon: 'fa-exchange-alt',  color: '#3a7be0' },
+  either: { label: 'Offer',    icon: 'fa-handshake',     color: '#7b3ae0' },
 };
 
 const PAYMENT_LABELS = {
   full_online: 'Fully Online',
-  partial: 'Partial Online + Cash',
-  cash: 'Full Cash on Delivery',
-  online: 'Fully Online',
-  cod: 'Full Cash on Delivery',
-};
-
-// pending_payment counts as accepted for ordering
-const STATUS_ORDER = {
-  pending: 0,
-  accepted: 1,
-  pending_payment: 1,
-  waiting: 2,
-  completed: 3,
-  declined: 4,
-  cancelled: 5,
+  partial:     'Partial Online + Cash',
+  cash:        'Full Cash on Delivery',
+  online:      'Fully Online',
+  cod:         'Full Cash on Delivery',
 };
 
 const formatDate = (ts) => {
@@ -90,7 +51,7 @@ const getTotalAmount = (tx) => Number(tx.agreedPrice ?? tx.listingPrice ?? tx.pr
 
 const getCashDue = (tx) => {
   const payType = getPaymentType(tx);
-  const total = getTotalAmount(tx);
+  const total   = getTotalAmount(tx);
   if (payType === 'cash' || payType === 'cod') return total;
   if (payType === 'partial') return Math.max(0, total - Number(tx.partialAmount ?? tx.onlineAmount ?? 0));
   return 0;
@@ -122,14 +83,22 @@ const getFilterStatus = (tx) => {
   return tx.status;
 };
 
+// Whether the buyer can book a collection slot
+const canBookCollection = (tx) =>
+  ['in_facility', 'ready_to_release'].includes(tx.status) && !tx.collectionBookingId;
+
+// Whether a collection slot is already booked
+const hasCollectionBooked = (tx) =>
+  ['in_facility', 'ready_to_release', 'awaiting_collection'].includes(tx.status) && !!tx.collectionBookingId;
+
 export default function MyPurchases() {
   const navigate = useNavigate();
 
-  const [currentUser, setCurrentUser] = useState(null);
+  const [currentUser, setCurrentUser]   = useState(null);
   const [transactions, setTransactions] = useState([]);
-  const [enriched, setEnriched] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [hasFetched, setHasFetched] = useState(false);
+  const [enriched, setEnriched]         = useState([]);
+  const [loading, setLoading]           = useState(true);
+  const [hasFetched, setHasFetched]     = useState(false);
   const [activeFilter, setActiveFilter] = useState('all');
 
   // ── Auth ───────────────────────────────────────────────────────────────────
@@ -177,7 +146,7 @@ export default function MyPurchases() {
           let listingTitle = tx.listingTitle || null;
           let listingImage = null;
           let listingPrice = tx.agreedPrice ?? tx.price ?? null;
-          let sellerName = tx.sellerName || null;
+          let sellerName   = tx.sellerName  || null;
 
           try {
             if (tx.listingId) {
@@ -211,8 +180,14 @@ export default function MyPurchases() {
         })
       );
 
+      // Sort by status then newest first
+      const ORDER = {
+        pending: 0, accepted: 1, pending_payment: 1, waiting: 2,
+        in_facility: 3, ready_to_release: 4, awaiting_collection: 5,
+        completed: 6, declined: 7, cancelled: 8,
+      };
       results.sort((a, b) => {
-        const diff = (STATUS_ORDER[a.status] ?? 99) - (STATUS_ORDER[b.status] ?? 99);
+        const diff = (ORDER[a.status] ?? 99) - (ORDER[b.status] ?? 99);
         if (diff !== 0) return diff;
         const ta = a.updatedAt?.toDate?.() || a.createdAt?.toDate?.() || new Date(0);
         const tb = b.updatedAt?.toDate?.() || b.createdAt?.toDate?.() || new Date(0);
@@ -226,14 +201,16 @@ export default function MyPurchases() {
     enrich();
   }, [transactions, hasFetched]);
 
-  // ── Filters — NO pending_payment tab ──────────────────────────────────────
+  // ── Filters ────────────────────────────────────────────────────────────────
   const FILTERS = [
-    { key: 'all',       label: 'All' },
-    { key: 'pending',   label: 'Pending' },
-    { key: 'accepted',  label: 'Accepted' },
-    { key: 'waiting',   label: 'Waiting' },
-    { key: 'completed', label: 'Completed' },
-    { key: 'declined',  label: 'Declined' },
+    { key: 'all',                 label: 'All'                },
+    { key: 'pending',             label: 'Pending'            },
+    { key: 'accepted',            label: 'Accepted'           },
+    { key: 'waiting',             label: 'Waiting'            },
+    { key: 'in_facility',         label: 'At Facility'        },
+    { key: 'awaiting_collection', label: 'Awaiting Collection'},
+    { key: 'completed',           label: 'Completed'          },
+    { key: 'declined',            label: 'Declined'           },
   ];
 
   const filtered =
@@ -250,7 +227,7 @@ export default function MyPurchases() {
   }, {});
 
   const activeCount = enriched.filter((tx) =>
-    ['pending', 'accepted', 'pending_payment', 'waiting'].includes(tx.status)
+    ['pending', 'accepted', 'pending_payment', 'waiting', 'in_facility', 'ready_to_release', 'awaiting_collection'].includes(tx.status)
   ).length;
 
   const handleArrowClick = (tx) => {
@@ -331,17 +308,17 @@ export default function MyPurchases() {
           ) : (
             <div className={styles.transactionList}>
               {filtered.map((tx) => {
-                const status = getDisplayStatus(tx);
-                const type = TYPE_CONFIG[tx.type] || TYPE_CONFIG.sale;
-                const isActive = ['pending', 'accepted', 'pending_payment', 'waiting'].includes(tx.status);
-                const paymentType = getPaymentType(tx);
-                const isPartialTx = paymentType === 'partial';
-                const isCashTx = paymentType === 'cash' || paymentType === 'cod';
-                const total = getTotalAmount(tx);
-                const cashDue = getCashDue(tx);
-                const stripePaid = hasStripePayment(tx) && tx.paymentStatus === 'paid';
+                const status          = getDisplayStatus(tx);
+                const type            = TYPE_CONFIG[tx.type] || TYPE_CONFIG.sale;
+                const isActive        = ['pending', 'accepted', 'pending_payment', 'waiting', 'in_facility', 'ready_to_release', 'awaiting_collection'].includes(tx.status);
+                const paymentType     = getPaymentType(tx);
+                const isPartialTx     = paymentType === 'partial';
+                const isCashTx        = paymentType === 'cash' || paymentType === 'cod';
+                const total           = getTotalAmount(tx);
+                const cashDue         = getCashDue(tx);
+                const stripePaid      = hasStripePayment(tx) && tx.paymentStatus === 'paid';
                 const showPaymentButton = canCompletePayment(tx);
-                const showPanel = tx.agreedPrice != null || paymentType || tx.tradeItem || tx.terms;
+                const showPanel       = tx.agreedPrice != null || paymentType || tx.tradeItem || tx.terms;
 
                 return (
                   <div
@@ -475,7 +452,7 @@ export default function MyPurchases() {
                         </div>
                       )}
 
-                      {/* Status messages */}
+                      {/* ── Status messages ── */}
                       {tx.status === 'pending' && (
                         <div className={styles.statusMsg} style={{ borderColor: '#f59e0b', background: '#fffbeb' }}>
                           <i className="fas fa-clock" style={{ color: '#f59e0b' }} />
@@ -512,6 +489,41 @@ export default function MyPurchases() {
                         </div>
                       )}
 
+                      {(tx.status === 'in_facility' || tx.status === 'ready_to_release') && (
+                        <div className={styles.statusMsg} style={{ borderColor: '#0ea5e9', background: '#f0f9ff' }}>
+                          <i className="fas fa-warehouse" style={{ color: '#0ea5e9' }} />
+                          <span>
+                            Your item is at the trade facility.{' '}
+                            {canBookCollection(tx)
+                              ? 'Book a collection slot to pick it up.'
+                              : 'Collection slot already booked — see details below.'
+                            }
+                          </span>
+                        </div>
+                      )}
+
+                      {tx.status === 'awaiting_collection' && (
+                        <div className={styles.statusMsg} style={{ borderColor: '#8b5cf6', background: '#f5f3ff' }}>
+                          <i className="fas fa-person-walking" style={{ color: '#8b5cf6' }} />
+                          <span>
+                            {tx.collectionDate && tx.collectionTimeSlot
+                              ? <>Collection booked for <strong>{tx.collectionDate}</strong> at <strong>{tx.collectionTimeSlot}</strong>. Please bring your student card.</>
+                              : 'Your item is ready — please collect it from the trade facility.'
+                            }
+                          </span>
+                        </div>
+                      )}
+
+                      {/* Collection slot details if already booked */}
+                      {hasCollectionBooked(tx) && tx.collectionDate && (
+                        <div className={styles.statusMsg} style={{ borderColor: '#0ea5e9', background: '#f0f9ff', marginTop: 6 }}>
+                          <i className="fas fa-calendar-check" style={{ color: '#0ea5e9' }} />
+                          <span>
+                            Collection slot: <strong>{tx.collectionDate}</strong> at <strong>{tx.collectionTimeSlot}</strong>
+                          </span>
+                        </div>
+                      )}
+
                       {tx.status === 'completed' && (
                         <div className={styles.statusMsg} style={{ borderColor: '#22c55e', background: '#f0fdf4' }}>
                           <i className="fas fa-check-double" style={{ color: '#22c55e' }} />
@@ -534,24 +546,43 @@ export default function MyPurchases() {
                       )}
                     </div>
 
-                    {/* Action button */}
-                    {showPaymentButton ? (
-                      <button
-                        className={`${styles.viewBtn} ${styles.viewBtnPay}`}
-                        onClick={(e) => { e.stopPropagation(); navigate(`/payment/${tx.id}`); }}
-                        title="Complete payment"
-                      >
-                        <i className="fas fa-credit-card" />
-                      </button>
-                    ) : tx.listingId ? (
-                      <button
-                        className={styles.viewBtn}
-                        onClick={(e) => { e.stopPropagation(); navigate(`/listing/${tx.listingId}`); }}
-                        title="View listing"
-                      >
-                        <i className="fas fa-arrow-right" />
-                      </button>
-                    ) : null}
+                    {/* ── Action buttons ── */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, alignSelf: 'center' }}>
+                      {/* Payment button */}
+                      {showPaymentButton && (
+                        <button
+                          className={`${styles.viewBtn} ${styles.viewBtnPay}`}
+                          onClick={(e) => { e.stopPropagation(); navigate(`/payment/${tx.id}`); }}
+                          title="Complete payment"
+                        >
+                          <i className="fas fa-credit-card" />
+                        </button>
+                      )}
+
+                      {/* Book collection button */}
+                      {canBookCollection(tx) && (
+                        <button
+                          className={styles.viewBtn}
+                          style={{ background: '#0ea5e9', fontSize: '0.72rem', padding: '6px 10px', borderRadius: 8, color: '#fff', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}
+                          onClick={(e) => { e.stopPropagation(); navigate(`/book-collection/${tx.id}`); }}
+                          title="Book collection slot"
+                        >
+                          <i className="fas fa-calendar-plus" />
+                          Book Collection
+                        </button>
+                      )}
+
+                      {/* View listing button — fallback when no action buttons */}
+                      {!showPaymentButton && !canBookCollection(tx) && tx.listingId && (
+                        <button
+                          className={styles.viewBtn}
+                          onClick={(e) => { e.stopPropagation(); navigate(`/listing/${tx.listingId}`); }}
+                          title="View listing"
+                        >
+                          <i className="fas fa-arrow-right" />
+                        </button>
+                      )}
+                    </div>
                   </div>
                 );
               })}

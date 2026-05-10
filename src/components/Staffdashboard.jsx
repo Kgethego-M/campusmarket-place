@@ -1,6 +1,7 @@
+
 import { useState, useRef, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { auth, db } from "../firebase";
+import { auth, db } from "../firebase.js";
 import { signOut, onAuthStateChanged } from "firebase/auth";
 import {
     doc, getDoc, updateDoc, serverTimestamp,
@@ -29,34 +30,37 @@ async function notifyBothParties(txn, stage) {
     const title = txn.listingTitle || txn.item;
 
     if (stage === "drop_off") {
+        // Seller gets notified → they go to Trade Facility
         await sendNotification(txn.sellerId, {
-            type: "item_received_at_facility",
-            listingId: txn.listingId || null,
+            type:          "item_received_at_facility",
+            listingId:     txn.listingId || null,
             transactionId: txn.id,
-            listingTitle: title,
-            message: `Your item "${title}" has been received at the trade facility.`,
+            listingTitle:  title,
+            message:       `Your item "${title}" has been received at the trade facility.`,
         });
+        // Buyer gets notified → they go to My Purchases to book collection
         await sendNotification(txn.buyerId, {
-            type: "item_at_facility",
-            listingId: txn.listingId || null,
+            type:          "item_at_facility",
+            listingId:     txn.listingId || null,
             transactionId: txn.id,
-            listingTitle: title,
-            message: `The item "${title}" you purchased is now at the trade facility.`,
+            listingTitle:  title,
+            message:       `The item "${title}" you purchased is now at the trade facility. Book a collection slot to pick it up.`,
         });
     } else {
+        // Collection confirmed
         await sendNotification(txn.buyerId, {
-            type: "item_ready_for_collection",
-            listingId: txn.listingId || null,
+            type:          "item_collected",
+            listingId:     txn.listingId || null,
             transactionId: txn.id,
-            listingTitle: title,
-            message: `Your item "${title}" has been released — please collect it from the facility.`,
+            listingTitle:  title,
+            message:       `"${title}" has been collected. Your transaction is complete!`,
         });
         await sendNotification(txn.sellerId, {
-            type: "transaction_complete",
-            listingId: txn.listingId || null,
+            type:          "transaction_complete",
+            listingId:     txn.listingId || null,
             transactionId: txn.id,
-            listingTitle: title,
-            message: `Transaction for "${title}" is complete. The buyer has been notified to collect.`,
+            listingTitle:  title,
+            message:       `"${title}" has been collected by the buyer. Your transaction is complete!`,
         });
     }
 }
@@ -201,11 +205,19 @@ function TransactionCard({ txn, onConfirmDropOff, onConfirmCollection, onRelease
     const [dropOffLoading,    setDropOffLoading]    = useState(false);
     const [collectionLoading, setCollectionLoading] = useState(false);
 
-    const showConfirmDropOff = txn.status === "pending";
+    // ── Waiting states ────────────────────────────────────────────────────────
+    const waitingForDropOff = txn.status === "pending" && !txn.dropOffBooked;
 
+    const waitingForCollection =
+        ["in_facility", "ready_to_release"].includes(txn.status) &&
+        !txn.collectionBooked;
+
+    const showConfirmDropOff = txn.status === "pending" && txn.dropOffBooked;
+
+    // ── FIXED: Only show Confirm Collection after buyer has booked
+    //    a collection slot AND status is awaiting_collection ──────
     const showConfirmCollection =
-        txn.status === "awaiting_collection" ||
-        (txn.status === "ready_to_release" && canRelease);
+        txn.status === "awaiting_collection" && txn.collectionBooked;
 
     async function handleConfirmCash() {
         setCashConfirmed(true);
@@ -291,11 +303,59 @@ function TransactionCard({ txn, onConfirmDropOff, onConfirmCollection, onRelease
                     )}
                 </div>
 
+                {/* ── Waiting for seller to book drop-off ── */}
+                {waitingForDropOff && (
+                    <div className={styles.waitingBanner}>
+                        <i className="fa-solid fa-hourglass-half" />
+                        <span>
+                            Waiting for <strong>{txn.seller}</strong> to book a drop-off slot.
+                            No action required yet.
+                        </span>
+                    </div>
+                )}
+
+                {/* ── Drop-off booked — show scheduled info ── */}
+                {txn.status === "pending" && txn.dropOffBooked && (
+                    <div className={styles.bookedBanner}>
+                        <i className="fa-solid fa-calendar-check" />
+                        <span>
+                            Drop-off booked by <strong>{txn.seller}</strong> for{" "}
+                            <strong>{txn.dropOffDate}</strong> at <strong>{txn.dropOffTimeSlot}</strong>.
+                            Click <strong>Confirm Drop-Off</strong> once item is received.
+                        </span>
+                    </div>
+                )}
+
+                {/* ── Waiting for buyer to book collection ── */}
+                {waitingForCollection && (
+                    <div className={styles.waitingBanner} style={{ marginTop: 6 }}>
+                        <i className="fa-solid fa-hourglass-half" />
+                        <span>
+                            Waiting for <strong>{txn.buyer}</strong> to book a collection slot
+                            before the item can be released.
+                        </span>
+                    </div>
+                )}
+
+                {/* ── Collection booked — show scheduled info ── */}
+                {txn.collectionBooked && txn.collectionDate && (
+                    <div className={styles.bookedBanner} style={{ marginTop: 6 }}>
+                        <i className="fa-solid fa-calendar-check" />
+                        <span>
+                            Collection booked by <strong>{txn.buyer}</strong> for{" "}
+                            <strong>{txn.collectionDate}</strong> at <strong>{txn.collectionTimeSlot}</strong>.
+                        </span>
+                    </div>
+                )}
+
                 {/* Pending drop-off notice */}
-                {txn.status === "pending" && (
+                {txn.status === "pending" && txn.dropOffBooked && (
                     <div className={styles.dropOffBanner}>
                         <i className="fa-solid fa-truck-arrow-right" />
-                        <span>Awaiting item drop-off from seller. Click <strong>Confirm Drop-Off</strong> once you have physically received the item.</span>
+                        <span>
+                            Awaiting item drop-off from seller. Click <strong>Confirm Drop-Off</strong> once
+                            you have physically received the item.
+                        </span>
                     </div>
                 )}
 
@@ -337,7 +397,7 @@ function TransactionCard({ txn, onConfirmDropOff, onConfirmCollection, onRelease
             {/* Action buttons */}
             <div className={styles.txnAction}>
 
-                {/* Confirm Drop-Off */}
+                {/* Confirm Drop-Off — only when seller has booked */}
                 {showConfirmDropOff && (
                     <button
                         className={styles.dropOffBtn}
@@ -351,7 +411,7 @@ function TransactionCard({ txn, onConfirmDropOff, onConfirmCollection, onRelease
                 )}
 
                 {/* Confirm Cash Received */}
-                {!showConfirmDropOff && hasShortfall && (
+                {!showConfirmDropOff && !waitingForDropOff && hasShortfall && (
                     <button
                         className={`${styles.confirmCashBtn} ${!canConfirmCash ? styles.confirmCashBtnDisabled : ""}`}
                         onClick={handleConfirmCash}
@@ -367,8 +427,27 @@ function TransactionCard({ txn, onConfirmDropOff, onConfirmCollection, onRelease
                     </button>
                 )}
 
-                {/* Confirm Collection for awaiting_collection */}
-                {txn.status === "awaiting_collection" && (
+                {/* Release button — only when checklist done, cash settled,
+                    AND buyer has already booked a collection slot */}
+                {(txn.status === "ready_to_release" || txn.status === "in_facility") && txn.collectionBooked && (
+                    <button
+                        className={`${styles.releaseBtn} ${!canRelease ? styles.releaseBtnDisabled : ""}`}
+                        onClick={() => canRelease && onRelease(txn.id)}
+                        disabled={!canRelease}
+                        title={
+                            !allChecked                    ? "Complete all checklist steps first" :
+                            hasShortfall && !cashConfirmed ? "Confirm cash received first" :
+                            "Release to buyer"
+                        }
+                    >
+                        <i className="fa-solid fa-arrow-up-from-bracket" />
+                        Release for Collection
+                    </button>
+                )}
+
+                {/* Confirm Collection — ONLY after buyer has booked a slot
+                    AND status is awaiting_collection */}
+                {showConfirmCollection && (
                     <button
                         className={styles.confirmCollectionBtn}
                         onClick={handleCollection}
@@ -378,36 +457,6 @@ function TransactionCard({ txn, onConfirmDropOff, onConfirmCollection, onRelease
                         <i className={`fa-solid ${collectionLoading ? "fa-spinner fa-spin" : "fa-handshake"}`} />
                         {collectionLoading ? "Confirming…" : "Confirm Collection"}
                     </button>
-                )}
-
-                {/* Release button for ready_to_release / in_facility */}
-                {(txn.status === "ready_to_release" || txn.status === "in_facility") && (
-                    <>
-                        <button
-                            className={`${styles.releaseBtn} ${!canRelease ? styles.releaseBtnDisabled : ""}`}
-                            onClick={() => canRelease && onRelease(txn.id)}
-                            disabled={!canRelease}
-                            title={
-                                !allChecked                    ? "Complete all checklist steps first" :
-                                hasShortfall && !cashConfirmed ? "Confirm cash received first" :
-                                "Release to buyer"
-                            }
-                        >
-                            <i className="fa-solid fa-arrow-up-from-bracket" />
-                            Release for Collection
-                        </button>
-                        {txn.status === "ready_to_release" && canRelease && (
-                            <button
-                                className={styles.confirmCollectionBtn}
-                                onClick={handleCollection}
-                                disabled={collectionLoading}
-                                title="Mark as fully collected once buyer has picked up"
-                            >
-                                <i className={`fa-solid ${collectionLoading ? "fa-spinner fa-spin" : "fa-handshake"}`} />
-                                {collectionLoading ? "Confirming…" : "Confirm Collection"}
-                            </button>
-                        )}
-                    </>
                 )}
             </div>
         </div>
@@ -533,10 +582,7 @@ export default function StaffDashboard() {
     const [isLoggingOut, setIsLoggingOut] = useState(false);
     const [showProfile, setShowProfile]   = useState(false);
     const [staffUser, setStaffUser]       = useState({
-        name: "",
-        email: "",
-        photoURL: "",
-        initials: "",
+        name: "", email: "", photoURL: "", initials: "",
     });
 
     useEffect(() => {
@@ -563,27 +609,34 @@ export default function StaffDashboard() {
         return () => unsub();
     }, []);
 
-    // Live Firestore listener for transactions
+    // ── Live Firestore listener ───────────────────────────────────────────────
     useEffect(() => {
+        // FIX: Added "waiting" to the status list so transactions where the
+        // seller has booked a drop-off (but status hasn't moved to "accepted")
+        // are included in the dashboard query.
         const q = query(
             collection(db, "transactions"),
-            where("status", "in", ["accepted", "in_facility", "ready_to_release", "awaiting_collection", "completed"])
+            where("status", "in", [
+                "waiting",            // ← ADDED
+                "accepted",
+                "in_facility",
+                "ready_to_release",
+                "awaiting_collection",
+                "completed",
+            ])
         );
+
         const unsub = onSnapshot(q, async (snapshot) => {
-            // Build base transaction objects from the snapshot
             const base = snapshot.docs.map(d => ({ _ref: d.id, _data: d.data() }));
 
-            // Collect unique sellerIds and listingIds to batch-fetch
             const sellerIds  = [...new Set(base.map(b => b._data.sellerId).filter(Boolean))];
             const listingIds = [...new Set(base.map(b => b._data.listingId).filter(Boolean))];
 
-            // Fetch all seller docs and listing docs in parallel
             const [sellerSnaps, listingSnaps] = await Promise.all([
                 Promise.all(sellerIds.map(id  => getDoc(doc(db, "users",    id)))),
                 Promise.all(listingIds.map(id => getDoc(doc(db, "listings", id)))),
             ]);
 
-            // Build lookup maps  sellerId → full name,  listingId → imageUrl
             const sellerMap = {};
             sellerSnaps.forEach(snap => {
                 if (snap.exists()) {
@@ -596,14 +649,13 @@ export default function StaffDashboard() {
             listingSnaps.forEach(snap => {
                 if (snap.exists()) {
                     const d = snap.data();
-                    // listings may store images as an array or a single field
                     listingImageMap[snap.id] =
+                        (Array.isArray(d.photos) && d.photos[0]) ||
                         (Array.isArray(d.images) && d.images[0]) ||
                         d.imageUrl || d.image || d.itemImage || null;
                 }
             });
 
-            // Map each transaction using the enriched data
             const live = base.map(({ _ref: id, _data: data }) => ({
                 id,
                 item:          data.listingTitle || "Item",
@@ -620,8 +672,22 @@ export default function StaffDashboard() {
                 paymentStatus: data.paymentStatus || (data.cashShortfall > 0 ? "Partially Paid" : "Fully Paid"),
                 tradeFor:      data.tradeItem    || null,
                 timeSlot:      data.dropOffTimeSlot || data.timeSlot || "TBD",
-                status:        data.status === "accepted" ? "pending" : (data.status || "pending"),
-                campus:        data.campus       || "Main Campus",
+
+                // FIX: Map both "waiting" and "accepted" to the local "pending" status
+                status: (data.status === "accepted" || data.status === "waiting")
+                    ? "pending"
+                    : (data.status || "pending"),
+
+                campus: data.campus || "Main Campus",
+
+                dropOffBooked:   !!(data.bookingId || data.dropOffStatus === "scheduled"),
+                dropOffDate:     data.dropOffDate     || null,
+                dropOffTimeSlot: data.dropOffTimeSlot || null,
+
+                collectionBooked:   !!(data.collectionBookingId || data.collectionStatus === "scheduled"),
+                collectionDate:     data.collectionDate     || null,
+                collectionTimeSlot: data.collectionTimeSlot || null,
+
                 checklist: data.checklist || [
                     { label: "Confirmed Drop-off", done: data.dropOffConfirmed || false },
                     { label: "Inspected Item",     done: data.itemInspected    || false },
@@ -648,7 +714,6 @@ export default function StaffDashboard() {
         }, 1800);
     };
 
-    // Confirm Drop-Off
     const handleConfirmDropOff = async (id) => {
         const txn = transactions.find(t => t.id === id);
 
@@ -665,10 +730,10 @@ export default function StaffDashboard() {
         if (txn) {
             try {
                 await updateDoc(doc(db, "transactions", id), {
-                    status:              "in_facility",
-                    dropOffConfirmed:    true,
-                    dropOffConfirmedAt:  serverTimestamp(),
-                    dropOffConfirmedBy:  auth.currentUser?.uid || null,
+                    status:             "in_facility",
+                    dropOffConfirmed:   true,
+                    dropOffConfirmedAt: serverTimestamp(),
+                    dropOffConfirmedBy: auth.currentUser?.uid || null,
                 });
                 await notifyBothParties(txn, "drop_off");
             } catch (err) {
@@ -677,7 +742,6 @@ export default function StaffDashboard() {
         }
     };
 
-    // Confirm Collection
     const handleConfirmCollection = async (id) => {
         const txn = transactions.find(t => t.id === id);
 
@@ -697,14 +761,14 @@ export default function StaffDashboard() {
         if (txn) {
             try {
                 await updateDoc(doc(db, "transactions", id), {
-                    status:               "completed",
-                    paymentStatus:        "Fully Paid",
-                    cashShortfall:        0,
-                    collectionConfirmed:  true,
+                    status:                "completed",
+                    paymentStatus:         "Fully Paid",
+                    cashShortfall:         0,
+                    collectionConfirmed:   true,
                     collectionConfirmedAt: serverTimestamp(),
                     collectionConfirmedBy: auth.currentUser?.uid || null,
-                    releasedAt:           serverTimestamp(),
-                    releasedByStaff:      true,
+                    releasedAt:            serverTimestamp(),
+                    releasedByStaff:       true,
                 });
                 await notifyBothParties(txn, "collection");
             } catch (err) {
@@ -713,7 +777,6 @@ export default function StaffDashboard() {
         }
     };
 
-    // Release
     const handleRelease = async (id) => {
         const txn = transactions.find(t => t.id === id);
 
@@ -755,26 +818,32 @@ export default function StaffDashboard() {
         }
     };
 
-    // Stats
-    const today        = new Date().toDateString();
-    const todayTxns    = transactions.filter(t => new Date(t.date).toDateString() === today);
-    const inFacility   = transactions.filter(t => t.status === "in_facility" || t.status === "ready_to_release");
-    const awaitingColl = transactions.filter(t => t.status === "awaiting_collection");
-    const completed    = transactions.filter(t => t.status === "completed");
+    const today = new Date().toISOString().split("T")[0];
+
+    const isDueToday = (t) =>
+        (t.dropOffDate === today && t.dropOffBooked) ||
+        (t.collectionDate === today && t.collectionBooked);
+
+    const todayTxns      = transactions.filter(t => isDueToday(t));
+    const inFacility     = transactions.filter(t => t.status === "in_facility" || t.status === "ready_to_release");
+    const awaitingColl   = transactions.filter(t => t.status === "awaiting_collection");
+    const completed      = transactions.filter(t => t.status === "completed");
     const pendingDropOff = transactions.filter(t => t.status === "pending");
 
-    const visibleTxns = transactions.filter(t => {
-        const matchSearch = !search ||
-            t.item.toLowerCase().includes(search.toLowerCase())   ||
-            t.seller.toLowerCase().includes(search.toLowerCase()) ||
-            t.buyer.toLowerCase().includes(search.toLowerCase());
-        const matchCampus = campus === "All Campuses" || t.campus === campus;
-        if (activeTab === "due_today")  return matchSearch && matchCampus && new Date(t.date).toDateString() === today && t.status !== "completed";
-        if (activeTab === "history")    return matchSearch && matchCampus && t.status === "completed";
-        if (activeTab === "time_slots") return matchSearch && matchCampus && t.status !== "completed";
-        if (activeTab === "all")        return matchSearch && matchCampus && t.status !== "completed";
-        return matchSearch && matchCampus && t.status !== "completed";
-    });
+    const visibleTxns = transactions
+        .filter(t => {
+            const matchSearch = !search ||
+                t.item.toLowerCase().includes(search.toLowerCase())   ||
+                t.seller.toLowerCase().includes(search.toLowerCase()) ||
+                t.buyer.toLowerCase().includes(search.toLowerCase());
+            const matchCampus = campus === "All Campuses" || t.campus === campus;
+            if (activeTab === "due_today")  return matchSearch && matchCampus && isDueToday(t) && t.status !== "completed";
+            if (activeTab === "history")    return matchSearch && matchCampus && t.status === "completed";
+            if (activeTab === "time_slots") return matchSearch && matchCampus && t.status !== "completed";
+            if (activeTab === "all")        return matchSearch && matchCampus && t.status !== "completed";
+            return matchSearch && matchCampus && t.status !== "completed";
+        })
+        .sort((a, b) => b.date - a.date); // newest first
 
     const STATS = [
         { label: "Pending Drop-off",    value: pendingDropOff.length, icon: "fa-truck-arrow-right", color: "#f59e0b" },

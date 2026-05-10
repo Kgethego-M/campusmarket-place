@@ -1,11 +1,11 @@
 import { useState, useEffect, useRef } from "react";
-import { collection, query, where, getDocs } from "firebase/firestore";
+import { collection, query, where, getDocs, doc, getDoc } from "firebase/firestore";
 import { useNavigate } from "react-router-dom";
 import { db } from "../firebase.js";
 
 const POPUP_VISIBLE_DURATION = 5000;     // 5 seconds visible
 const DELAY_BEFORE_FIRST = 10000;        // 10 seconds before first popup
-const DELAY_BETWEEN_POPUPS = 120000;     // 2 minutes (120000 ms) after close before next popup
+const DELAY_BETWEEN_POPUPS = 120000;     // 2 minutes after close before next
 const MAX_POPUPS = 3;
 
 export default function PremiumPopup() {
@@ -14,8 +14,8 @@ export default function PremiumPopup() {
   const [countdown, setCountdown] = useState(POPUP_VISIBLE_DURATION / 1000);
   const navigate = useNavigate();
 
-  const timeoutRef = useRef(null);      // timeout to show next popup
-  const countdownRef = useRef(null);    // interval for countdown
+  const timeoutRef = useRef(null);
+  const countdownRef = useRef(null);
 
   useEffect(() => {
     fetchPremiumAd();
@@ -33,16 +33,39 @@ export default function PremiumPopup() {
         where("type", "==", "premium-popup")
       );
       const snapshot = await getDocs(q);
-      if (!snapshot.empty) {
-        const adData = { id: snapshot.docs[0].id, ...snapshot.docs[0].data() };
-        setAd(adData);
-        // Initialise session counters
-        let shownCount = parseInt(sessionStorage.getItem("premiumAdShownCount") || "0");
-        if (shownCount < MAX_POPUPS) {
-          // Schedule first popup after DELAY_BEFORE_FIRST
-          scheduleNextPopup(true);
+      if (snapshot.empty) return;
+
+      // Filter ads whose listing is not sold/inactive
+      const validAds = [];
+      for (const docSnap of snapshot.docs) {
+        const adData = { id: docSnap.id, ...docSnap.data() };
+        if (adData.listingId) {
+          const listingSnap = await getDoc(doc(db, "listings", adData.listingId));
+          if (listingSnap.exists()) {
+            const listing = listingSnap.data();
+            const status = listing.status?.toLowerCase();
+            const unavailable = ["sold", "inactive", "accepted", "completed"];
+            if (!unavailable.includes(status)) {
+              validAds.push(adData);
+            }
+          }
+        } else {
+          validAds.push(adData); // keep ads without listingId (if any)
         }
       }
+
+      if (validAds.length === 0) return;
+
+      // Pick a random premium ad
+      const randomAd = validAds[Math.floor(Math.random() * validAds.length)];
+      setAd(randomAd);
+
+      // Session state
+      let shownCount = parseInt(sessionStorage.getItem("premiumAdShownCount") || "0");
+      if (shownCount >= MAX_POPUPS) return;
+
+      // Schedule the first popup
+      scheduleNextPopup(true);
     } catch (err) {
       console.error("Error fetching premium ad:", err);
     }
@@ -62,7 +85,6 @@ export default function PremiumPopup() {
   function showPopup() {
     setVisible(true);
     setCountdown(POPUP_VISIBLE_DURATION / 1000);
-    // Start countdown timer
     if (countdownRef.current) clearInterval(countdownRef.current);
     countdownRef.current = setInterval(() => {
       setCountdown(prev => {
@@ -78,11 +100,9 @@ export default function PremiumPopup() {
 
   function closePopup() {
     setVisible(false);
-    // Increment the shown count
     let shownCount = parseInt(sessionStorage.getItem("premiumAdShownCount") || "0");
     shownCount++;
     sessionStorage.setItem("premiumAdShownCount", shownCount);
-    // Schedule next popup if fewer than MAX_POPUPS have been shown
     if (shownCount < MAX_POPUPS) {
       scheduleNextPopup(false);
     }
@@ -92,15 +112,15 @@ export default function PremiumPopup() {
     if (ad?.listingId) {
       navigate(`/listing/${ad.listingId}`);
     }
-    closePopup(); // closes immediately when clicked
+    closePopup();
   }
 
   if (!visible || !ad) return null;
 
   return (
     <>
-      {/* Backdrop */}
       <div
+        onClick={handleViewListing}
         style={{
           position: "fixed",
           top: 0, left: 0,
@@ -111,7 +131,6 @@ export default function PremiumPopup() {
         }}
       />
 
-      {/* Popup card */}
       <div
         onClick={handleViewListing}
         style={{

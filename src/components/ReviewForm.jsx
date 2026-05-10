@@ -1,13 +1,14 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { auth } from '../firebase';
+import { auth, db } from '../firebase';
+import { doc, getDoc } from 'firebase/firestore';
 import { submitReview } from '../utils/review.utils';
 import styles from "../pages/ReviewForm.module.css";
 
 const LABELS = ['', 'Poor', 'Fair', 'Good', 'Very Good', 'Excellent'];
 
 const ReviewForm = () => {
-  const { transactionId: listingId } = useParams(); // route param is :transactionId but value is the listingId
+  const { transactionId: listingId } = useParams();
   const navigate = useNavigate();
 
   const [rating, setRating] = useState(0);
@@ -16,12 +17,32 @@ const ReviewForm = () => {
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState('');
+  const [listingTitle, setListingTitle] = useState('');
+  const [listingPrice, setListingPrice] = useState('');
 
   const params = new URLSearchParams(window.location.search);
-  const reviewedUserId = params.get('reviewedUserId') || '';
+  const reviewedUserId   = params.get('reviewedUserId') || '';
   const reviewedUserName = params.get('name') || 'this user';
-  const role = params.get('role') || 'seller';
-  const purchaseId = params.get('purchaseId') || '';
+  const role             = params.get('role') || 'seller';
+  const purchaseId       = params.get('purchaseId') || '';
+
+  // Fetch listing details to show item info
+  useEffect(() => {
+    if (!listingId) return;
+    (async () => {
+      try {
+        const snap = await getDoc(doc(db, 'listings', listingId));
+        if (snap.exists()) {
+          const d = snap.data();
+          setListingTitle(d.title || d.Title || '');
+          const price = d.price || d.Price || null;
+          if (price) setListingPrice(`R${Number(price).toLocaleString('en-ZA')}`);
+        }
+      } catch (err) {
+        console.warn('ReviewForm: could not load listing', err);
+      }
+    })();
+  }, [listingId]);
 
   const handleSubmit = async () => {
     if (rating === 0) {
@@ -39,9 +60,9 @@ const ReviewForm = () => {
       await submitReview({
         reviewedUserId,
         reviewerUserId: user?.uid || '',
-        reviewerName: user?.displayName || 'Anonymous',
+        reviewerName:   user?.displayName || 'Anonymous',
         listingId,
-        purchaseId, // stored in review so NotificationsPage can check it
+        purchaseId,
         rating,
         comment,
         role,
@@ -88,6 +109,16 @@ const ReviewForm = () => {
             <p className={styles.sub}>
               with <strong>{reviewedUserName}</strong> as a {role}
             </p>
+            {/* Item details */}
+            {listingTitle && (
+              <div className={styles.itemChip}>
+                <i className="fa-solid fa-tag" style={{ fontSize: '0.75rem' }} />
+                <span>{listingTitle}</span>
+                {listingPrice && (
+                  <span className={styles.itemPrice}>{listingPrice}</span>
+                )}
+              </div>
+            )}
           </div>
         </div>
 

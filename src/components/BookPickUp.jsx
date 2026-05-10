@@ -6,7 +6,7 @@ import {
   query, where, getDocs, updateDoc, serverTimestamp,
 } from "firebase/firestore";
 import NavBar from "./NavBarTemp.jsx";
-import styles from "./BookDropOff.module.css";
+import styles from "./BookPickUp.module.css";
 import { generateTimeSlots } from "../utils/facilityConfig.utils";
 
 const FALLBACK_CONFIG = { openTime: "08:00", closeTime: "18:00", slotsPerHour: 1 };
@@ -20,19 +20,17 @@ function formatPrice(value) {
   });
 }
 
-/* ── Human-readable status label ───────────────────────────────── */
 function getStatusLabel(status) {
   switch (status) {
     case "waiting":            return "Payment confirmed";
     case "dropoff_scheduled":  return "Drop-off scheduled";
-    case "pending":            return "Pending buyer";
+    case "pending":            return "Pending payment";
     case "completed":          return "Completed";
     case "cancelled":          return "Cancelled";
     default:                   return status ?? "Unknown";
   }
 }
 
-/* ── Payment method display label ──────────────────────────────── */
 function getPaymentLabel(method) {
   switch (method) {
     case "online":  return "Online (paid)";
@@ -42,41 +40,41 @@ function getPaymentLabel(method) {
   }
 }
 
-/* ── Payment banner content by method ─────────────────────────── */
+/* ── Payment banner adapted for pick-up context ─────────────── */
 function getPaymentBanner(method, price) {
   switch (method) {
     case "online":
       return {
-        variant:   "online",
-        icon:      "shield-check",
-        headline:  "No cash needed at drop-off",
-        detail:    `The buyer already paid R${price} in full online. Bring the item and the facility will handle the rest.`,
+        variant:  "online",
+        icon:     "shield-check",
+        headline: "Payment already settled — just collect your item",
+        detail:   `You paid R${price} in full online. Show your ID at the facility counter and collect the item.`,
       };
     case "cod":
       return {
-        variant:   "cod",
-        icon:      "cash",
-        headline:  `Collect R${price} cash at the facility`,
-        detail:    "This is a cash-on-delivery order. The buyer will pay when they collect the item — facility staff will verify the payment.",
+        variant:  "cod",
+        icon:     "cash",
+        headline: `Bring R${price} cash to the facility`,
+        detail:   "This is a cash-on-delivery order. Pay the facility staff when you collect — have exact change if possible.",
       };
     case "partial":
       return {
-        variant:   "partial",
-        icon:      "credit-card",
-        headline:  "Partial payment — confirm the split with the buyer",
-        detail:    `Part of the R${price} was paid online. Clarify with the buyer how much cash remains before you drop off.`,
+        variant:  "partial",
+        icon:     "credit-card",
+        headline: "Bring the outstanding cash balance",
+        detail:   `Part of the R${price} was paid online. Confirm the remaining cash amount with the seller before pick-up.`,
       };
     default:
       return {
-        variant:   "unknown",
-        icon:      "info-circle",
-        headline:  `Transaction amount: R${price}`,
-        detail:    "Confirm payment details with the buyer before your drop-off.",
+        variant:  "unknown",
+        icon:     "info-circle",
+        headline: `Transaction amount: R${price}`,
+        detail:   "Confirm payment details with the seller before your pick-up.",
       };
   }
 }
 
-export default function BookDropOff() {
+export default function BookPickUp() {
   const { transactionId } = useParams();
   const navigate          = useNavigate();
 
@@ -85,7 +83,7 @@ export default function BookDropOff() {
   const [error,            setError]             = useState("");
   const [transaction,      setTransaction]       = useState(null);
   const [listing,          setListing]           = useState(null);
-  const [buyerName,        setBuyerName]         = useState("");
+  const [sellerName,       setSellerName]        = useState("");
   const [paymentMethod,    setPaymentMethod]     = useState(null);
   const [selectedDate,     setSelectedDate]      = useState("");
   const [selectedTimeSlot, setSelectedTimeSlot]  = useState("");
@@ -134,19 +132,18 @@ export default function BookDropOff() {
 
     try {
       const transSnap = await getDoc(doc(db, "transactions", transactionId));
-      if (!transSnap.exists()) return setError("Transaction not found.");
+      if (!transSnap.exists()) return setError("Transaction not found");
 
       const txn = { id: transSnap.id, ...transSnap.data() };
 
-      if (txn.sellerId !== uid)
-        return setError("You can only book a drop-off for your own sales.");
+      if (txn.buyerId !== uid)
+        return setError("You can only book pick-up for your own purchases");
 
-      const ALLOWED_STATUSES = ["waiting", "accepted", "in_facility"];
-      if (!ALLOWED_STATUSES.includes(txn.status))
-        return setError(`Cannot book drop-off. Current status: ${txn.status}`);
+      if (txn.dropOffStatus !== "dropped_off")
+        return setError("The seller hasn't dropped off this item yet. Please check back later.");
 
-      if (txn.bookingId)
-        return setError("A drop-off has already been booked for this transaction.");
+      if (txn.pickupBookingId)
+        return setError("A pick-up has already been booked for this transaction.");
 
       setTransaction(txn);
 
@@ -159,18 +156,15 @@ export default function BookDropOff() {
       }
       setPaymentMethod(pm ?? "unknown");
 
-      const [listingSnap, buyerSnap] = await Promise.all([
+      const [listingSnap, sellerSnap] = await Promise.all([
         getDoc(doc(db, "listings", txn.listingId)),
-        getDoc(doc(db, "users",    txn.buyerId)),
+        getDoc(doc(db, "users",    txn.sellerId)),
       ]);
 
       if (listingSnap.exists()) setListing({ id: listingSnap.id, ...listingSnap.data() });
-      if (buyerSnap.exists()) {
-        const b = buyerSnap.data();
-        setBuyerName(
-          (b.firstName && b.lastName) ? `${b.firstName} ${b.lastName}` :
-          b.displayName || b.name || b.firstName || "Buyer"
-        );
+      if (sellerSnap.exists()) {
+        const s = sellerSnap.data();
+        setSellerName(s.displayName || s.name || s.firstName || "Seller");
       }
     } catch (err) {
       console.error(err);
@@ -183,12 +177,11 @@ export default function BookDropOff() {
   useEffect(() => {
     const unsub = auth.onAuthStateChanged((user) => {
       if (user) fetchTransaction(user.uid);
-      else { setLoading(false); setError("Please log in to book a drop-off."); }
+      else { setLoading(false); setError("Please log in to book a pick-up"); }
     });
     return () => unsub();
   }, [fetchTransaction]);
 
-  // ── Build slot counts when date changes ───────────────────────
   useEffect(() => {
     if (!selectedDate) return;
     setSelectedTimeSlot("");
@@ -197,8 +190,7 @@ export default function BookDropOff() {
       setSlotsLoading(true);
       try {
         const snap = await getDocs(query(
-          collection(db, "bookings"),
-          where("date", "==", selectedDate)
+          collection(db, "pickupBookings"), where("date", "==", selectedDate)
         ));
 
         const booked = {};
@@ -224,63 +216,57 @@ export default function BookDropOff() {
 
   async function handleSubmit(e) {
     e.preventDefault();
-    if (!selectedDate)     return setError("Please select a date.");
-    if (!selectedTimeSlot) return setError("Please select a time slot.");
+    if (!selectedDate)     return setError("Please select a date");
+    if (!selectedTimeSlot) return setError("Please select a time slot");
 
     setSubmitting(true);
     setError("");
 
     try {
       const latest = await getDoc(doc(db, "transactions", transaction.id));
-      if (latest.data().bookingId)
-        return setError("A drop-off was already booked for this transaction.");
+      if (latest.data().pickupBookingId)
+        return setError("This pick-up was already booked by someone else.");
 
-      const bookingRef = await addDoc(collection(db, "bookings"), {
-        transactionId:  transaction.id,
-        listingId:      transaction.listingId,
-        sellerId:       transaction.sellerId,
-        buyerId:        transaction.buyerId,
-        date:           selectedDate,
-        timeSlot:       selectedTimeSlot,
-        status:         "scheduled",
-        createdAt:      serverTimestamp(),
-        updatedAt:      serverTimestamp(),
+      const bookingRef = await addDoc(collection(db, "pickupBookings"), {
+        transactionId: transaction.id,
+        listingId:     transaction.listingId,
+        sellerId:      transaction.sellerId,
+        buyerId:       transaction.buyerId,
+        date:          selectedDate,
+        timeSlot:      selectedTimeSlot,
+        status:        "scheduled",
+        createdAt:     serverTimestamp(),
+        updatedAt:     serverTimestamp(),
       });
 
       await Promise.all([
         updateDoc(doc(db, "transactions", transaction.id), {
-          bookingId:       bookingRef.id,
-          dropOffStatus:   "scheduled",
-          dropOffDate:     selectedDate,
-          dropOffTimeSlot: selectedTimeSlot,
-          updatedAt:       serverTimestamp(),
+          pickupBookingId:  bookingRef.id,
+          pickupStatus:     "scheduled",
+          pickupDate:       selectedDate,
+          pickupTimeSlot:   selectedTimeSlot,
         }),
-        // Notify seller
         addDoc(collection(db, "notifications"), {
-          userId:        transaction.sellerId,
-          type:          "dropoff_booked",
-          transactionId: transaction.id,
-          title:         "Drop-off booked",
-          message:       `Your drop-off for "${listing?.title}" is scheduled on ${selectedDate} at ${selectedTimeSlot}.`,
-          read:          false,
-          createdAt:     serverTimestamp(),
+          userId:    transaction.buyerId,
+          title:     "Pick-up booked",
+          message:   `Your pick-up for ${listing?.title} is scheduled on ${selectedDate} at ${selectedTimeSlot}.`,
+          read:      false,
+          createdAt: serverTimestamp(),
         }),
-        // Notify buyer
+        // Also notify seller
         addDoc(collection(db, "notifications"), {
-          userId:        transaction.buyerId,
-          type:          "dropoff_booked",
-          transactionId: transaction.id,
-          title:         "Seller booked drop-off",
-          message:       `The seller has scheduled a drop-off for "${listing?.title}" on ${selectedDate} at ${selectedTimeSlot}.`,
-          read:          false,
-          createdAt:     serverTimestamp(),
+          userId:    transaction.sellerId,
+          title:     "Buyer booked pick-up",
+          message:   `The buyer has scheduled a pick-up for ${listing?.title} on ${selectedDate} at ${selectedTimeSlot}.`,
+          read:      false,
+          createdAt: serverTimestamp(),
         }),
       ]);
 
       navigate("/trade-facility");
     } catch (err) {
       console.error(err);
-      setError("Failed to book drop-off: " + err.message);
+      setError("Failed to book: " + err.message);
     } finally {
       setSubmitting(false);
     }
@@ -327,60 +313,39 @@ export default function BookDropOff() {
     );
   }
 
-  // Calculate price for display
-  const price = transaction?.price 
-    ? formatPrice(transaction.price) 
-    : listing?.price 
-      ? formatPrice(listing.price) 
-      : "0";
-
-  // Get payment banner based on payment method and price
-  const banner = getPaymentBanner(paymentMethod, price);
-
-  // ── Loading skeleton ──────────────────────────────────────────
   if (loading) {
     return (
       <>
         <NavBar />
         <div className={styles.page}>
-          <div className={styles.skeletonHeader}>
-            <div className={`${styles.shimmer} ${styles.skeletonBlock}`}
-                 style={{ height: 28, marginBottom: 10, maxWidth: 280 }} />
-            <div className={`${styles.shimmer} ${styles.skeletonBlock}`}
-                 style={{ height: 14, maxWidth: 340 }} />
-          </div>
-          <div className={`${styles.shimmer} ${styles.skeletonBlock}`}
-               style={{ height: 110, marginBottom: 14, borderRadius: 14 }} />
-          <div className={`${styles.shimmer} ${styles.skeletonBlock}`}
-               style={{ height: 50, marginBottom: 24, borderRadius: 10 }} />
-          <div className={`${styles.shimmer} ${styles.skeletonBlock}`}
-               style={{ height: 44, marginBottom: 16, borderRadius: 9 }} />
-          <div className={`${styles.shimmer} ${styles.skeletonBlock}`}
-               style={{ height: 120, marginBottom: 24, borderRadius: 9 }} />
-          <div className={`${styles.shimmer} ${styles.skeletonBlock}`}
-               style={{ height: 44, borderRadius: 9 }} />
+          <div className={`${styles.skeletonBlock} ${styles.shimmer}`}
+               style={{ height: 20, width: 100, marginBottom: 14 }} />
+          <div className={`${styles.skeletonBlock} ${styles.shimmer}`}
+               style={{ height: 28, width: "60%", marginBottom: 8 }} />
+          <div className={`${styles.skeletonBlock} ${styles.shimmer}`}
+               style={{ height: 16, width: "40%", marginBottom: 24 }} />
+          <div className={`${styles.skeletonBlock} ${styles.shimmer}`}
+               style={{ height: 110, marginBottom: 14 }} />
+          <div className={`${styles.skeletonBlock} ${styles.shimmer}`}
+               style={{ height: 72, marginBottom: 24 }} />
         </div>
       </>
     );
   }
 
-  // ── Error state ───────────────────────────────────────────────
   if (error && !transaction) {
     return (
       <>
         <NavBar />
         <div className={styles.page}>
           <div className={styles.errorBox}>
-            <svg width="28" height="28" viewBox="0 0 24 24" fill="none"
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none"
                  stroke="currentColor" strokeWidth="1.5">
-              <circle cx="12" cy="12" r="10"/>
-              <line x1="12" y1="8" x2="12" y2="12"/>
-              <line x1="12" y1="16" x2="12.01" y2="16"/>
+              <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" />
+              <line x1="12" y1="16" x2="12.01" y2="16" />
             </svg>
-            <p style={{ margin: 0 }}>{error}</p>
-            <button className={styles.cancelBtn}
-                    style={{ maxWidth: 200 }}
-                    onClick={() => navigate("/trade-facility")}>
+            <p>{error}</p>
+            <button className={styles.cancelBtn} onClick={() => navigate("/trade-facility")}>
               Back to Trade Facility
             </button>
           </div>
@@ -389,7 +354,9 @@ export default function BookDropOff() {
     );
   }
 
-  // ── Main form ─────────────────────────────────────────────────
+  const price  = formatPrice(transaction?.agreedPrice ?? listing?.price);
+  const banner = getPaymentBanner(paymentMethod, price);
+
   return (
     <>
       <NavBar />
@@ -397,21 +364,20 @@ export default function BookDropOff() {
 
         {/* ── Page header ── */}
         <div className={styles.pageHeader}>
-          <button className={styles.backLink}
-                  onClick={() => navigate("/trade-facility")}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+          <button className={styles.backLink} onClick={() => navigate("/trade-facility")}>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none"
                  stroke="currentColor" strokeWidth="2">
               <polyline points="15 18 9 12 15 6"/>
             </svg>
             Trade Facility
           </button>
-          <h1 className={styles.heading}>Book drop-off slot</h1>
+          <h1 className={styles.heading}>Book your pick-up</h1>
           <p className={styles.subheading}>
-            Schedule when you'll drop off the item for {buyerName}.
+            Schedule when you'll collect your item from {sellerName}.
           </p>
         </div>
 
-        {/* Item summary */}
+        {/* ── Summary card ── */}
         <div className={styles.summaryCard}>
           <div className={styles.summaryTop}>
             <div className={styles.summaryImgWrap}>
@@ -438,11 +404,27 @@ export default function BookDropOff() {
 
           <div className={styles.summaryDivider} />
 
+          {/* Drop-off info row */}
+          {transaction?.dropOffDate && (
+            <div className={styles.dropOffInfo}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
+                   stroke="currentColor" strokeWidth="2">
+                <rect x="3" y="4" width="18" height="18" rx="2"/>
+                <line x1="16" y1="2" x2="16" y2="6"/>
+                <line x1="8"  y1="2" x2="8"  y2="6"/>
+                <line x1="3"  y1="10" x2="21" y2="10"/>
+              </svg>
+              Item dropped off on {transaction.dropOffDate} at {transaction.dropOffTimeSlot}
+            </div>
+          )}
+
+          <div className={styles.summaryDivider} />
+
           {/* Transaction detail row */}
           <div className={styles.txnGrid}>
             <div className={styles.txnCell}>
-              <span className={styles.txnLabel}>Buyer</span>
-              <span className={styles.txnValue}>{buyerName}</span>
+              <span className={styles.txnLabel}>Seller</span>
+              <span className={styles.txnValue}>{sellerName}</span>
             </div>
             <div className={styles.txnCell}>
               <span className={styles.txnLabel}>Amount</span>
@@ -495,41 +477,24 @@ export default function BookDropOff() {
         {/* ── Form ── */}
         <form className={styles.form} onSubmit={handleSubmit}>
           <div className={styles.fieldGroup}>
-            <label className={styles.label}>Drop-off date</label>
-            <input
-              type="date"
-              className={styles.input}
-              value={selectedDate}
-              onChange={e => setSelectedDate(e.target.value)}
-              min={minDate}
-              required
-            />
+            <label className={styles.label}>Pick-up date</label>
+            <input type="date" className={styles.input} value={selectedDate}
+                   onChange={e => setSelectedDate(e.target.value)} min={minDate} required />
           </div>
 
           <div className={styles.fieldGroup}>
             <label className={styles.label}>
               Time slot
               {selectedTimeSlot && (
-                <span className={styles.selectedBadge}>{selectedTimeSlot}</span>
+                <span className={styles.selectedBadge}>{selectedTimeSlot} selected</span>
               )}
             </label>
             {!selectedDate
               ? <p className={styles.slotHint}>Select a date above to see available slots.</p>
-              : renderSlotGrid()
-            }
+              : renderSlotGrid()}
           </div>
 
-          {error && (
-            <div className={styles.inlineError}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-                   stroke="currentColor" strokeWidth="2">
-                <circle cx="12" cy="12" r="10"/>
-                <line x1="12" y1="8" x2="12" y2="12"/>
-                <line x1="12" y1="16" x2="12.01" y2="16"/>
-              </svg>
-              {error}
-            </div>
-          )}
+          {error && <div className={styles.inlineError}>{error}</div>}
 
           <div className={styles.actions}>
             <button type="button" className={styles.cancelBtn}
@@ -543,8 +508,7 @@ export default function BookDropOff() {
             >
               {submitting
                 ? <><span className={styles.spinner} /> Booking…</>
-                : "Confirm drop-off slot"
-              }
+                : "Confirm pick-up"}
             </button>
           </div>
         </form>
