@@ -15,8 +15,8 @@ function formatPrice(value) {
 }
 
 export default function TradeFacility() {
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [user, setUser]                 = useState(null);
+  const [loading, setLoading]           = useState(true);
   const [transactions, setTransactions] = useState([]);
   const navigate = useNavigate();
 
@@ -43,35 +43,73 @@ export default function TradeFacility() {
   async function fetchTransactions(uid) {
     setLoading(true);
     try {
-      // CHANGE: Use "waiting" instead of "accepted"
-      // (or whichever status your team set after buyer confirms payment)
-      const q = query(
-        collection(db, "transactions"),
-        where("sellerId", "==", uid),
-        where("status", "==", "waiting")   // ✅ buyer has confirmed payment
-      );
-      const snapshot = await getDocs(q);
+      const ACTIVE_STATUSES = ["accepted", "in_facility", "ready_to_release", "awaiting_collection"];
 
-      const txns = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-
-      const [listingSnaps, buyerSnaps] = await Promise.all([
-        Promise.all(txns.map(t => getDoc(doc(db, "listings", t.listingId)))),
-        Promise.all(txns.map(t => getDoc(doc(db, "users",    t.buyerId)))),
+      // Fetch as seller AND as buyer across all statuses
+      const [sellerSnaps, buyerSnaps] = await Promise.all([
+        Promise.all(
+          ACTIVE_STATUSES.map(status =>
+            getDocs(query(
+              collection(db, "transactions"),
+              where("sellerId", "==", uid),
+              where("status", "==", status)
+            ))
+          )
+        ),
+        Promise.all(
+          ACTIVE_STATUSES.map(status =>
+            getDocs(query(
+              collection(db, "transactions"),
+              where("buyerId", "==", uid),
+              where("status", "==", status)
+            ))
+          )
+        ),
       ]);
 
-      const enriched = txns.map((txn, i) => {
-        if (listingSnaps[i].exists()) txn.listing = listingSnaps[i].data();
-        if (buyerSnaps[i].exists()) {
-          const b = buyerSnaps[i].data();
-          txn.buyerName =
-            (b.firstName && b.lastName) ? `${b.firstName} ${b.lastName}` :
-            b.displayName || b.name ||
-            (b.email ? b.email.split("@")[0] : "Buyer");
-        } else {
-          txn.buyerName = "Unknown User";
-        }
-        return txn;
+      // Merge and deduplicate
+      const seen = new Set();
+      const txns = [];
+      [...sellerSnaps, ...buyerSnaps].forEach(snap => {
+        snap.docs.forEach(d => {
+          if (!seen.has(d.id)) {
+            seen.add(d.id);
+            txns.push({ id: d.id, ...d.data(), _currentUserId: uid });
+          }
+        });
       });
+
+      // Enrich with listing + counterparty name
+      const enriched = await Promise.all(
+        txns.map(async (txn) => {
+          const isSeller = txn.sellerId === uid;
+          const counterpartyId = isSeller ? txn.buyerId : txn.sellerId;
+
+          const [listingSnap, counterpartySnap] = await Promise.all([
+            getDoc(doc(db, "listings", txn.listingId)),
+            getDoc(doc(db, "users", counterpartyId)),
+          ]);
+
+          if (listingSnap.exists()) txn.listing = listingSnap.data();
+
+          if (counterpartySnap.exists()) {
+            const u = counterpartySnap.data();
+            txn.counterpartyName =
+              (u.firstName && u.lastName) ? `${u.firstName} ${u.lastName}` :
+              u.displayName || u.name ||
+              (u.email ? u.email.split("@")[0] : isSeller ? "Buyer" : "Seller");
+          } else {
+            txn.counterpartyName = isSeller ? "Unknown Buyer" : "Unknown Seller";
+          }
+
+          txn.isSeller = isSeller;
+          return txn;
+        })
+      );
+
+      // Sort: accepted first, then in_facility, ready_to_release, awaiting_collection
+      const ORDER = { accepted: 0, in_facility: 1, ready_to_release: 2, awaiting_collection: 3 };
+      enriched.sort((a, b) => (ORDER[a.status] ?? 9) - (ORDER[b.status] ?? 9));
 
       setTransactions(enriched);
     } catch (err) {
@@ -82,15 +120,45 @@ export default function TradeFacility() {
   }
 
   function getStatusBadge(txn) {
+    if (txn.status === "awaiting_collection")
+      return { label: "Awaiting Collection", color: "#6d28d9", bg: "#ede9fe" };
+    if (txn.status === "ready_to_release")
+      return { label: "Ready to Release",    color: "#c2410c", bg: "#ffedd5" };
+    if (txn.status === "in_facility")
+      return { label: "Item at Facility",    color: "#0369a1", bg: "#e0f2fe" };
     if (txn.dropOffStatus === "dropped_off")
-      return { label: "Item dropped off",   color: "#166534", bg: "#dcfce7" };
+      return { label: "Item dropped off",    color: "#166534", bg: "#dcfce7" };
     if (txn.dropOffStatus === "scheduled")
-      return { label: "Drop-off scheduled", color: "#92400e", bg: "#fef3c7" };
-    // For waiting status (buyer confirmed)
-    if (txn.status === "waiting")
-      return { label: "Waiting for drop-off", color: "#1e40af", bg: "#dbeafe" };
-    return   { label: txn.status,           color: "#374151", bg: "#f3f4f6" };
+      return { label: "In Facility",         color: "#92400e", bg: "#fef3c7" };
+    if (txn.status === "accepted")
+      return { label: "Book drop-off",       color: "#1e40af", bg: "#dbeafe" };
+    return   { label: txn.status,            color: "#374151", bg: "#f3f4f6" };
   }
+
+  // Seller needs to drop off - status accepted, no booking yet
+  // Note: don't gate on dropOffStatus since it may not be set yet
+  const canBookDropOff = (txn) =>
+    txn.isSeller &&
+    txn.status === "accepted" &&
+    !txn.bookingId;
+
+  // Drop-off already scheduled
+  const hasDropOffBooked = (txn) =>
+    txn.isSeller &&
+    (txn.dropOffStatus === "scheduled" || !!txn.bookingId);
+
+  // Anyone involved can book collection once item is at facility and not yet booked.
+  // Buyers always can; sellers can if it's a trade (they also receive the buyer's item).
+  const canBookCollection = (txn) => {
+    const itemAtFacility = ["in_facility", "ready_to_release", "awaiting_collection"].includes(txn.status);
+    if (!itemAtFacility || txn.collectionBookingId) return false;
+    if (!txn.isSeller) return true;
+    return txn.type === "trade";
+  };
+
+  // Collection already booked - show confirmation to anyone involved
+  const hasCollectionBooked = (txn) =>
+    !!txn.collectionBookingId;
 
   if (loading) {
     return (
@@ -148,8 +216,8 @@ export default function TradeFacility() {
         <div className={styles.header}>
           <div>
             <h1 className={styles.heading}>Trade Facility</h1>
-            <p className={styles.subheading}> 
-              <strong> Track your drop-offs, collections and trade exchanges </strong>
+            <p className={styles.subheading}>
+              <strong>Track your drop-offs, collections and trade exchanges</strong>
             </p>
           </div>
           {transactions.length > 0 && (
@@ -182,13 +250,13 @@ export default function TradeFacility() {
             {transactions.map((txn, idx) => {
               const badge    = getStatusBadge(txn);
               const imageUrl = txn.listing?.photos?.[0] ?? null;
+
               return (
                 <div key={txn.id} className={styles.card}
                      style={{ animationDelay: `${idx * 0.06}s` }}>
                   <div className={styles.imgWrap}>
                     {imageUrl
-                      ? <img src={imageUrl} alt={txn.listing?.title}
-                             className={styles.img} />
+                      ? <img src={imageUrl} alt={txn.listing?.title} className={styles.img} />
                       : <div className={styles.imgPlaceholder}>
                           <svg width="24" height="24" viewBox="0 0 24 24" fill="none"
                                stroke="#9ca3af" strokeWidth="1.5">
@@ -203,6 +271,20 @@ export default function TradeFacility() {
                   <div className={styles.cardBody}>
                     <p className={styles.itemTitle}>
                       {txn.listing?.title ?? "Item"}
+                      {/* Role pill — so user knows if they're buyer or seller */}
+                      <span style={{
+                        marginLeft: 6, fontSize: "0.7rem", borderRadius: 4,
+                        padding: "1px 6px",
+                        background: txn.isSeller ? "#dcfce7" : "#dbeafe",
+                        color:      txn.isSeller ? "#166534" : "#1e40af",
+                      }}>
+                        {txn.isSeller ? "Selling" : "Buying"}
+                      </span>
+                      {txn.type === "trade" && (
+                        <span style={{ marginLeft: 4, fontSize: "0.7rem", background: "#ede9fe", color: "#6d28d9", borderRadius: 4, padding: "1px 6px" }}>
+                          Trade
+                        </span>
+                      )}
                     </p>
 
                     <div className={styles.metaRow}>
@@ -216,20 +298,30 @@ export default function TradeFacility() {
                           <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/>
                           <circle cx="12" cy="7" r="4"/>
                         </svg>
-                        {txn.buyerName}
+                        {txn.isSeller ? `Buyer: ${txn.counterpartyName}` : `Seller: ${txn.counterpartyName}`}
                       </span>
                     </div>
 
+                    {/* Drop-off schedule info */}
                     {txn.dropOffDate && (
                       <p className={styles.dropOffDate}>
-                        Scheduled: {txn.dropOffDate} · {txn.dropOffTimeSlot}
+                        Drop-off: {txn.dropOffDate} · {txn.dropOffTimeSlot}
                       </p>
                     )}
 
-                    {/* Show book button only if drop‑off not already scheduled */}
-                    {txn.status === "waiting" && !txn.dropOffStatus && (
-                      <button className={styles.dropOffBtn}
-                              onClick={() => navigate(`/book-dropoff/${txn.id}`)}>
+                    {/* Collection schedule info */}
+                    {txn.collectionDate && (
+                      <p className={styles.dropOffDate} style={{ color: "#6d28d9" }}>
+                        Collection: {txn.collectionDate} · {txn.collectionTimeSlot}
+                      </p>
+                    )}
+
+                    {/* ── SELLER: Book drop-off ── */}
+                    {canBookDropOff(txn) && (
+                      <button
+                        className={styles.dropOffBtn}
+                        onClick={() => navigate(`/book-dropoff/${txn.id}`)}
+                      >
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
                              stroke="currentColor" strokeWidth="2.5">
                           <rect x="3" y="4" width="18" height="18" rx="2"/>
@@ -239,6 +331,40 @@ export default function TradeFacility() {
                         </svg>
                         Book drop-off
                       </button>
+                    )}
+
+                    {/* ── SELLER: Drop-off already booked ── */}
+                    {hasDropOffBooked(txn) && (
+                      <p style={{ fontSize: "0.75rem", color: "#166534", marginTop: 4 }}>
+                        <i className="fas fa-calendar-check" style={{ marginRight: 4 }} />
+                        Drop-off slot booked
+                      </p>
+                    )}
+
+                    {/* ── BUYER: Book collection ── */}
+                    {canBookCollection(txn) && (
+                      <button
+                        className={styles.dropOffBtn}
+                        style={{ background: "#6d28d9", marginTop: 6 }}
+                        onClick={() => navigate(`/book-collection/${txn.id}`)}
+                      >
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
+                             stroke="currentColor" strokeWidth="2.5">
+                          <rect x="3" y="4" width="18" height="18" rx="2"/>
+                          <line x1="16" y1="2" x2="16" y2="6"/>
+                          <line x1="8"  y1="2" x2="8"  y2="6"/>
+                          <line x1="3"  y1="10" x2="21" y2="10"/>
+                        </svg>
+                        Book collection
+                      </button>
+                    )}
+
+                    {/* ── BUYER: Collection already booked ── */}
+                    {hasCollectionBooked(txn) && (
+                      <p style={{ fontSize: "0.75rem", color: "#6d28d9", marginTop: 4 }}>
+                        <i className="fas fa-calendar-check" style={{ marginRight: 4 }} />
+                        Collection slot booked
+                      </p>
                     )}
                   </div>
 

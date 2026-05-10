@@ -43,6 +43,7 @@ import ProfileListingCard from './components/ProfileListingCard';
 // SPRINT 2 IMPORTS
 import TradeFacility from './components/TradeFacility';
 import BookDropOff from './components/BookDropOff';
+import BookCollection from './components/BookCollection';
 
 // SPRINT 3 IMPORTS
 import AdminAnalytics from './components/AdminAnalytics';
@@ -273,6 +274,16 @@ export function AppRoutes() {
         element={
           <ProtectedRoute allowedRoles={['student']}>
             <BookDropOff />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Added from your stash — was missing from develop */}
+      <Route
+        path="/book-collection/:transactionId"
+        element={
+          <ProtectedRoute allowedRoles={['student']}>
+            <BookCollection />
           </ProtectedRoute>
         }
       />
