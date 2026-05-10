@@ -27,6 +27,7 @@ import ReviewForm from './components/ReviewForm.jsx';
 import Notificationspage from './components/Notificationspage.jsx';
 import MyPurchases from './components/MyPurchases.jsx';
 import Payment from './components/Payment.jsx';
+import AdminProfile from "./components/adminProfile";
 import PaymentSuccess from './components/PaymentSuccess.jsx';
 import PaymentCancelled from './components/PaymentCancelled.jsx';
 import ReportsPage from './components/ReportsPage';
@@ -229,6 +230,8 @@ export function AppRoutes() {
       <Route path="/review/:transactionId" element={<ReviewForm />} />
       <Route path="/edit-listing/:id" element={<EditListing />} />
       <Route path="/azure/create-listing" element={<CreateListingAzure />} />
+
+      <Route path="/admin/profile" element={<ProtectedRoute allowedRoles={['admin']}><AdminProfile /></ProtectedRoute>} />
 
       {/* Student Routes */}
       <Route

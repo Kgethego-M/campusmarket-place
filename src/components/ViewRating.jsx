@@ -302,8 +302,8 @@ export default function ViewSellerRatings({ userId: propUserId, onBack }) {
   const activeLabel = activeTab === 'seller' ? 'reviews as seller' : 'reviews as buyer';
 
   const currentUid = auth.currentUser?.uid;
-  // Owner of this profile page can report reviews left on them
-  const isOwnProfile = currentUid === userId;
+  // Show report button to any logged-in user who didn't write the review
+  const canReportReview = (review) => !!currentUid && currentUid !== review.reviewerUserId;
   const handleReportReview = (review) => setReportReview(review);
 
   return (
@@ -424,7 +424,7 @@ export default function ViewSellerRatings({ userId: propUserId, onBack }) {
               <>
                 <div className={styles.transactionsList}>
                   {previewReviews.map((review, i) => (
-                    <ReviewCard key={review.id} review={review} animate delay={i * 60} onReport={isOwnProfile ? handleReportReview : null} />
+                    <ReviewCard key={review.id} review={review} animate delay={i * 60} onReport={canReportReview(review) ? handleReportReview : null} />
                   ))}
                 </div>
                 {hasMore && (
@@ -477,7 +477,7 @@ export default function ViewSellerRatings({ userId: propUserId, onBack }) {
 
       <Drawer open={reviewDrawerOpen} onClose={() => setReviewDrawerOpen(false)} title={`All ${activeTab} reviews (${totalReviews})`}>
         <div className={styles.drawerReviewList}>
-          {reviews.map((review, i) => <ReviewCard key={review.id} review={review} animate delay={i * 40} onReport={isOwnProfile ? handleReportReview : null} />)}
+          {reviews.map((review, i) => <ReviewCard key={review.id} review={review} animate delay={i * 40} onReport={canReportReview(review) ? handleReportReview : null} />)}
         </div>
       </Drawer>
 
