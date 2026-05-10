@@ -395,9 +395,15 @@ function TransactionDetailPanel({ txn, onClose, onConfirmDropOff, onConfirmColle
                     )}
 
                     {/* ── Checklist ── */}
-                    {txn.status !== "pending" && (
+                    {(txn.status !== "pending" || (txn.status === "pending" && txn.dropOffBooked)) && (
                         <div className={styles.detailSection} style={{ marginTop: 8 }}>
                             <h3 className={styles.detailSectionTitle}><i className="fa-solid fa-clipboard-check" /> Inspection Checklist</h3>
+                            {txn.status === "pending" && !allChecked && dropOffTimeReached && (
+                                <div className={styles.timeGateBanner} style={{ marginBottom: 8, background: "rgba(245,158,11,0.1)", borderColor: "#f59e0b", color: "#b45309" }}>
+                                    <i className="fa-solid fa-triangle-exclamation" />
+                                    <span>Complete <strong>all inspection steps</strong> before confirming drop-off.</span>
+                                </div>
+                            )}
                             {!dropOffTimeReached && (
                                 <div className={styles.timeGateBanner}>
                                     <i className="fa-solid fa-lock" />
@@ -432,14 +438,20 @@ function TransactionDetailPanel({ txn, onClose, onConfirmDropOff, onConfirmColle
                                     <span>Drop-off confirmation unlocks on <strong>{txn.dropOffDate}</strong>{txn.dropOffTimeSlot && <> at <strong>{txn.dropOffTimeSlot}</strong></>}.</span>
                                 </div>
                             )}
+                            {dropOffTimeReached && !allChecked && (
+                                <div className={styles.timeGateBanner} style={{ marginBottom: 8, background: "rgba(245,158,11,0.1)", borderColor: "#f59e0b", color: "#b45309" }}>
+                                    <i className="fa-solid fa-clipboard-list" />
+                                    <span>Complete the <strong>inspection checklist</strong> above before confirming drop-off.</span>
+                                </div>
+                            )}
                             <button
                                 className={styles.dropOffBtn}
                                 onClick={handleDropOff}
-                                disabled={dropOffLoading || !dropOffTimeReached}
-                                style={!dropOffTimeReached ? { opacity: 0.45, cursor: "not-allowed" } : undefined}
+                                disabled={dropOffLoading || !dropOffTimeReached || !allChecked}
+                                style={(!dropOffTimeReached || !allChecked) ? { opacity: 0.45, cursor: "not-allowed" } : undefined}
                             >
-                                <i className={`fa-solid ${dropOffLoading ? "fa-spinner fa-spin" : !dropOffTimeReached ? "fa-lock" : "fa-box-archive"}`} />
-                                {dropOffLoading ? "Confirming…" : !dropOffTimeReached ? "Confirm Drop-Off (Locked)" : "Confirm Drop-Off"}
+                                <i className={`fa-solid ${dropOffLoading ? "fa-spinner fa-spin" : !dropOffTimeReached ? "fa-lock" : !allChecked ? "fa-clipboard-list" : "fa-box-archive"}`} />
+                                {dropOffLoading ? "Confirming…" : !dropOffTimeReached ? "Confirm Drop-Off (Locked)" : !allChecked ? "Complete Inspection First" : "Confirm Drop-Off"}
                             </button>
                         </>
                     )}
