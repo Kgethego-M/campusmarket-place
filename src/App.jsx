@@ -43,6 +43,8 @@ import ProfileListingCard from './components/ProfileListingCard';
 // SPRINT 2 IMPORTS
 import TradeFacility from './components/TradeFacility';
 import BookDropOff from './components/BookDropOff';
+import BookPickUp from './components/BookPickUp';
+
 import BookCollection from './components/BookCollection';
 
 // SPRINT 3 IMPORTS
@@ -209,6 +211,20 @@ export function AppRoutes() {
       <Route path="/profile" element={<Profile />} />
       <Route path="/profile/:userId" element={<ViewRating />} />
       <Route path="/view-rating" element={<ViewRating userId="sampleUserId" />} />
+      <Route path="/chat" element={<ProtectedRoute allowedRoles={['student']}><Chat/></ProtectedRoute>} />
+      <Route path="/chat/:transactionId" element={<Chat />} />
+      <Route path="/edit-listing/:id" element={<EditListing />} />
+      <Route path="/access-denied" element={<AccessDenied />} />
+      <Route path="/staff" element={<ProtectedRoute allowedRoles={['staff']}><StaffDashboard /></ProtectedRoute>} />
+      <Route path="/admin" element={<ProtectedRoute allowedRoles={['admin']}><AdminDashboard /></ProtectedRoute>}/>
+      
+      {/* SPRINT 2 ROUTES */}
+      <Route path="/trade-facility" element={<ProtectedRoute allowedRoles={['student']}><TradeFacility /></ProtectedRoute>} />
+      <Route path="/book-dropoff/:transactionId" element={<ProtectedRoute allowedRoles={['student']}><BookDropOff /></ProtectedRoute>} />
+      <Route path="/book-pickup/:transactionId" element={<ProtectedRoute allowedRoles={['student']}><BookPickUp /></ProtectedRoute>} />
+      <Route path="/payment/:txId" element={<ProtectedRoute allowedRoles={['student']}><Payment /></ProtectedRoute>} />
+
+      <Route path="/azure/create-listing" element={<CreateListingAzure/>} />
       <Route path="/listing/:id" element={<ListingDetail />} />
       <Route path="/review/:transactionId" element={<ReviewForm />} />
       <Route path="/edit-listing/:id" element={<EditListing />} />

@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { collection, query, where, getDocs } from "firebase/firestore";
+import { collection, query, where, getDocs, doc, getDoc } from "firebase/firestore";
 import { useNavigate } from "react-router-dom";
 import { db } from "../firebase.js";
 
@@ -17,14 +17,31 @@ export default function AdBanner() {
 
   async function fetchActiveAds() {
     try {
-      const q = query(
-        collection(db, "ads"),
-        where("status", "==", "active")
-      );
+      const q = query(collection(db, "ads"), where("status", "==", "active"));
       const snapshot = await getDocs(q);
-      if (!snapshot.empty) {
-        const fetched = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        setAds(fetched);
+      if (snapshot.empty) return;
+
+      const validAds = [];
+      for (const docSnap of snapshot.docs) {
+        const ad = { id: docSnap.id, ...docSnap.data() };
+        if (ad.listingId) {
+          const listingSnap = await getDoc(doc(db, "listings", ad.listingId));
+          if (listingSnap.exists()) {
+            const listing = listingSnap.data();
+            const status = listing.status?.toLowerCase();
+            const unavailable = ["sold", "inactive", "accepted", "completed"];
+            if (!unavailable.includes(status)) {
+              validAds.push(ad);
+            }
+          }
+        } else {
+          // Ad without a listingId – you may want to skip it
+          validAds.push(ad);
+        }
+      }
+
+      if (validAds.length > 0) {
+        setAds(validAds);
         setVisible(true);
       }
     } catch (err) {
@@ -72,7 +89,6 @@ export default function AdBanner() {
       boxShadow: "0 -4px 16px rgba(0,0,0,0.1)",
       fontFamily: "'Segoe UI', sans-serif"
     }}>
-      {/* Sponsored badge */}
       <span style={{
         flexShrink: 0,
         fontSize: "11px",
@@ -81,15 +97,11 @@ export default function AdBanner() {
         backgroundColor: "#ff9800",
         padding: "4px 8px",
         borderRadius: "6px",
-        display: "flex",
-        alignItems: "center",
-        gap: "4px",
         whiteSpace: "nowrap"
       }}>
         ✦ Sponsored
       </span>
 
-      {/* Ad image */}
       {ad.imageUrl ? (
         <img
           src={ad.imageUrl}
@@ -118,7 +130,6 @@ export default function AdBanner() {
         />
       )}
 
-      {/* Ad text */}
       <div
         onClick={handleView}
         style={{ flex: 1, minWidth: 0, cursor: "pointer" }}
@@ -145,47 +156,16 @@ export default function AdBanner() {
         </p>
       </div>
 
-      {/* Prev / counter / Next */}
       {ads.length > 1 && (
-        <div style={{
-          display: "flex",
-          alignItems: "center",
-          gap: "8px",
-          flexShrink: 0
-        }}>
-          <button
-            onClick={handlePrev}
-            style={{
-              background: "none",
-              border: "none",
-              fontSize: "16px",
-              cursor: "pointer",
-              color: "#666",
-              padding: "4px"
-            }}
-          >
-            ‹
-          </button>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0 }}>
+          <button onClick={handlePrev} style={{ background: "none", border: "none", fontSize: "16px", cursor: "pointer", color: "#666", padding: "4px" }}>‹</button>
           <span style={{ fontSize: "12px", color: "#999", minWidth: "32px", textAlign: "center" }}>
             {currentIndex + 1}/{ads.length}
           </span>
-          <button
-            onClick={handleNext}
-            style={{
-              background: "none",
-              border: "none",
-              fontSize: "16px",
-              cursor: "pointer",
-              color: "#666",
-              padding: "4px"
-            }}
-          >
-            ›
-          </button>
+          <button onClick={handleNext} style={{ background: "none", border: "none", fontSize: "16px", cursor: "pointer", color: "#666", padding: "4px" }}>›</button>
         </div>
       )}
 
-      {/* View button */}
       <button
         onClick={handleView}
         style={{
@@ -203,7 +183,6 @@ export default function AdBanner() {
         View
       </button>
 
-      {/* Dismiss all */}
       <button
         onClick={handleDismissAll}
         style={{

@@ -1,4 +1,4 @@
-// src/components/ListingDetailView.jsx
+// src/components/ListingDetail.jsx
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
@@ -11,6 +11,7 @@ import { createTransaction } from '../services/transactionService';
 import { notifySellerOfOffer } from '../services/notificationService';
 import NavBarTemp from './NavBarTemp';
 import ReportModal from './ReportModal';
+import PromoteListingModal from './PromoteListingModal';   // ✅ ADDED
 
 // ── Toast ─────────────────────────────────────────────────────────────────────
 function Toast({ toast }) {
@@ -51,7 +52,6 @@ function ImageScroller({ photos, title }) {
     }
   }, [photos.length]);
 
-  // Touch handlers
   const onTouchStart = (e) => { startX.current = e.touches[0].clientX; };
   const onTouchEnd   = (e) => {
     if (startX.current === null) return;
@@ -59,8 +59,6 @@ function ImageScroller({ photos, title }) {
     if (Math.abs(delta) > 40) goTo(active + (delta > 0 ? 1 : -1));
     startX.current = null;
   };
-
-  // Mouse drag
   const onMouseDown = (e) => { startX.current = e.clientX; isDragging.current = false; };
   const onMouseMove = (e) => { if (startX.current !== null && Math.abs(e.clientX - startX.current) > 5) isDragging.current = true; };
   const onMouseUp   = (e) => {
@@ -87,7 +85,6 @@ function ImageScroller({ photos, title }) {
 
   return (
     <div style={imgStyles.root}>
-      {/* Main scroller */}
       <div
         style={imgStyles.wrapper}
         onTouchStart={onTouchStart}
@@ -98,23 +95,6 @@ function ImageScroller({ photos, title }) {
         onMouseLeave={onMouseUp}
       >
         <div ref={trackRef} style={imgStyles.track}>
-          {photos.map((src, i) => (
-            <div key={i} style={imgStyles.slide} aria-hidden="true">
-              <img
-                src={src}
-                alt=""
-                style={{
-                  ...imgStyles.img,
-                  opacity: i === active ? 1 : 0,
-                  transition: 'opacity 0.35s ease',
-                  position: i === 0 ? 'relative' : 'absolute',
-                  inset: 0,
-                }}
-                draggable={false}
-              />
-            </div>
-          ))}
-          {/* All images stacked, only active is visible */}
           <div style={{ position: 'relative', width: '100%', height: '100%' }}>
             {photos.map((src, i) => (
               <img
@@ -138,72 +118,26 @@ function ImageScroller({ photos, title }) {
             ))}
           </div>
         </div>
-
-        {/* Arrows — only if multiple photos */}
         {photos.length > 1 && (
           <>
-            <button
-              onClick={() => goTo(active - 1)}
-              disabled={active === 0}
-              style={{ ...imgStyles.arrow, left: 10, opacity: active === 0 ? 0.3 : 1 }}
-            >
-              ‹
-            </button>
-            <button
-              onClick={() => goTo(active + 1)}
-              disabled={active === photos.length - 1}
-              style={{ ...imgStyles.arrow, right: 10, opacity: active === photos.length - 1 ? 0.3 : 1 }}
-            >
-              ›
-            </button>
+            <button onClick={() => goTo(active - 1)} disabled={active === 0} style={{ ...imgStyles.arrow, left: 10, opacity: active === 0 ? 0.3 : 1 }}>‹</button>
+            <button onClick={() => goTo(active + 1)} disabled={active === photos.length - 1} style={{ ...imgStyles.arrow, right: 10, opacity: active === photos.length - 1 ? 0.3 : 1 }}>›</button>
           </>
         )}
-
-        {/* Counter pill */}
-        {photos.length > 1 && (
-          <div style={imgStyles.counter}>{active + 1} / {photos.length}</div>
-        )}
+        {photos.length > 1 && <div style={imgStyles.counter}>{active + 1} / {photos.length}</div>}
       </div>
-
-      {/* Dot indicators */}
       {photos.length > 1 && (
         <div style={imgStyles.dots}>
           {photos.map((_, i) => (
-            <button
-              key={i}
-              onClick={() => goTo(i)}
-              style={{
-                ...imgStyles.dot,
-                background: i === active ? '#6AA6DA' : '#d1d5db',
-                width: i === active ? 20 : 8,
-              }}
-            />
+            <button key={i} onClick={() => goTo(i)} style={{ ...imgStyles.dot, background: i === active ? '#6AA6DA' : '#d1d5db', width: i === active ? 20 : 8 }} />
           ))}
         </div>
       )}
-
-      {/* Thumbnail strip */}
       {photos.length > 1 && (
         <div style={imgStyles.thumbRow}>
           {photos.map((src, i) => (
-            <button
-              key={i}
-              onClick={() => goTo(i)}
-              style={{
-                ...imgStyles.thumb,
-                border: 'none',
-                opacity: i === active ? 1 : 0.6,
-              }}
-            >
-              <img
-                src={src}
-                alt={`thumb-${i}`}
-                style={{
-                  width: '100%', height: '100%', objectFit: 'cover', borderRadius: 5,
-                  border: i === active ? '2px solid #6AA6DA' : '2px solid transparent',
-                  boxSizing: 'border-box',
-                }}
-              />
+            <button key={i} onClick={() => goTo(i)} style={{ ...imgStyles.thumb, opacity: i === active ? 1 : 0.6 }}>
+              <img src={src} alt={`thumb-${i}`} style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 5, border: i === active ? '2px solid #6AA6DA' : '2px solid transparent' }} />
             </button>
           ))}
         </div>
@@ -213,58 +147,33 @@ function ImageScroller({ photos, title }) {
 }
 
 const imgStyles = {
-  root:    { display: 'flex', flexDirection: 'column', gap: 10 },
+  root: { display: 'flex', flexDirection: 'column', gap: 10 },
   wrapper: {
-    width: '100%',
-    aspectRatio: '4/3',
-    borderRadius: 12,
-    overflow: 'hidden',
-    backgroundColor: '#f0f2f5',
-    position: 'relative',
-    cursor: 'grab',
-    userSelect: 'none',
+    width: '100%', aspectRatio: '4/3', borderRadius: 12, overflow: 'hidden',
+    backgroundColor: '#f0f2f5', position: 'relative', cursor: 'grab', userSelect: 'none',
   },
-  track:   { position: 'absolute', inset: 0 },
-  slide:   { display: 'none' }, // hidden — we use absolute positioning above
-  img:     { width: '100%', height: '100%', objectFit: 'contain' },
+  track: { position: 'absolute', inset: 0 },
   placeholder: {
-    width: '100%', height: '100%',
-    display: 'flex', flexDirection: 'column',
-    alignItems: 'center', justifyContent: 'center',
-    backgroundColor: '#f0f2f5',
+    width: '100%', height: '100%', display: 'flex', flexDirection: 'column',
+    alignItems: 'center', justifyContent: 'center', backgroundColor: '#f0f2f5',
   },
   arrow: {
     position: 'absolute', top: '50%', transform: 'translateY(-50%)',
-    background: 'rgba(255,255,255,0.9)', border: 'none',
-    width: 34, height: 34, borderRadius: '50%',
-    fontSize: '1.4rem', lineHeight: '1', cursor: 'pointer',
+    background: 'rgba(255,255,255,0.9)', border: 'none', width: 34, height: 34,
+    borderRadius: '50%', fontSize: '1.4rem', lineHeight: '1', cursor: 'pointer',
     display: 'flex', alignItems: 'center', justifyContent: 'center',
-    boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-    transition: 'opacity 0.15s, transform 0.15s',
-    zIndex: 2,
-    fontFamily: 'serif',
+    boxShadow: '0 2px 8px rgba(0,0,0,0.15)', transition: 'opacity 0.15s, transform 0.15s',
+    zIndex: 2, fontFamily: 'serif',
   },
   counter: {
-    position: 'absolute', bottom: 10, right: 12,
-    background: 'rgba(0,0,0,0.45)', color: 'white',
-    fontSize: '0.72rem', fontWeight: 600,
-    padding: '2px 9px', borderRadius: 99,
+    position: 'absolute', bottom: 10, right: 12, background: 'rgba(0,0,0,0.45)', color: 'white',
+    fontSize: '0.72rem', fontWeight: 600, padding: '2px 9px', borderRadius: 99,
     fontFamily: 'Segoe UI, system-ui, sans-serif',
   },
   dots: { display: 'flex', justifyContent: 'center', gap: 6, padding: '2px 0' },
-  dot: {
-    height: 8, borderRadius: 99, border: 'none', cursor: 'pointer',
-    transition: 'width 0.25s ease, background 0.25s ease',
-    padding: 0,
-  },
+  dot: { height: 8, borderRadius: 99, border: 'none', cursor: 'pointer', transition: 'width 0.25s ease, background 0.25s ease', padding: 0 },
   thumbRow: { display: 'flex', gap: 8, flexWrap: 'wrap' },
-  thumb: {
-    width: 58, height: 58, borderRadius: 6,
-    overflow: 'hidden', cursor: 'pointer',
-    transition: 'border 0.15s, opacity 0.15s',
-    padding: 0, background: 'none',
-    flexShrink: 0,
-  },
+  thumb: { width: 58, height: 58, borderRadius: 6, overflow: 'hidden', cursor: 'pointer', transition: 'border 0.15s, opacity 0.15s', padding: 0, background: 'none', flexShrink: 0 },
 };
 
 // ── Icons ─────────────────────────────────────────────────────────────────────
@@ -317,6 +226,7 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
   const [inCart, setInCart]               = useState(false);
   const [cartLoading, setCartLoading]     = useState(false);
   const [toast, setToast]                 = useState(null);
+  const [showPromoteModal, setShowPromoteModal] = useState(false);   // ✅ ADDED
 
   const showToast = (msg, type = 'success') => {
     setToast({ msg, type });
@@ -518,6 +428,14 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
         reportedName={listing.title}
       />
 
+      {/* ✅ Promote modal */}
+      {showPromoteModal && (
+        <PromoteListingModal
+          listing={listing}
+          onClose={() => setShowPromoteModal(false)}
+        />
+      )}
+
       <div style={styles.page}>
 
         {/* ── Images (Shein-style) ── */}
@@ -618,6 +536,20 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
                 <p style={styles.ownerBannerSubtitle}>You are viewing your own listing. Edit it from your profile.</p>
               </div>
             </div>
+          )}
+
+          {/* ✅ PROMOTE LISTING BUTTON (only for owner) */}
+          {isOwnListing && (
+            <button
+              onClick={() => setShowPromoteModal(true)}
+              style={{
+                ...styles.buyBtn,
+                backgroundColor: '#ff9800',
+                marginTop: '8px',
+              }}
+            >
+              ✦ Promote listing
+            </button>
           )}
 
           {/* ── Seller card ── */}

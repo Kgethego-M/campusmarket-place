@@ -83,26 +83,22 @@ export default function BookCollection() {
 
       const txn = { id: transSnap.id, ...transSnap.data() };
 
-      // ✅ FIXED: Allow both buyer AND seller to book collection
       const isUserSeller = txn.sellerId === uid;
       const isUserBuyer  = txn.buyerId  === uid;
 
       if (!isUserSeller && !isUserBuyer)
         return setError("You are not part of this transaction.");
 
-      // Item must be at facility
       const ALLOWED_STATUSES = ["in_facility", "ready_to_release", "awaiting_collection"];
       if (!ALLOWED_STATUSES.includes(txn.status))
         return setError(`Item is not ready for collection yet. Current status: ${txn.status}`);
 
-      // Prevent double-booking
       if (txn.collectionBookingId)
         return setError("A collection slot has already been booked for this transaction.");
 
       setTransaction(txn);
       setIsSeller(isUserSeller);
 
-      // Load listing + counterparty
       const counterpartyId = isUserSeller ? txn.buyerId : txn.sellerId;
       const [listingSnap, counterpartySnap] = await Promise.all([
         getDoc(doc(db, "listings", txn.listingId)),
@@ -177,7 +173,6 @@ export default function BookCollection() {
     setError("");
 
     try {
-      // Race condition guard
       const latest = await getDoc(doc(db, "transactions", transaction.id));
       if (latest.data().collectionBookingId)
         return setError("A collection slot was already booked for this transaction.");
@@ -206,25 +201,26 @@ export default function BookCollection() {
         }),
         // Notify buyer
         addDoc(collection(db, "notifications"), {
-          userId:    transaction.buyerId,
-          type:      "collection_booked",
-          title:     "Collection slot booked",
-          message:   `Collection for "${listing?.title}" is scheduled on ${selectedDate} at ${selectedTimeSlot}. Please bring your student card.`,
-          read:      false,
-          createdAt: serverTimestamp(),
+          userId:        transaction.buyerId,
+          type:          "collection_booked",
+          transactionId: transaction.id,
+          title:         "Collection slot booked",
+          message:       `Collection for "${listing?.title}" is scheduled on ${selectedDate} at ${selectedTimeSlot}. Please bring your student card.`,
+          read:          false,
+          createdAt:     serverTimestamp(),
         }),
         // Notify seller
         addDoc(collection(db, "notifications"), {
-          userId:    transaction.sellerId,
-          type:      "collection_booked",
-          title:     "Collection slot booked",
-          message:   `Collection for "${listing?.title}" has been scheduled on ${selectedDate} at ${selectedTimeSlot}.`,
-          read:      false,
-          createdAt: serverTimestamp(),
+          userId:        transaction.sellerId,
+          type:          "collection_booked",
+          transactionId: transaction.id,
+          title:         "Collection slot booked",
+          message:       `Collection for "${listing?.title}" has been scheduled on ${selectedDate} at ${selectedTimeSlot}.`,
+          read:          false,
+          createdAt:     serverTimestamp(),
         }),
       ]);
 
-      // ✅ FIXED: Go back to trade facility, not my-purchases
       navigate("/trade-facility");
     } catch (err) {
       console.error(err);
