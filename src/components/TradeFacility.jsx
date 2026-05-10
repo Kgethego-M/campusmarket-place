@@ -209,52 +209,83 @@ export default function TradeFacility() {
   async function fetchTransactions(uid) {
     setLoading(true);
     try {
-      const sellerQ = query(
-        collection(db, "transactions"),
-        where("sellerId", "==", uid),
-        where("status", "==", "waiting")
-      );
-      const buyerQ = query(
-        collection(db, "transactions"),
-        where("buyerId", "==", uid),
-        where("status", "in", [
-          "pending", "pending_payment", "accepted", "waiting",
-          "in_facility", "ready_for_release", "awaiting_collection",
-        ])
-      );
+      const ACTIVE_STATUSES = [
+        "waiting",             // ← buyer agreed to pay; seller must book drop-off
+        "accepted",
+        "in_facility",
+        "ready_to_release",
+        "awaiting_collection",
+      ];
 
-      const [sellerSnap, buyerSnap] = await Promise.all([getDocs(sellerQ), getDocs(buyerQ)]);
-
-      const sellerTxns = sellerSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-      const buyerTxns  = buyerSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-
-      const [sListingSnaps, sBuyerSnaps] = await Promise.all([
-        Promise.all(sellerTxns.map(t => getDoc(doc(db, "listings", t.listingId)))),
-        Promise.all(sellerTxns.map(t => getDoc(doc(db, "users",    t.buyerId)))),
+      const [sellerSnaps, buyerSnaps] = await Promise.all([
+        Promise.all(
+          ACTIVE_STATUSES.map(status =>
+            getDocs(query(
+              collection(db, "transactions"),
+              where("sellerId", "==", uid),
+              where("status", "==", status)
+            ))
+          )
+        ),
+        Promise.all(
+          ACTIVE_STATUSES.map(status =>
+            getDocs(query(
+              collection(db, "transactions"),
+              where("buyerId", "==", uid),
+              where("status", "==", status)
+            ))
+          )
+        ),
       ]);
-      const enrichedSeller = sellerTxns.map((txn, i) => {
-        if (sListingSnaps[i].exists()) txn.listing = sListingSnaps[i].data();
-        if (sBuyerSnaps[i].exists()) {
-          const b = sBuyerSnaps[i].data();
-          txn.buyerName = (b.firstName && b.lastName) ? `${b.firstName} ${b.lastName}`
-            : b.displayName || b.name || (b.email ? b.email.split("@")[0] : "Buyer");
-        } else { txn.buyerName = "Unknown User"; }
-        return txn;
+
+      // Merge and deduplicate
+      const seen = new Set();
+      const txns = [];
+      [...sellerSnaps, ...buyerSnaps].forEach(snap => {
+        snap.docs.forEach(d => {
+          if (!seen.has(d.id)) {
+            seen.add(d.id);
+            txns.push({ id: d.id, ...d.data(), _currentUserId: uid });
+          }
+        });
       });
 
-      const [bListingSnaps, bSellerSnaps] = await Promise.all([
-        Promise.all(buyerTxns.map(t => getDoc(doc(db, "listings", t.listingId)))),
-        Promise.all(buyerTxns.map(t => getDoc(doc(db, "users",    t.sellerId)))),
-      ]);
-      const enrichedBuyer = buyerTxns.map((txn, i) => {
-        if (bListingSnaps[i].exists()) txn.listing = bListingSnaps[i].data();
-        if (bSellerSnaps[i].exists()) {
-          const s = bSellerSnaps[i].data();
-          txn.sellerName = (s.firstName && s.lastName) ? `${s.firstName} ${s.lastName}`
-            : s.displayName || s.name || (s.email ? s.email.split("@")[0] : "Seller");
-        } else { txn.sellerName = "Unknown User"; }
-        return txn;
-      });
+      // Enrich with listing + counterparty name
+      const enriched = await Promise.all(
+        txns.map(async (txn) => {
+          const isSeller = txn.sellerId === uid;
+          const counterpartyId = isSeller ? txn.buyerId : txn.sellerId;
+
+          const [listingSnap, counterpartySnap] = await Promise.all([
+            getDoc(doc(db, "listings", txn.listingId)),
+            getDoc(doc(db, "users", counterpartyId)),
+          ]);
+
+          if (listingSnap.exists()) txn.listing = listingSnap.data();
+
+          if (counterpartySnap.exists()) {
+            const u = counterpartySnap.data();
+            txn.counterpartyName =
+              (u.firstName && u.lastName) ? `${u.firstName} ${u.lastName}` :
+              u.displayName || u.name ||
+              (u.email ? u.email.split("@")[0] : isSeller ? "Buyer" : "Seller");
+          } else {
+            txn.counterpartyName = isSeller ? "Unknown Buyer" : "Unknown Seller";
+          }
+
+          txn.isSeller = isSeller;
+          return txn;
+        })
+      );
+
+      const ORDER = {
+        waiting: 0,
+        accepted: 1,
+        in_facility: 2,
+        ready_to_release: 3,
+        awaiting_collection: 4,
+      };
+      enriched.sort((a, b) => (ORDER[a.status] ?? 9) - (ORDER[b.status] ?? 9));
 
       setSellerTransactions(enrichedSeller);
       setBuyerTransactions(enrichedBuyer);
@@ -265,7 +296,43 @@ export default function TradeFacility() {
     }
   }
 
-  const transactions = activeTab === "seller" ? sellerTransactions : buyerTransactions;
+  function getStatusBadge(txn) {
+    if (txn.status === "waiting")
+      return { label: "Book drop-off",       color: "#1e40af", bg: "#dbeafe" };
+    if (txn.status === "awaiting_collection")
+      return { label: "Awaiting Collection", color: "#6d28d9", bg: "#ede9fe" };
+    if (txn.status === "ready_to_release")
+      return { label: "Ready to Release",    color: "#c2410c", bg: "#ffedd5" };
+    if (txn.status === "in_facility")
+      return { label: "Item at Facility",    color: "#0369a1", bg: "#e0f2fe" };
+    if (txn.dropOffStatus === "dropped_off")
+      return { label: "Item dropped off",    color: "#166534", bg: "#dcfce7" };
+    if (txn.dropOffStatus === "scheduled")
+      return { label: "Drop-off scheduled",  color: "#92400e", bg: "#fef3c7" };
+    if (txn.status === "accepted")
+      return { label: "Book drop-off",       color: "#1e40af", bg: "#dbeafe" };
+    return   { label: txn.status,            color: "#374151", bg: "#f3f4f6" };
+  }
+
+  // ── "waiting" and "accepted" both mean seller must book drop-off ──
+  const canBookDropOff = (txn) =>
+    txn.isSeller &&
+    ["waiting", "accepted"].includes(txn.status) &&
+    !txn.bookingId;
+
+  const hasDropOffBooked = (txn) =>
+    txn.isSeller &&
+    (txn.dropOffStatus === "scheduled" || !!txn.bookingId);
+
+  const canBookCollection = (txn) => {
+    const itemAtFacility = ["in_facility", "ready_to_release", "awaiting_collection"].includes(txn.status);
+    if (!itemAtFacility || txn.collectionBookingId) return false;
+    if (!txn.isSeller) return true;
+    return txn.type === "trade";
+  };
+
+  const hasCollectionBooked = (txn) =>
+    !!txn.collectionBookingId;
 
   if (loading) {
     return (
@@ -384,6 +451,7 @@ export default function TradeFacility() {
             {activeTab === "seller" && sellerTransactions.map((txn, idx) => {
               const badge    = getSellerStatusBadge(txn);
               const imageUrl = txn.listing?.photos?.[0] ?? null;
+
               return (
                 <div key={txn.id} className={styles.card} style={{ animationDelay: `${idx * 0.06}s` }}>
                   <div className={styles.imgWrap}>
@@ -400,7 +468,23 @@ export default function TradeFacility() {
                     }
                   </div>
                   <div className={styles.cardBody}>
-                    <p className={styles.itemTitle}>{txn.listing?.title ?? "Item"}</p>
+                    <p className={styles.itemTitle}>
+                      {txn.listing?.title ?? "Item"}
+                      <span style={{
+                        marginLeft: 6, fontSize: "0.7rem", borderRadius: 4,
+                        padding: "1px 6px",
+                        background: txn.isSeller ? "#dcfce7" : "#dbeafe",
+                        color:      txn.isSeller ? "#166534" : "#1e40af",
+                      }}>
+                        {txn.isSeller ? "Selling" : "Buying"}
+                      </span>
+                      {txn.type === "trade" && (
+                        <span style={{ marginLeft: 4, fontSize: "0.7rem", background: "#ede9fe", color: "#6d28d9", borderRadius: 4, padding: "1px 6px" }}>
+                          Trade
+                        </span>
+                      )}
+                    </p>
+
                     <div className={styles.metaRow}>
                       <span className={styles.metaPrice}>
                         R{formatPrice(txn.agreedPrice ?? txn.listing?.price)}
@@ -412,7 +496,7 @@ export default function TradeFacility() {
                           <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/>
                           <circle cx="12" cy="7" r="4"/>
                         </svg>
-                        {txn.buyerName}
+                        {txn.isSeller ? `Buyer: ${txn.counterpartyName}` : `Seller: ${txn.counterpartyName}`}
                       </span>
                     </div>
                     {txn.dropOffDate && (
@@ -420,9 +504,19 @@ export default function TradeFacility() {
                         Drop-off: {txn.dropOffDate} · {txn.dropOffTimeSlot}
                       </p>
                     )}
-                    {txn.status === "waiting" && !txn.dropOffStatus && (
-                      <button className={styles.dropOffBtn}
-                              onClick={() => navigate(`/book-dropoff/${txn.id}`)}>
+
+                    {txn.collectionDate && (
+                      <p className={styles.dropOffDate} style={{ color: "#6d28d9" }}>
+                        Collection: {txn.collectionDate} · {txn.collectionTimeSlot}
+                      </p>
+                    )}
+
+                    {/* ── SELLER: Book drop-off ── */}
+                    {canBookDropOff(txn) && (
+                      <button
+                        className={styles.dropOffBtn}
+                        onClick={() => navigate(`/book-dropoff/${txn.id}`)}
+                      >
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
                              stroke="currentColor" strokeWidth="2.5">
                           <rect x="3" y="4" width="18" height="18" rx="2"/>
@@ -432,6 +526,40 @@ export default function TradeFacility() {
                         </svg>
                         Book drop-off
                       </button>
+                    )}
+
+                    {/* ── SELLER: Drop-off already booked ── */}
+                    {hasDropOffBooked(txn) && (
+                      <p style={{ fontSize: "0.75rem", color: "#166534", marginTop: 4 }}>
+                        <i className="fas fa-calendar-check" style={{ marginRight: 4 }} />
+                        Drop-off slot booked
+                      </p>
+                    )}
+
+                    {/* ── BUYER: Book collection ── */}
+                    {canBookCollection(txn) && (
+                      <button
+                        className={styles.dropOffBtn}
+                        style={{ background: "#6d28d9", marginTop: 6 }}
+                        onClick={() => navigate(`/book-collection/${txn.id}`)}
+                      >
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
+                             stroke="currentColor" strokeWidth="2.5">
+                          <rect x="3" y="4" width="18" height="18" rx="2"/>
+                          <line x1="16" y1="2" x2="16" y2="6"/>
+                          <line x1="8"  y1="2" x2="8"  y2="6"/>
+                          <line x1="3"  y1="10" x2="21" y2="10"/>
+                        </svg>
+                        Book collection
+                      </button>
+                    )}
+
+                    {/* ── Collection already booked ── */}
+                    {hasCollectionBooked(txn) && (
+                      <p style={{ fontSize: "0.75rem", color: "#6d28d9", marginTop: 4 }}>
+                        <i className="fas fa-calendar-check" style={{ marginRight: 4 }} />
+                        Collection slot booked
+                      </p>
                     )}
                   </div>
                   <div className={styles.badgeWrap}>

@@ -45,9 +45,52 @@ const fetchListingTitle = async (listingId) => {
         const snap = await getDoc(doc(db, 'listings', listingId));
         if (snap.exists()) {
             const d = snap.data();
-            return d.title ?? null;
+            return {
+                title: d.title || d.Title || null,
+                price: d.price || d.Price || null,
+            };
         }
     } catch (_) {}
+    return {};
+};
+
+// ── Try every possible field name for the transaction ID,
+//    look it up, check sellerId vs currentUser.uid, and route.
+//    Seller → /trade-facility  |  Buyer → /my-purchases
+async function resolveAndNavigate(notification, currentUser, navigate) {
+    // Grab the transaction ID from whichever field it's stored under
+    const transactionId =
+        notification.transactionId  ||
+        notification.transaction_id ||
+        notification.txnId          ||
+        notification.txId           ||
+        null;
+
+    if (transactionId && currentUser) {
+        try {
+            const txSnap = await getDoc(doc(db, 'transactions', transactionId));
+            if (txSnap.exists()) {
+                const isSeller = txSnap.data().sellerId === currentUser.uid;
+                navigate(isSeller ? '/trade-facility' : '/my-purchases');
+                return;
+            }
+        } catch (err) {
+            console.error('NavBar: resolveAndNavigate error', err);
+        }
+    }
+
+    // No transaction ID or lookup failed — use the notification type to guess
+    // Buyer-facing types → My Purchases, seller-facing → Trade Facility
+    const BUYER_TYPES = [
+        'item_at_facility',
+        'item_ready_for_collection',
+        'collection_booked',
+        'item_collected',
+        'offer_accepted',
+    ];
+    const isBuyerNotification = BUYER_TYPES.includes(notification.type);
+    navigate(isBuyerNotification ? '/my-purchases' : '/trade-facility');
+}
     return null;
 };
 
@@ -219,6 +262,7 @@ export default function Navbar() {
                     if (n.transactionId) navigate(`/my-purchases`);
                     else navigate('/trade-facility');
             }
+
         } else if (n.source === 'rating') {
             markRatingAsRead(n.id);
             setRatingNotifications((prev) => prev.filter((r) => r.id !== n.id));
@@ -241,7 +285,68 @@ export default function Navbar() {
         setRatingNotifications([]);
     };
 
-    // ── Auth + profile ───────────────────────────────────────────────────────
+    const notificationIcon = (type) => {
+        if (type === 'buyer_paid')                           return 'fa-money-bill-wave';
+        if (type === 'new_offer')                            return 'fa-shopping-cart';
+        if (type === 'offer_accepted')                       return 'fa-circle-check';
+        if (type === 'offer_declined')                       return 'fa-circle-xmark';
+        if (type === 'rate_seller' || type === 'rate_buyer') return 'fa-star';
+        if (type === 'item_received_at_facility')            return 'fa-box-archive';
+        if (type === 'item_at_facility')                     return 'fa-warehouse';
+        if (type === 'item_ready_for_collection')            return 'fa-person-walking';
+        if (type === 'item_collected')                       return 'fa-handshake';
+        if (type === 'transaction_complete')                 return 'fa-circle-check';
+        if (type === 'collection_booked')                    return 'fa-calendar-check';
+        if (type === 'dropoff_booked')                       return 'fa-calendar-check';
+        return 'fa-bell';
+    };
+
+    const notificationIconColor = (type) => {
+        if (type === 'buyer_paid')                           return '#16a34a';
+        if (type === 'new_offer')                            return '#3b82f6';
+        if (type === 'offer_accepted')                       return '#22c55e';
+        if (type === 'offer_declined')                       return '#ef4444';
+        if (type === 'rate_seller' || type === 'rate_buyer') return '#f59e0b';
+        if (type === 'item_received_at_facility')            return '#f59e0b';
+        if (type === 'item_at_facility')                     return '#6AA6DA';
+        if (type === 'item_ready_for_collection')            return '#8b5cf6';
+        if (type === 'item_collected')                       return '#22c55e';
+        if (type === 'transaction_complete')                 return '#22c55e';
+        if (type === 'collection_booked')                    return '#6d28d9';
+        if (type === 'dropoff_booked')                       return '#92400e';
+        return '#94a3b8';
+    };
+
+    const notificationMessage = (n) => {
+        const title = n.listingTitle ? `"${n.listingTitle}"` : 'your item';
+        const price = n.listingPrice ? ` · R${Number(n.listingPrice).toLocaleString('en-ZA')}` : '';
+        const buyer = n.buyerName || 'A student';
+
+        if (n.type === 'buyer_paid')                return `${buyer} has paid for ${title}. Book a drop-off slot now.`;
+        if (n.type === 'new_offer')                 return `${buyer} made an offer on ${title}${price}`;
+        if (n.type === 'offer_accepted')            return `Your offer on ${title} was accepted!${price}`;
+        if (n.type === 'offer_declined')            return `Your offer on ${title} was declined.`;
+        if (n.type === 'item_received_at_facility') return `${title} has been received at the trade facility.${price}`;
+        if (n.type === 'item_at_facility')          return `${title} is now at the trade facility. Book your collection slot.${price}`;
+        if (n.type === 'item_ready_for_collection') return `${title} is ready for collection at the trade facility.${price}`;
+        if (n.type === 'item_collected')            return `${title} has been collected. Transaction complete!${price}`;
+        if (n.type === 'transaction_complete')      return `Your sale of ${title} is complete${price}.`;
+        if (n.type === 'collection_booked')         return n.message || `Collection slot booked for ${title}.`;
+        if (n.type === 'dropoff_booked')            return n.message || `Drop-off slot booked for ${title}.`;
+
+        if (n.type === 'rate_seller') {
+            const itemPart = n.listingTitle ? ` for "${n.listingTitle}"${price}` : '';
+            return `Rate your experience with ${n.reviewedUserName} as a seller${itemPart}`;
+        }
+        if (n.type === 'rate_buyer') {
+            const itemPart = n.listingTitle ? ` — "${n.listingTitle}"${price}` : '';
+            return `Rate your buyer ${n.reviewedUserName}${itemPart}`;
+        }
+
+        return n.message || 'Notification';
+    };
+
+    // ── Auth + profile ────────────────────────────────────────────────────────
 
     useEffect(() => {
         const unsub = onAuthStateChanged(auth, async (firebaseUser) => {
@@ -389,29 +494,38 @@ export default function Navbar() {
                     const listingId = data.listingId || data.ListingId || data.listing_id || null;
                     if (!listingId) continue;
 
-                    let sellerName    = 'Seller';
-                    let listingTitle  = null;
+                    let sellerName = 'Seller';
+                    let listingTitle = data.listingTitle || '';
+                    let listingPrice = null;
+
                     try {
-                        const [uSnap, lSnap] = await Promise.all([
-                            getDoc(doc(db, 'users',    data.sellerId)),
+                        const [userSnap, listingSnap] = await Promise.all([
+                            getDoc(doc(db, 'users', data.sellerId)),
                             getDoc(doc(db, 'listings', listingId)),
                         ]);
-                        if (uSnap.exists()) {
-                            const ud = uSnap.data();
+                        if (userSnap.exists()) {
+                            const ud = userSnap.data();
                             sellerName = `${ud.firstName || ''} ${ud.lastName || ''}`.trim() || sellerName;
                         }
-                        if (lSnap.exists()) {
-                            listingTitle = lSnap.data().title ?? null;
+                        if (listingSnap.exists()) {
+                            const ld = listingSnap.data();
+                            listingTitle = listingTitle || ld.title || ld.Title || '';
+                            listingPrice = ld.price || ld.Price || null;
                         }
                     } catch (_) {}
 
                     results.push({
                         id: `buyer-${d.id}`, source: 'rating', type: 'rate_seller',
-                        title:           `Rate your experience with ${sellerName}`,
+                        title: `Rate your experience with ${sellerName}`,
+                        message: `Your purchase is complete — how was the transaction?`,
+                        listingId,
                         listingTitle,
-                        listingId,        purchaseId:      d.id,
-                        reviewedUserId:   data.sellerId,   reviewedUserName: sellerName,
-                        role: 'seller',   createdAt:       data.updatedAt || data.createdAt,
+                        listingPrice,
+                        purchaseId: d.id,
+                        reviewedUserId: data.sellerId,
+                        reviewedUserName: sellerName,
+                        role: 'seller',
+                        createdAt: data.updatedAt || data.createdAt,
                     });
                 }
 
@@ -420,29 +534,38 @@ export default function Navbar() {
                     const listingId = data.listingId || data.ListingId || data.listing_id || null;
                     if (!listingId) continue;
 
-                    let buyerName    = 'Buyer';
-                    let listingTitle = null;
+                    let buyerName = 'Buyer';
+                    let listingTitle = data.listingTitle || '';
+                    let listingPrice = null;
+
                     try {
-                        const [uSnap, lSnap] = await Promise.all([
-                            getDoc(doc(db, 'users',    data.buyerId)),
+                        const [userSnap, listingSnap] = await Promise.all([
+                            getDoc(doc(db, 'users', data.buyerId)),
                             getDoc(doc(db, 'listings', listingId)),
                         ]);
-                        if (uSnap.exists()) {
-                            const ud = uSnap.data();
+                        if (userSnap.exists()) {
+                            const ud = userSnap.data();
                             buyerName = `${ud.firstName || ''} ${ud.lastName || ''}`.trim() || buyerName;
                         }
-                        if (lSnap.exists()) {
-                            listingTitle = lSnap.data().title ?? null;
+                        if (listingSnap.exists()) {
+                            const ld = listingSnap.data();
+                            listingTitle = listingTitle || ld.title || ld.Title || '';
+                            listingPrice = ld.price || ld.Price || null;
                         }
                     } catch (_) {}
 
                     results.push({
                         id: `seller-${d.id}`, source: 'rating', type: 'rate_buyer',
-                        title:           `Rate your buyer — ${buyerName}`,
+                        title: `Rate your buyer — ${buyerName}`,
+                        message: `Your listing was purchased — how was the buyer?`,
+                        listingId,
                         listingTitle,
-                        listingId,        purchaseId:     d.id,
-                        reviewedUserId:   data.buyerId,   reviewedUserName: buyerName,
-                        role: 'buyer',    createdAt:      data.updatedAt || data.createdAt,
+                        listingPrice,
+                        purchaseId: d.id,
+                        reviewedUserId: data.buyerId,
+                        reviewedUserName: buyerName,
+                        role: 'buyer',
+                        createdAt: data.updatedAt || data.createdAt,
                     });
                 }
 
@@ -494,7 +617,7 @@ export default function Navbar() {
                 <span className={styles.logoText}>CampusMarket</span>
             </div>
 
-            {/* Desktop nav links */}
+            {/* Nav links */}
             <nav className={styles.navLinks}>
                 {NAV_LINKS.map((link) => {
                     const isActive = link.path && location.pathname === link.path;

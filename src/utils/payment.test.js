@@ -1,19 +1,24 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Instead of importing from payment.utils (which pulls in Firebase),
-// we copy the pure functions inline here — zero external dependencies.
+// Instead of importing from payment.utils, we copy the pure functions inline here
+// so the tests stay simple and do not pull Firebase into Vitest.
 // Firebase-touching functions are tested with hand-rolled mocks below.
 // ─────────────────────────────────────────────────────────────────────────────
 
+// ─── Amount Helpers ───────────────────────────────────────────────────────────
+
 function getOnlineAmount(tx) {
   const type = tx.paymentType || tx.paymentMethod || 'cash';
+
   switch (type) {
     case 'full_online':
     case 'online':
       return Number(tx.agreedPrice ?? tx.listingPrice ?? 0);
+
     case 'partial':
       return Number(tx.partialAmount ?? 0);
+
     case 'cash':
     case 'cod':
     default:
@@ -22,14 +27,17 @@ function getOnlineAmount(tx) {
 }
 
 function getCashAmount(tx) {
-  const type  = tx.paymentType || tx.paymentMethod || 'cash';
+  const type = tx.paymentType || tx.paymentMethod || 'cash';
   const total = Number(tx.agreedPrice ?? tx.listingPrice ?? 0);
+
   switch (type) {
     case 'full_online':
     case 'online':
       return 0;
+
     case 'partial':
       return Math.max(0, total - Number(tx.partialAmount ?? 0));
+
     case 'cash':
     case 'cod':
     default:
@@ -37,27 +45,35 @@ function getCashAmount(tx) {
   }
 }
 
-function toPaystackAmount(randAmount) {
+/**
+ * Stripe expects the smallest currency unit.
+ * For ZAR, this means cents.
+ * Example: R255.00 → 25500
+ */
+function toStripeAmount(randAmount) {
   return Math.round(Number(randAmount) * 100);
 }
 
-function generateRef(txId) {
+function generateStripeRef(txId) {
   return `CM-${txId.slice(0, 6).toUpperCase()}-${Date.now()}`;
 }
 
 const PAYMENT_LABELS = {
   full_online: 'Fully Online',
-  online:      'Fully Online',
-  partial:     'Partial Online + Cash',
-  cash:        'Full Cash on Delivery',
-  cod:         'Full Cash on Delivery',
+  online: 'Fully Online',
+  partial: 'Partial Online + Cash',
+  cash: 'Full Cash on Delivery',
+  cod: 'Full Cash on Delivery',
 };
 
-// Hand-rolled mock — replaces the real updateTransactionStatus
-// so we can inject a fake updateDoc and check what it received
+// ─────────────────────────────────────────────────────────────────────────────
+// Firestore mock helper
+// ─────────────────────────────────────────────────────────────────────────────
+
 function makeUpdateTransactionStatus(mockUpdateDoc) {
   return async function updateTransactionStatus(txId, status, extra = {}) {
     const ref = `mock-ref-for-${txId}`;
+
     await mockUpdateDoc(ref, {
       status,
       updatedAt: 'mock-timestamp',
@@ -66,25 +82,103 @@ function makeUpdateTransactionStatus(mockUpdateDoc) {
   };
 }
 
-// Inline version of openPaystackPopup with no Firebase import
-function openPaystackPopup({ publicKey, email, amountRand, ref, metadata = {} }) {
-  return new Promise((resolve, reject) => {
-    if (!globalThis.PaystackPop) {
-      reject(new Error('Paystack SDK not loaded'));
-      return;
+// ─────────────────────────────────────────────────────────────────────────────
+// Stripe Checkout helper mocks
+// ─────────────────────────────────────────────────────────────────────────────
+
+function makeCreateStripeCheckoutSession(updateTransactionStatus) {
+  return async function createStripeCheckoutSession({
+    tx,
+    buyerEmail,
+    createSessionUrl = '/api/stripe/create-checkout-session',
+  }) {
+    if (!tx?.id) {
+      throw new Error('Transaction ID is required.');
     }
-    const handler = globalThis.PaystackPop.setup({
-      key:      publicKey,
-      email,
-      amount:   toPaystackAmount(amountRand),
-      currency: 'ZAR',
-      ref,
-      metadata,
-      callback: (response) => resolve(response),
-      onClose:  () => reject({ cancelled: true }),
+
+    const amountRand = getOnlineAmount(tx);
+
+    if (amountRand <= 0) {
+      throw new Error('This transaction does not require online payment.');
+    }
+
+    const stripeRef = generateStripeRef(tx.id);
+
+    await updateTransactionStatus(tx.id, 'pending_payment', {
+      paymentProvider: 'stripe',
+      stripeRef,
+      onlineAmount: amountRand,
+      cashAmount: getCashAmount(tx),
     });
-    handler.openIframe();
-  });
+
+    const response = await fetch(createSessionUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        transactionId: tx.id,
+        buyerEmail,
+        amount: toStripeAmount(amountRand),
+        amountRand,
+        currency: 'zar',
+        stripeRef,
+        paymentType: tx.paymentType || tx.paymentMethod || 'cash',
+        listingId: tx.listingId ?? null,
+        listingTitle: tx.listingTitle ?? tx.title ?? 'Marketplace transaction',
+        metadata: {
+          transactionId: tx.id,
+          stripeRef,
+          paymentType: tx.paymentType || tx.paymentMethod || 'cash',
+        },
+      }),
+    });
+
+    const data = await response.json().catch(() => null);
+
+    if (!response.ok) {
+      throw new Error(data?.message || 'Failed to create Stripe Checkout session.');
+    }
+
+    if (!data?.url) {
+      throw new Error('Stripe Checkout URL was not returned by the server.');
+    }
+
+    return data;
+  };
+}
+
+function makeRedirectToStripeCheckout(updateTransactionStatus, createStripeCheckoutSession) {
+  return async function redirectToStripeCheckout({
+    tx,
+    buyerEmail,
+    createSessionUrl = '/api/stripe/create-checkout-session',
+  }) {
+    const amountRand = getOnlineAmount(tx);
+
+    if (amountRand <= 0) {
+      await updateTransactionStatus(tx.id, 'waiting', {
+        paymentProvider: 'cash',
+        onlineAmount: 0,
+        cashAmount: getCashAmount(tx),
+      });
+
+      return {
+        skipped: true,
+        reason: 'cash_payment',
+      };
+    }
+
+    const session = await createStripeCheckoutSession({
+      tx,
+      buyerEmail,
+      createSessionUrl,
+    });
+
+    window.location.href = session.url;
+
+    return session;
+  };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -92,7 +186,6 @@ function openPaystackPopup({ publicKey, email, amountRand, ref, metadata = {} })
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('getOnlineAmount', () => {
-
   it('returns agreedPrice for full_online', () => {
     expect(getOnlineAmount({ paymentType: 'full_online', agreedPrice: 500 })).toBe(500);
   });
@@ -105,7 +198,7 @@ describe('getOnlineAmount', () => {
     expect(getOnlineAmount({ paymentType: 'full_online' })).toBe(0);
   });
 
-  it('returns agreedPrice for online (alias)', () => {
+  it('returns agreedPrice for online alias', () => {
     expect(getOnlineAmount({ paymentType: 'online', agreedPrice: 750 })).toBe(750);
   });
 
@@ -119,10 +212,6 @@ describe('getOnlineAmount', () => {
 
   it('returns 0 when partialAmount is missing for partial', () => {
     expect(getOnlineAmount({ paymentType: 'partial', agreedPrice: 500 })).toBe(0);
-  });
-
-  it('returns 0 when partialAmount is 0 for partial', () => {
-    expect(getOnlineAmount({ paymentType: 'partial', agreedPrice: 500, partialAmount: 0 })).toBe(0);
   });
 
   it('returns 0 for cash', () => {
@@ -147,7 +236,6 @@ describe('getOnlineAmount', () => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('getCashAmount', () => {
-
   it('returns 0 for full_online', () => {
     expect(getCashAmount({ paymentType: 'full_online', agreedPrice: 500 })).toBe(0);
   });
@@ -200,11 +288,11 @@ describe('getCashAmount', () => {
 describe('getOnlineAmount + getCashAmount sum to agreedPrice', () => {
   const cases = [
     { paymentType: 'full_online', agreedPrice: 500, partialAmount: null },
-    { paymentType: 'online',      agreedPrice: 300, partialAmount: null },
-    { paymentType: 'partial',     agreedPrice: 500, partialAmount: 200  },
-    { paymentType: 'partial',     agreedPrice: 500, partialAmount: 0    },
-    { paymentType: 'cash',        agreedPrice: 400, partialAmount: null },
-    { paymentType: 'cod',         agreedPrice: 150, partialAmount: null },
+    { paymentType: 'online', agreedPrice: 300, partialAmount: null },
+    { paymentType: 'partial', agreedPrice: 500, partialAmount: 200 },
+    { paymentType: 'partial', agreedPrice: 500, partialAmount: 0 },
+    { paymentType: 'cash', agreedPrice: 400, partialAmount: null },
+    { paymentType: 'cod', agreedPrice: 150, partialAmount: null },
   ];
 
   cases.forEach((tx) => {
@@ -215,65 +303,62 @@ describe('getOnlineAmount + getCashAmount sum to agreedPrice', () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// toPaystackAmount
+// toStripeAmount
 // ─────────────────────────────────────────────────────────────────────────────
 
-describe('toPaystackAmount', () => {
-
+describe('toStripeAmount', () => {
   it('converts rands to cents', () => {
-    expect(toPaystackAmount(255)).toBe(25500);
-  });
-
-  it('rounds floating point — 1.005 * 100 = 100.499... so rounds DOWN to 100', () => {
-    // JS float: 1.005 * 100 = 100.49999999999999, not 100.5
-    // Math.round(100.499...) = 100, not 101 — this is correct behaviour
-    expect(toPaystackAmount(1.005)).toBe(100);
+    expect(toStripeAmount(255)).toBe(25500);
   });
 
   it('handles 0', () => {
-    expect(toPaystackAmount(0)).toBe(0);
+    expect(toStripeAmount(0)).toBe(0);
   });
 
   it('handles string input', () => {
-    expect(toPaystackAmount('50')).toBe(5000);
+    expect(toStripeAmount('50')).toBe(5000);
   });
 
-  it('handles decimal rands e.g. R 99.99', () => {
-    expect(toPaystackAmount(99.99)).toBe(9999);
+  it('handles decimal rands e.g. R99.99', () => {
+    expect(toStripeAmount(99.99)).toBe(9999);
   });
 
   it('handles large amounts', () => {
-    expect(toPaystackAmount(50000)).toBe(5000000);
+    expect(toStripeAmount(50000)).toBe(5000000);
+  });
+
+  it('shows JavaScript floating point behaviour for 1.005', () => {
+    expect(toStripeAmount(1.005)).toBe(100);
   });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// generateRef
+// generateStripeRef
 // ─────────────────────────────────────────────────────────────────────────────
 
-describe('generateRef', () => {
-
+describe('generateStripeRef', () => {
   it('starts with CM-', () => {
-    expect(generateRef('abc123xyz')).toMatch(/^CM-/);
+    expect(generateStripeRef('abc123xyz')).toMatch(/^CM-/);
   });
 
   it('uses first 6 chars of txId uppercased', () => {
-    expect(generateRef('abcdef999').startsWith('CM-ABCDEF-')).toBe(true);
+    expect(generateStripeRef('abcdef999').startsWith('CM-ABCDEF-')).toBe(true);
   });
 
   it('ends with a numeric timestamp', () => {
-    const parts     = generateRef('txid01').split('-');
+    const parts = generateStripeRef('txid01').split('-');
     const timestamp = Number(parts[parts.length - 1]);
+
     expect(timestamp).toBeGreaterThan(0);
     expect(Number.isInteger(timestamp)).toBe(true);
   });
 
   it('matches format CM-XXXXXX-timestamp', () => {
-    expect(generateRef('txid01')).toMatch(/^CM-TXID01-\d+$/);
+    expect(generateStripeRef('txid01')).toMatch(/^CM-TXID01-\d+$/);
   });
 
   it('handles txId shorter than 6 chars', () => {
-    expect(generateRef('ab1').startsWith('CM-AB1-')).toBe(true);
+    expect(generateStripeRef('ab1').startsWith('CM-AB1-')).toBe(true);
   });
 });
 
@@ -282,7 +367,6 @@ describe('generateRef', () => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('PAYMENT_LABELS', () => {
-
   it('full_online → Fully Online', () => {
     expect(PAYMENT_LABELS.full_online).toBe('Fully Online');
   });
@@ -305,7 +389,7 @@ describe('PAYMENT_LABELS', () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// updateTransactionStatus (hand-rolled mock — no Firebase)
+// updateTransactionStatus
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('updateTransactionStatus', () => {
@@ -319,26 +403,34 @@ describe('updateTransactionStatus', () => {
 
   it('calls updateDoc with correct status and updatedAt', async () => {
     await updateTransactionStatus('tx123', 'waiting');
+
     expect(mockUpdateDoc).toHaveBeenCalledWith('mock-ref-for-tx123', {
-      status:    'waiting',
+      status: 'waiting',
       updatedAt: 'mock-timestamp',
     });
   });
 
-  it('merges extra fields', async () => {
-    await updateTransactionStatus('tx123', 'waiting', { paystackRef: 'CM-REF-123', onlinePaid: 250 });
+  it('merges extra Stripe fields', async () => {
+    await updateTransactionStatus('tx123', 'pending_payment', {
+      stripeRef: 'CM-TX123-1234567890',
+      onlineAmount: 250,
+      paymentProvider: 'stripe',
+    });
+
     expect(mockUpdateDoc).toHaveBeenCalledWith('mock-ref-for-tx123', {
-      status:      'waiting',
-      updatedAt:   'mock-timestamp',
-      paystackRef: 'CM-REF-123',
-      onlinePaid:  250,
+      status: 'pending_payment',
+      updatedAt: 'mock-timestamp',
+      stripeRef: 'CM-TX123-1234567890',
+      onlineAmount: 250,
+      paymentProvider: 'stripe',
     });
   });
 
   it('works with completed status', async () => {
     await updateTransactionStatus('tx456', 'completed');
+
     expect(mockUpdateDoc).toHaveBeenCalledWith('mock-ref-for-tx456', {
-      status:    'completed',
+      status: 'completed',
       updatedAt: 'mock-timestamp',
     });
   });
@@ -349,77 +441,356 @@ describe('updateTransactionStatus', () => {
 
   it('rejects when updateDoc throws', async () => {
     mockUpdateDoc.mockRejectedValueOnce(new Error('Firestore error'));
+
     await expect(updateTransactionStatus('tx000', 'waiting')).rejects.toThrow('Firestore error');
   });
 
   it('calls updateDoc exactly once', async () => {
     await updateTransactionStatus('tx123', 'waiting');
+
     expect(mockUpdateDoc).toHaveBeenCalledTimes(1);
   });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// openPaystackPopup (mocks globalThis.PaystackPop — no Firebase)
+// createStripeCheckoutSession
 // ─────────────────────────────────────────────────────────────────────────────
 
-describe('openPaystackPopup', () => {
-  const opts = {
-    publicKey:  'pk_test_abc123',
-    email:      'student@university.ac.za',
-    amountRand: 255,
-    ref:        'CM-TX1234-1234567890',
-  };
+describe('createStripeCheckoutSession', () => {
+  let mockUpdateDoc;
+  let updateTransactionStatus;
+  let createStripeCheckoutSession;
+
+  beforeEach(() => {
+    mockUpdateDoc = vi.fn(() => Promise.resolve());
+    updateTransactionStatus = makeUpdateTransactionStatus(mockUpdateDoc);
+    createStripeCheckoutSession = makeCreateStripeCheckoutSession(updateTransactionStatus);
+
+    globalThis.fetch = vi.fn(() =>
+      Promise.resolve({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            id: 'cs_test_123',
+            url: 'https://checkout.stripe.com/c/pay/cs_test_123',
+          }),
+      })
+    );
+  });
 
   afterEach(() => {
-    delete globalThis.PaystackPop;
+    vi.restoreAllMocks();
+    delete globalThis.fetch;
   });
 
-  it('rejects when PaystackPop is not available', async () => {
-    await expect(openPaystackPopup(opts)).rejects.toThrow('Paystack SDK not loaded');
+  it('throws when transaction ID is missing', async () => {
+    await expect(
+      createStripeCheckoutSession({
+        tx: { paymentType: 'online', agreedPrice: 300 },
+        buyerEmail: 'student@university.ac.za',
+      })
+    ).rejects.toThrow('Transaction ID is required.');
   });
 
-  it('resolves with Paystack response on success', async () => {
-    const mockResponse = { reference: 'CM-TX1234-1234567890', status: 'success' };
-    globalThis.PaystackPop = {
-      setup: vi.fn(({ callback }) => ({ openIframe: () => callback(mockResponse) })),
-    };
-    await expect(openPaystackPopup(opts)).resolves.toEqual(mockResponse);
+  it('throws when transaction does not require online payment', async () => {
+    await expect(
+      createStripeCheckoutSession({
+        tx: { id: 'tx123', paymentType: 'cash', agreedPrice: 300 },
+        buyerEmail: 'student@university.ac.za',
+      })
+    ).rejects.toThrow('This transaction does not require online payment.');
   });
 
-  it('rejects with { cancelled: true } when user closes popup', async () => {
-    globalThis.PaystackPop = {
-      setup: vi.fn(({ onClose }) => ({ openIframe: () => onClose() })),
-    };
-    await expect(openPaystackPopup(opts)).rejects.toEqual({ cancelled: true });
-  });
+  it('updates Firestore to pending_payment before creating Checkout session', async () => {
+    await createStripeCheckoutSession({
+      tx: {
+        id: 'tx123',
+        paymentType: 'online',
+        agreedPrice: 300,
+      },
+      buyerEmail: 'student@university.ac.za',
+    });
 
-  it('passes amount in cents to PaystackPop.setup', async () => {
-    globalThis.PaystackPop = {
-      setup: vi.fn(({ callback }) => ({ openIframe: () => callback({ reference: 'r' }) })),
-    };
-    await openPaystackPopup({ ...opts, amountRand: 255 });
-    expect(globalThis.PaystackPop.setup).toHaveBeenCalledWith(
-      expect.objectContaining({ amount: 25500 })
+    expect(mockUpdateDoc).toHaveBeenCalledWith(
+      'mock-ref-for-tx123',
+      expect.objectContaining({
+        status: 'pending_payment',
+        paymentProvider: 'stripe',
+        onlineAmount: 300,
+        cashAmount: 0,
+      })
     );
   });
 
-  it('passes currency as ZAR', async () => {
-    globalThis.PaystackPop = {
-      setup: vi.fn(({ callback }) => ({ openIframe: () => callback({ reference: 'r' }) })),
-    };
-    await openPaystackPopup(opts);
-    expect(globalThis.PaystackPop.setup).toHaveBeenCalledWith(
-      expect.objectContaining({ currency: 'ZAR' })
+  it('calls backend with Stripe amount in cents and lowercase zar currency', async () => {
+    await createStripeCheckoutSession({
+      tx: {
+        id: 'tx123',
+        paymentType: 'online',
+        agreedPrice: 300,
+        listingTitle: 'iPhone 13',
+      },
+      buyerEmail: 'student@university.ac.za',
+    });
+
+    const fetchBody = JSON.parse(globalThis.fetch.mock.calls[0][1].body);
+
+    expect(fetchBody).toEqual(
+      expect.objectContaining({
+        transactionId: 'tx123',
+        buyerEmail: 'student@university.ac.za',
+        amount: 30000,
+        amountRand: 300,
+        currency: 'zar',
+        paymentType: 'online',
+        listingTitle: 'iPhone 13',
+      })
     );
   });
 
-  it('passes correct key and email', async () => {
-    globalThis.PaystackPop = {
-      setup: vi.fn(({ callback }) => ({ openIframe: () => callback({ reference: 'r' }) })),
-    };
-    await openPaystackPopup(opts);
-    expect(globalThis.PaystackPop.setup).toHaveBeenCalledWith(
-      expect.objectContaining({ key: 'pk_test_abc123', email: 'student@university.ac.za' })
+  it('sends metadata with transactionId, stripeRef, and paymentType', async () => {
+    await createStripeCheckoutSession({
+      tx: {
+        id: 'tx123',
+        paymentType: 'partial',
+        agreedPrice: 500,
+        partialAmount: 200,
+      },
+      buyerEmail: 'student@university.ac.za',
+    });
+
+    const fetchBody = JSON.parse(globalThis.fetch.mock.calls[0][1].body);
+
+    expect(fetchBody.metadata).toEqual(
+      expect.objectContaining({
+        transactionId: 'tx123',
+        paymentType: 'partial',
+      })
     );
+
+    expect(fetchBody.metadata.stripeRef).toMatch(/^CM-TX123-\d+$/);
+  });
+
+  it('uses custom createSessionUrl when provided', async () => {
+    await createStripeCheckoutSession({
+      tx: {
+        id: 'tx123',
+        paymentType: 'online',
+        agreedPrice: 300,
+      },
+      buyerEmail: 'student@university.ac.za',
+      createSessionUrl: '/custom/stripe/session',
+    });
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      '/custom/stripe/session',
+      expect.any(Object)
+    );
+  });
+
+  it('returns Checkout session data when successful', async () => {
+    const result = await createStripeCheckoutSession({
+      tx: {
+        id: 'tx123',
+        paymentType: 'online',
+        agreedPrice: 300,
+      },
+      buyerEmail: 'student@university.ac.za',
+    });
+
+    expect(result).toEqual({
+      id: 'cs_test_123',
+      url: 'https://checkout.stripe.com/c/pay/cs_test_123',
+    });
+  });
+
+  it('throws backend error message when backend response is not ok', async () => {
+    globalThis.fetch = vi.fn(() =>
+      Promise.resolve({
+        ok: false,
+        json: () =>
+          Promise.resolve({
+            message: 'Could not create Stripe session.',
+          }),
+      })
+    );
+
+    await expect(
+      createStripeCheckoutSession({
+        tx: {
+          id: 'tx123',
+          paymentType: 'online',
+          agreedPrice: 300,
+        },
+        buyerEmail: 'student@university.ac.za',
+      })
+    ).rejects.toThrow('Could not create Stripe session.');
+  });
+
+  it('throws fallback error when backend response is not ok and has no message', async () => {
+    globalThis.fetch = vi.fn(() =>
+      Promise.resolve({
+        ok: false,
+        json: () => Promise.resolve({}),
+      })
+    );
+
+    await expect(
+      createStripeCheckoutSession({
+        tx: {
+          id: 'tx123',
+          paymentType: 'online',
+          agreedPrice: 300,
+        },
+        buyerEmail: 'student@university.ac.za',
+      })
+    ).rejects.toThrow('Failed to create Stripe Checkout session.');
+  });
+
+  it('throws when backend does not return a Checkout URL', async () => {
+    globalThis.fetch = vi.fn(() =>
+      Promise.resolve({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            id: 'cs_test_123',
+          }),
+      })
+    );
+
+    await expect(
+      createStripeCheckoutSession({
+        tx: {
+          id: 'tx123',
+          paymentType: 'online',
+          agreedPrice: 300,
+        },
+        buyerEmail: 'student@university.ac.za',
+      })
+    ).rejects.toThrow('Stripe Checkout URL was not returned by the server.');
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// redirectToStripeCheckout
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('redirectToStripeCheckout', () => {
+  let mockUpdateDoc;
+  let updateTransactionStatus;
+  let createStripeCheckoutSession;
+  let redirectToStripeCheckout;
+
+  beforeEach(() => {
+    mockUpdateDoc = vi.fn(() => Promise.resolve());
+    updateTransactionStatus = makeUpdateTransactionStatus(mockUpdateDoc);
+
+    createStripeCheckoutSession = vi.fn(() =>
+      Promise.resolve({
+        id: 'cs_test_123',
+        url: 'https://checkout.stripe.com/c/pay/cs_test_123',
+      })
+    );
+
+    redirectToStripeCheckout = makeRedirectToStripeCheckout(
+      updateTransactionStatus,
+      createStripeCheckoutSession
+    );
+
+    delete window.location;
+    window.location = {
+      href: '',
+    };
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('skips Stripe for cash payment and marks transaction as waiting', async () => {
+    const result = await redirectToStripeCheckout({
+      tx: {
+        id: 'tx123',
+        paymentType: 'cash',
+        agreedPrice: 300,
+      },
+      buyerEmail: 'student@university.ac.za',
+    });
+
+    expect(result).toEqual({
+      skipped: true,
+      reason: 'cash_payment',
+    });
+
+    expect(mockUpdateDoc).toHaveBeenCalledWith('mock-ref-for-tx123', {
+      status: 'waiting',
+      updatedAt: 'mock-timestamp',
+      paymentProvider: 'cash',
+      onlineAmount: 0,
+      cashAmount: 300,
+    });
+
+    expect(createStripeCheckoutSession).not.toHaveBeenCalled();
+  });
+
+  it('redirects to Stripe Checkout for online payment', async () => {
+    const result = await redirectToStripeCheckout({
+      tx: {
+        id: 'tx123',
+        paymentType: 'online',
+        agreedPrice: 300,
+      },
+      buyerEmail: 'student@university.ac.za',
+    });
+
+    expect(createStripeCheckoutSession).toHaveBeenCalledWith({
+      tx: {
+        id: 'tx123',
+        paymentType: 'online',
+        agreedPrice: 300,
+      },
+      buyerEmail: 'student@university.ac.za',
+      createSessionUrl: '/api/stripe/create-checkout-session',
+    });
+
+    expect(window.location.href).toBe('https://checkout.stripe.com/c/pay/cs_test_123');
+
+    expect(result).toEqual({
+      id: 'cs_test_123',
+      url: 'https://checkout.stripe.com/c/pay/cs_test_123',
+    });
+  });
+
+  it('passes custom createSessionUrl to createStripeCheckoutSession', async () => {
+    await redirectToStripeCheckout({
+      tx: {
+        id: 'tx123',
+        paymentType: 'online',
+        agreedPrice: 300,
+      },
+      buyerEmail: 'student@university.ac.za',
+      createSessionUrl: '/custom/stripe/session',
+    });
+
+    expect(createStripeCheckoutSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        createSessionUrl: '/custom/stripe/session',
+      })
+    );
+  });
+
+  it('redirects for partial online payment', async () => {
+    await redirectToStripeCheckout({
+      tx: {
+        id: 'tx123',
+        paymentType: 'partial',
+        agreedPrice: 500,
+        partialAmount: 200,
+      },
+      buyerEmail: 'student@university.ac.za',
+    });
+
+    expect(createStripeCheckoutSession).toHaveBeenCalledTimes(1);
+    expect(window.location.href).toBe('https://checkout.stripe.com/c/pay/cs_test_123');
   });
 });

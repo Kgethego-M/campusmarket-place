@@ -134,20 +134,26 @@ export default function BookDropOff() {
 
     try {
       const transSnap = await getDoc(doc(db, "transactions", transactionId));
-      if (!transSnap.exists()) return setError("Transaction not found");
+      if (!transSnap.exists()) return setError("Transaction not found.");
 
       const txn = { id: transSnap.id, ...transSnap.data() };
 
+      // Only the seller can book a drop-off
       if (txn.sellerId !== uid)
-        return setError("You can only book drop-off for your own sales");
+        return setError("You can only book a drop-off for your own sales.");
 
-      if (txn.status !== "waiting")
-        return setError(`This transaction isn't ready yet. Current status: ${getStatusLabel(txn.status)}`);
+      // ✅ "waiting" is the status set when buyer agrees to pay
+      const ALLOWED_STATUSES = ["waiting", "accepted", "in_facility"];
+      if (!ALLOWED_STATUSES.includes(txn.status))
+        return setError(`Cannot book drop-off. Current status: ${txn.status}`);
+
+      // Prevent double-booking
       if (txn.bookingId)
         return setError("A drop-off has already been booked for this transaction.");
 
       setTransaction(txn);
 
+      // Resolve payment method
       let pm = txn.paymentMethod;
       if (!pm && txn.paymentType) {
         pm = txn.paymentType === "full_online" ? "online"
@@ -165,7 +171,10 @@ export default function BookDropOff() {
       if (listingSnap.exists()) setListing({ id: listingSnap.id, ...listingSnap.data() });
       if (buyerSnap.exists()) {
         const b = buyerSnap.data();
-        setBuyerName(b.displayName || b.name || b.firstName || "Buyer");
+        setBuyerName(
+          (b.firstName && b.lastName) ? `${b.firstName} ${b.lastName}` :
+          b.displayName || b.name || b.firstName || "Buyer"
+        );
       }
     } catch (err) {
       console.error(err);
@@ -178,11 +187,12 @@ export default function BookDropOff() {
   useEffect(() => {
     const unsub = auth.onAuthStateChanged((user) => {
       if (user) fetchTransaction(user.uid);
-      else { setLoading(false); setError("Please log in to book a drop-off"); }
+      else { setLoading(false); setError("Please log in to book a drop-off."); }
     });
     return () => unsub();
   }, [fetchTransaction]);
 
+  // ── Build slot counts when date changes ───────────────────────
   useEffect(() => {
     if (!selectedDate) return;
     setSelectedTimeSlot("");
@@ -191,7 +201,8 @@ export default function BookDropOff() {
       setSlotsLoading(true);
       try {
         const snap = await getDocs(query(
-          collection(db, "bookings"), where("date", "==", selectedDate)
+          collection(db, "bookings"),
+          where("date", "==", selectedDate)
         ));
 
         const booked = {};
@@ -217,27 +228,28 @@ export default function BookDropOff() {
 
   async function handleSubmit(e) {
     e.preventDefault();
-    if (!selectedDate)     return setError("Please select a date");
-    if (!selectedTimeSlot) return setError("Please select a time slot");
+    if (!selectedDate)     return setError("Please select a date.");
+    if (!selectedTimeSlot) return setError("Please select a time slot.");
 
     setSubmitting(true);
     setError("");
 
     try {
+      // Guard against race conditions
       const latest = await getDoc(doc(db, "transactions", transaction.id));
       if (latest.data().bookingId)
-        return setError("This transaction was already booked by someone else.");
+        return setError("A drop-off was already booked for this transaction.");
 
       const bookingRef = await addDoc(collection(db, "bookings"), {
-        transactionId: transaction.id,
-        listingId:     transaction.listingId,
-        sellerId:      transaction.sellerId,
-        buyerId:       transaction.buyerId,
-        date:          selectedDate,
-        timeSlot:      selectedTimeSlot,
-        status:        "scheduled",
-        createdAt:     serverTimestamp(),
-        updatedAt:     serverTimestamp(),
+        transactionId:  transaction.id,
+        listingId:      transaction.listingId,
+        sellerId:       transaction.sellerId,
+        buyerId:        transaction.buyerId,
+        date:           selectedDate,
+        timeSlot:       selectedTimeSlot,
+        status:         "scheduled",
+        createdAt:      serverTimestamp(),
+        updatedAt:      serverTimestamp(),
       });
 
       await Promise.all([
@@ -246,11 +258,23 @@ export default function BookDropOff() {
           dropOffStatus:   "scheduled",
           dropOffDate:     selectedDate,
           dropOffTimeSlot: selectedTimeSlot,
+          updatedAt:       serverTimestamp(),
         }),
+        // Notify seller
         addDoc(collection(db, "notifications"), {
           userId:    transaction.sellerId,
+          type:      "dropoff_booked",
           title:     "Drop-off booked",
-          message:   `Your drop-off for ${listing?.title} is scheduled on ${selectedDate} at ${selectedTimeSlot}.`,
+          message:   `Your drop-off for "${listing?.title}" is scheduled on ${selectedDate} at ${selectedTimeSlot}.`,
+          read:      false,
+          createdAt: serverTimestamp(),
+        }),
+        // Notify buyer
+        addDoc(collection(db, "notifications"), {
+          userId:    transaction.buyerId,
+          type:      "dropoff_booked",
+          title:     "Seller booked drop-off",
+          message:   `The seller has scheduled a drop-off for "${listing?.title}" on ${selectedDate} at ${selectedTimeSlot}.`,
           read:      false,
           createdAt: serverTimestamp(),
         }),
@@ -259,7 +283,7 @@ export default function BookDropOff() {
       navigate("/trade-facility");
     } catch (err) {
       console.error(err);
-      setError("Failed to book: " + err.message);
+      setError("Failed to book drop-off: " + err.message);
     } finally {
       setSubmitting(false);
     }
@@ -306,39 +330,50 @@ export default function BookDropOff() {
     );
   }
 
+  // ── Loading skeleton ──────────────────────────────────────────
   if (loading) {
     return (
       <>
         <NavBar />
         <div className={styles.page}>
-          <div className={`${styles.skeletonBlock} ${styles.shimmer}`}
-               style={{ height: 20, width: 100, marginBottom: 14 }} />
-          <div className={`${styles.skeletonBlock} ${styles.shimmer}`}
-               style={{ height: 28, width: "60%", marginBottom: 8 }} />
-          <div className={`${styles.skeletonBlock} ${styles.shimmer}`}
-               style={{ height: 16, width: "40%", marginBottom: 24 }} />
-          <div className={`${styles.skeletonBlock} ${styles.shimmer}`}
-               style={{ height: 110, marginBottom: 14 }} />
-          <div className={`${styles.skeletonBlock} ${styles.shimmer}`}
-               style={{ height: 72, marginBottom: 24 }} />
+          <div className={styles.skeletonHeader}>
+            <div className={`${styles.shimmer} ${styles.skeletonBlock}`}
+                 style={{ height: 28, marginBottom: 10, maxWidth: 280 }} />
+            <div className={`${styles.shimmer} ${styles.skeletonBlock}`}
+                 style={{ height: 14, maxWidth: 340 }} />
+          </div>
+          <div className={`${styles.shimmer} ${styles.skeletonBlock}`}
+               style={{ height: 110, marginBottom: 14, borderRadius: 14 }} />
+          <div className={`${styles.shimmer} ${styles.skeletonBlock}`}
+               style={{ height: 50, marginBottom: 24, borderRadius: 10 }} />
+          <div className={`${styles.shimmer} ${styles.skeletonBlock}`}
+               style={{ height: 44, marginBottom: 16, borderRadius: 9 }} />
+          <div className={`${styles.shimmer} ${styles.skeletonBlock}`}
+               style={{ height: 120, marginBottom: 24, borderRadius: 9 }} />
+          <div className={`${styles.shimmer} ${styles.skeletonBlock}`}
+               style={{ height: 44, borderRadius: 9 }} />
         </div>
       </>
     );
   }
 
+  // ── Error state ───────────────────────────────────────────────
   if (error && !transaction) {
     return (
       <>
         <NavBar />
         <div className={styles.page}>
           <div className={styles.errorBox}>
-            <svg width="32" height="32" viewBox="0 0 24 24" fill="none"
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none"
                  stroke="currentColor" strokeWidth="1.5">
-              <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" />
-              <line x1="12" y1="16" x2="12.01" y2="16" />
+              <circle cx="12" cy="12" r="10"/>
+              <line x1="12" y1="8" x2="12" y2="12"/>
+              <line x1="12" y1="16" x2="12.01" y2="16"/>
             </svg>
-            <p>{error}</p>
-            <button className={styles.cancelBtn} onClick={() => navigate("/trade-facility")}>
+            <p style={{ margin: 0 }}>{error}</p>
+            <button className={styles.cancelBtn}
+                    style={{ maxWidth: 200 }}
+                    onClick={() => navigate("/trade-facility")}>
               Back to Trade Facility
             </button>
           </div>
@@ -347,9 +382,7 @@ export default function BookDropOff() {
     );
   }
 
-  const price  = formatPrice(transaction?.agreedPrice ?? listing?.price);
-  const banner = getPaymentBanner(paymentMethod, price);
-
+  // ── Main form ─────────────────────────────────────────────────
   return (
     <>
       <NavBar />
@@ -357,20 +390,21 @@ export default function BookDropOff() {
 
         {/* ── Page header ── */}
         <div className={styles.pageHeader}>
-          <button className={styles.backLink} onClick={() => navigate("/trade-facility")}>
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none"
+          <button className={styles.backLink}
+                  onClick={() => navigate("/trade-facility")}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
                  stroke="currentColor" strokeWidth="2">
               <polyline points="15 18 9 12 15 6"/>
             </svg>
             Trade Facility
           </button>
-          <h1 className={styles.heading}>Accept offer &amp; book drop-off</h1>
+          <h1 className={styles.heading}>Book drop-off slot</h1>
           <p className={styles.subheading}>
             Schedule when you'll drop off the item for {buyerName}.
           </p>
         </div>
 
-        {/* ── Summary card ── */}
+        {/* Item summary */}
         <div className={styles.summaryCard}>
           <div className={styles.summaryTop}>
             <div className={styles.summaryImgWrap}>
@@ -416,6 +450,7 @@ export default function BookDropOff() {
               }`}>{getPaymentLabel(paymentMethod)}</span>
             </div>
           </div>
+          <span className={styles.statusChip}>{transaction?.status}</span>
         </div>
 
         {/* ── Payment banner ── */}
@@ -455,25 +490,44 @@ export default function BookDropOff() {
         <form className={styles.form} onSubmit={handleSubmit}>
           <div className={styles.fieldGroup}>
             <label className={styles.label}>Drop-off date</label>
-            <input type="date" className={styles.input} value={selectedDate}
-                   onChange={e => setSelectedDate(e.target.value)} min={minDate} required />
+            <input
+              type="date"
+              className={styles.input}
+              value={selectedDate}
+              onChange={e => setSelectedDate(e.target.value)}
+              min={minDate}
+              required
+            />
           </div>
 
           <div className={styles.fieldGroup}>
             <label className={styles.label}>
               Time slot
               {selectedTimeSlot && (
-                <span className={styles.selectedBadge}>{selectedTimeSlot} selected</span>
+                <span className={styles.selectedBadge}>{selectedTimeSlot}</span>
               )}
             </label>
             {!selectedDate
               ? <p className={styles.slotHint}>Select a date above to see available slots.</p>
-              : renderSlotGrid()}
+              : renderSlotGrid()
+            }
           </div>
 
-          {error && <div className={styles.inlineError}>{error}</div>}
+          {error && (
+            <div className={styles.inlineError}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+                   stroke="currentColor" strokeWidth="2">
+                <circle cx="12" cy="12" r="10"/>
+                <line x1="12" y1="8" x2="12" y2="12"/>
+                <line x1="12" y1="16" x2="12.01" y2="16"/>
+              </svg>
+              {error}
+            </div>
+          )}
 
           <div className={styles.actions}>
+            <button type="button" className={styles.cancelBtn}
+                    onClick={() => navigate("/trade-facility")}>
             <button type="button" className={styles.cancelBtn}
                     onClick={() => navigate("/trade-facility")}>
               Cancel
@@ -485,7 +539,8 @@ export default function BookDropOff() {
             >
               {submitting
                 ? <><span className={styles.spinner} /> Booking…</>
-                : "Accept & book drop-off"}
+                : "Confirm drop-off slot"
+              }
             </button>
           </div>
         </form>
