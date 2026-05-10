@@ -25,6 +25,11 @@ const toRawListingType = (displayType) => {
 const HISTORY_STATUSES  = new Set(['sold', 'completed', 'traded']);
 const READONLY_STATUSES = new Set(['accepted']);
 
+// Any transaction in one of these statuses means the listing is "spoken for"
+// and should NOT also appear as a standalone history entry via fetchUserListings.
+// This prevents a listing appearing in both the History and Offers tabs.
+const ACTIVE_TX_STATUSES = ['completed', 'accepted', 'sold', 'traded'];
+
 function Profile() {
   const navigate     = useNavigate();
   const location     = useLocation();
@@ -193,13 +198,18 @@ function Profile() {
       });
 
       if (doneItems.length) {
+        // FIX: Check for ANY active/completed transaction (not just 'completed') so that
+        // listings with 'accepted', 'sold', or 'traded' transactions are also excluded
+        // from appearing as standalone history entries. Without this, a listing with an
+        // 'accepted' transaction would appear in History even though fetchUserPurchases
+        // only pulls 'completed' transactions — causing potential double-display.
         const coveredByTx = await Promise.all(
           doneItems.map(async (l) => {
             try {
               const txSnap = await getDocs(query(
                 collection(db, 'transactions'),
                 where('listingId', '==', l.id),
-                where('status', '==', 'completed'),
+                where('status', 'in', ACTIVE_TX_STATUSES),
               ));
               return txSnap.empty ? null : l.id; // null = not covered, id = covered by tx
             } catch { return null; }
@@ -210,7 +220,7 @@ function Profile() {
         setHistory(prev => {
           const existingIds = new Set(prev.map(h => h.id));
           const newItems = doneItems
-            .filter(l => !existingIds.has(l.id) && !coveredIds.has(l.id)) // ← skip if tx exists
+            .filter(l => !existingIds.has(l.id) && !coveredIds.has(l.id))
             .map(l => ({
               id:           l.id,
               item:         l.title,
@@ -256,7 +266,6 @@ function Profile() {
 
   const fetchUserPurchases = async (uid) => {
     try {
-      // Only look at the transactions collection, status = completed
       const [asBuyerSnap, asSellerSnap] = await Promise.all([
         getDocs(query(
           collection(db, 'transactions'),
@@ -352,7 +361,6 @@ function Profile() {
     } catch (err) {
       console.warn('fetchUserPurchases:', err);
     }
-    
   };
 
   const handleInputChange = (e) => {

@@ -14,10 +14,178 @@ function formatPrice(value) {
   });
 }
 
+/* ── Derive pipeline stage from transaction ───────────────────── */
+function getPipelineStage(txn) {
+  const status       = txn.status;
+  const dropOffStatus = txn.dropOffStatus;
+
+  if (status === "completed" || status === "awaiting_collection") return 5;
+  if (status === "ready_for_release")                             return 4;
+  if (status === "in_facility")                                   return 3;
+  if (dropOffStatus === "scheduled")                              return 2;
+  return 1;
+}
+
+const PIPELINE_STEPS = [
+  { label: "Waiting for seller to book drop-off" },
+  { label: "Drop-off booked — awaiting delivery" },
+  { label: "Item received — being inspected"     },
+  { label: "Evaluation complete — ready for pick-up" },
+  { label: "Collected"                            },
+];
+
+/* ── Seller badge ─────────────────────────────────────────────── */
+function getSellerStatusBadge(txn) {
+  const s = txn.dropOffStatus;
+  if (s === "inspection_pass") return { label: "Inspection passed",  color: "#166534", bg: "#dcfce7" };
+  if (s === "inspection_fail") return { label: "Inspection failed",  color: "#791F1F", bg: "#FCEBEB" };
+  if (s === "dropped_off")     return { label: "Item dropped off",   color: "#166534", bg: "#dcfce7" };
+  if (s === "scheduled")       return { label: "Drop-off scheduled", color: "#92400e", bg: "#fef3c7" };
+  return                              { label: "Awaiting drop-off",  color: "#1e40af", bg: "#dbeafe" };
+}
+
+/* ── Buyer tracker card ───────────────────────────────────────── */
+function BuyerTrackerCard({ txn, idx }) {
+  const stage    = getPipelineStage(txn);
+  const failed   = txn.dropOffStatus === "inspection_fail";
+  const price    = formatPrice(txn.agreedPrice ?? txn.listing?.price);
+  const imageUrl = txn.listing?.photos?.[0] ?? null;
+
+  return (
+    <div
+      className={`${styles.trackerCard} ${failed ? styles.trackerCardFailed : ""}`}
+      style={{ animationDelay: `${idx * 0.06}s` }}
+    >
+      {/* ── Item summary ── */}
+      <div className={styles.trackerTop}>
+        <div className={styles.imgWrap}>
+          {imageUrl
+            ? <img src={imageUrl} alt={txn.listing?.title} className={styles.img} />
+            : <div className={styles.imgPlaceholder}>
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none"
+                     stroke="#9ca3af" strokeWidth="1.5">
+                  <rect x="3" y="3" width="18" height="18" rx="2"/>
+                  <circle cx="8.5" cy="8.5" r="1.5"/>
+                  <polyline points="21 15 16 10 5 21"/>
+                </svg>
+              </div>
+          }
+        </div>
+        <div className={styles.trackerInfo}>
+          <p className={styles.itemTitle}>{txn.listing?.title ?? "Item"}</p>
+          <div className={styles.metaRow}>
+            <span className={styles.metaPrice}>R{price}</span>
+            <span className={styles.metaDot}>·</span>
+            <span className={styles.metaItem}>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
+                   stroke="currentColor" strokeWidth="2">
+                <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/>
+                <circle cx="12" cy="7" r="4"/>
+              </svg>
+              {txn.sellerName}
+            </span>
+          </div>
+          {txn.dropOffDate && (
+            <p className={styles.dropOffDate}>
+              Drop-off: {txn.dropOffDate} · {txn.dropOffTimeSlot}
+            </p>
+          )}
+        </div>
+      </div>
+
+      {/* ── Divider ── */}
+      <div className={styles.trackerDivider} />
+
+      {/* ── Pipeline or failed banner ── */}
+      {failed ? (
+        <div className={styles.failedBanner}>
+          <div className={styles.failedIcon}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
+                 stroke="currentColor" strokeWidth="2">
+              <circle cx="12" cy="12" r="10"/>
+              <line x1="12" y1="8" x2="12" y2="12"/>
+              <line x1="12" y1="16" x2="12.01" y2="16"/>
+            </svg>
+          </div>
+          <div>
+            <p className={styles.failedTitle}>Evaluation failed</p>
+            <p className={styles.failedSub}>
+              This item did not pass inspection. Please contact support to resolve this transaction.
+            </p>
+          </div>
+        </div>
+      ) : (
+        <div className={styles.pipeline}>
+          {PIPELINE_STEPS.map((step, i) => {
+            const stepNum   = i + 1;
+            const completed = stage > stepNum;
+            const active    = stage === stepNum;
+            const pending   = !completed && !active;
+            const isLast    = i === PIPELINE_STEPS.length - 1;
+
+            return (
+              <div key={i} className={styles.pipelineStep}>
+                <div className={styles.pipelineLeft}>
+                  {/* Dot */}
+                  <div className={`${styles.pipelineDot}
+                    ${completed ? styles.pipelineDotDone    : ""}
+                    ${active    ? styles.pipelineDotActive  : ""}
+                    ${pending   ? styles.pipelineDotPending : ""}
+                  `}>
+                    {completed && (
+                      <svg width="9" height="9" viewBox="0 0 24 24" fill="none"
+                           stroke="currentColor" strokeWidth="3.5">
+                        <polyline points="20 6 9 17 4 12"/>
+                      </svg>
+                    )}
+                    {active && <span className={styles.pipelinePulse} />}
+                  </div>
+                  {/* Connector line (skip last) */}
+                  {!isLast && (
+                    <div className={`${styles.pipelineConnector}
+                      ${completed ? styles.pipelineConnectorDone : ""}
+                    `} />
+                  )}
+                </div>
+
+                <div className={styles.pipelineRight}>
+                  <div className={styles.pipelineLabelRow}>
+                    <span className={`${styles.pipelineLabel}
+                      ${completed ? styles.pipelineLabelDone    : ""}
+                      ${active    ? styles.pipelineLabelActive  : ""}
+                      ${pending   ? styles.pipelineLabelPending : ""}
+                    `}>
+                      {step.label}
+                    </span>
+                    {active && stage < 4 && (
+                      <span className={styles.pipelineInProgressBadge}>In progress</span>
+                    )}
+                    {active && stage === 4 && (
+                      <span className={styles.pipelineReadyBadge}>Ready ✓</span>
+                    )}
+                    {active && stage === 5 && (
+                      <span className={styles.pipelineReadyBadge}>Collected ✓</span>
+                    )}
+                  </div>
+                  {/* Extra spacing below label except last */}
+                  {!isLast && <div style={{ height: 14 }} />}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ── Main ─────────────────────────────────────────────────────── */
 export default function TradeFacility() {
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [transactions, setTransactions] = useState([]);
+  const [user,               setUser]              = useState(null);
+  const [loading,            setLoading]           = useState(true);
+  const [sellerTransactions, setSellerTransactions] = useState([]);
+  const [buyerTransactions,  setBuyerTransactions]  = useState([]);
+  const [activeTab,          setActiveTab]          = useState("seller");
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -31,9 +199,7 @@ export default function TradeFacility() {
         setUser(currentUser);
         fetchTransactions(currentUser.uid);
       } else {
-        setTimeout(() => {
-          if (!auth.currentUser) navigate("/login");
-        }, 500);
+        setTimeout(() => { if (!auth.currentUser) navigate("/login"); }, 500);
         setLoading(false);
       }
     });
@@ -43,37 +209,55 @@ export default function TradeFacility() {
   async function fetchTransactions(uid) {
     setLoading(true);
     try {
-      // CHANGE: Use "waiting" instead of "accepted"
-      // (or whichever status your team set after buyer confirms payment)
-      const q = query(
+      const sellerQ = query(
         collection(db, "transactions"),
         where("sellerId", "==", uid),
-        where("status", "==", "waiting")   // ✅ buyer has confirmed payment
+        where("status", "==", "waiting")
       );
-      const snapshot = await getDocs(q);
+      const buyerQ = query(
+        collection(db, "transactions"),
+        where("buyerId", "==", uid),
+        where("status", "in", [
+          "pending", "pending_payment", "accepted", "waiting",
+          "in_facility", "ready_for_release", "awaiting_collection",
+        ])
+      );
 
-      const txns = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+      const [sellerSnap, buyerSnap] = await Promise.all([getDocs(sellerQ), getDocs(buyerQ)]);
 
-      const [listingSnaps, buyerSnaps] = await Promise.all([
-        Promise.all(txns.map(t => getDoc(doc(db, "listings", t.listingId)))),
-        Promise.all(txns.map(t => getDoc(doc(db, "users",    t.buyerId)))),
+      const sellerTxns = sellerSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const buyerTxns  = buyerSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+      const [sListingSnaps, sBuyerSnaps] = await Promise.all([
+        Promise.all(sellerTxns.map(t => getDoc(doc(db, "listings", t.listingId)))),
+        Promise.all(sellerTxns.map(t => getDoc(doc(db, "users",    t.buyerId)))),
       ]);
-
-      const enriched = txns.map((txn, i) => {
-        if (listingSnaps[i].exists()) txn.listing = listingSnaps[i].data();
-        if (buyerSnaps[i].exists()) {
-          const b = buyerSnaps[i].data();
-          txn.buyerName =
-            (b.firstName && b.lastName) ? `${b.firstName} ${b.lastName}` :
-            b.displayName || b.name ||
-            (b.email ? b.email.split("@")[0] : "Buyer");
-        } else {
-          txn.buyerName = "Unknown User";
-        }
+      const enrichedSeller = sellerTxns.map((txn, i) => {
+        if (sListingSnaps[i].exists()) txn.listing = sListingSnaps[i].data();
+        if (sBuyerSnaps[i].exists()) {
+          const b = sBuyerSnaps[i].data();
+          txn.buyerName = (b.firstName && b.lastName) ? `${b.firstName} ${b.lastName}`
+            : b.displayName || b.name || (b.email ? b.email.split("@")[0] : "Buyer");
+        } else { txn.buyerName = "Unknown User"; }
         return txn;
       });
 
-      setTransactions(enriched);
+      const [bListingSnaps, bSellerSnaps] = await Promise.all([
+        Promise.all(buyerTxns.map(t => getDoc(doc(db, "listings", t.listingId)))),
+        Promise.all(buyerTxns.map(t => getDoc(doc(db, "users",    t.sellerId)))),
+      ]);
+      const enrichedBuyer = buyerTxns.map((txn, i) => {
+        if (bListingSnaps[i].exists()) txn.listing = bListingSnaps[i].data();
+        if (bSellerSnaps[i].exists()) {
+          const s = bSellerSnaps[i].data();
+          txn.sellerName = (s.firstName && s.lastName) ? `${s.firstName} ${s.lastName}`
+            : s.displayName || s.name || (s.email ? s.email.split("@")[0] : "Seller");
+        } else { txn.sellerName = "Unknown User"; }
+        return txn;
+      });
+
+      setSellerTransactions(enrichedSeller);
+      setBuyerTransactions(enrichedBuyer);
     } catch (err) {
       console.error("Error fetching transactions:", err);
     } finally {
@@ -81,16 +265,7 @@ export default function TradeFacility() {
     }
   }
 
-  function getStatusBadge(txn) {
-    if (txn.dropOffStatus === "dropped_off")
-      return { label: "Item dropped off",   color: "#166534", bg: "#dcfce7" };
-    if (txn.dropOffStatus === "scheduled")
-      return { label: "Drop-off scheduled", color: "#92400e", bg: "#fef3c7" };
-    // For waiting status (buyer confirmed)
-    if (txn.status === "waiting")
-      return { label: "Waiting for drop-off", color: "#1e40af", bg: "#dbeafe" };
-    return   { label: txn.status,           color: "#374151", bg: "#f3f4f6" };
-  }
+  const transactions = activeTab === "seller" ? sellerTransactions : buyerTransactions;
 
   if (loading) {
     return (
@@ -99,26 +274,22 @@ export default function TradeFacility() {
         <div className={styles.page}>
           <div className={styles.header}>
             <div>
-              <div className={`${styles.shimmer} ${styles.skeletonLine}`}
-                   style={{ width: 180, height: 28, marginBottom: 8 }} />
-              <div className={`${styles.shimmer} ${styles.skeletonLine}`}
-                   style={{ width: 260, height: 14 }} />
+              <div className={`${styles.shimmer} ${styles.skeletonLine}`} style={{ width: 180, height: 28, marginBottom: 8 }} />
+              <div className={`${styles.shimmer} ${styles.skeletonLine}`} style={{ width: 260, height: 14 }} />
             </div>
           </div>
+          <div className={`${styles.shimmer} ${styles.skeletonLine}`}
+               style={{ width: 240, height: 38, borderRadius: 999, marginBottom: 24 }} />
           <div className={styles.list}>
-            {[1, 2, 3].map(n => (
-              <div key={n} className={styles.card}
-                   style={{ animationDelay: `${n * 0.07}s` }}>
+            {[1, 2].map(n => (
+              <div key={n} className={styles.card} style={{ animationDelay: `${n * 0.07}s` }}>
                 <div className={`${styles.shimmer} ${styles.skeletonImg}`} />
                 <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 10 }}>
-                  <div className={`${styles.shimmer} ${styles.skeletonLine}`}
-                       style={{ width: "55%", height: 14 }} />
-                  <div className={`${styles.shimmer} ${styles.skeletonLine}`}
-                       style={{ width: "35%", height: 12 }} />
-                  <div className={`${styles.shimmer} ${styles.skeletonLine}`}
-                       style={{ width: "45%", height: 12 }} />
+                  <div className={`${styles.shimmer} ${styles.skeletonLine}`} style={{ width: "55%", height: 14 }} />
+                  <div className={`${styles.shimmer} ${styles.skeletonLine}`} style={{ width: "35%", height: 12 }} />
+                  <div className={`${styles.shimmer} ${styles.skeletonLine}`} style={{ width: "75%", height: 10 }} />
+                  <div className={`${styles.shimmer} ${styles.skeletonLine}`} style={{ width: "60%", height: 10 }} />
                 </div>
-                <div className={`${styles.shimmer} ${styles.skeletonBadge}`} />
               </div>
             ))}
           </div>
@@ -133,9 +304,7 @@ export default function TradeFacility() {
         <NavBar />
         <div className={styles.centred}>
           <p>Please log in to access Trade Facility.</p>
-          <button className={styles.primaryBtn} onClick={() => navigate("/login")}>
-            Go to login
-          </button>
+          <button className={styles.primaryBtn} onClick={() => navigate("/login")}>Go to login</button>
         </div>
       </>
     );
@@ -145,11 +314,12 @@ export default function TradeFacility() {
     <>
       <NavBar />
       <div className={styles.page}>
+
         <div className={styles.header}>
           <div>
             <h1 className={styles.heading}>Trade Facility</h1>
-            <p className={styles.subheading}> 
-              <strong> Track your drop-offs, collections and trade exchanges </strong>
+            <p className={styles.subheading}>
+              <strong>Track your drop-offs, collections and trade exchanges</strong>
             </p>
           </div>
           {transactions.length > 0 && (
@@ -159,6 +329,33 @@ export default function TradeFacility() {
           )}
         </div>
 
+        {/* ── Toggle ── */}
+        <div className={styles.toggleWrap}>
+          <button
+            className={`${styles.toggleBtn} ${activeTab === "seller" ? styles.toggleActive : ""}`}
+            onClick={() => setActiveTab("seller")}
+          >
+            Book Drop-off
+            {sellerTransactions.length > 0 && (
+              <span className={`${styles.toggleCount} ${activeTab === "seller" ? styles.toggleCountActive : ""}`}>
+                {sellerTransactions.length}
+              </span>
+            )}
+          </button>
+          <button
+            className={`${styles.toggleBtn} ${activeTab === "buyer" ? styles.toggleActive : ""}`}
+            onClick={() => setActiveTab("buyer")}
+          >
+            Track Pick-up
+            {buyerTransactions.length > 0 && (
+              <span className={`${styles.toggleCount} ${activeTab === "buyer" ? styles.toggleCountActive : ""}`}>
+                {buyerTransactions.length}
+              </span>
+            )}
+          </button>
+        </div>
+
+        {/* ── Content ── */}
         {transactions.length === 0 ? (
           <div className={styles.empty}>
             <div className={styles.emptyIcon}>
@@ -168,27 +365,30 @@ export default function TradeFacility() {
                 <polyline points="9 22 9 12 15 12 15 22"/>
               </svg>
             </div>
-            <p className={styles.emptyTitle}>No transactions waiting</p>
-            <p className={styles.emptySub}>
-              When a buyer confirms payment, you'll be able to book a drop‑off here.
+            <p className={styles.emptyTitle}>
+              {activeTab === "seller" ? "No transactions waiting" : "No active purchases"}
             </p>
-            <button className={styles.primaryBtn}
-                    onClick={() => navigate("/view-listing")}>
+            <p className={styles.emptySub}>
+              {activeTab === "seller"
+                ? "When a buyer confirms payment, you'll be able to book a drop‑off here."
+                : "When you purchase an item, you can track its progress here."}
+            </p>
+            <button className={styles.primaryBtn} onClick={() => navigate("/view-listing")}>
               Browse listings
             </button>
           </div>
         ) : (
           <div className={styles.list}>
-            {transactions.map((txn, idx) => {
-              const badge    = getStatusBadge(txn);
+
+            {/* Seller: standard cards */}
+            {activeTab === "seller" && sellerTransactions.map((txn, idx) => {
+              const badge    = getSellerStatusBadge(txn);
               const imageUrl = txn.listing?.photos?.[0] ?? null;
               return (
-                <div key={txn.id} className={styles.card}
-                     style={{ animationDelay: `${idx * 0.06}s` }}>
+                <div key={txn.id} className={styles.card} style={{ animationDelay: `${idx * 0.06}s` }}>
                   <div className={styles.imgWrap}>
                     {imageUrl
-                      ? <img src={imageUrl} alt={txn.listing?.title}
-                             className={styles.img} />
+                      ? <img src={imageUrl} alt={txn.listing?.title} className={styles.img} />
                       : <div className={styles.imgPlaceholder}>
                           <svg width="24" height="24" viewBox="0 0 24 24" fill="none"
                                stroke="#9ca3af" strokeWidth="1.5">
@@ -199,15 +399,11 @@ export default function TradeFacility() {
                         </div>
                     }
                   </div>
-
                   <div className={styles.cardBody}>
-                    <p className={styles.itemTitle}>
-                      {txn.listing?.title ?? "Item"}
-                    </p>
-
+                    <p className={styles.itemTitle}>{txn.listing?.title ?? "Item"}</p>
                     <div className={styles.metaRow}>
                       <span className={styles.metaPrice}>
-                        R{formatPrice(txn.listing?.price)}
+                        R{formatPrice(txn.agreedPrice ?? txn.listing?.price)}
                       </span>
                       <span className={styles.metaDot}>·</span>
                       <span className={styles.metaItem}>
@@ -219,14 +415,11 @@ export default function TradeFacility() {
                         {txn.buyerName}
                       </span>
                     </div>
-
                     {txn.dropOffDate && (
                       <p className={styles.dropOffDate}>
-                        Scheduled: {txn.dropOffDate} · {txn.dropOffTimeSlot}
+                        Drop-off: {txn.dropOffDate} · {txn.dropOffTimeSlot}
                       </p>
                     )}
-
-                    {/* Show book button only if drop‑off not already scheduled */}
                     {txn.status === "waiting" && !txn.dropOffStatus && (
                       <button className={styles.dropOffBtn}
                               onClick={() => navigate(`/book-dropoff/${txn.id}`)}>
@@ -241,16 +434,20 @@ export default function TradeFacility() {
                       </button>
                     )}
                   </div>
-
                   <div className={styles.badgeWrap}>
-                    <span className={styles.badge}
-                          style={{ background: badge.bg, color: badge.color }}>
+                    <span className={styles.badge} style={{ background: badge.bg, color: badge.color }}>
                       {badge.label}
                     </span>
                   </div>
                 </div>
               );
             })}
+
+            {/* Buyer: tracker cards */}
+            {activeTab === "buyer" && buyerTransactions.map((txn, idx) => (
+              <BuyerTrackerCard key={txn.id} txn={txn} idx={idx} />
+            ))}
+
           </div>
         )}
       </div>

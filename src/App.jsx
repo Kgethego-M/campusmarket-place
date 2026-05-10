@@ -39,6 +39,8 @@ import ProfileListingCard from './components/ProfileListingCard';
 // SPRINT 2 IMPORTS
 import TradeFacility from './components/TradeFacility';
 import BookDropOff from './components/BookDropOff';
+import BookPickUp from './components/BookPickUp';
+
 
 // SPRINT 3 IMPORTS
 import AdminAnalytics from './components/AdminAnalytics';
@@ -204,6 +206,7 @@ export function AppRoutes() {
       {/* SPRINT 2 ROUTES */}
       <Route path="/trade-facility" element={<ProtectedRoute allowedRoles={['student']}><TradeFacility /></ProtectedRoute>} />
       <Route path="/book-dropoff/:transactionId" element={<ProtectedRoute allowedRoles={['student']}><BookDropOff /></ProtectedRoute>} />
+      <Route path="/book-pickup/:transactionId" element={<ProtectedRoute allowedRoles={['student']}><BookPickUp /></ProtectedRoute>} />
       <Route path="/payment/:txId" element={<ProtectedRoute allowedRoles={['student']}><Payment /></ProtectedRoute>} />
 
       <Route path="/azure/create-listing" element={<CreateListingAzure/>} />
