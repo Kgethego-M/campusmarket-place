@@ -13,20 +13,20 @@ const NAV_LINKS = [
   { label: 'Trade',        path: '/trade-facility', icon: 'fa-arrows-rotate' },
   { label: 'Messages',     path: '/chat',           icon: 'fa-comment' },
   { label: 'My Purchases', path: '/my-purchases',   icon: 'fa-bag-shopping' },
-  { label: 'Cart',         path: '/cart',           icon: 'fa-cart-shopping' },
+  { label: 'Favourites',   path: '/cart',           icon: 'fa-heart' },
 ];
 
 export default function ViewCart() {
   const navigate = useNavigate();
   const location = useLocation();
 
-  const [currentUser, setCurrentUser]         = useState(null);
-  const [cartItems, setCartItems]             = useState([]);
-  const [cartIds, setCartIds]                 = useState([]);
-  const [loading, setLoading]                 = useState(true);
+  const [currentUser, setCurrentUser]           = useState(null);
+  const [cartItems, setCartItems]               = useState([]);
+  const [cartIds, setCartIds]                   = useState([]);
+  const [loading, setLoading]                   = useState(true);
   const [snapshotReceived, setSnapshotReceived] = useState(false);
-  const [removing, setRemoving]               = useState(null);
-  const [toast, setToast]                     = useState(null);
+  const [removing, setRemoving]                 = useState(null);
+  const [toast, setToast]                       = useState(null);
 
   const showToast = (msg, type = 'success') => {
     setToast({ msg, type });
@@ -78,7 +78,7 @@ export default function ViewCart() {
             if (!snap.exists()) return null;
             const d = snap.data();
             return {
-              id: snap.id,
+              id:          snap.id,
               title:       d.title || 'Unknown Item',
               price:       d.price ?? null,
               condition:   d.condition || '',
@@ -99,7 +99,7 @@ export default function ViewCart() {
     enrich();
   }, [cartIds, snapshotReceived]);
 
-  // ── Remove from cart ───────────────────────────────────────────────────────
+  // ── Remove from favourites ─────────────────────────────────────────────────
   const handleRemove = async (listingId) => {
     if (!currentUser || removing) return;
     setRemoving(listingId);
@@ -107,9 +107,9 @@ export default function ViewCart() {
       await updateDoc(doc(db, 'carts', currentUser.uid), {
         items: arrayRemove(listingId),
       });
-      showToast('Removed from cart');
+      showToast('Removed from favourites');
     } catch (err) {
-      console.error('Remove from cart error:', err);
+      console.error('Remove from favourites error:', err);
       showToast('Failed to remove item', 'error');
     } finally {
       setRemoving(null);
@@ -121,9 +121,9 @@ export default function ViewCart() {
     if (!currentUser || cartItems.length === 0) return;
     try {
       await updateDoc(doc(db, 'carts', currentUser.uid), { items: [] });
-      showToast('Cart cleared');
+      showToast('Favourites cleared');
     } catch {
-      showToast('Failed to clear cart', 'error');
+      showToast('Failed to clear favourites', 'error');
     }
   };
 
@@ -136,7 +136,7 @@ export default function ViewCart() {
           <div className={styles.container}>
             <div className={styles.header}>
               <div className={styles.headerLeft}>
-                <h1 className={styles.pageTitle}>My Cart</h1>
+                <h1 className={styles.pageTitle}>My Favourites</h1>
               </div>
             </div>
             <div className={styles.grid}>
@@ -181,7 +181,7 @@ export default function ViewCart() {
                 <i className="fas fa-arrow-left" /> Back
               </button>
               <div>
-                <h1 className={styles.pageTitle}>My Cart</h1>
+                <h1 className={styles.pageTitle}>My Favourites</h1>
                 <p className={styles.pageSub}>
                   {cartItems.length === 0
                     ? 'No items saved'
@@ -201,10 +201,10 @@ export default function ViewCart() {
           {cartItems.length === 0 ? (
             <div className={styles.emptyState}>
               <div className={styles.emptyIcon}>
-                <i className="fas fa-shopping-cart" />
+                <i className="fas fa-heart" />
               </div>
-              <p className={styles.emptyTitle}>Your cart is empty</p>
-              <p className={styles.emptySub}>Browse listings and add items you like to your cart.</p>
+              <p className={styles.emptyTitle}>No favourites yet</p>
+              <p className={styles.emptySub}>Browse listings and save items you like to your favourites.</p>
               <button className={styles.browseBtn} onClick={() => navigate('/view-listing')}>
                 <i className="fas fa-search" /> Browse listings
               </button>
@@ -287,7 +287,7 @@ export default function ViewCart() {
                       >
                         {removing === item.id
                           ? <i className="fas fa-spinner fa-spin" />
-                          : <><i className="fas fa-trash" /> Remove</>
+                          : <><i className="fas fa-heart-broken" /> Remove</>
                         }
                       </button>
                     </div>
