@@ -1,12 +1,13 @@
 import { useState, useEffect, useRef } from "react";
 import { collection, query, where, getDocs, doc, getDoc } from "firebase/firestore";
 import { useNavigate } from "react-router-dom";
-import { db } from "../firebase.js";
+import { db, auth } from "../firebase.js";
 
-const POPUP_VISIBLE_DURATION = 5000;     // 5 seconds visible
-const DELAY_BEFORE_FIRST = 10000;        // 10 seconds before first popup
-const DELAY_BETWEEN_POPUPS = 120000;     // 2 minutes after close before next
-const MAX_POPUPS = 3;
+const POPUP_VISIBLE_DURATION = 5000;   // 5 seconds visible
+const DELAY_BEFORE_FIRST = 10000;      // 10 seconds before first popup
+const DELAY_BETWEEN_POPUPS = 120000;   // 2 minutes between popups
+const MAX_POPUPS_PER_SESSION = 3;
+const SESSION_TIMEOUT = 2 * 60 * 1000; // 2 minutes – after this, session resets
 
 export default function PremiumPopup() {
   const [ad, setAd] = useState(null);
@@ -35,57 +36,57 @@ export default function PremiumPopup() {
       const snapshot = await getDocs(q);
       if (snapshot.empty) return;
 
-      // Filter ads whose listing is not sold/inactive
+      // Filter valid ads (listing not sold/inactive)
       const validAds = [];
       for (const docSnap of snapshot.docs) {
         const adData = { id: docSnap.id, ...docSnap.data() };
         if (adData.listingId) {
           const listingSnap = await getDoc(doc(db, "listings", adData.listingId));
           if (listingSnap.exists()) {
-            const listing = listingSnap.data();
-            const status = listing.status?.toLowerCase();
-            const unavailable = ["sold", "inactive", "accepted", "completed"];
-            if (!unavailable.includes(status)) {
+            const status = listingSnap.data().status?.toLowerCase();
+            if (!["sold", "inactive", "accepted", "completed"].includes(status)) {
               validAds.push(adData);
             }
           }
         } else {
-          validAds.push(adData); // keep ads without listingId (if any)
+          validAds.push(adData);
         }
       }
-
       if (validAds.length === 0) return;
 
-      // Pick a random premium ad
+      // Randomly pick one ad for this popup instance
       const randomAd = validAds[Math.floor(Math.random() * validAds.length)];
       setAd(randomAd);
 
-      // Session state
-      let shownCount = parseInt(sessionStorage.getItem("premiumAdShownCount") || "0");
-      if (shownCount >= MAX_POPUPS) return;
+      // Session management
+      const now = Date.now();
+      let startTime = parseInt(sessionStorage.getItem("premiumStartTime") || now);
+      let count = parseInt(sessionStorage.getItem("premiumCount") || 0);
 
-      // Schedule the first popup
-      scheduleNextPopup(true);
+      // Reset if session expired (more than SESSION_TIMEOUT since start)
+      if (now - startTime > SESSION_TIMEOUT) {
+        startTime = now;
+        count = 0;
+        sessionStorage.setItem("premiumStartTime", startTime);
+        sessionStorage.setItem("premiumCount", "0");
+      }
+
+      // If already shown max times in this session, do nothing
+      if (count >= MAX_POPUPS_PER_SESSION) return;
+
+      // Determine delay for this popup
+      const delay = count === 0 ? DELAY_BEFORE_FIRST : DELAY_BETWEEN_POPUPS;
+      timeoutRef.current = setTimeout(() => {
+        showPopup();
+      }, delay);
     } catch (err) {
       console.error("Error fetching premium ad:", err);
     }
   }
 
-  function scheduleNextPopup(isFirst = false) {
-    const shownCount = parseInt(sessionStorage.getItem("premiumAdShownCount") || "0");
-    if (shownCount >= MAX_POPUPS) return;
-
-    const delay = isFirst ? DELAY_BEFORE_FIRST : DELAY_BETWEEN_POPUPS;
-    if (timeoutRef.current) clearTimeout(timeoutRef.current);
-    timeoutRef.current = setTimeout(() => {
-      showPopup();
-    }, delay);
-  }
-
   function showPopup() {
     setVisible(true);
     setCountdown(POPUP_VISIBLE_DURATION / 1000);
-    if (countdownRef.current) clearInterval(countdownRef.current);
     countdownRef.current = setInterval(() => {
       setCountdown(prev => {
         if (prev <= 1) {
@@ -100,11 +101,17 @@ export default function PremiumPopup() {
 
   function closePopup() {
     setVisible(false);
-    let shownCount = parseInt(sessionStorage.getItem("premiumAdShownCount") || "0");
-    shownCount++;
-    sessionStorage.setItem("premiumAdShownCount", shownCount);
-    if (shownCount < MAX_POPUPS) {
-      scheduleNextPopup(false);
+    // Increment session count
+    let count = parseInt(sessionStorage.getItem("premiumCount") || 0);
+    count++;
+    sessionStorage.setItem("premiumCount", count);
+    // If we haven't reached max and session not expired, schedule next popup
+    const startTime = parseInt(sessionStorage.getItem("premiumStartTime") || Date.now());
+    const now = Date.now();
+    if (count < MAX_POPUPS_PER_SESSION && (now - startTime) <= SESSION_TIMEOUT) {
+      timeoutRef.current = setTimeout(() => {
+        showPopup();
+      }, DELAY_BETWEEN_POPUPS);
     }
   }
 
@@ -122,59 +129,32 @@ export default function PremiumPopup() {
       <div
         onClick={handleViewListing}
         style={{
-          position: "fixed",
-          top: 0, left: 0,
-          width: "100vw",
-          height: "100vh",
-          backgroundColor: "rgba(0,0,0,0.7)",
-          zIndex: 1999,
+          position: "fixed", top: 0, left: 0, width: "100vw", height: "100vh",
+          backgroundColor: "rgba(0,0,0,0.7)", zIndex: 1999,
         }}
       />
-
       <div
         onClick={handleViewListing}
         style={{
-          position: "fixed",
-          top: "50%",
-          left: "50%",
-          transform: "translate(-50%, -50%)",
-          backgroundColor: "white",
-          borderRadius: "16px",
-          padding: "28px",
-          width: "340px",
-          zIndex: 2000,
-          boxShadow: "0 8px 32px rgba(0,0,0,0.3)",
-          fontFamily: "'Segoe UI', sans-serif",
-          cursor: "pointer",
-          textAlign: "center",
+          position: "fixed", top: "50%", left: "50%", transform: "translate(-50%, -50%)",
+          backgroundColor: "white", borderRadius: "16px", padding: "28px", width: "340px",
+          zIndex: 2000, boxShadow: "0 8px 32px rgba(0,0,0,0.3)", cursor: "pointer", textAlign: "center",
         }}
       >
         <div style={{
-          position: "absolute",
-          top: "-12px",
-          left: "50%",
-          transform: "translateX(-50%)",
-          backgroundColor: "#ff9800",
-          color: "white",
-          padding: "4px 12px",
-          borderRadius: "20px",
-          fontSize: "12px",
-          fontWeight: "bold",
-        }}>
-          ✦ PREMIUM AD ✦
-        </div>
+          position: "absolute", top: "-12px", left: "50%", transform: "translateX(-50%)",
+          backgroundColor: "#ff9800", color: "white", padding: "4px 12px", borderRadius: "20px",
+          fontSize: "12px", fontWeight: "bold",
+        }}>✦ PREMIUM AD ✦</div>
 
         {ad.imageUrl ? (
           <img src={ad.imageUrl} alt={ad.title} style={{
-            width: "100%", height: "160px", objectFit: "cover",
-            borderRadius: "10px", marginBottom: "16px",
+            width: "100%", height: "160px", objectFit: "cover", borderRadius: "10px", marginBottom: "16px",
           }} />
         ) : (
           <div style={{
-            width: "100%", height: "160px", backgroundColor: "#f0f4f8",
-            borderRadius: "10px", marginBottom: "16px",
-            display: "flex", alignItems: "center", justifyContent: "center",
-            color: "#aaa",
+            width: "100%", height: "160px", backgroundColor: "#f0f4f8", borderRadius: "10px",
+            marginBottom: "16px", display: "flex", alignItems: "center", justifyContent: "center", color: "#aaa",
           }}>No image</div>
         )}
 

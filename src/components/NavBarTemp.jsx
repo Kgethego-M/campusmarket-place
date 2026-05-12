@@ -13,7 +13,7 @@ const NAV_LINKS = [
     { label: "Trade Facility", path: "/trade-facility" },
     { label: "Messages",       path: "/chat" },
     { label: "My Purchases",   path: "/my-purchases" },
-    { label: "Cart",           path: "/cart", isCart: true },
+    { label: "Favorites", path: "/favourites", isFavorite: true },
 ];
 
 const formatTime = (ts) => {
@@ -68,7 +68,6 @@ async function resolveAndNavigate(notification, currentUser, navigate) {
     const BUYER_TYPES = [
         'item_at_facility',
         'item_ready_for_collection',
-       
         'item_collected',
     ];
     const isBuyerNotification = BUYER_TYPES.includes(notification.type);
@@ -118,18 +117,12 @@ export default function Navbar() {
             await markOfferAsRead(n.id);
 
             if (n.type === 'new_offer') {
-                // Seller's listing got an offer
                 navigate('/profile?tab=offers&highlight=' + (n.transactionId || n.listingId || ''));
-
             } else if (n.type === 'offer_accepted') {
-                // FIX: navigate to payment page with the transaction ID
                 navigate(`/payment/${n.transactionId}`);
-
             } else if (n.type === 'offer_declined') {
                 navigate('/view-listing');
-
             } else {
-                // Everything else: look up the transaction and route by role
                 await resolveAndNavigate(n, currentUser, navigate);
             }
 
@@ -464,8 +457,8 @@ export default function Navbar() {
                             onClick={() => link.path && navigate(link.path)}
                             disabled={!link.path}
                         >
-                            {link.isCart
-                                ? <span className={styles.cartNavItem}><i className="fas fa-shopping-cart" />Cart</span>
+                            {link.isFavorite
+                                ? <span className={styles.cartNavItem}><i className="fas fa-heart" />Favorites</span>
                                 : link.label
                             }
                         </button>
@@ -633,7 +626,7 @@ export default function Navbar() {
                             link.label === 'Browse'         ? 'fa-store' :
                             link.label === 'Messages'       ? 'fa-comment' :
                             link.label === 'My Purchases'   ? 'fa-bag-shopping' :
-                            link.label === 'Cart'           ? 'fa-cart-shopping' :
+                            link.label === 'Favorites'      ? 'fa-heart' :
                             'fa-arrows-rotate'
                         }`} />
                         <span>{link.label}</span>

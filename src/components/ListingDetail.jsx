@@ -484,28 +484,27 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
           {renderButton()}
 
           {/* ── Add to Cart ── */}
-          {currentUser && !isOwnListing && (
-            <button
-              style={{
-                ...styles.cartBtn,
-                backgroundColor: inCart ? '#f0fdf4' : '#f8fafc',
-                borderColor:     inCart ? '#86efac' : '#d1d5db',
-                color:           inCart ? '#15803d' : '#374151',
-              }}
-              onClick={handleCartToggle}
-              disabled={cartLoading}
-            >
-              {cartLoading
-                ? <IconLoader />
-                : <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
-                    <circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/>
-                    <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/>
-                  </svg>
-              }
-              <span>{inCart ? 'Remove from cart' : 'Save to cart'}</span>
-            </button>
-          )}
-
+         {currentUser && !isOwnListing && (
+  <button
+    style={{
+      ...styles.cartBtn,
+      backgroundColor: inCart ? '#f0fdf4' : '#f8fafc',
+      borderColor:     inCart ? '#86efac' : '#d1d5db',
+      color:           inCart ? '#15803d' : '#374151',
+    }}
+    onClick={handleCartToggle}
+    disabled={cartLoading}
+  >
+    {cartLoading ? (
+      <IconLoader />
+    ) : inCart ? (
+      <i className="fas fa-heart-broken" style={{ color: '#dc2626' }} />
+    ) : (
+      <i className="far fa-heart" />
+    )}
+    <span>{inCart ? 'Remove from favourites' : 'Save to favourites'}</span>
+  </button>
+)}
           {/* ── Message Seller ── */}
           {currentUser && !isOwnListing && (
             <button style={styles.messageBtn} onClick={handleMessageSeller} disabled={chatLoading}>
