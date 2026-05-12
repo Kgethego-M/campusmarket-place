@@ -32,8 +32,6 @@ import PaymentSuccess from './components/PaymentSuccess.jsx';
 import PaymentCancelled from './components/PaymentCancelled.jsx';
 import ReportsPage from './components/ReportsPage';
 import ModerationSummaryPage from './components/ModerationSummaryPage';
-import PromoteSuccess from "./components/PromoteSuccess";
-import PromoteCancelled from "./components/PromoteCancelled";
 
 import CreateListingAzure from './components/CreateListingAzure';
 
@@ -363,9 +361,6 @@ export function AppRoutes() {
           </ProtectedRoute>
         }
       />
-
-      <Route path="/promote-success" element={<PromoteSuccess />} />
-      <Route path="/promote-cancelled" element={<PromoteCancelled />} />
 
       /* Admin Routes */
       <Route
