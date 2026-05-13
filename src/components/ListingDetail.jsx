@@ -416,25 +416,13 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
     // Trade item validation
     if (purchaseType === 'trade') {
       if (!tradeItemName) {
-        showToast('Please enter your trade item name', 'warn');
-        alert('Please enter your trade item name');
+        showToast('Please describe what you want to trade', 'warn');
+        alert('Please describe what you want to trade');
         return;
       }
-      if (!tradeItemCategory) {
-        showToast('Please select a category for your trade item', 'warn');
-        alert('Please select a category for your trade item');
-        return;
-      }
-      if (!tradeItemCondition) {
-        showToast('Please select the condition of your trade item', 'warn');
-        alert('Please select the condition of your trade item');
-        return;
-      }
-      if (!tradeImagePreview && !tradeImageFile) {
-        showToast('Please upload a photo of your trade item', 'warn');
-        alert('Please upload a photo of your trade item');
-        return;
-      }
+      // Soft hints for structured fields — don't block submission so partial offers still go through
+      if (!tradeItemCategory) showToast('Tip: Adding a category helps the seller understand your offer', 'warn');
+      if (!tradeItemCondition) showToast('Tip: Selecting a condition helps the seller evaluate your item', 'warn');
     }
 
     setSubmitting(true);
@@ -484,7 +472,8 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
       paymentType:   purchaseType === 'sale' ? paymentType : null,
       paymentMethod,
       partialAmount: paymentType === 'partial' ? Number(partialAmount) : null,
-      tradeItem:     tradeItemPayload,
+      tradeItem:     purchaseType === 'trade' ? tradeItemName : null,  // string for compatibility
+      tradeItemDetails: tradeItemPayload,                               // structured object
       terms:         terms || null,
       createdAt:     new Date().toISOString(),
     };
@@ -834,7 +823,7 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
                   </label>
                   <input
                     type="text"
-                    placeholder="e.g. Sony WH-1000XM4 Headphones"
+                    placeholder="Describe your trade item (e.g. Sony WH-1000XM4 Headphones)"
                     value={tradeItemName}
                     onChange={(e) => setTradeItemName(e.target.value)}
                     style={modalStyles.input}
