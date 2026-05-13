@@ -69,6 +69,8 @@ async function resolveAndNavigate(notification, currentUser, navigate) {
         'item_at_facility',
         'item_ready_for_collection',
         'item_collected',
+        'overdue_collection_buyer',
+        'overdue_dropoff_buyer',
     ];
     const isBuyerNotification = BUYER_TYPES.includes(notification.type);
     navigate(isBuyerNotification ? '/my-purchases' : '/trade-facility');
@@ -122,6 +124,21 @@ export default function Navbar() {
                 navigate(`/payment/${n.transactionId}`);
             } else if (n.type === 'offer_declined') {
                 navigate('/view-listing');
+            } else if (n.type === 'item_at_facility') {
+                // Buyer: item dropped off → go to My Purchases, Awaiting Collection tab, open that listing
+                const params = new URLSearchParams({ filter: 'awaiting_collection' });
+                if (n.transactionId) params.set('open', n.transactionId);
+                navigate(`/my-purchases?${params.toString()}`);
+            } else if (
+                n.type === 'overdue_collection_buyer' ||
+                n.type === 'overdue_dropoff_buyer'
+            ) {
+                navigate('/my-purchases');
+            } else if (
+                n.type === 'overdue_collection_seller' ||
+                n.type === 'overdue_dropoff_seller'
+            ) {
+                navigate('/trade-facility');
             } else {
                 await resolveAndNavigate(n, currentUser, navigate);
             }
@@ -161,6 +178,10 @@ export default function Navbar() {
         if (type === 'transaction_complete')                 return 'fa-circle-check';
         if (type === 'collection_booked')                    return 'fa-calendar-check';
         if (type === 'dropoff_booked')                       return 'fa-calendar-check';
+        if (type === 'overdue_collection_buyer')             return 'fa-triangle-exclamation';
+        if (type === 'overdue_collection_seller')            return 'fa-triangle-exclamation';
+        if (type === 'overdue_dropoff_seller')               return 'fa-triangle-exclamation';
+        if (type === 'overdue_dropoff_buyer')                return 'fa-clock';
         return 'fa-bell';
     };
 
@@ -177,6 +198,10 @@ export default function Navbar() {
         if (type === 'transaction_complete')                 return '#22c55e';
         if (type === 'collection_booked')                    return '#6d28d9';
         if (type === 'dropoff_booked')                       return '#92400e';
+        if (type === 'overdue_collection_buyer')             return '#dc2626';
+        if (type === 'overdue_collection_seller')            return '#dc2626';
+        if (type === 'overdue_dropoff_seller')               return '#dc2626';
+        if (type === 'overdue_dropoff_buyer')                return '#f59e0b';
         return '#94a3b8';
     };
 
@@ -190,12 +215,16 @@ export default function Navbar() {
         if (n.type === 'offer_accepted')            return `Your offer on ${title} was accepted!${price}`;
         if (n.type === 'offer_declined')            return `Your offer on ${title} was declined.`;
         if (n.type === 'item_received_at_facility') return `${title} has been received at the trade facility.${price}`;
-        if (n.type === 'item_at_facility')          return `${title} is now at the trade facility. Book your collection slot.${price}`;
+        if (n.type === 'item_at_facility')          return `${title} has been dropped off and is ready to collect from the trade facility. Show your receipt to staff when collecting.`;
         if (n.type === 'item_ready_for_collection') return `${title} is ready for collection at the trade facility.${price}`;
         if (n.type === 'item_collected')            return `${title} has been collected. Transaction complete!${price}`;
         if (n.type === 'transaction_complete')      return `Your sale of ${title} is complete${price}.`;
         if (n.type === 'collection_booked')         return n.message || `Collection slot booked for ${title}.`;
         if (n.type === 'dropoff_booked')            return n.message || `Drop-off slot booked for ${title}.`;
+        if (n.type === 'overdue_collection_buyer')  return n.message || `You did not collect ${title} in time. It will be returned to the seller. Contact the trade facility for assistance.`;
+        if (n.type === 'overdue_collection_seller') return n.message || `The buyer did not collect ${title}. Please come to the trade facility to collect your item back.`;
+        if (n.type === 'overdue_dropoff_seller')    return n.message || `Your drop-off for ${title} is overdue. Please come to the facility as soon as possible.`;
+        if (n.type === 'overdue_dropoff_buyer')     return n.message || `The seller has not yet dropped off ${title}. We have sent them a reminder.`;
 
         if (n.type === 'rate_seller') {
             const itemPart = n.listingTitle ? ` for "${n.listingTitle}"${price}` : '';

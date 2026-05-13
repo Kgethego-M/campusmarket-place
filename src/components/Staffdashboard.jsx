@@ -30,7 +30,7 @@ async function notifyBothParties(txn, stage) {
     const title = txn.listingTitle || txn.item;
 
     if (stage === "drop_off") {
-        // Seller gets notified → they go to Trade Facility
+        // Seller gets notified → their item was received
         await sendNotification(txn.sellerId, {
             type:          "item_received_at_facility",
             listingId:     txn.listingId || null,
@@ -38,13 +38,13 @@ async function notifyBothParties(txn, stage) {
             listingTitle:  title,
             message:       `Your item "${title}" has been received at the trade facility.`,
         });
-        // Buyer gets notified → they go to My Purchases to book collection
+        // Buyer gets notified → go to My Purchases, show receipt, collect within 7 days
         await sendNotification(txn.buyerId, {
             type:          "item_at_facility",
             listingId:     txn.listingId || null,
             transactionId: txn.id,
             listingTitle:  title,
-            message:       `The item "${title}" you purchased is now at the trade facility. Book a collection slot to pick it up.`,
+            message:       `"${title}" has been dropped off at the trade facility. You have up to 7 days to collect it. Show your receipt to staff when collecting.`,
         });
     } else {
         // Collection confirmed
@@ -65,13 +65,68 @@ async function notifyBothParties(txn, stage) {
     }
 }
 
-// ─── Constants ────────────────────────────────────────────────────────────────
+// ─── Overdue notification helpers ────────────────────────────────────────────
+
+/**
+ * Fired when the BUYER failed to collect within the collection period.
+ * - Buyer: warned their item will be returned to the seller.
+ * - Seller: told the buyer didn't collect and they should come pick it up.
+ */
+async function notifyOverdueCollection(txn) {
+    if (!txn.buyerId || !txn.sellerId) return;
+    const title = txn.listingTitle || txn.item;
+
+    await sendNotification(txn.buyerId, {
+        type:          "overdue_collection_buyer",
+        listingId:     txn.listingId || null,
+        transactionId: txn.id,
+        listingTitle:  title,
+        message:       `You did not collect "${title}" within the collection period. The item will be returned to the seller. Please contact the trade facility if you need assistance.`,
+    });
+
+    await sendNotification(txn.sellerId, {
+        type:          "overdue_collection_seller",
+        listingId:     txn.listingId || null,
+        transactionId: txn.id,
+        listingTitle:  title,
+        message:       `The buyer failed to collect "${title}" within the collection period. Please come to the trade facility to collect your item back.`,
+    });
+}
+
+/**
+ * Fired when the SELLER failed to drop off within the drop-off period.
+ * - Seller: reminded to drop off their item or the transaction may be cancelled.
+ * - Buyer: informed the seller has not dropped off yet.
+ */
+async function notifyOverdueDropOff(txn) {
+    if (!txn.buyerId || !txn.sellerId) return;
+    const title = txn.listingTitle || txn.item;
+
+    await sendNotification(txn.sellerId, {
+        type:          "overdue_dropoff_seller",
+        listingId:     txn.listingId || null,
+        transactionId: txn.id,
+        listingTitle:  title,
+        message:       `Your drop-off for "${title}" is overdue. Please come to the trade facility as soon as possible or your transaction may be cancelled.`,
+    });
+
+    await sendNotification(txn.buyerId, {
+        type:          "overdue_dropoff_buyer",
+        listingId:     txn.listingId || null,
+        transactionId: txn.id,
+        listingTitle:  title,
+        message:       `The seller has not yet dropped off "${title}" at the trade facility. We have sent them a reminder. You will be notified once it arrives.`,
+    });
+}
+
+
 
 const TABS = [
-    { key: "due_today",  label: "Due Today",        icon: "fa-calendar-day"      },
-    { key: "all",        label: "All Transactions",  icon: "fa-list"              },
-    { key: "history",    label: "History",           icon: "fa-clock-rotate-left" },
-    { key: "time_slots", label: "Time Slots",        icon: "fa-clock"             },
+    { key: "drop_offs",   label: "Drop Offs",         icon: "fa-truck-arrow-right"  },
+    { key: "collections", label: "Collections",        icon: "fa-person-walking"     },
+    { key: "all",         label: "All Transactions",   icon: "fa-list"               },
+    { key: "history",     label: "History",            icon: "fa-clock-rotate-left"  },
+    { key: "time_slots",  label: "Time Slots",         icon: "fa-clock"              },
 ];
 
 const STATUS_META = {
@@ -162,23 +217,42 @@ function TransactionDetailPanel({ txn, onClose, onConfirmDropOff, onConfirmColle
         ? { ...STATUS_META[txn.status] || STATUS_META.pending, label: "Overdue", cls: (STATUS_META[txn.status] || STATUS_META.pending).cls }
         : (STATUS_META[txn.status] || STATUS_META.pending);
 
-    const allChecked    = txn.checklist.every(c => c.done);
-    const shortfall     = txn.cashShortfall ?? 0;
-    const hasShortfall  = shortfall > 0;
-    const [cashConfirmed, setCashConfirmed] = useState(txn.paymentStatus === "Fully Paid" || shortfall === 0);
+    const allChecked = txn.checklist.every(c => c.done);
+
+    // ── Payment method helpers ────────────────────────────────
+    const paymentMethod    = (txn.paymentMethod || "cash").toLowerCase();
+    const isFullyOnline    = paymentMethod === "online"  || paymentMethod === "fully_online"  || paymentMethod === "fully online";
+    const isFullyCash      = paymentMethod === "cash"    || paymentMethod === "fully_cash"    || paymentMethod === "fully cash"   || paymentMethod === "in_person" || paymentMethod === "in person";
+    const isPartial        = paymentMethod === "partial" || paymentMethod === "partial_online" || paymentMethod === "split"       || paymentMethod === "partially online" || paymentMethod === "partially_online";
+
+    const totalPrice       = txn.price ?? 0;
+    const onlineAmountPaid = txn.onlineAmountPaid ?? 0;
+    const shortfall        = isFullyOnline
+        ? 0
+        : isPartial
+            ? Math.max(0, totalPrice - onlineAmountPaid)
+            : (txn.cashShortfall ?? totalPrice);
+
+    const hasShortfall = shortfall > 0;
+
+    // Online payment is always auto-confirmed; cash/partial confirmed by staff at collection
+    const [cashConfirmed, setCashConfirmed] = useState(
+        isFullyOnline || txn.paymentStatus === "Fully Paid" || shortfall === 0
+    );
     const [saving,        setSaving]        = useState(false);
     const [alertSending,  setAlertSending]  = useState(false);
-    const [alertSent,     setAlertSent]     = useState(false);
+    const [alertSent,     setAlertSent]     = useState(!!txn.overdueAlertSentAt);
     const [dropOffLoading,    setDropOffLoading]    = useState(false);
     const [collectionLoading, setCollectionLoading] = useState(false);
 
-    const canConfirmCash = allChecked && hasShortfall && !cashConfirmed;
-    const canRelease     = allChecked && (!hasShortfall || cashConfirmed);
+    // Staff can confirm cash at collection (not drop-off) for cash/partial
+    const canConfirmCash = !isFullyOnline && allChecked && hasShortfall && !cashConfirmed;
+    const canRelease     = allChecked && (isFullyOnline || !hasShortfall || cashConfirmed);
 
     const waitingForDropOff    = txn.status === "pending" && !txn.dropOffBooked;
-    const waitingForCollection = ["in_facility", "ready_to_release"].includes(txn.status) && !txn.collectionBooked;
+    const waitingForCollection = ["in_facility", "ready_to_release"].includes(txn.status);
     const showConfirmDropOff   = txn.status === "pending" && txn.dropOffBooked;
-    const showConfirmCollection = txn.status === "awaiting_collection" && txn.collectionBooked;
+    const showConfirmCollection = txn.status === "awaiting_collection";
 
     const dropOffTimeReached    = isBookingTimeReached(txn.dropOffDate,    txn.dropOffTimeSlot);
     const collectionTimeReached = isBookingTimeReached(txn.collectionDate, txn.collectionTimeSlot);
@@ -298,17 +372,50 @@ function TransactionDetailPanel({ txn, onClose, onConfirmDropOff, onConfirmColle
                                 <span className={styles.detailInfoValue}>{txn.type}</span>
                             </div>
                             {txn.type === "Purchase" ? (
-                                <div className={styles.detailInfoRow}>
-                                    <span className={styles.detailInfoLabel}>Amount</span>
-                                    <span className={styles.detailInfoValue}>
-                                        R{txn.price?.toLocaleString()}
-                                        {cashConfirmed || !hasShortfall ? (
-                                            <span className={styles.paidChip}><i className="fa-solid fa-circle-check" /> Paid</span>
-                                        ) : (
-                                            <span className={styles.shortfallChip}><i className="fa-solid fa-triangle-exclamation" /> Owed: R{shortfall.toLocaleString()}</span>
-                                        )}
-                                    </span>
-                                </div>
+                                <>
+                                    <div className={styles.detailInfoRow}>
+                                        <span className={styles.detailInfoLabel}>Amount</span>
+                                        <span className={styles.detailInfoValue}>
+                                            R{totalPrice?.toLocaleString()}
+                                            {isFullyOnline ? (
+                                                <span className={styles.paidChip}><i className="fa-solid fa-circle-check" /> Paid Online</span>
+                                            ) : cashConfirmed ? (
+                                                <span className={styles.paidChip}><i className="fa-solid fa-circle-check" /> Paid</span>
+                                            ) : hasShortfall ? (
+                                                <span className={styles.shortfallChip}><i className="fa-solid fa-triangle-exclamation" /> Cash owed: R{shortfall.toLocaleString()}</span>
+                                            ) : (
+                                                <span className={styles.paidChip}><i className="fa-solid fa-circle-check" /> Paid</span>
+                                            )}
+                                        </span>
+                                    </div>
+                                    <div className={styles.detailInfoRow}>
+                                        <span className={styles.detailInfoLabel}>Payment</span>
+                                        <span className={styles.detailInfoValue}>
+                                            {isFullyOnline ? "Fully Online" : isFullyCash ? "Fully Cash" : isPartial ? "Partial (Online + Cash)" : txn.paymentMethod}
+                                        </span>
+                                    </div>
+                                    {isPartial && (
+                                        <>
+                                            <div className={styles.detailInfoRow}>
+                                                <span className={styles.detailInfoLabel}>Paid Online</span>
+                                                <span className={styles.detailInfoValue} style={{ color: "#10b981", fontWeight: 600 }}>
+                                                    R{onlineAmountPaid.toLocaleString()}
+                                                    <span className={styles.paidChip}><i className="fa-solid fa-circle-check" /> Confirmed</span>
+                                                </span>
+                                            </div>
+                                            <div className={styles.detailInfoRow}>
+                                                <span className={styles.detailInfoLabel}>Cash Due</span>
+                                                <span className={styles.detailInfoValue}>
+                                                    R{shortfall.toLocaleString()}
+                                                    {cashConfirmed
+                                                        ? <span className={styles.paidChip}><i className="fa-solid fa-circle-check" /> Received</span>
+                                                        : <span className={styles.shortfallChip}><i className="fa-solid fa-coins" /> Collect at pickup</span>
+                                                    }
+                                                </span>
+                                            </div>
+                                        </>
+                                    )}
+                                </>
                             ) : (
                                 <div className={styles.detailInfoRow}>
                                     <span className={styles.detailInfoLabel}>Trade For</span>
@@ -336,16 +443,35 @@ function TransactionDetailPanel({ txn, onClose, onConfirmDropOff, onConfirmColle
                         <div className={styles.detailSection}>
                             <h3 className={styles.detailSectionTitle}><i className="fa-solid fa-person-walking" /> Collection</h3>
                             <div className={styles.detailInfoRow}>
-                                <span className={styles.detailInfoLabel}>Date</span>
-                                <span className={styles.detailInfoValue}>{txn.collectionDate || "—"}</span>
+                                <span className={styles.detailInfoLabel}>Collect By</span>
+                                <span className={styles.detailInfoValue}>
+                                    {(() => {
+                                        // Best source: explicit deadline field
+                                        if (txn.collectionDeadline) {
+                                            return new Date(txn.collectionDeadline).toLocaleDateString("en-ZA", { day: "numeric", month: "short", year: "numeric" });
+                                        }
+                                        // Second: droppedOffAt timestamp + 7 days
+                                        if (txn.droppedOffAt) {
+                                            return new Date(new Date(txn.droppedOffAt).getTime() + 7 * 24 * 60 * 60 * 1000).toLocaleDateString("en-ZA", { day: "numeric", month: "short", year: "numeric" });
+                                        }
+                                        // Fallback: dropOffDate (string "YYYY-MM-DD") + 7 days — always available once booked
+                                        if (txn.dropOffDate) {
+                                            return new Date(new Date(txn.dropOffDate + "T00:00:00").getTime() + 7 * 24 * 60 * 60 * 1000).toLocaleDateString("en-ZA", { day: "numeric", month: "short", year: "numeric" });
+                                        }
+                                        return "—";
+                                    })()}
+                                </span>
                             </div>
                             <div className={styles.detailInfoRow}>
-                                <span className={styles.detailInfoLabel}>Time Slot</span>
-                                <span className={styles.detailInfoValue}>{txn.collectionTimeSlot || "—"}</span>
-                            </div>
-                            <div className={styles.detailInfoRow}>
-                                <span className={styles.detailInfoLabel}>Booked</span>
-                                <span className={styles.detailInfoValue}>{txn.collectionBooked ? "Yes" : "Not yet"}</span>
+                                <span className={styles.detailInfoLabel}>Status</span>
+                                <span className={styles.detailInfoValue}>
+                                    {txn.status === "completed"
+                                        ? <span className={styles.paidChip}><i className="fa-solid fa-circle-check" /> Collected</span>
+                                        : txn.status === "awaiting_collection"
+                                            ? <span style={{ color: "#8b5cf6", fontWeight: 600 }}>Awaiting buyer</span>
+                                            : "Not yet released"
+                                    }
+                                </span>
                             </div>
                         </div>
                     </div>
@@ -366,13 +492,13 @@ function TransactionDetailPanel({ txn, onClose, onConfirmDropOff, onConfirmColle
                     {waitingForCollection && (
                         <div className={styles.waitingBanner}>
                             <i className="fa-solid fa-hourglass-half" />
-                            <span>Waiting for <strong>{txn.buyer}</strong> to book a collection slot before the item can be released.</span>
+                            <span>Item is in facility. Complete the inspection checklist, then release it to the Collections tab so <strong>{txn.buyer}</strong> can collect.</span>
                         </div>
                     )}
                     {txn.collectionBooked && txn.collectionDate && (
                         <div className={styles.bookedBanner}>
                             <i className="fa-solid fa-calendar-check" />
-                            <span>Collection booked by <strong>{txn.buyer}</strong> for <strong>{txn.collectionDate}</strong> at <strong>{txn.collectionTimeSlot}</strong>.</span>
+                            <span>Collection previously booked by <strong>{txn.buyer}</strong> for <strong>{txn.collectionDate}</strong> at <strong>{txn.collectionTimeSlot}</strong>.</span>
                         </div>
                     )}
                     {txn.status === "pending" && txn.dropOffBooked && (
@@ -381,16 +507,36 @@ function TransactionDetailPanel({ txn, onClose, onConfirmDropOff, onConfirmColle
                             <span>Awaiting item drop-off from seller. Click <strong>Confirm Drop-Off</strong> once you have physically received the item.</span>
                         </div>
                     )}
-                    {hasShortfall && !cashConfirmed && txn.status !== "pending" && (
-                        <div className={styles.shortfallBanner}>
-                            <i className="fa-solid fa-coins" />
-                            <span>Outstanding cash shortfall of <strong>R{shortfall.toLocaleString()}</strong>. Collect from buyer before releasing the item.</span>
-                        </div>
-                    )}
-                    {hasShortfall && cashConfirmed && (
+                    {isFullyOnline && txn.type === "Purchase" && (
                         <div className={styles.cashConfirmedBanner}>
                             <i className="fa-solid fa-circle-check" />
-                            <span>Cash of <strong>R{shortfall.toLocaleString()}</strong> confirmed received.</span>
+                            <span>Payment of <strong>R{totalPrice.toLocaleString()}</strong> was completed online — no cash collection required.</span>
+                        </div>
+                    )}
+                    {isPartial && hasShortfall && !cashConfirmed && txn.status !== "pending" && (
+                        <div className={styles.shortfallBanner}>
+                            <i className="fa-solid fa-coins" />
+                            <span>
+                                R{onlineAmountPaid.toLocaleString()} was paid online. Collect the remaining <strong>R{shortfall.toLocaleString()} cash</strong> from buyer at collection.
+                            </span>
+                        </div>
+                    )}
+                    {isPartial && cashConfirmed && (
+                        <div className={styles.cashConfirmedBanner}>
+                            <i className="fa-solid fa-circle-check" />
+                            <span>Online payment of R{onlineAmountPaid.toLocaleString()} + cash of <strong>R{shortfall.toLocaleString()}</strong> confirmed. Fully paid.</span>
+                        </div>
+                    )}
+                    {isFullyCash && hasShortfall && !cashConfirmed && txn.status !== "pending" && (
+                        <div className={styles.shortfallBanner}>
+                            <i className="fa-solid fa-coins" />
+                            <span>Full payment of <strong>R{shortfall.toLocaleString()} cash</strong> must be collected from buyer at collection.</span>
+                        </div>
+                    )}
+                    {isFullyCash && cashConfirmed && (
+                        <div className={styles.cashConfirmedBanner}>
+                            <i className="fa-solid fa-circle-check" />
+                            <span>Cash of <strong>R{totalPrice.toLocaleString()}</strong> confirmed received.</span>
                         </div>
                     )}
 
@@ -455,42 +601,66 @@ function TransactionDetailPanel({ txn, onClose, onConfirmDropOff, onConfirmColle
                             </button>
                         </>
                     )}
-                    {!showConfirmDropOff && !waitingForDropOff && hasShortfall && (
+
+                    {/* Cash confirm: only at collection step, never for fully online */}
+                    {showConfirmCollection && !isFullyOnline && hasShortfall && (
                         <button
                             className={`${styles.confirmCashBtn} ${!canConfirmCash ? styles.confirmCashBtnDisabled : ""}`}
                             onClick={handleConfirmCash}
                             disabled={!canConfirmCash || saving}
                         >
                             <i className={`fa-solid ${cashConfirmed ? "fa-circle-check" : "fa-hand-holding-dollar"}`} />
-                            {saving ? "Saving…" : cashConfirmed ? "Cash Received" : "Confirm Cash Received"}
+                            {saving ? "Saving…" : cashConfirmed
+                                ? "Cash Received"
+                                : isPartial
+                                    ? `Confirm R${shortfall.toLocaleString()} Cash Received`
+                                    : `Confirm R${shortfall.toLocaleString()} Cash Received`
+                            }
                         </button>
                     )}
-                    {(txn.status === "ready_to_release" || txn.status === "in_facility") && txn.collectionBooked && (
+                    {(txn.status === "ready_to_release" || txn.status === "in_facility") && (
                         <button
                             className={`${styles.releaseBtn} ${!canRelease ? styles.releaseBtnDisabled : ""}`}
                             onClick={() => canRelease && onRelease(txn.id)}
                             disabled={!canRelease}
+                            title={!canRelease ? "Complete inspection checklist first" : "Move to Collections — buyer will be notified"}
                         >
                             <i className="fa-solid fa-arrow-up-from-bracket" />
-                            Release for Collection
+                            Move to Collections
                         </button>
                     )}
                     {showConfirmCollection && (
                         <>
-                            {!collectionTimeReached && (
-                                <div className={styles.timeGateBanner} style={{ marginBottom: 8 }}>
-                                    <i className="fa-solid fa-lock" />
-                                    <span>Collection confirmation unlocks on <strong>{txn.collectionDate}</strong>{txn.collectionTimeSlot && <> at <strong>{txn.collectionTimeSlot}</strong></>}.</span>
+                            {isFullyOnline ? (
+                                <div className={styles.cashConfirmedBanner} style={{ marginBottom: 8 }}>
+                                    <i className="fa-solid fa-circle-check" />
+                                    <span>Payment of R{totalPrice.toLocaleString()} was completed online — no cash to collect.</span>
                                 </div>
-                            )}
+                            ) : isPartial && !cashConfirmed ? (
+                                <div className={styles.shortfallBanner} style={{ marginBottom: 8 }}>
+                                    <i className="fa-solid fa-coins" />
+                                    <span>Collect <strong>R{shortfall.toLocaleString()} cash</strong> from buyer (R{onlineAmountPaid.toLocaleString()} already paid online).</span>
+                                </div>
+                            ) : isFullyCash && !cashConfirmed ? (
+                                <div className={styles.shortfallBanner} style={{ marginBottom: 8 }}>
+                                    <i className="fa-solid fa-coins" />
+                                    <span>Collect full cash payment of <strong>R{totalPrice.toLocaleString()}</strong> from buyer before releasing item.</span>
+                                </div>
+                            ) : null}
+                            <div className={styles.bookedBanner} style={{ marginBottom: 8 }}>
+                                <i className="fa-solid fa-receipt" />
+                                <span>Verify the buyer's receipt before confirming collection.</span>
+                            </div>
                             <button
                                 className={styles.confirmCollectionBtn}
                                 onClick={handleCollection}
-                                disabled={collectionLoading || !collectionTimeReached}
-                                style={!collectionTimeReached ? { opacity: 0.45, cursor: "not-allowed" } : undefined}
+                                disabled={collectionLoading || (!isFullyOnline && hasShortfall && !cashConfirmed)}
+                                style={(!isFullyOnline && hasShortfall && !cashConfirmed) ? { opacity: 0.45, cursor: "not-allowed" } : undefined}
                             >
-                                <i className={`fa-solid ${collectionLoading ? "fa-spinner fa-spin" : !collectionTimeReached ? "fa-lock" : "fa-handshake"}`} />
-                                {collectionLoading ? "Confirming…" : !collectionTimeReached ? "Confirm Collection (Locked)" : "Confirm Collection"}
+                                <i className={`fa-solid ${collectionLoading ? "fa-spinner fa-spin" : "fa-handshake"}`} />
+                                {collectionLoading ? "Confirming…"
+                                    : (!isFullyOnline && hasShortfall && !cashConfirmed) ? "Confirm Cash First"
+                                    : "Confirm Collection"}
                             </button>
                         </>
                     )}
@@ -517,9 +687,20 @@ function TransactionCard({ txn, onConfirmDropOff, onConfirmCollection, onRelease
         ? { ...STATUS_META[txn.status] || STATUS_META.pending, label: "Overdue", cls: (STATUS_META[txn.status] || STATUS_META.pending).cls }
         : (STATUS_META[txn.status] || STATUS_META.pending);
 
-    const shortfall    = txn.cashShortfall ?? 0;
+    const paymentMethod    = (txn.paymentMethod || "cash").toLowerCase();
+    const isFullyOnline    = paymentMethod === "online"  || paymentMethod === "fully_online"  || paymentMethod === "fully online";
+    const isPartialCard    = paymentMethod === "partial" || paymentMethod === "partial_online" || paymentMethod === "split" || paymentMethod === "partially online" || paymentMethod === "partially_online";
+
+    const totalPrice       = txn.price ?? 0;
+    const onlineAmountPaid = txn.onlineAmountPaid ?? 0;
+    const shortfall        = isFullyOnline
+        ? 0
+        : isPartialCard
+            ? Math.max(0, totalPrice - onlineAmountPaid)
+            : (txn.cashShortfall ?? totalPrice);
+
     const hasShortfall = shortfall > 0;
-    const isPaid       = txn.paymentStatus === "Fully Paid" || shortfall === 0;
+    const isPaid       = isFullyOnline || txn.paymentStatus === "Fully Paid" || shortfall === 0;
 
     return (
         <>
@@ -585,9 +766,13 @@ function TransactionCard({ txn, onConfirmDropOff, onConfirmCollection, onRelease
                         <div className={styles.txnMeta}>
                             {txn.type === "Purchase" ? (
                                 <span className={styles.txnTag}>
-                                    Purchase · R{txn.price?.toLocaleString()}
-                                    {isPaid ? (
+                                    Purchase · R{totalPrice?.toLocaleString()}
+                                    {isFullyOnline ? (
+                                        <span className={styles.paidChip}><i className="fa-solid fa-wifi" /> Online</span>
+                                    ) : isPaid ? (
                                         <span className={styles.paidChip}><i className="fa-solid fa-circle-check" /> Paid</span>
+                                    ) : isPartialCard ? (
+                                        <span className={styles.shortfallChip}><i className="fa-solid fa-coins" /> R{shortfall.toLocaleString()} cash due</span>
                                     ) : (
                                         <span className={styles.shortfallChip}><i className="fa-solid fa-triangle-exclamation" /> Cash owed: R{shortfall.toLocaleString()}</span>
                                     )}
@@ -732,9 +917,10 @@ function StaffProfilePanel({ staffName, staffEmail, staffInitials, staffPhoto, o
 // ─── Main Dashboard ───────────────────────────────────────────────────────────
 export default function StaffDashboard() {
     const navigate = useNavigate();
-    const [activeTab, setActiveTab]           = useState("due_today");
+    const [activeTab, setActiveTab]           = useState("drop_offs");
     const [dueTodaySubTab, setDueTodaySubTab] = useState("drop_off");
     const [search, setSearch]                 = useState("");
+    const [collectionSearch, setCollectionSearch] = useState("");
     const [transactions, setTransactions]     = useState([]);
     const [campus, setCampus]                 = useState("All Campuses");
     const [isLoggingOut, setIsLoggingOut] = useState(false);
@@ -742,7 +928,7 @@ export default function StaffDashboard() {
     const [staffUser, setStaffUser]       = useState({
         name: "", email: "", photoURL: "", initials: "",
     });
-    const [loadingTxns, setLoadingTxns]   = useState(false);
+    const [loadingTxns, setLoadingTxns]   = useState(true);
     const [lastFetched, setLastFetched]   = useState(null);
     const sellerCacheRef  = useRef({});
     const listingCacheRef = useRef({});
@@ -847,7 +1033,12 @@ export default function StaffDashboard() {
                     collectionBooked:   !!(data.collectionBookingId || data.collectionStatus === "scheduled"),
                     collectionDate:     data.collectionDate     || null,
                     collectionTimeSlot: data.collectionTimeSlot || null,
+                    overdueAlertSentAt: data.overdueAlertSentAt || null,
+                    droppedOffAt: data.droppedOffAt?.toDate ? data.droppedOffAt.toDate().toISOString() : data.droppedOffAt || null,
+                    collectionDeadline: data.collectionDeadline?.toDate ? data.collectionDeadline.toDate().toISOString() : data.collectionDeadline || null,
 
+                    paymentMethod: data.paymentMethod || data.paymentType || "cash",
+                    onlineAmountPaid: data.onlineAmountPaid ?? data.depositAmount ?? 0,
                     checklist: data.checklist || [
                         { label: "Confirmed Drop-off", done: data.dropOffConfirmed || false },
                         { label: "Inspected Item",     done: data.itemInspected    || false },
@@ -932,6 +1123,11 @@ export default function StaffDashboard() {
                 collectionBooked:  !!(data.collectionBookingId || data.collectionStatus === "scheduled"),
                 collectionDate:    data.collectionDate     || null,
                 collectionTimeSlot: data.collectionTimeSlot || null,
+                overdueAlertSentAt: data.overdueAlertSentAt || null,
+                    droppedOffAt: data.droppedOffAt?.toDate ? data.droppedOffAt.toDate().toISOString() : data.droppedOffAt || null,
+                    collectionDeadline: data.collectionDeadline?.toDate ? data.collectionDeadline.toDate().toISOString() : data.collectionDeadline || null,
+                paymentMethod: data.paymentMethod || data.paymentType || "cash",
+                onlineAmountPaid: data.onlineAmountPaid ?? data.depositAmount ?? 0,
                 checklist: data.checklist || [
                     { label: "Confirmed Drop-off", done: data.dropOffConfirmed || false },
                     { label: "Inspected Item",     done: data.itemInspected    || false },
@@ -999,6 +1195,7 @@ export default function StaffDashboard() {
                     dropOffConfirmed:   true,
                     dropOffConfirmedAt: serverTimestamp(),
                     dropOffConfirmedBy: auth.currentUser?.uid || null,
+                    droppedOffAt:       serverTimestamp(),
                 });
                 await notifyBothParties(txn, "drop_off");
             } catch (err) {
@@ -1055,7 +1252,8 @@ export default function StaffDashboard() {
                 releasedAt:      serverTimestamp(),
                 releasedByStaff: true,
             });
-            if (txn) await notifyBothParties(txn, "collection");
+            // Notify buyer: item ready, show receipt, 7 days to collect
+            if (txn) await notifyBothParties(txn, "drop_off");
         } catch (err) {
             console.error("Failed to update release status:", err);
         }
@@ -1112,21 +1310,18 @@ export default function StaffDashboard() {
                 t.seller.toLowerCase().includes(search.toLowerCase()) ||
                 t.buyer.toLowerCase().includes(search.toLowerCase());
             const matchCampus = campus === "All Campuses" || t.campus === campus;
-            if (activeTab === "due_today") {
-                if (!matchSearch || !matchCampus) return false;
-                if (t.status === "completed") return false;
-                if (dueTodaySubTab === "drop_off") {
-                    // Items booked for drop-off today that haven't been received yet
-                    return t.dropOffDate === today && t.dropOffBooked &&
-                        (t.status === "pending" || t.status === "waiting" || t.status === "accepted");
-                }
-                if (dueTodaySubTab === "collection") {
-                    // Items awaiting collection (with or without a booked slot today)
-                    return t.status === "awaiting_collection" ||
-                        t.status === "ready_to_release" ||
-                        (t.status === "in_facility" && t.collectionBooked && t.collectionDate === today);
-                }
-                return false;
+
+            if (activeTab === "drop_offs") {
+                // All pending drop-offs (items not yet received), sorted by date
+                return matchSearch && matchCampus && t.status === "pending";
+            }
+            if (activeTab === "collections") {
+                // Items that have passed inspection and are awaiting buyer collection
+                const matchColl = !collectionSearch ||
+                    t.item.toLowerCase().includes(collectionSearch.toLowerCase())   ||
+                    t.seller.toLowerCase().includes(collectionSearch.toLowerCase()) ||
+                    t.buyer.toLowerCase().includes(collectionSearch.toLowerCase());
+                return matchColl && matchCampus && t.status === "awaiting_collection";
             }
             if (activeTab === "history")    return matchSearch && matchCampus && t.status === "completed";
             if (activeTab === "time_slots") return matchSearch && matchCampus && t.status !== "completed";
@@ -1134,15 +1329,18 @@ export default function StaffDashboard() {
             return matchSearch && matchCampus && t.status !== "completed";
         })
         .sort((a, b) => {
-            if (activeTab === "due_today") {
-                // Sort by the relevant time slot for this sub-tab
-                const slotA = dueTodaySubTab === "drop_off" ? a.dropOffTimeSlot : (a.collectionTimeSlot || a.timeSlot);
-                const slotB = dueTodaySubTab === "drop_off" ? b.dropOffTimeSlot : (b.collectionTimeSlot || b.timeSlot);
-                return timeSlotToMinutes(slotA) - timeSlotToMinutes(slotB);
+            if (activeTab === "drop_offs") {
+                // Sort by drop-off date ascending, no date goes to bottom
+                const dateA = a.dropOffDate || "9999-99-99";
+                const dateB = b.dropOffDate || "9999-99-99";
+                if (dateA !== dateB) return dateA.localeCompare(dateB);
+                return timeSlotToMinutes(a.dropOffTimeSlot || a.timeSlot) - timeSlotToMinutes(b.dropOffTimeSlot || b.timeSlot);
+            }
+            if (activeTab === "collections") {
+                // Sort by date released (most recent first)
+                return b.date - a.date;
             }
             if (activeTab === "all" || activeTab === "time_slots") {
-                // Sort by drop-off date ascending, then by time slot ascending
-                // Transactions with no date fall to the bottom
                 const dateA = a.dropOffDate || "9999-99-99";
                 const dateB = b.dropOffDate || "9999-99-99";
                 if (dateA !== dateB) return dateA.localeCompare(dateB);
@@ -1163,6 +1361,12 @@ export default function StaffDashboard() {
         <div className={styles.shell}>
             <StaffNavbar />
 
+            {loadingTxns && transactions.length === 0 ? (
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "60vh", gap: "1rem", color: "#64748b" }}>
+                    <i className="fa-solid fa-spinner fa-spin" style={{ fontSize: "2rem", color: "#6AA6DA" }} />
+                    <p style={{ fontSize: "1rem", fontWeight: 500, margin: 0 }}>Loading Staff Dashboard…</p>
+                </div>
+            ) : (
             <main className={styles.main}>
                 <div className={styles.pageTitle}>
                     <div className={styles.pageTitleLeft}>
@@ -1238,45 +1442,39 @@ export default function StaffDashboard() {
                         >
                             <i className={`fa-solid ${tab.icon}`} />
                             {tab.label}
-                            {tab.key === "due_today" && todayTxns.filter(t => t.status !== "completed").length > 0 && (
+                            {tab.key === "drop_offs" && transactions.filter(t => t.status === "pending").length > 0 && (
+                                <span className={styles.tabDot} />
+                            )}
+                            {tab.key === "collections" && transactions.filter(t => t.status === "awaiting_collection").length > 0 && (
                                 <span className={styles.tabDot} />
                             )}
                         </button>
                     ))}
                 </div>
 
-                {/* Due Today sub-tabs */}
-                {activeTab === "due_today" && (
-                    <div className={styles.subTabs}>
-                        <button
-                            className={`${styles.subTab} ${dueTodaySubTab === "drop_off" ? styles.subTabActive : ""}`}
-                            onClick={() => setDueTodaySubTab("drop_off")}
-                        >
-                            <i className="fa-solid fa-truck-arrow-right" />
-                            Drop-offs
-                            {(() => {
-                                const count = transactions.filter(t =>
-                                    t.dropOffDate === today && t.dropOffBooked &&
-                                    (t.status === "pending" || t.status === "waiting" || t.status === "accepted")
-                                ).length;
-                                return count > 0 ? <span className={styles.subTabBadge}>{count}</span> : null;
-                            })()}
-                        </button>
-                        <button
-                            className={`${styles.subTab} ${dueTodaySubTab === "collection" ? styles.subTabActive : ""}`}
-                            onClick={() => setDueTodaySubTab("collection")}
-                        >
-                            <i className="fa-solid fa-person-walking" />
-                            Collections
-                            {(() => {
-                                const count = transactions.filter(t =>
-                                    t.status === "awaiting_collection" ||
-                                    t.status === "ready_to_release" ||
-                                    (t.status === "in_facility" && t.collectionBooked && t.collectionDate === today)
-                                ).length;
-                                return count > 0 ? <span className={styles.subTabBadge}>{count}</span> : null;
-                            })()}
-                        </button>
+                {/* Collections search bar */}
+                {activeTab === "collections" && (
+                    <div className={styles.controlRow} style={{ marginTop: 0 }}>
+                        <div className={styles.searchWrap}>
+                            <i className="fa-solid fa-magnifying-glass" />
+                            <input
+                                className={styles.searchInput}
+                                type="text"
+                                placeholder="Search collections by item, buyer or seller..."
+                                value={collectionSearch}
+                                onChange={e => setCollectionSearch(e.target.value)}
+                                autoFocus
+                            />
+                            {collectionSearch && (
+                                <button
+                                    onClick={() => setCollectionSearch("")}
+                                    style={{ background: "none", border: "none", cursor: "pointer", color: "#94a3b8", padding: "0 4px" }}
+                                    title="Clear search"
+                                >
+                                    <i className="fa-solid fa-xmark" />
+                                </button>
+                            )}
+                        </div>
                     </div>
                 )}
 
@@ -1309,6 +1507,7 @@ export default function StaffDashboard() {
                     </div>
                 )}
             </main>
+            )}
 
             {showProfile && (
                 <StaffProfilePanel

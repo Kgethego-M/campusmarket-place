@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState, useEffect, useRef } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { auth, db } from '../firebase';
 import {
   collection,
@@ -83,16 +83,33 @@ const getFilterStatus = (tx) => {
   return tx.status;
 };
 
-// Whether the buyer can book a collection slot
-const canBookCollection = (tx) =>
-  ['in_facility', 'ready_to_release'].includes(tx.status) && !tx.collectionBookingId;
+// Generate a simple receipt reference from transaction id
+const getReceiptRef = (tx) => tx.receiptRef || `RCP-${tx.id?.slice(-8).toUpperCase()}`;
 
-// Whether a collection slot is already booked
-const hasCollectionBooked = (tx) =>
-  ['in_facility', 'ready_to_release', 'awaiting_collection'].includes(tx.status) && !!tx.collectionBookingId;
+// Deadline for collection (7 days from dropOffConfirmedAt or droppedOffAt or updatedAt)
+const getCollectionDeadline = (tx) => {
+  const base = tx.droppedOffAt || tx.dropOffConfirmedAt || tx.updatedAt;
+  if (!base) return null;
+  const d = base?.toDate ? base.toDate() : new Date(base);
+  const deadline = new Date(d);
+  deadline.setDate(deadline.getDate() + 7);
+  return deadline;
+};
+
+const formatDeadline = (date) => {
+  if (!date) return null;
+  return date.toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric' });
+};
+
+const daysRemaining = (deadline) => {
+  if (!deadline) return null;
+  const diff = Math.ceil((deadline - Date.now()) / (1000 * 60 * 60 * 24));
+  return diff;
+};
 
 export default function MyPurchases() {
   const navigate = useNavigate();
+  const location = useLocation();
 
   const [currentUser, setCurrentUser]   = useState(null);
   const [transactions, setTransactions] = useState([]);
@@ -100,6 +117,24 @@ export default function MyPurchases() {
   const [loading, setLoading]           = useState(true);
   const [hasFetched, setHasFetched]     = useState(false);
   const [activeFilter, setActiveFilter] = useState('all');
+  const [openTxId, setOpenTxId]         = useState(null);
+  const openTxRef = useRef(null);
+
+  // Read URL params: ?filter=awaiting_collection&open=txnId
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const filterParam = params.get('filter');
+    const openParam   = params.get('open');
+    if (filterParam) setActiveFilter(filterParam);
+    if (openParam)   setOpenTxId(openParam);
+  }, [location.search]);
+
+  // Scroll to opened transaction card when enriched data loads
+  useEffect(() => {
+    if (openTxId && openTxRef.current) {
+      openTxRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }, [openTxId, enriched]);
 
   // ── Auth ───────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -207,7 +242,6 @@ export default function MyPurchases() {
     { key: 'pending',             label: 'Pending'            },
     { key: 'accepted',            label: 'Accepted'           },
     { key: 'waiting',             label: 'Waiting'            },
-    { key: 'in_facility',         label: 'At Facility'        },
     { key: 'awaiting_collection', label: 'Awaiting Collection'},
     { key: 'completed',           label: 'Completed'          },
     { key: 'declined',            label: 'Declined'           },
@@ -323,7 +357,9 @@ export default function MyPurchases() {
                 return (
                   <div
                     key={tx.id}
+                    ref={openTxId === tx.id ? openTxRef : null}
                     className={`${styles.card} ${isActive ? styles.cardActive : ''} ${showPaymentButton ? styles.cardAccepted : ''}`}
+                    style={openTxId === tx.id ? { boxShadow: '0 0 0 3px #8b5cf6, 0 4px 20px rgba(139,92,246,0.18)', borderColor: '#8b5cf6' } : undefined}
                     onClick={() => handleArrowClick(tx)}
                     role="button"
                     tabIndex={0}
@@ -492,37 +528,57 @@ export default function MyPurchases() {
                       {(tx.status === 'in_facility' || tx.status === 'ready_to_release') && (
                         <div className={styles.statusMsg} style={{ borderColor: '#0ea5e9', background: '#f0f9ff' }}>
                           <i className="fas fa-warehouse" style={{ color: '#0ea5e9' }} />
-                          <span>
-                            Your item is at the trade facility.{' '}
-                            {canBookCollection(tx)
-                              ? 'Book a collection slot to pick it up.'
-                              : 'Collection slot already booked — see details below.'
-                            }
-                          </span>
+                          <span>Your item has been received. Staff will complete the inspection and notify you when it is ready to collect.</span>
                         </div>
                       )}
 
-                      {tx.status === 'awaiting_collection' && (
-                        <div className={styles.statusMsg} style={{ borderColor: '#8b5cf6', background: '#f5f3ff' }}>
-                          <i className="fas fa-person-walking" style={{ color: '#8b5cf6' }} />
-                          <span>
-                            {tx.collectionDate && tx.collectionTimeSlot
-                              ? <>Collection booked for <strong>{tx.collectionDate}</strong> at <strong>{tx.collectionTimeSlot}</strong>. Please bring your student card.</>
-                              : 'Your item is ready — please collect it from the trade facility.'
-                            }
-                          </span>
-                        </div>
-                      )}
+                      {tx.status === 'awaiting_collection' && (() => {
+                        const deadline = getCollectionDeadline(tx);
+                        const days = daysRemaining(deadline);
+                        const receiptRef = getReceiptRef(tx);
+                        return (
+                          <>
+                            <div className={styles.statusMsg} style={{ borderColor: '#8b5cf6', background: '#f5f3ff' }}>
+                              <i className="fas fa-person-walking" style={{ color: '#8b5cf6' }} />
+                              <span>
+                                Your item is ready to collect from the trade facility.{' '}
+                                {deadline && (
+                                  <strong style={{ color: days <= 2 ? '#ef4444' : '#7c3aed' }}>
+                                    Collect within {days > 0 ? `${days} day${days !== 1 ? 's' : ''}` : 'today'}{' '}
+                                    (by {formatDeadline(deadline)}).
+                                  </strong>
+                                )}{' '}
+                                Show your receipt to staff when collecting.
+                              </span>
+                            </div>
+                            {/* Receipt card */}
+                            <div style={{
+                              marginTop: 6,
+                              padding: '0.6rem 0.75rem',
+                              background: '#faf5ff',
+                              border: '1.5px dashed #a78bfa',
+                              borderRadius: 8,
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '0.75rem',
+                            }}>
+                              <div style={{ flexShrink: 0, width: 32, height: 32, background: '#7c3aed', borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                <i className="fas fa-receipt" style={{ color: '#fff', fontSize: '0.85rem' }} />
+                              </div>
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ fontSize: '0.68rem', fontWeight: 700, color: '#7c3aed', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Collection Receipt</div>
+                                <div style={{ fontSize: '0.82rem', fontWeight: 700, color: '#1a1a1a', fontFamily: 'monospace', letterSpacing: '0.08em' }}>{receiptRef}</div>
+                                <div style={{ fontSize: '0.7rem', color: '#6b7280' }}>{tx.listingTitle}</div>
+                              </div>
+                              <div style={{ fontSize: '0.7rem', color: '#7c3aed', fontWeight: 600, textAlign: 'right', flexShrink: 0 }}>
+                                <i className="fas fa-qrcode" style={{ fontSize: '1.2rem', display: 'block', marginBottom: 2 }} />
+                                Show to staff
+                              </div>
+                            </div>
+                          </>
+                        );
+                      })()}
 
-                      {/* Collection slot details if already booked */}
-                      {hasCollectionBooked(tx) && tx.collectionDate && (
-                        <div className={styles.statusMsg} style={{ borderColor: '#0ea5e9', background: '#f0f9ff', marginTop: 6 }}>
-                          <i className="fas fa-calendar-check" style={{ color: '#0ea5e9' }} />
-                          <span>
-                            Collection slot: <strong>{tx.collectionDate}</strong> at <strong>{tx.collectionTimeSlot}</strong>
-                          </span>
-                        </div>
-                      )}
 
                       {tx.status === 'completed' && (
                         <div className={styles.statusMsg} style={{ borderColor: '#22c55e', background: '#f0fdf4' }}>
@@ -559,21 +615,8 @@ export default function MyPurchases() {
                         </button>
                       )}
 
-                      {/* Book collection button */}
-                      {canBookCollection(tx) && (
-                        <button
-                          className={styles.viewBtn}
-                          style={{ background: '#0ea5e9', fontSize: '0.72rem', padding: '6px 10px', borderRadius: 8, color: '#fff', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}
-                          onClick={(e) => { e.stopPropagation(); navigate(`/book-collection/${tx.id}`); }}
-                          title="Book collection slot"
-                        >
-                          <i className="fas fa-calendar-plus" />
-                          Book Collection
-                        </button>
-                      )}
-
                       {/* View listing button — fallback when no action buttons */}
-                      {!showPaymentButton && !canBookCollection(tx) && tx.listingId && (
+                      {!showPaymentButton && tx.listingId && (
                         <button
                           className={styles.viewBtn}
                           onClick={(e) => { e.stopPropagation(); navigate(`/listing/${tx.listingId}`); }}
