@@ -382,16 +382,15 @@ export default function CreateListing() {
                             />
                         )}
 
-                        {/* ── US18: Price Suggestion widget ── */}
-                        <PriceSuggestion
-                            category={category === "other" ? "" : category}
-                            onSuggestionLoad={({ low, high }) => {
-                                // Pre-fill price only if seller hasn't typed one yet
-                                if (!price) {
-                                    setPrice(String(Math.round((low + high) / 2)));
-                                }
-                            }}
-                        />
+{/* ── US18: Price Suggestion widget (now with condition) ── */}
+<PriceSuggestion
+    category={category === "other" ? "" : category}
+    onSuggestionLoad={({ low, high }) => {
+        if (!price) {
+            setPrice(String(Math.round((low + high) / 2)));
+        }
+    }}
+/>
                     </div>
 
                     <div>
