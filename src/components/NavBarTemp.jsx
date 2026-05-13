@@ -466,6 +466,15 @@ export default function Navbar() {
                     </div>
                 </div>
 
+            {isLoggingOut && (
+                <div className={styles.logoutOverlay}>
+                    <div className={styles.logoutLoader}>
+                        <i className="fas fa-spinner fa-spin" />
+                        <p>Logging out...</p>
+                    </div>
+                </div>
+            )}
+
                 {/* Mobile bottom nav */}
                 <nav className={styles.mobileNav} aria-hidden="true">
                     {NAV_LINKS.map((link) => (

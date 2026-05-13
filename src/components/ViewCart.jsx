@@ -11,6 +11,9 @@ import styles from './ViewCart.module.css';
 // The navbar links array here is not used because NavBarTemp handles navigation.
 // We keep it only for reference, but we won't use it.
 // const NAV_LINKS = [ ... ]; // removed
+// The navbar links array here is not used because NavBarTemp handles navigation.
+// We keep it only for reference, but we won't use it.
+// const NAV_LINKS = [ ... ]; // removed
 
 export default function ViewCart() {
   const navigate = useNavigate();
@@ -39,6 +42,7 @@ export default function ViewCart() {
   }, [navigate]);
 
   // ── Real-time favourites listener ──────────────────────────────────────────
+  // ── Real-time favourites listener ──────────────────────────────────────────
   useEffect(() => {
     if (!currentUser) return;
 
@@ -57,6 +61,7 @@ export default function ViewCart() {
     return () => unsub();
   }, [currentUser]);
 
+  // ── Enrich favourite IDs with listing data ─────────────────────────────────
   // ── Enrich favourite IDs with listing data ─────────────────────────────────
   useEffect(() => {
     if (!snapshotReceived) return;
@@ -96,6 +101,7 @@ export default function ViewCart() {
   }, [cartIds, snapshotReceived]);
 
   // ── Remove from favourites ─────────────────────────────────────────────────
+  // ── Remove from favourites ─────────────────────────────────────────────────
   const handleRemove = async (listingId) => {
     if (!currentUser || removing) return;
     setRemoving(listingId);
@@ -106,6 +112,7 @@ export default function ViewCart() {
       showToast('Removed from favourites');
     } catch (err) {
       console.error('Remove from favourites error:', err);
+      console.error('Remove from favourites error:', err);
       showToast('Failed to remove item', 'error');
     } finally {
       setRemoving(null);
@@ -113,12 +120,15 @@ export default function ViewCart() {
   };
 
   // ── Clear all favourites ───────────────────────────────────────────────────
+  // ── Clear all favourites ───────────────────────────────────────────────────
   const handleClearAll = async () => {
     if (!currentUser || cartItems.length === 0) return;
     try {
       await updateDoc(doc(db, 'carts', currentUser.uid), { items: [] });
       showToast('Favourites cleared');
+      showToast('Favourites cleared');
     } catch {
+      showToast('Failed to clear favourites', 'error');
       showToast('Failed to clear favourites', 'error');
     }
   };
@@ -132,6 +142,7 @@ export default function ViewCart() {
           <div className={styles.container}>
             <div className={styles.header}>
               <div className={styles.headerLeft}>
+                <h1 className={styles.pageTitle}>My Favourites</h1>
                 <h1 className={styles.pageTitle}>My Favourites</h1>
               </div>
             </div>
