@@ -1,4 +1,3 @@
-
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { auth, db } from "../firebase.js";
@@ -82,6 +81,23 @@ const STATUS_META = {
     completed:           { label: "Completed",           cls: "done",     icon: "fa-check-double"    },
 };
 
+// ─── Payment type configuration ───────────────────────────────────────────────
+const PAYMENT_CONFIG = {
+    full_online: { label: "Fully Online", icon: "fa-globe", color: "#10b981", bg: "#d1fae5", staffNote: "No cash to collect. Item can be released immediately." },
+    partial:     { label: "Partial Online", icon: "fa-credit-card", color: "#f59e0b", bg: "#fed7aa", staffNote: "Collect remaining cash from buyer before releasing item." },
+    cash:        { label: "Full Cash", icon: "fa-money-bill", color: "#ef4444", bg: "#fee2e2", staffNote: "Collect FULL cash payment from buyer before releasing item." },
+    cod:         { label: "Cash on Delivery", icon: "fa-hand-holding-dollar", color: "#ef4444", bg: "#fee2e2", staffNote: "Collect FULL cash payment from buyer before releasing item." },
+    unknown:     { label: "Unknown", icon: "fa-question", color: "#6b7280", bg: "#f3f4f6", staffNote: "Verify payment details with buyer before releasing." },
+};
+
+function getPaymentConfig(txn) {
+    const method = txn.paymentMethod || txn.paymentType;
+    if (method === "full_online" || method === "online") return PAYMENT_CONFIG.full_online;
+    if (method === "partial") return PAYMENT_CONFIG.partial;
+    if (method === "cash" || method === "cod") return PAYMENT_CONFIG.cash;
+    return PAYMENT_CONFIG.unknown;
+}
+
 // ─── Date/Time helpers ────────────────────────────────────────────────────────
 
 /**
@@ -162,17 +178,21 @@ function TransactionDetailPanel({ txn, onClose, onConfirmDropOff, onConfirmColle
         ? { ...STATUS_META[txn.status] || STATUS_META.pending, label: "Overdue", cls: (STATUS_META[txn.status] || STATUS_META.pending).cls }
         : (STATUS_META[txn.status] || STATUS_META.pending);
 
+    const paymentConfig = getPaymentConfig(txn);
     const allChecked    = txn.checklist.every(c => c.done);
     const shortfall     = txn.cashShortfall ?? 0;
     const hasShortfall  = shortfall > 0;
-    const [cashConfirmed, setCashConfirmed] = useState(txn.paymentStatus === "Fully Paid" || shortfall === 0);
+    
+    // For full online payments, automatically mark cash as confirmed
+    const isFullOnline = txn.paymentMethod === "full_online" || txn.paymentType === "full_online";
+    const [cashConfirmed, setCashConfirmed] = useState(isFullOnline || shortfall === 0);
     const [saving,        setSaving]        = useState(false);
     const [alertSending,  setAlertSending]  = useState(false);
     const [alertSent,     setAlertSent]     = useState(false);
     const [dropOffLoading,    setDropOffLoading]    = useState(false);
     const [collectionLoading, setCollectionLoading] = useState(false);
 
-    const canConfirmCash = allChecked && hasShortfall && !cashConfirmed;
+    const canConfirmCash = allChecked && hasShortfall && !cashConfirmed && !isFullOnline;
     const canRelease     = allChecked && (!hasShortfall || cashConfirmed);
 
     const waitingForDropOff    = txn.status === "pending" && !txn.dropOffBooked;
@@ -236,6 +256,11 @@ function TransactionDetailPanel({ txn, onClose, onConfirmDropOff, onConfirmColle
                                     <i className={`fa-solid ${isOverdue ? "fa-circle-exclamation" : meta.icon}`} />
                                     {isOverdue ? "Overdue" : meta.label}
                                 </span>
+                                {/* ── PAYMENT TYPE BADGE ── */}
+                                <span className={styles.paymentBadge} style={{ background: paymentConfig.bg, color: paymentConfig.color }}>
+                                    <i className={`fa-solid ${paymentConfig.icon}`} />
+                                    {paymentConfig.label}
+                                </span>
                                 {txn.dropOffDate && (
                                     <span className={styles.dateBadge}>
                                         <i className="fa-regular fa-calendar" />
@@ -255,6 +280,15 @@ function TransactionDetailPanel({ txn, onClose, onConfirmDropOff, onConfirmColle
 
                 {/* ── Scrollable body ── */}
                 <div className={styles.detailBody}>
+
+                    {/* Staff Payment Instruction Banner */}
+                    <div className={styles.paymentInstructionBanner} style={{ background: paymentConfig.bg, borderLeftColor: paymentConfig.color }}>
+                        <i className={`fa-solid ${paymentConfig.icon}`} style={{ color: paymentConfig.color }} />
+                        <div>
+                            <strong>{paymentConfig.label} Payment</strong>
+                            <p>{paymentConfig.staffNote}</p>
+                        </div>
+                    </div>
 
                     {/* Overdue alert */}
                     {isOverdue && (
@@ -297,6 +331,15 @@ function TransactionDetailPanel({ txn, onClose, onConfirmDropOff, onConfirmColle
                                 <span className={styles.detailInfoLabel}>Type</span>
                                 <span className={styles.detailInfoValue}>{txn.type}</span>
                             </div>
+                            <div className={styles.detailInfoRow}>
+                                <span className={styles.detailInfoLabel}>Payment Method</span>
+                                <span className={styles.detailInfoValue}>
+                                    <span className={styles.paymentMethodChip} style={{ background: paymentConfig.bg, color: paymentConfig.color }}>
+                                        <i className={`fa-solid ${paymentConfig.icon}`} />
+                                        {paymentConfig.label}
+                                    </span>
+                                </span>
+                            </div>
                             {txn.type === "Purchase" ? (
                                 <div className={styles.detailInfoRow}>
                                     <span className={styles.detailInfoLabel}>Amount</span>
@@ -305,7 +348,7 @@ function TransactionDetailPanel({ txn, onClose, onConfirmDropOff, onConfirmColle
                                         {cashConfirmed || !hasShortfall ? (
                                             <span className={styles.paidChip}><i className="fa-solid fa-circle-check" /> Paid</span>
                                         ) : (
-                                            <span className={styles.shortfallChip}><i className="fa-solid fa-triangle-exclamation" /> Owed: R{shortfall.toLocaleString()}</span>
+                                            <span className={styles.shortfallChip}><i className="fa-solid fa-triangle-exclamation" /> Cash Owed: R{shortfall.toLocaleString()}</span>
                                         )}
                                     </span>
                                 </div>
@@ -381,7 +424,7 @@ function TransactionDetailPanel({ txn, onClose, onConfirmDropOff, onConfirmColle
                             <span>Awaiting item drop-off from seller. Click <strong>Confirm Drop-Off</strong> once you have physically received the item.</span>
                         </div>
                     )}
-                    {hasShortfall && !cashConfirmed && txn.status !== "pending" && (
+                    {hasShortfall && !cashConfirmed && txn.status !== "pending" && !isFullOnline && (
                         <div className={styles.shortfallBanner}>
                             <i className="fa-solid fa-coins" />
                             <span>Outstanding cash shortfall of <strong>R{shortfall.toLocaleString()}</strong>. Collect from buyer before releasing the item.</span>
@@ -455,7 +498,7 @@ function TransactionDetailPanel({ txn, onClose, onConfirmDropOff, onConfirmColle
                             </button>
                         </>
                     )}
-                    {!showConfirmDropOff && !waitingForDropOff && hasShortfall && (
+                    {!showConfirmDropOff && !waitingForDropOff && hasShortfall && !isFullOnline && (
                         <button
                             className={`${styles.confirmCashBtn} ${!canConfirmCash ? styles.confirmCashBtnDisabled : ""}`}
                             onClick={handleConfirmCash}
@@ -506,6 +549,7 @@ function TransactionDetailPanel({ txn, onClose, onConfirmDropOff, onConfirmColle
 // ─── Transaction Card (compact summary row) ───────────────────────────────────
 function TransactionCard({ txn, onConfirmDropOff, onConfirmCollection, onRelease, onMarkStep, onAlertOverdue }) {
     const [panelOpen, setPanelOpen] = useState(false);
+    const paymentConfig = getPaymentConfig(txn);
 
     const todayStr = new Date().toISOString().split("T")[0];
     const isOverdueDropOff    = txn.status === "pending"             && !!txn.dropOffDate && txn.dropOffDate < todayStr;
@@ -520,6 +564,7 @@ function TransactionCard({ txn, onConfirmDropOff, onConfirmCollection, onRelease
     const shortfall    = txn.cashShortfall ?? 0;
     const hasShortfall = shortfall > 0;
     const isPaid       = txn.paymentStatus === "Fully Paid" || shortfall === 0;
+    const isFullOnline = txn.paymentMethod === "full_online" || txn.paymentType === "full_online";
 
     return (
         <>
@@ -560,6 +605,11 @@ function TransactionCard({ txn, onConfirmDropOff, onConfirmCollection, onRelease
                         <div className={styles.txnTopRow}>
                             <span className={styles.txnTitle}>{txn.item}</span>
                             <div className={styles.txnBadges}>
+                                {/* ── PAYMENT TYPE BADGE (visible on card) ── */}
+                                <span className={styles.paymentBadgeSmall} style={{ background: paymentConfig.bg, color: paymentConfig.color }}>
+                                    <i className={`fa-solid ${paymentConfig.icon}`} />
+                                    {paymentConfig.label}
+                                </span>
                                 {txn.dropOffDate && (
                                     <span className={styles.dateBadge}>
                                         <i className="fa-regular fa-calendar" />
@@ -586,8 +636,10 @@ function TransactionCard({ txn, onConfirmDropOff, onConfirmCollection, onRelease
                             {txn.type === "Purchase" ? (
                                 <span className={styles.txnTag}>
                                     Purchase · R{txn.price?.toLocaleString()}
-                                    {isPaid ? (
-                                        <span className={styles.paidChip}><i className="fa-solid fa-circle-check" /> Paid</span>
+                                    {isPaid && isFullOnline ? (
+                                        <span className={styles.paidChip}><i className="fa-solid fa-circle-check" /> Paid Online</span>
+                                    ) : isPaid && !isFullOnline ? (
+                                        <span className={styles.paidChip}><i className="fa-solid fa-circle-check" /> Paid (Cash+Online)</span>
                                     ) : (
                                         <span className={styles.shortfallChip}><i className="fa-solid fa-triangle-exclamation" /> Cash owed: R{shortfall.toLocaleString()}</span>
                                     )}
@@ -640,11 +692,16 @@ function TimeSlotsView({ transactions }) {
                     </div>
                     {txns.map(t => {
                         const meta = STATUS_META[t.status] || STATUS_META.pending;
+                        const paymentConfig = getPaymentConfig(t);
                         return (
                             <div key={t.id} className={styles.slotItem}>
                                 <div className={styles.slotItemLeft}>
                                     <span className={styles.slotItemTitle}>{t.item}</span>
                                     <span className={styles.slotItemParties}>{t.seller} → {t.buyer}</span>
+                                    <span className={styles.paymentBadgeSmall} style={{ background: paymentConfig.bg, color: paymentConfig.color, fontSize: "9px", padding: "1px 6px" }}>
+                                        <i className={`fa-solid ${paymentConfig.icon}`} />
+                                        {paymentConfig.label}
+                                    </span>
                                 </div>
                                 <span className={`${styles.statusBadge} ${styles[`status_${meta.cls}`]}`}>
                                     {meta.label}
@@ -773,13 +830,10 @@ export default function StaffDashboard() {
 
     // ── Live Firestore listener ───────────────────────────────────────────────
     useEffect(() => {
-        // FIX: Added "waiting" to the status list so transactions where the
-        // seller has booked a drop-off (but status hasn't moved to "accepted")
-        // are included in the dashboard query.
         const q = query(
             collection(db, "transactions"),
             where("status", "in", [
-                "waiting",            // ← ADDED
+                "waiting",
                 "accepted",
                 "in_facility",
                 "ready_to_release",
@@ -830,24 +884,20 @@ export default function StaffDashboard() {
                     price:         data.agreedPrice  || data.price || 0,
                     cashShortfall: data.cashShortfall ?? 0,
                     paymentStatus: data.paymentStatus || (data.cashShortfall > 0 ? "Partially Paid" : "Fully Paid"),
+                    paymentMethod: data.paymentType || data.paymentMethod || "unknown",
+                    paymentType:   data.paymentType || data.paymentMethod || "unknown",
                     tradeFor:      data.tradeItem    || null,
                     timeSlot:      data.dropOffTimeSlot || data.timeSlot || "TBD",
-
-                    // FIX: Map both "waiting" and "accepted" to the local "pending" status
                     status: (data.status === "accepted" || data.status === "waiting")
                         ? "pending"
                         : (data.status || "pending"),
-
                     campus: data.campus || "Main Campus",
-
                     dropOffBooked:   !!(data.bookingId || data.dropOffStatus === "scheduled"),
                     dropOffDate:     data.dropOffDate     || null,
                     dropOffTimeSlot: data.dropOffTimeSlot || null,
-
                     collectionBooked:   !!(data.collectionBookingId || data.collectionStatus === "scheduled"),
                     collectionDate:     data.collectionDate     || null,
                     collectionTimeSlot: data.collectionTimeSlot || null,
-
                     checklist: data.checklist || [
                         { label: "Confirmed Drop-off", done: data.dropOffConfirmed || false },
                         { label: "Inspected Item",     done: data.itemInspected    || false },
@@ -868,7 +918,7 @@ export default function StaffDashboard() {
         return () => unsub();
     }, []);
 
-    // Manual refresh — re-fetches a snapshot on demand (button in the toolbar)
+    // Manual refresh
     const fetchTransactions = useCallback(async () => {
         setLoadingTxns(true);
         try {
@@ -920,6 +970,8 @@ export default function StaffDashboard() {
                 price:         data.agreedPrice  || data.price || 0,
                 cashShortfall: data.cashShortfall ?? 0,
                 paymentStatus: data.paymentStatus || (data.cashShortfall > 0 ? "Partially Paid" : "Fully Paid"),
+                paymentMethod: data.paymentType || data.paymentMethod || "unknown",
+                paymentType:   data.paymentType || data.paymentMethod || "unknown",
                 tradeFor:      data.tradeItem    || null,
                 timeSlot:      data.dropOffTimeSlot || data.timeSlot || "TBD",
                 status: (data.status === "accepted" || data.status === "waiting")
@@ -955,7 +1007,6 @@ export default function StaffDashboard() {
         } else {
             await notifyOverdueCollection(txn);
         }
-        // Mark that alerts were sent so staff don't spam
         try {
             await updateDoc(doc(db, "transactions", txn.id), {
                 overdueAlertSentAt: serverTimestamp(),
@@ -1095,9 +1146,8 @@ export default function StaffDashboard() {
     const completed      = transactions.filter(t => t.status === "completed");
     const pendingDropOff = transactions.filter(t => t.status === "pending");
 
-    const todayStr = new Date().toISOString().split("T")[0]; // "YYYY-MM-DD"
+    const todayStr = new Date().toISOString().split("T")[0];
 
-    // Parse "HH:MM" or "HH:MM - HH:MM" time slot strings into a sortable minute count
     const timeSlotToMinutes = (slot) => {
         if (!slot || slot === "TBD") return Infinity;
         const match = (slot || "").match(/(\d{1,2}):(\d{2})/);
@@ -1116,12 +1166,10 @@ export default function StaffDashboard() {
                 if (!matchSearch || !matchCampus) return false;
                 if (t.status === "completed") return false;
                 if (dueTodaySubTab === "drop_off") {
-                    // Items booked for drop-off today that haven't been received yet
                     return t.dropOffDate === today && t.dropOffBooked &&
                         (t.status === "pending" || t.status === "waiting" || t.status === "accepted");
                 }
                 if (dueTodaySubTab === "collection") {
-                    // Items awaiting collection (with or without a booked slot today)
                     return t.status === "awaiting_collection" ||
                         t.status === "ready_to_release" ||
                         (t.status === "in_facility" && t.collectionBooked && t.collectionDate === today);
@@ -1135,20 +1183,16 @@ export default function StaffDashboard() {
         })
         .sort((a, b) => {
             if (activeTab === "due_today") {
-                // Sort by the relevant time slot for this sub-tab
                 const slotA = dueTodaySubTab === "drop_off" ? a.dropOffTimeSlot : (a.collectionTimeSlot || a.timeSlot);
                 const slotB = dueTodaySubTab === "drop_off" ? b.dropOffTimeSlot : (b.collectionTimeSlot || b.timeSlot);
                 return timeSlotToMinutes(slotA) - timeSlotToMinutes(slotB);
             }
             if (activeTab === "all" || activeTab === "time_slots") {
-                // Sort by drop-off date ascending, then by time slot ascending
-                // Transactions with no date fall to the bottom
                 const dateA = a.dropOffDate || "9999-99-99";
                 const dateB = b.dropOffDate || "9999-99-99";
                 if (dateA !== dateB) return dateA.localeCompare(dateB);
                 return timeSlotToMinutes(a.dropOffTimeSlot || a.timeSlot) - timeSlotToMinutes(b.dropOffTimeSlot || b.timeSlot);
             }
-            // History: newest first
             return b.date - a.date;
         });
 
