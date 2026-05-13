@@ -13,7 +13,7 @@ const NAV_LINKS = [
     { label: "Trade Facility", path: "/trade-facility" },
     { label: "Messages",       path: "/chat" },
     { label: "My Purchases",   path: "/my-purchases" },
-    { label: "Favourites",     path: "/cart", isFavourites: true },
+    { label: "Favorite",       path: "/cart", isFavorite: true },
 ];
 
 const formatTime = (ts) => {
@@ -356,8 +356,8 @@ export default function Navbar() {
                         if (!link.path) cls += ` ${styles.navLinkDisabled}`;
                         return (
                             <button key={link.label} className={cls} onClick={() => link.path && navigate(link.path)} disabled={!link.path}>
-                                {link.isFavourites
-                                    ? <span className={styles.cartNavItem}><i className="fas fa-heart" />Favourites</span>
+                                {link.isFavorite
+                                    ? <span className={styles.cartNavItem}><i className="fas fa-heart" />Favorites</span>
                                     : link.label
                                 }
                             </button>
@@ -479,7 +479,7 @@ export default function Navbar() {
                                 link.label === 'Browse'         ? 'fa-store'        :
                                 link.label === 'Messages'       ? 'fa-comment'      :
                                 link.label === 'My Purchases'   ? 'fa-bag-shopping' :
-                                link.label === 'Favourites'     ? 'fa-heart'        :
+                                link.label === 'Favorites'       ? 'fa-heart'        :
                                 'fa-arrows-rotate'
                             }`} />
                             <span>{link.label}</span>

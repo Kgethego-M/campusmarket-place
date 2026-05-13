@@ -8,25 +8,21 @@ import {
 import NavBarTemp from './NavBarTemp';
 import styles from './ViewCart.module.css';
 
-const NAV_LINKS = [
-  { label: 'Browse',       path: '/view-listing',  icon: 'fa-store' },
-  { label: 'Trade',        path: '/trade-facility', icon: 'fa-arrows-rotate' },
-  { label: 'Messages',     path: '/chat',           icon: 'fa-comment' },
-  { label: 'My Purchases', path: '/my-purchases',   icon: 'fa-bag-shopping' },
-  { label: 'Favourites',   path: '/cart',           icon: 'fa-heart' },
-];
+// The navbar links array here is not used because NavBarTemp handles navigation.
+// We keep it only for reference, but we won't use it.
+// const NAV_LINKS = [ ... ]; // removed
 
 export default function ViewCart() {
   const navigate = useNavigate();
   const location = useLocation();
 
-  const [currentUser, setCurrentUser]           = useState(null);
-  const [cartItems, setCartItems]               = useState([]);
-  const [cartIds, setCartIds]                   = useState([]);
-  const [loading, setLoading]                   = useState(true);
+  const [currentUser, setCurrentUser]         = useState(null);
+  const [cartItems, setCartItems]             = useState([]);
+  const [cartIds, setCartIds]                 = useState([]);
+  const [loading, setLoading]                 = useState(true);
   const [snapshotReceived, setSnapshotReceived] = useState(false);
-  const [removing, setRemoving]                 = useState(null);
-  const [toast, setToast]                       = useState(null);
+  const [removing, setRemoving]               = useState(null);
+  const [toast, setToast]                     = useState(null);
 
   const showToast = (msg, type = 'success') => {
     setToast({ msg, type });
@@ -42,7 +38,7 @@ export default function ViewCart() {
     return () => unsub();
   }, [navigate]);
 
-  // ── Real-time cart listener ────────────────────────────────────────────────
+  // ── Real-time favourites listener ──────────────────────────────────────────
   useEffect(() => {
     if (!currentUser) return;
 
@@ -61,7 +57,7 @@ export default function ViewCart() {
     return () => unsub();
   }, [currentUser]);
 
-  // ── Enrich cart IDs with listing data ─────────────────────────────────────
+  // ── Enrich favourite IDs with listing data ─────────────────────────────────
   useEffect(() => {
     if (!snapshotReceived) return;
     if (cartIds.length === 0) {
@@ -78,7 +74,7 @@ export default function ViewCart() {
             if (!snap.exists()) return null;
             const d = snap.data();
             return {
-              id:          snap.id,
+              id: snap.id,
               title:       d.title || 'Unknown Item',
               price:       d.price ?? null,
               condition:   d.condition || '',
@@ -116,7 +112,7 @@ export default function ViewCart() {
     }
   };
 
-  // ── Clear all ──────────────────────────────────────────────────────────────
+  // ── Clear all favourites ───────────────────────────────────────────────────
   const handleClearAll = async () => {
     if (!currentUser || cartItems.length === 0) return;
     try {
@@ -181,7 +177,7 @@ export default function ViewCart() {
                 <i className="fas fa-arrow-left" /> Back
               </button>
               <div>
-                <h1 className={styles.pageTitle}>My Favourites</h1>
+                <h1 className={styles.pageTitle}>My Favorites</h1>
                 <p className={styles.pageSub}>
                   {cartItems.length === 0
                     ? 'No items saved'
@@ -201,10 +197,10 @@ export default function ViewCart() {
           {cartItems.length === 0 ? (
             <div className={styles.emptyState}>
               <div className={styles.emptyIcon}>
-                <i className="fas fa-heart" />
+                <i className="fas fa-heart-broken" />
               </div>
-              <p className={styles.emptyTitle}>No favourites yet</p>
-              <p className={styles.emptySub}>Browse listings and save items you like to your favourites.</p>
+              <p className={styles.emptyTitle}>Your favorites list is empty</p>
+              <p className={styles.emptySub}>Browse listings and click the heart icon to save items.</p>
               <button className={styles.browseBtn} onClick={() => navigate('/view-listing')}>
                 <i className="fas fa-search" /> Browse listings
               </button>
@@ -287,7 +283,7 @@ export default function ViewCart() {
                       >
                         {removing === item.id
                           ? <i className="fas fa-spinner fa-spin" />
-                          : <><i className="fas fa-heart-broken" /> Remove</>
+                          : <><i className="fas fa-trash" /> Remove</>
                         }
                       </button>
                     </div>
