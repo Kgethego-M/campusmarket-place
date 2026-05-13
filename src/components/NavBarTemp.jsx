@@ -13,7 +13,7 @@ const NAV_LINKS = [
     { label: "Trade Facility", path: "/trade-facility" },
     { label: "Messages",       path: "/chat" },
     { label: "My Purchases",   path: "/my-purchases" },
-    { label: "Cart",           path: "/cart", isCart: true },
+    { label: "Favorite",       path: "/cart", isFavorite: true },
 ];
 
 const formatTime = (ts) => {
@@ -41,9 +41,6 @@ const fetchListingDetails = async (listingId) => {
     return {};
 };
 
-// ── Try every possible field name for the transaction ID,
-//    look it up, check sellerId vs currentUser.uid, and route.
-//    Seller → /trade-facility  |  Buyer → /my-purchases
 async function resolveAndNavigate(notification, currentUser, navigate) {
     const transactionId =
         notification.transactionId  ||
@@ -65,23 +62,17 @@ async function resolveAndNavigate(notification, currentUser, navigate) {
         }
     }
 
-    const BUYER_TYPES = [
-        'item_at_facility',
-        'item_ready_for_collection',
-       
-        'item_collected',
-    ];
-    const isBuyerNotification = BUYER_TYPES.includes(notification.type);
-    navigate(isBuyerNotification ? '/my-purchases' : '/trade-facility');
+    const BUYER_TYPES = ['item_at_facility', 'item_ready_for_collection', 'item_collected'];
+    navigate(BUYER_TYPES.includes(notification.type) ? '/my-purchases' : '/trade-facility');
 }
 
 export default function Navbar() {
     const navigate = useNavigate();
     const location = useLocation();
 
-    const [dropdownOpen, setDropdownOpen]           = useState(false);
     const [isLoggingOut, setIsLoggingOut]           = useState(false);
     const [notificationsOpen, setNotificationsOpen] = useState(false);
+    const [avatarMenuOpen, setAvatarMenuOpen]       = useState(false);
     const [currentUser, setCurrentUser]             = useState(null);
 
     const [offerNotifications, setOfferNotifications]   = useState([]);
@@ -95,8 +86,8 @@ export default function Navbar() {
         name: 'Student', email: '', photoURL: '', initials: 'S',
     });
 
-    const dropdownRef     = useRef(null);
     const notificationRef = useRef(null);
+    const avatarRef       = useRef(null);
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -113,26 +104,12 @@ export default function Navbar() {
 
     const handleNotificationClick = async (n) => {
         setNotificationsOpen(false);
-
         if (n.source === 'offer') {
             await markOfferAsRead(n.id);
-
-            if (n.type === 'new_offer') {
-                // Seller's listing got an offer
-                navigate('/profile?tab=offers&highlight=' + (n.transactionId || n.listingId || ''));
-
-            } else if (n.type === 'offer_accepted') {
-                // FIX: navigate to payment page with the transaction ID
-                navigate(`/payment/${n.transactionId}`);
-
-            } else if (n.type === 'offer_declined') {
-                navigate('/view-listing');
-
-            } else {
-                // Everything else: look up the transaction and route by role
-                await resolveAndNavigate(n, currentUser, navigate);
-            }
-
+            if (n.type === 'new_offer')       navigate('/profile?tab=offers&highlight=' + (n.transactionId || n.listingId || ''));
+            else if (n.type === 'offer_accepted') navigate(`/payment/${n.transactionId}`);
+            else if (n.type === 'offer_declined') navigate('/view-listing');
+            else await resolveAndNavigate(n, currentUser, navigate);
         } else if (n.source === 'rating') {
             markRatingAsRead(n.id);
             setRatingNotifications((prev) => prev.filter((r) => r.id !== n.id));
@@ -191,7 +168,6 @@ export default function Navbar() {
         const title = n.listingTitle ? `"${n.listingTitle}"` : 'your item';
         const price = n.listingPrice ? ` · R${Number(n.listingPrice).toLocaleString('en-ZA')}` : '';
         const buyer = n.buyerName || 'A student';
-
         if (n.type === 'buyer_paid')                return `${buyer} has paid for ${title}. Book a drop-off slot now.`;
         if (n.type === 'new_offer')                 return `${buyer} made an offer on ${title}${price}`;
         if (n.type === 'offer_accepted')            return `Your offer on ${title} was accepted!${price}`;
@@ -203,16 +179,8 @@ export default function Navbar() {
         if (n.type === 'transaction_complete')      return `Your sale of ${title} is complete${price}.`;
         if (n.type === 'collection_booked')         return n.message || `Collection slot booked for ${title}.`;
         if (n.type === 'dropoff_booked')            return n.message || `Drop-off slot booked for ${title}.`;
-
-        if (n.type === 'rate_seller') {
-            const itemPart = n.listingTitle ? ` for "${n.listingTitle}"${price}` : '';
-            return `Rate your experience with ${n.reviewedUserName} as a seller${itemPart}`;
-        }
-        if (n.type === 'rate_buyer') {
-            const itemPart = n.listingTitle ? ` — "${n.listingTitle}"${price}` : '';
-            return `Rate your buyer ${n.reviewedUserName}${itemPart}`;
-        }
-
+        if (n.type === 'rate_seller') return `Rate your experience with ${n.reviewedUserName} as a seller${n.listingTitle ? ` for "${n.listingTitle}"${price}` : ''}`;
+        if (n.type === 'rate_buyer')  return `Rate your buyer ${n.reviewedUserName}${n.listingTitle ? ` — "${n.listingTitle}"${price}` : ''}`;
         return n.message || 'Notification';
     };
 
@@ -228,13 +196,11 @@ export default function Navbar() {
                 return;
             }
             setCurrentUser(firebaseUser);
-
             const parts    = (firebaseUser.displayName || '').split(' ');
             const fn       = parts[0] || '';
             const ln       = parts.slice(1).join(' ') || '';
             const initials = `${fn[0] || ''}${ln[0] || ''}`.toUpperCase() || 'S';
             setUserDisplay({ name: firebaseUser.displayName || 'Student', email: firebaseUser.email || '', photoURL: firebaseUser.photoURL || '', initials });
-
             try {
                 const snap = await getDoc(doc(db, 'users', firebaseUser.uid));
                 if (snap.exists()) {
@@ -260,8 +226,8 @@ export default function Navbar() {
 
     useEffect(() => {
         const handle = (e) => {
-            if (dropdownRef.current     && !dropdownRef.current.contains(e.target))     setDropdownOpen(false);
             if (notificationRef.current && !notificationRef.current.contains(e.target)) setNotificationsOpen(false);
+            if (avatarRef.current       && !avatarRef.current.contains(e.target))       setAvatarMenuOpen(false);
         };
         document.addEventListener('mousedown', handle);
         return () => document.removeEventListener('mousedown', handle);
@@ -271,6 +237,7 @@ export default function Navbar() {
 
     const handleLogout = () => {
         setIsLoggingOut(true);
+        setAvatarMenuOpen(false);
         setTimeout(async () => {
             try {
                 localStorage.removeItem('loggedInUserId');
@@ -282,7 +249,6 @@ export default function Navbar() {
                 alert('Failed to logout. Please try again.');
             } finally {
                 setIsLoggingOut(false);
-                setDropdownOpen(false);
             }
         }, 2000);
     };
@@ -291,28 +257,21 @@ export default function Navbar() {
 
     useEffect(() => {
         if (!currentUser) return;
-
         const q = query(
             collection(db, 'notifications'),
             where('userId', '==', currentUser.uid),
             where('read',   '==', false)
         );
-
         const unsub = onSnapshot(q, async (snapshot) => {
             const raw = snapshot.docs.map((d) => ({ id: d.id, source: 'offer', ...d.data() }));
             const enriched = await Promise.all(
                 raw.map(async (n) => {
                     const details = await fetchListingDetails(n.listingId);
-                    return {
-                        ...n,
-                        listingTitle: n.listingTitle || details.title || null,
-                        listingPrice: n.agreedPrice  || details.price || null,
-                    };
+                    return { ...n, listingTitle: n.listingTitle || details.title || null, listingPrice: n.agreedPrice || details.price || null };
                 })
             );
             setOfferNotifications(enriched);
         });
-
         return () => unsub();
     }, [currentUser]);
 
@@ -320,118 +279,54 @@ export default function Navbar() {
 
     useEffect(() => {
         if (!currentUser) return;
-
         const fetchRatingNotifications = async () => {
             try {
                 const [buyerSnap, sellerSnap] = await Promise.all([
                     getDocs(query(collection(db, 'transactions'), where('buyerId',  '==', currentUser.uid), where('status', '==', 'completed'))),
                     getDocs(query(collection(db, 'transactions'), where('sellerId', '==', currentUser.uid), where('status', '==', 'completed'))),
                 ]);
-
                 const results = [];
 
                 for (const d of buyerSnap.docs) {
                     const data = d.data();
                     const listingId = data.listingId || data.ListingId || data.listing_id || null;
                     if (!listingId) continue;
-
-                    let sellerName = 'Seller';
-                    let listingTitle = data.listingTitle || '';
-                    let listingPrice = null;
-
+                    let sellerName = 'Seller', listingTitle = data.listingTitle || '', listingPrice = null;
                     try {
-                        const [userSnap, listingSnap] = await Promise.all([
-                            getDoc(doc(db, 'users', data.sellerId)),
-                            getDoc(doc(db, 'listings', listingId)),
-                        ]);
-                        if (userSnap.exists()) {
-                            const ud = userSnap.data();
-                            sellerName = `${ud.firstName || ''} ${ud.lastName || ''}`.trim() || sellerName;
-                        }
-                        if (listingSnap.exists()) {
-                            const ld = listingSnap.data();
-                            listingTitle = listingTitle || ld.title || ld.Title || '';
-                            listingPrice = ld.price || ld.Price || null;
-                        }
+                        const [userSnap, listingSnap] = await Promise.all([getDoc(doc(db, 'users', data.sellerId)), getDoc(doc(db, 'listings', listingId))]);
+                        if (userSnap.exists())    { const ud = userSnap.data();    sellerName   = `${ud.firstName || ''} ${ud.lastName || ''}`.trim() || sellerName; }
+                        if (listingSnap.exists()) { const ld = listingSnap.data(); listingTitle = listingTitle || ld.title || ld.Title || ''; listingPrice = ld.price || ld.Price || null; }
                     } catch (_) {}
-
-                    results.push({
-                        id: `buyer-${d.id}`, source: 'rating', type: 'rate_seller',
-                        title: `Rate your experience with ${sellerName}`,
-                        message: `Your purchase is complete — how was the transaction?`,
-                        listingId,
-                        listingTitle,
-                        listingPrice,
-                        purchaseId: d.id,
-                        reviewedUserId: data.sellerId,
-                        reviewedUserName: sellerName,
-                        role: 'seller',
-                        createdAt: data.updatedAt || data.createdAt,
-                    });
+                    results.push({ id: `buyer-${d.id}`, source: 'rating', type: 'rate_seller', title: `Rate your experience with ${sellerName}`, message: `Your purchase is complete — how was the transaction?`, listingId, listingTitle, listingPrice, purchaseId: d.id, reviewedUserId: data.sellerId, reviewedUserName: sellerName, role: 'seller', createdAt: data.updatedAt || data.createdAt });
                 }
 
                 for (const d of sellerSnap.docs) {
                     const data = d.data();
                     const listingId = data.listingId || data.ListingId || data.listing_id || null;
                     if (!listingId) continue;
-
-                    let buyerName = 'Buyer';
-                    let listingTitle = data.listingTitle || '';
-                    let listingPrice = null;
-
+                    let buyerName = 'Buyer', listingTitle = data.listingTitle || '', listingPrice = null;
                     try {
-                        const [userSnap, listingSnap] = await Promise.all([
-                            getDoc(doc(db, 'users', data.buyerId)),
-                            getDoc(doc(db, 'listings', listingId)),
-                        ]);
-                        if (userSnap.exists()) {
-                            const ud = userSnap.data();
-                            buyerName = `${ud.firstName || ''} ${ud.lastName || ''}`.trim() || buyerName;
-                        }
-                        if (listingSnap.exists()) {
-                            const ld = listingSnap.data();
-                            listingTitle = listingTitle || ld.title || ld.Title || '';
-                            listingPrice = ld.price || ld.Price || null;
-                        }
+                        const [userSnap, listingSnap] = await Promise.all([getDoc(doc(db, 'users', data.buyerId)), getDoc(doc(db, 'listings', listingId))]);
+                        if (userSnap.exists())    { const ud = userSnap.data();    buyerName    = `${ud.firstName || ''} ${ud.lastName || ''}`.trim() || buyerName; }
+                        if (listingSnap.exists()) { const ld = listingSnap.data(); listingTitle = listingTitle || ld.title || ld.Title || ''; listingPrice = ld.price || ld.Price || null; }
                     } catch (_) {}
-
-                    results.push({
-                        id: `seller-${d.id}`, source: 'rating', type: 'rate_buyer',
-                        title: `Rate your buyer — ${buyerName}`,
-                        message: `Your listing was purchased — how was the buyer?`,
-                        listingId,
-                        listingTitle,
-                        listingPrice,
-                        purchaseId: d.id,
-                        reviewedUserId: data.buyerId,
-                        reviewedUserName: buyerName,
-                        role: 'buyer',
-                        createdAt: data.updatedAt || data.createdAt,
-                    });
+                    results.push({ id: `seller-${d.id}`, source: 'rating', type: 'rate_buyer', title: `Rate your buyer — ${buyerName}`, message: `Your listing was purchased — how was the buyer?`, listingId, listingTitle, listingPrice, purchaseId: d.id, reviewedUserId: data.buyerId, reviewedUserName: buyerName, role: 'buyer', createdAt: data.updatedAt || data.createdAt });
                 }
 
                 const unread = results.filter((n) => !readRatingIds.includes(n.id));
-
                 const reviewChecks = await Promise.all(
                     unread.map(async (n) => {
                         try {
-                            const snap = await getDocs(query(
-                                collection(db, 'reviews'),
-                                where('reviewerUserId', '==', currentUser.uid),
-                                where('listingId',      '==', n.listingId),
-                                where('reviewedUserId', '==', n.reviewedUserId)
-                            ));
+                            const snap = await getDocs(query(collection(db, 'reviews'), where('reviewerUserId', '==', currentUser.uid), where('listingId', '==', n.listingId), where('reviewedUserId', '==', n.reviewedUserId)));
                             return snap.empty ? n : null;
                         } catch (_) { return n; }
                     })
                 );
-
                 setRatingNotifications(reviewChecks.filter(Boolean));
             } catch (err) {
                 console.error('NavBar: error fetching rating notifications', err);
             }
         };
-
         fetchRatingNotifications();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [currentUser]);
@@ -441,175 +336,135 @@ export default function Navbar() {
     // ── Render ────────────────────────────────────────────────────────────────
 
     return (
-        <header className={styles.navbar}>
-            {/* Logo */}
-            <div className={styles.logo} onClick={() => navigate('/view-listing')}>
-                <div className={styles.logoBox}>
-                    <i className="fa-solid fa-shop" style={{ color: '#fff', fontSize: '1.1rem' }} />
-                </div>
-                <span className={styles.logoText}>CampusMarket</span>
-            </div>
+        <>
+            <header className={styles.navbar}>
 
-            {/* Nav links */}
-            <nav className={styles.navLinks}>
-                {NAV_LINKS.map((link) => {
-                    const isActive = link.path && location.pathname === link.path;
-                    let cls = styles.navLink;
-                    if (isActive)   cls += ` ${styles.navLinkActive}`;
-                    if (!link.path) cls += ` ${styles.navLinkDisabled}`;
-                    return (
-                        <button
-                            key={link.label}
-                            className={cls}
-                            onClick={() => link.path && navigate(link.path)}
-                            disabled={!link.path}
-                        >
-                            {link.isCart
-                                ? <span className={styles.cartNavItem}><i className="fas fa-shopping-cart" />Cart</span>
-                                : link.label
-                            }
-                        </button>
-                    );
-                })}
-            </nav>
-
-            {/* Right side */}
-            <div className={styles.navRight}>
-
-                {/* Notification Bell */}
-                <div className={styles.notificationWrapper} ref={notificationRef}>
-                    <button
-                        className={styles.iconButton}
-                        onClick={() => setNotificationsOpen((v) => !v)}
-                        title="Notifications"
-                    >
-                        <i className="fa-solid fa-bell" />
-                        {totalCount > 0 && (
-                            <span className={styles.notificationBadge}>{totalCount}</span>
-                        )}
-                    </button>
-
-                    {notificationsOpen && (
-                        <div className={styles.notificationDropdown}>
-                            <div className={styles.notificationHeader}>
-                                <span>Notifications</span>
-                                {totalCount > 0 && (
-                                    <button className={styles.markAllRead} onClick={handleMarkAllRead}>
-                                        Mark all as read
-                                    </button>
-                                )}
-                            </div>
-                            <div className={styles.notificationList}>
-                                {totalCount === 0 ? (
-                                    <div className={styles.notificationEmpty}>
-                                        <i className="fas fa-bell-slash" style={{ fontSize: '1.5rem', color: '#94a3b8', marginBottom: '0.5rem' }} />
-                                        <p style={{ color: '#94a3b8', margin: 0, fontSize: '0.875rem' }}>No new notifications</p>
-                                    </div>
-                                ) : (
-                                    <>
-                                        {offerNotifications.length > 0 && (
-                                            <>
-                                                <div className={styles.notificationSectionLabel}>
-                                                    <i className="fas fa-tag" /> Offers &amp; Transactions
-                                                </div>
-                                                {offerNotifications.map((n) => (
-                                                    <div
-                                                        key={n.id}
-                                                        data-testid={`notification-item-${n.id}`}
-                                                        className={styles.notificationItem}
-                                                        onClick={() => handleNotificationClick(n)}
-                                                        role="button"
-                                                        tabIndex={0}
-                                                        onKeyDown={(e) => e.key === 'Enter' && handleNotificationClick(n)}
-                                                    >
-                                                        <div className={styles.notificationIconWrap} style={{ color: notificationIconColor(n.type) }}>
-                                                            <i className={`fas ${notificationIcon(n.type)}`} />
-                                                        </div>
-                                                        <div className={styles.notificationContent}>
-                                                            <p>{notificationMessage(n)}</p>
-                                                            <span>{formatTime(n.createdAt)}</span>
-                                                        </div>
-                                                        <i className="fas fa-chevron-right" style={{ color: '#cbd5e1', fontSize: '0.65rem', flexShrink: 0 }} />
-                                                    </div>
-                                                ))}
-                                            </>
-                                        )}
-                                        {ratingNotifications.length > 0 && (
-                                            <>
-                                                <div className={styles.notificationSectionLabel}>
-                                                    <i className="fas fa-star" /> Rate &amp; Review
-                                                </div>
-                                                {ratingNotifications.map((n) => (
-                                                    <div
-                                                        key={n.id}
-                                                        data-testid={`notification-item-${n.id}`}
-                                                        className={styles.notificationItem}
-                                                        onClick={() => handleNotificationClick(n)}
-                                                        role="button"
-                                                        tabIndex={0}
-                                                        onKeyDown={(e) => e.key === 'Enter' && handleNotificationClick(n)}
-                                                    >
-                                                        <div className={styles.notificationIconWrap} style={{ color: notificationIconColor(n.type) }}>
-                                                            <i className={`fas ${notificationIcon(n.type)}`} />
-                                                        </div>
-                                                        <div className={styles.notificationContent}>
-                                                            <p>{notificationMessage(n)}</p>
-                                                            {n.message && <p style={{ color: '#94a3b8', fontSize: '0.75rem', margin: '1px 0 0' }}>{n.message}</p>}
-                                                            <span>{formatTime(n.createdAt)}</span>
-                                                        </div>
-                                                        <i className="fas fa-chevron-right" style={{ color: '#cbd5e1', fontSize: '0.65rem', flexShrink: 0 }} />
-                                                    </div>
-                                                ))}
-                                            </>
-                                        )}
-                                    </>
-                                )}
-                            </div>
-                        </div>
-                    )}
+                {/* Logo */}
+                <div className={styles.logo} onClick={() => navigate('/view-listing')}>
+                    <div className={styles.logoBox}>
+                        <i className="fa-solid fa-shop" style={{ color: '#fff', fontSize: '1.1rem' }} />
+                    </div>
+                    <span className={styles.logoText}>CampusMarket</span>
                 </div>
 
-                {/* Menu Button */}
-                <div className={styles.menuWrapper} ref={dropdownRef}>
-                    <button
-                        className={styles.iconButton}
-                        onClick={() => !isLoggingOut && setDropdownOpen((v) => !v)}
-                        title="Menu"
-                    >
-                        <i className="fa-solid fa-bars" />
-                    </button>
-
-                    {dropdownOpen && !isLoggingOut && (
-                        <div className={styles.dropdown}>
-                            <div className={styles.dropdownHeader}>
-                                <div className={styles.dropdownAvatar} />
-                                <div><span className={styles.dropdownName}>{userDisplay.name}</span></div>
-                            </div>
-                            <div className={styles.dropdownDivider} />
-                            <button className={styles.dropdownItem} onClick={() => { navigate('/profile'); setDropdownOpen(false); }}>
-                                <i className="fas fa-user" /> My Profile
-                            </button>
-                            <button className={styles.dropdownItem} onClick={() => { navigate('/settings'); setDropdownOpen(false); }}>
-                                <i className="fas fa-cog" /> Settings
-                            </button>
-                            <button className={`${styles.dropdownItem} ${styles.dropdownSell}`} onClick={() => { navigate('/create-listing'); setDropdownOpen(false); }}>
-                                <i className="fas fa-plus" /> Sell Item
-                            </button>
-                            <div className={styles.dropdownDivider} />
-                            <button
-                                className={`${styles.dropdownItem} ${styles.dropdownLogout}`}
-                                onClick={handleLogout}
-                                disabled={isLoggingOut}
-                            >
-                                {isLoggingOut
-                                    ? <><i className="fas fa-spinner fa-spin" /> Logging out...</>
-                                    : <><i className="fas fa-right-from-bracket" /> Logout</>
+                {/* Nav links */}
+                <nav className={styles.navLinks}>
+                    {NAV_LINKS.map((link) => {
+                        const isActive = link.path && location.pathname === link.path;
+                        let cls = styles.navLink;
+                        if (isActive)   cls += ` ${styles.navLinkActive}`;
+                        if (!link.path) cls += ` ${styles.navLinkDisabled}`;
+                        return (
+                            <button key={link.label} className={cls} onClick={() => link.path && navigate(link.path)} disabled={!link.path}>
+                                {link.isFavorite
+                                    ? <span className={styles.cartNavItem}><i className="fas fa-heart" />Favorites</span>
+                                    : link.label
                                 }
                             </button>
-                        </div>
-                    )}
+                        );
+                    })}
+                </nav>
+
+                {/* Right side */}
+                <div className={styles.navRight}>
+
+                    {/* Notification Bell */}
+                    <div className={styles.notificationWrapper} ref={notificationRef}>
+                        <button className={styles.iconButton} onClick={() => setNotificationsOpen((v) => !v)} title="Notifications">
+                            <i className="fa-solid fa-bell" />
+                            {totalCount > 0 && <span className={styles.notificationBadge}>{totalCount}</span>}
+                        </button>
+
+                        {notificationsOpen && (
+                            <div className={styles.notificationDropdown}>
+                                <div className={styles.notificationHeader}>
+                                    <span>Notifications</span>
+                                    {totalCount > 0 && <button className={styles.markAllRead} onClick={handleMarkAllRead}>Mark all as read</button>}
+                                </div>
+                                <div className={styles.notificationList}>
+                                    {totalCount === 0 ? (
+                                        <div className={styles.notificationEmpty}>
+                                            <i className="fas fa-bell-slash" style={{ fontSize: '1.5rem', color: '#94a3b8', marginBottom: '0.5rem' }} />
+                                            <p style={{ color: '#94a3b8', margin: 0, fontSize: '0.875rem' }}>No new notifications</p>
+                                        </div>
+                                    ) : (
+                                        <>
+                                            {offerNotifications.length > 0 && (
+                                                <>
+                                                    <div className={styles.notificationSectionLabel}><i className="fas fa-tag" /> Offers &amp; Transactions</div>
+                                                    {offerNotifications.map((n) => (
+                                                        <div key={n.id} data-testid={`notification-item-${n.id}`} className={styles.notificationItem} onClick={() => handleNotificationClick(n)} role="button" tabIndex={0} onKeyDown={(e) => e.key === 'Enter' && handleNotificationClick(n)}>
+                                                            <div className={styles.notificationIconWrap} style={{ color: notificationIconColor(n.type) }}><i className={`fas ${notificationIcon(n.type)}`} /></div>
+                                                            <div className={styles.notificationContent}><p>{notificationMessage(n)}</p><span>{formatTime(n.createdAt)}</span></div>
+                                                            <i className="fas fa-chevron-right" style={{ color: '#cbd5e1', fontSize: '0.65rem', flexShrink: 0 }} />
+                                                        </div>
+                                                    ))}
+                                                </>
+                                            )}
+                                            {ratingNotifications.length > 0 && (
+                                                <>
+                                                    <div className={styles.notificationSectionLabel}><i className="fas fa-star" /> Rate &amp; Review</div>
+                                                    {ratingNotifications.map((n) => (
+                                                        <div key={n.id} data-testid={`notification-item-${n.id}`} className={styles.notificationItem} onClick={() => handleNotificationClick(n)} role="button" tabIndex={0} onKeyDown={(e) => e.key === 'Enter' && handleNotificationClick(n)}>
+                                                            <div className={styles.notificationIconWrap} style={{ color: notificationIconColor(n.type) }}><i className={`fas ${notificationIcon(n.type)}`} /></div>
+                                                            <div className={styles.notificationContent}>
+                                                                <p>{notificationMessage(n)}</p>
+                                                                {n.message && <p style={{ color: '#94a3b8', fontSize: '0.75rem', margin: '1px 0 0' }}>{n.message}</p>}
+                                                                <span>{formatTime(n.createdAt)}</span>
+                                                            </div>
+                                                            <i className="fas fa-chevron-right" style={{ color: '#cbd5e1', fontSize: '0.65rem', flexShrink: 0 }} />
+                                                        </div>
+                                                    ))}
+                                                </>
+                                            )}
+                                        </>
+                                    )}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* ── Avatar button + popover ── */}
+                    <div className={styles.avatarWrapper} ref={avatarRef}>
+                        <button
+                            className={styles.avatarButton}
+                            onClick={() => setAvatarMenuOpen((v) => !v)}
+                            title={userDisplay.name}
+                            aria-label="Account menu"
+                        >
+                            {userDisplay.photoURL ? (
+                                <img src={userDisplay.photoURL} alt={userDisplay.name} className={styles.avatarImg} />
+                            ) : (
+                                <span className={styles.avatarInitials}>{userDisplay.initials}</span>
+                            )}
+                        </button>
+
+                        {avatarMenuOpen && !isLoggingOut && (
+                            <div className={styles.avatarDropdown}>
+                                <div className={styles.avatarDropdownUser}>
+                                    <span className={styles.avatarDropdownName}>{userDisplay.name}</span>
+                                    {userDisplay.email && (
+                                        <span className={styles.avatarDropdownEmail}>{userDisplay.email}</span>
+                                    )}
+                                </div>
+                                <div className={styles.dropdownDivider} />
+                                <button
+                                    className={styles.avatarDropdownItem}
+                                    onClick={() => { navigate('/profile'); setAvatarMenuOpen(false); }}
+                                >
+                                    <i className="fas fa-user" /> My Profile
+                                </button>
+                                <div className={styles.dropdownDivider} />
+                                <button
+                                    className={`${styles.avatarDropdownItem} ${styles.avatarDropdownLogout}`}
+                                    onClick={handleLogout}
+                                >
+                                    <i className="fas fa-right-from-bracket" /> Log out
+                                </button>
+                            </div>
+                        )}
+                    </div>
                 </div>
-            </div>
 
             {isLoggingOut && (
                 <div className={styles.logoutOverlay}>
@@ -620,26 +475,47 @@ export default function Navbar() {
                 </div>
             )}
 
-            {/* Mobile bottom nav */}
-            <nav className={styles.mobileNav} aria-hidden="true">
-                {NAV_LINKS.map((link) => (
-                    <button
-                        key={link.label}
-                        tabIndex={-1}
-                        className={`${styles.mobileNavBtn} ${location.pathname === link.path ? styles.mobileNavBtnActive : ''}`}
-                        onClick={() => link.path && navigate(link.path)}
-                    >
-                        <i className={`fas ${
-                            link.label === 'Browse'         ? 'fa-store' :
-                            link.label === 'Messages'       ? 'fa-comment' :
-                            link.label === 'My Purchases'   ? 'fa-bag-shopping' :
-                            link.label === 'Cart'           ? 'fa-cart-shopping' :
-                            'fa-arrows-rotate'
-                        }`} />
-                        <span>{link.label}</span>
-                    </button>
-                ))}
-            </nav>
-        </header>
+                {/* Mobile bottom nav */}
+                <nav className={styles.mobileNav} aria-hidden="true">
+                    {NAV_LINKS.map((link) => (
+                        <button
+                            key={link.label}
+                            tabIndex={-1}
+                            className={`${styles.mobileNavBtn} ${location.pathname === link.path ? styles.mobileNavBtnActive : ''}`}
+                            onClick={() => link.path && navigate(link.path)}
+                        >
+                            <i className={`fas ${
+                                link.label === 'Browse'         ? 'fa-store'        :
+                                link.label === 'Messages'       ? 'fa-comment'      :
+                                link.label === 'My Purchases'   ? 'fa-bag-shopping' :
+                                link.label === 'Favorites'       ? 'fa-heart'        :
+                                'fa-arrows-rotate'
+                            }`} />
+                            <span>{link.label}</span>
+                        </button>
+                    ))}
+                </nav>
+            </header>
+
+            {/* ── Floating Action Button — Sell an item ── */}
+            <button
+                className={styles.fab}
+                onClick={() => navigate('/create-listing')}
+                title="Sell an item"
+                aria-label="Sell an item"
+            >
+                <i className="fas fa-plus" />
+            </button>
+
+            {/* ── Logout overlay ── */}
+            {isLoggingOut && (
+                <div className={styles.logoutOverlay}>
+                    <div className={styles.logoutLoader}>
+                        <i className="fas fa-spinner fa-spin" />
+                        <p>Logging out...</p>
+                    </div>
+                </div>
+            )}
+        </>
     );
 }

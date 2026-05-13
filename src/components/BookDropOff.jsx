@@ -26,6 +26,9 @@ async function uploadImageToCloudinary(file) {
   return data.secure_url;
 }
 
+// ── How many days after payment the seller has to drop off ──────
+const DROP_OFF_WINDOW_DAYS = 7;
+
 function formatPrice(value) {
   const num = Number(String(value ?? "0").replace(/\s/g, ""));
   if (isNaN(num)) return "0";
@@ -70,6 +73,32 @@ const CONDITION_COLORS = {
   'Poor':     { color: '#dc2626', bg: '#fef2f2' },
 };
 
+/**
+ * Given a Firestore transaction, returns the payment confirmation date
+ * as a JS Date. Falls back through several timestamp fields.
+ */
+function getPaymentDate(txn) {
+  const ts =
+    txn.paymentConfirmedAt ||
+    txn.paymentDate        ||
+    txn.paidAt             ||
+    txn.updatedAt          ||
+    txn.createdAt          ||
+    null;
+  if (!ts) return null;
+  return ts?.toDate ? ts.toDate() : new Date(ts);
+}
+
+/**
+ * Returns a "YYYY-MM-DD" string for a Date, adjusted to local midnight.
+ */
+function toDateStr(date) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
 export default function BookDropOff() {
   const { transactionId } = useParams();
   const navigate          = useNavigate();
@@ -84,6 +113,7 @@ export default function BookDropOff() {
   const [selectedDate,     setSelectedDate]     = useState("");
   const [selectedTimeSlot, setSelectedTimeSlot] = useState("");
   const [minDate,          setMinDate]          = useState("");
+  const [maxDate,          setMaxDate]           = useState("");
 
   // Who is the current user in this transaction?
   const [role, setRole] = useState(null); // 'seller' | 'buyer'
@@ -107,7 +137,7 @@ export default function BookDropOff() {
 
   useEffect(() => {
     const today = new Date();
-    setMinDate(today.toISOString().split("T")[0]);
+    setMinDate(toDateStr(today));
   }, []);
 
   useEffect(() => {
@@ -166,6 +196,29 @@ export default function BookDropOff() {
       // Buyer: check if buyer drop-off already booked
       if (isBuyer && txn.buyerBookingId)
         return setError("You have already booked your drop-off slot for this trade.");
+
+      // ── Calculate the 7-day drop-off deadline ──────────────────
+      const paymentDate = getPaymentDate(txn);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      if (paymentDate) {
+        const deadline = new Date(paymentDate);
+        deadline.setHours(0, 0, 0, 0);
+        deadline.setDate(deadline.getDate() + DROP_OFF_WINDOW_DAYS);
+
+        if (deadline < today) {
+          setError(
+            `The ${DROP_OFF_WINDOW_DAYS}-day drop-off window has passed (deadline was ${toDateStr(deadline)}). Please contact support if you need assistance.`
+          );
+        }
+        setMaxDate(toDateStr(deadline));
+      } else {
+        const fallbackDeadline = new Date(today);
+        fallbackDeadline.setDate(fallbackDeadline.getDate() + DROP_OFF_WINDOW_DAYS);
+        setMaxDate(toDateStr(fallbackDeadline));
+      }
+      // ──────────────────────────────────────────────────────────
 
       setTransaction(txn);
 
@@ -255,6 +308,10 @@ export default function BookDropOff() {
     if (!selectedDate)     return setError("Please select a date.");
     if (!selectedTimeSlot) return setError("Please select a time slot.");
 
+    if (maxDate && selectedDate > maxDate) {
+      return setError(`Please choose a date on or before ${maxDate} (${DROP_OFF_WINDOW_DAYS}-day drop-off window).`);
+    }
+
     setSubmitting(true);
     setError("");
 
@@ -290,7 +347,6 @@ export default function BookDropOff() {
 
         const listingTitle = listing?.title ?? "your item";
 
-        // Notify seller
         await addDoc(collection(db, "notifications"), {
           userId:        transaction.sellerId,
           type:          "dropoff_booked",
@@ -446,6 +502,7 @@ export default function BookDropOff() {
     if (isToday && visibleSlots.length === 0) {
       return (
         <p className={styles.noSlots}>
+          <i className="fas fa-clock" style={{ marginRight: "6px" }} />
           No more slots available for today — all time slots have passed. Please select a future date.
         </p>
       );
@@ -455,6 +512,7 @@ export default function BookDropOff() {
       <>
         {isToday && hiddenCount > 0 && (
           <p className={styles.slotHint}>
+            <i className="fas fa-hourglass-half" style={{ marginRight: "6px" }} />
             Showing today's remaining slots only — {hiddenCount} earlier slot{hiddenCount !== 1 ? "s have" : " has"} passed.
           </p>
         )}
@@ -557,6 +615,50 @@ export default function BookDropOff() {
               : `Schedule when you'll drop off the item for ${counterpartyName}.`}
           </p>
         </div>
+
+        {/* ── Deadline info card (integrated, not floating) ── */}
+        {maxDate && (
+          <div className={styles.deadlineCard}>
+            <div className={styles.deadlineIcon}>
+              <i className="fas fa-clock" style={{ fontSize: "18px" }} />
+            </div>
+            <div className={styles.deadlineContent}>
+              <span className={styles.deadlineLabel}>
+                <i className="fas fa-hourglass-half" style={{ marginRight: "4px", fontSize: "10px" }} />
+                Drop-off deadline
+              </span>
+              <span className={styles.deadlineValue}>
+                Must be booked within <strong>{DROP_OFF_WINDOW_DAYS} days</strong> of payment
+              </span>
+              <span className={styles.deadlineDate}>
+                <i className="fas fa-calendar-alt" style={{ marginRight: "4px", fontSize: "10px" }} />
+                Latest allowed date: <strong>{maxDate}</strong>
+              </span>
+            </div>
+          </div>
+        )}
+
+        {/* ── Deadline info card (integrated, not floating) ── */}
+        {maxDate && (
+          <div className={styles.deadlineCard}>
+            <div className={styles.deadlineIcon}>
+              <i className="fas fa-clock" style={{ fontSize: "18px" }} />
+            </div>
+            <div className={styles.deadlineContent}>
+              <span className={styles.deadlineLabel}>
+                <i className="fas fa-hourglass-half" style={{ marginRight: "4px", fontSize: "10px" }} />
+                Drop-off deadline
+              </span>
+              <span className={styles.deadlineValue}>
+                Must be booked within <strong>{DROP_OFF_WINDOW_DAYS} days</strong> of payment
+              </span>
+              <span className={styles.deadlineDate}>
+                <i className="fas fa-calendar-alt" style={{ marginRight: "4px", fontSize: "10px" }} />
+                Latest allowed date: <strong>{maxDate}</strong>
+              </span>
+            </div>
+          </div>
+        )}
 
         {/* ── Role banner for buyers ── */}
         {isBuyerFlow && (
@@ -735,20 +837,44 @@ export default function BookDropOff() {
         {/* ── Booking form ── */}
         <form className={styles.form} onSubmit={handleSubmit}>
           <div className={styles.fieldGroup}>
-            <label className={styles.label}>Drop-off date</label>
-            <input type="date" className={styles.input} value={selectedDate}
-              onChange={e => setSelectedDate(e.target.value)} min={minDate} required />
+            <label className={styles.label}>
+              Select drop-off date
+            </label>
+            <input
+              type="date"
+              className={styles.input}
+              value={selectedDate}
+              onChange={e => setSelectedDate(e.target.value)}
+              min={minDate}
+              max={maxDate || undefined}
+              required
+            />
+            {maxDate && (
+              <p className={styles.dateHelper}>
+                <i className="fas fa-calendar-check" style={{ marginRight: "4px", fontSize: "10px" }} />
+                Latest allowed: {maxDate}
+              </p>
+            )}
+            {selectedDate && maxDate && selectedDate > maxDate && (
+              <p className={styles.dateWarning}>
+                <i className="fas fa-exclamation-triangle" style={{ marginRight: "4px" }} />
+                This date is past the {DROP_OFF_WINDOW_DAYS}-day deadline. Please pick an earlier date.
+              </p>
+            )}
           </div>
 
           <div className={styles.fieldGroup}>
             <label className={styles.label}>
-              Time slot
+              Select time slot
               {selectedTimeSlot && (
                 <span className={styles.selectedBadge}>{selectedTimeSlot}</span>
               )}
             </label>
             {!selectedDate
-              ? <p className={styles.slotHint}>Select a date above to see available slots.</p>
+              ? <p className={styles.slotHint}>
+                  <i className="fas fa-calendar-day" style={{ marginRight: "6px" }} />
+                  Select a date above to see available slots.
+                </p>
               : renderSlotGrid()
             }
           </div>
@@ -769,7 +895,7 @@ export default function BookDropOff() {
               Cancel
             </button>
             <button type="submit" className={styles.submitBtn}
-              disabled={submitting || !selectedDate || !selectedTimeSlot || tradeImageUploading}>
+              disabled={submitting || !selectedDate || !selectedTimeSlot || (maxDate && selectedDate > maxDate) || tradeImageUploading}>
               {(submitting || tradeImageUploading)
                 ? <><span className={styles.spinner} /> {tradeImageUploading ? "Uploading image…" : "Booking…"}</>
                 : isBuyerFlow ? "Confirm trade drop-off" : "Confirm drop-off slot"

@@ -528,3 +528,109 @@
   animation: shimmer 1.4s infinite;
   border: none;
 }
+
+/* ── Deadline Card - integrated, not floating ─────────────────── */
+.deadlineCard {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  background: #fffbeb;
+  border-left: 4px solid #f59e0b;
+  border-radius: 12px;
+  padding: 14px 16px;
+  margin-bottom: 20px;
+}
+
+.deadlineIcon {
+  flex-shrink: 0;
+  color: #f59e0b;
+  margin-top: 2px;
+}
+
+.deadlineContent {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1;
+}
+
+.deadlineLabel {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #b45309;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.deadlineValue {
+  font-size: 0.85rem;
+  color: #78350f;
+}
+
+.deadlineValue strong {
+  color: #d97706;
+}
+
+.deadlineDate {
+  font-size: 0.75rem;
+  color: #92400e;
+  background: #fef3c7;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 20px;
+  align-self: flex-start;
+}
+
+.deadlineDate strong {
+  font-weight: 600;
+  color: #b45309;
+}
+
+/* ── Date helper text - subtle, under the date picker ─────────── */
+.dateHelper {
+  font-size: 0.7rem;
+  color: #6b7280;
+  margin-top: 6px;
+  margin-bottom: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.dateWarning {
+  font-size: 0.7rem;
+  color: #dc2626;
+  margin-top: 6px;
+  margin-bottom: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* ── Slot hint with icon ──────────────────────────────────────── */
+.slotHint {
+  font-size: 0.75rem;
+  color: #6b7280;
+  margin-top: 8px;
+  margin-bottom: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.noSlots {
+  font-size: 0.75rem;
+  color: #ef4444;
+  background: #fef2f2;
+  padding: 10px 12px;
+  border-radius: 8px;
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
