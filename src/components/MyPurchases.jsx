@@ -17,11 +17,8 @@ const STATUS_CONFIG = {
   pending:             { label: 'Pending',             color: '#f59e0b', bg: '#fef3c7', icon: 'fa-clock'          },
   accepted:            { label: 'Accepted',            color: '#3b82f6', bg: '#dbeafe', icon: 'fa-circle-check'   },
   waiting:             { label: 'Waiting',             color: '#8b5cf6', bg: '#ede9fe', icon: 'fa-hourglass-half' },
-  in_facility:         { label: 'At Facility',         color: '#0ea5e9', bg: '#e0f2fe', icon: 'fa-warehouse'      },
   ready_to_release:    { label: 'Ready to Collect',    color: '#f97316', bg: '#ffedd5', icon: 'fa-circle-check'   },
   awaiting_collection: { label: 'Awaiting Collection', color: '#8b5cf6', bg: '#ede9fe', icon: 'fa-person-walking' },
-  completed:           { label: 'Completed',           color: '#22c55e', bg: '#dcfce7', icon: 'fa-check-double'   },
-  declined:            { label: 'Declined',            color: '#ef4444', bg: '#fee2e2', icon: 'fa-circle-xmark'   },
   cancelled:           { label: 'Cancelled',           color: '#94a3b8', bg: '#f1f5f9', icon: 'fa-ban'            },
 };
 
@@ -85,11 +82,11 @@ const getFilterStatus = (tx) => {
 
 // Whether the buyer can book a collection slot
 const canBookCollection = (tx) =>
-  ['in_facility', 'ready_to_release'].includes(tx.status) && !tx.collectionBookingId;
+  ['ready_to_release'].includes(tx.status) && !tx.collectionBookingId;
 
 // Whether a collection slot is already booked
 const hasCollectionBooked = (tx) =>
-  ['in_facility', 'ready_to_release', 'awaiting_collection'].includes(tx.status) && !!tx.collectionBookingId;
+  ['ready_to_release', 'awaiting_collection'].includes(tx.status) && !!tx.collectionBookingId;
 
 export default function MyPurchases() {
   const navigate = useNavigate();
@@ -183,8 +180,7 @@ export default function MyPurchases() {
       // Sort by status then newest first
       const ORDER = {
         pending: 0, accepted: 1, pending_payment: 1, waiting: 2,
-        in_facility: 3, ready_to_release: 4, awaiting_collection: 5,
-        completed: 6, declined: 7, cancelled: 8,
+        ready_to_release: 3, awaiting_collection: 4, cancelled: 5,
       };
       results.sort((a, b) => {
         const diff = (ORDER[a.status] ?? 99) - (ORDER[b.status] ?? 99);
@@ -207,10 +203,7 @@ export default function MyPurchases() {
     { key: 'pending',             label: 'Pending'            },
     { key: 'accepted',            label: 'Accepted'           },
     { key: 'waiting',             label: 'Waiting'            },
-    { key: 'in_facility',         label: 'At Facility'        },
     { key: 'awaiting_collection', label: 'Awaiting Collection'},
-    { key: 'completed',           label: 'Completed'          },
-    { key: 'declined',            label: 'Declined'           },
   ];
 
   const filtered =
@@ -227,7 +220,7 @@ export default function MyPurchases() {
   }, {});
 
   const activeCount = enriched.filter((tx) =>
-    ['pending', 'accepted', 'pending_payment', 'waiting', 'in_facility', 'ready_to_release', 'awaiting_collection'].includes(tx.status)
+    ['pending', 'accepted', 'pending_payment', 'waiting', 'ready_to_release', 'awaiting_collection'].includes(tx.status)
   ).length;
 
   const handleArrowClick = (tx) => {
@@ -310,7 +303,7 @@ export default function MyPurchases() {
               {filtered.map((tx) => {
                 const status          = getDisplayStatus(tx);
                 const type            = TYPE_CONFIG[tx.type] || TYPE_CONFIG.sale;
-                const isActive        = ['pending', 'accepted', 'pending_payment', 'waiting', 'in_facility', 'ready_to_release', 'awaiting_collection'].includes(tx.status);
+                const isActive        = ['pending', 'accepted', 'pending_payment', 'waiting', 'ready_to_release', 'awaiting_collection'].includes(tx.status);
                 const paymentType     = getPaymentType(tx);
                 const isPartialTx     = paymentType === 'partial';
                 const isCashTx        = paymentType === 'cash' || paymentType === 'cod';
@@ -489,7 +482,7 @@ export default function MyPurchases() {
                         </div>
                       )}
 
-                      {(tx.status === 'in_facility' || tx.status === 'ready_to_release') && (
+                      {tx.status === 'ready_to_release' && (
                         <div className={styles.statusMsg} style={{ borderColor: '#0ea5e9', background: '#f0f9ff' }}>
                           <i className="fas fa-warehouse" style={{ color: '#0ea5e9' }} />
                           <span>
@@ -521,20 +514,6 @@ export default function MyPurchases() {
                           <span>
                             Collection slot: <strong>{tx.collectionDate}</strong> at <strong>{tx.collectionTimeSlot}</strong>
                           </span>
-                        </div>
-                      )}
-
-                      {tx.status === 'completed' && (
-                        <div className={styles.statusMsg} style={{ borderColor: '#22c55e', background: '#f0fdf4' }}>
-                          <i className="fas fa-check-double" style={{ color: '#22c55e' }} />
-                          <span>Transaction complete.</span>
-                        </div>
-                      )}
-
-                      {tx.status === 'declined' && (
-                        <div className={styles.statusMsg} style={{ borderColor: '#ef4444', background: '#fef2f2' }}>
-                          <i className="fas fa-circle-xmark" style={{ color: '#ef4444' }} />
-                          <span>Your offer was declined. You can browse other listings.</span>
                         </div>
                       )}
 

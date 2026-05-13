@@ -423,6 +423,7 @@
     font-size: 1rem;
     color: #333;
 }
+
 .historyMeta {
     font-size: 0.85rem;
     color: #777;
@@ -738,7 +739,7 @@
 }
 
 .deleteListingButton {
-    background-color: #9b59b6; /* Nice purple color */
+    background-color: #9b59b6;
     color: white;
 }
 
@@ -855,17 +856,12 @@
 }
 
 @keyframes highlightPulse {
-    0% {
-        background-color: rgba(225, 229, 28, 0);
-    }
-    50% {
-        background-color: rgba(225, 229, 28, 0.4);
-    }
-    100% {
-        background-color: rgba(225, 229, 28, 0);
-    }
+    0%   { background-color: rgba(225, 229, 28, 0); }
+    50%  { background-color: rgba(225, 229, 28, 0.4); }
+    100% { background-color: rgba(225, 229, 28, 0); }
 }
-/* ── Compact Listings Grid (like ViewRating) ─────────────────── */
+
+/* ── Compact Listings Grid ── */
 .listingsGridCompact {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
@@ -878,62 +874,39 @@
 }
 
 @keyframes cardSlideIn {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
 @keyframes fadeIn {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
+  from { opacity: 0; }
+  to   { opacity: 1; }
 }
 
-/* ── Responsive adjustments for compact grid ─────────────────── */
 @media (max-width: 600px) {
-  .listingsGridCompact {
-    grid-template-columns: repeat(2, 1fr);
-    gap: 10px;
-  }
+  .listingsGridCompact { grid-template-columns: repeat(2, 1fr); gap: 10px; }
 }
 
 @media (max-width: 400px) {
-  .listingsGridCompact {
-    grid-template-columns: 1fr;
-  }
+  .listingsGridCompact { grid-template-columns: 1fr; }
 }
+
 .offersList {
   display: flex;
   flex-direction: column;
   gap: 12px;
   animation: fadeIn 0.3s ease;
 }
-/* Sold — red/orange for seller side */
- 
-.completed {
-  background: #d1fae5;
-  color: #065f46;
-}
- 
-.pending {
-  background: #fef9c3;
-  color: #854d0e;
-}
- 
+
+.completed { background: #d1fae5; color: #065f46; }
+.pending   { background: #fef9c3; color: #854d0e; }
+
 /* ── Accepted listing — sale in progress ── */
 .listingCardAccepted {
   position: relative;
   opacity: 0.88;
 }
- 
+
 .acceptedBanner {
   display: flex;
   align-items: center;
@@ -947,8 +920,8 @@
   font-weight: 600;
   color: #92400e;
 }
- /* ── ADD THESE TO THE BOTTOM OF Profile.module.css ── */
 
+/* ── History meta chips ── */
 .historyMeta {
   display: flex;
   align-items: center;
@@ -988,25 +961,11 @@
   white-space: nowrap;
 }
 
-.historyBadgeBought {
-  background: #dbeafe;
-  color: #1d4ed8;
-}
+.historyBadgeBought { background: #dbeafe; color: #1d4ed8; }
+.historyBadgeSold   { background: #dcfce7; color: #15803d; }
 
-.historyBadgeSold {
-  background: #dcfce7;
-  color: #15803d;
-}
-
-.historyIconBuyer {
-  background-color: #dbeafe !important;
-  color: #2563eb !important;
-}
-
-.historyIconSeller {
-  background-color: #dcfce7 !important;
-  color: #16a34a !important;
-}
+.historyIconBuyer  { background-color: #dbeafe !important; color: #2563eb !important; }
+.historyIconSeller { background-color: #dcfce7 !important; color: #16a34a !important; }
 
 .historyItemTitle {
   margin: 0 0 6px 0;
@@ -1015,7 +974,7 @@
   font-weight: 600;
 }
 
-/* Offers grid */
+/* ── Offers grid ── */
 .offersGrid {
   display: flex;
   flex-direction: column;
@@ -1037,8 +996,8 @@
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
   transform: translateY(-2px);
 }
-/* ── ADD THIS TO THE BOTTOM OF Profile.module.css ── */
 
+/* ── View ratings link ── */
 .viewRatingsLink {
   display: inline-flex;
   align-items: center;
@@ -1057,14 +1016,9 @@
   white-space: nowrap;
 }
 
-.viewRatingsLink:hover {
-  background: #e8f4fc;
-  color: #4094d4;
-}
+.viewRatingsLink:hover { background: #e8f4fc; color: #4094d4; }
+.viewRatingsLink i     { font-size: 0.65rem; }
 
-.viewRatingsLink i {
-  font-size: 0.65rem;
-}
 /* ── History card — new design ── */
 .historyItem {
   display: flex;
@@ -1120,7 +1074,7 @@
   font-size: 9px;
 }
 
-.historyTypeDotSold  { background: #dcfce7; color: #15803d; }
+.historyTypeDotSold   { background: #dcfce7; color: #15803d; }
 .historyTypeDotBought { background: #dbeafe; color: #1d4ed8; }
 .historyTypeDotTrade  { background: #ede9fe; color: #6d28d9; }
 
@@ -1189,28 +1143,110 @@
 .historyBadgeSold   { background: #dcfce7; color: #15803d; }
 .historyBadgeBought { background: #dbeafe; color: #1d4ed8; }
 .historyBadgeTrade  { background: #ede9fe; color: #6d28d9; }
-/* =====================================================
-   MOBILE RESPONSIVE — Profile.module.css
-   ===================================================== */
 
-/* ── profileContainer padding shrinks on small screens ── */
+/* ── Trade item card (Offers tab) ── */
+.tradeItemCard {
+  background: #f0f6ff;
+  border: 1px solid #bdd6f0;
+  border-left: 4px solid #6AA6DA;
+  border-radius: 10px;
+  overflow: hidden;
+  margin-top: 2px;
+}
+
+.tradeItemHeader {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  background: #e8f2fb;
+  border-bottom: 1px solid #bdd6f0;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: #1e4d8c;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.tradeItemBody {
+  display: flex;
+  gap: 12px;
+  padding: 11px 12px;
+  align-items: flex-start;
+}
+
+.tradeItemImage {
+  width: 72px;
+  height: 72px;
+  border-radius: 8px;
+  object-fit: cover;
+  flex-shrink: 0;
+  border: 1px solid #bdd6f0;
+}
+
+.tradeItemInfo {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+
+.tradeItemName {
+  margin: 0;
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: #1e3a5f;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tradeItemMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.tradeItemChip {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 99px;
+}
+
+.tradeItemDesc {
+  margin: 0;
+  font-size: 0.75rem;
+  color: #4a6a8a;
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.tradeItemLegacyText {
+  margin: 0;
+  font-size: 0.82rem;
+  color: #1e3a5f;
+  padding: 10px 12px;
+  line-height: 1.5;
+}
+
+/* ── Mobile responsive ── */
 @media (max-width: 768px) {
-  .profileContainer {
-    padding: 1rem;
-  }
+  .profileContainer { padding: 1rem; }
+  .header h1        { font-size: 1.3rem; }
 
-  .header h1 {
-    font-size: 1.3rem;
-  }
-
-  /* profileCard: side-by-side → stacked */
   .profileCard {
     grid-template-columns: 1fr;
     gap: 1.25rem;
     padding: 1.25rem;
   }
 
-  /* profileLeft: picture + info stacks vertically */
   .profileLeft {
     flex-direction: column;
     align-items: center;
@@ -1218,16 +1254,9 @@
     gap: 1rem;
   }
 
-  .profilePictureWrapper {
-    width: 110px;
-    height: 110px;
-  }
+  .profilePictureWrapper { width: 110px; height: 110px; }
+  .userInfo h2           { font-size: 1.2rem; }
 
-  .userInfo h2 {
-    font-size: 1.2rem;
-  }
-
-  /* statsSection: remove left border, add top border */
   .statsSection {
     padding-left: 0;
     border-left: none;
@@ -1235,64 +1264,23 @@
     padding-top: 1.25rem;
   }
 
-  /* statsGrid: 3 cols → 3 cols but smaller, or wrap */
-  .statsGrid {
-    grid-template-columns: repeat(3, 1fr);
-    gap: 0.6rem;
-  }
+  .statsGrid  { grid-template-columns: repeat(3, 1fr); gap: 0.6rem; }
+  .statItem   { padding: 0.6rem; gap: 0.5rem; }
+  .statItem i { font-size: 1.1rem; }
+  .statValue  { font-size: 1.1rem; }
+  .rating     { flex-wrap: wrap; gap: 0.4rem; }
 
-  .statItem {
-    padding: 0.6rem;
-    gap: 0.5rem;
-  }
+  .editActions { flex-direction: column; }
 
-  .statItem i {
-    font-size: 1.1rem;
-  }
-
-  .statValue {
-    font-size: 1.1rem;
-  }
-
-  /* rating row wraps nicely */
-  .rating {
-    flex-wrap: wrap;
-    gap: 0.4rem;
-  }
-
-  /* editActions buttons stack */
-  .editActions {
-    flex-direction: column;
-  }
-
-  /* tabs: smaller text, shrink padding */
-  .tab {
-    font-size: 0.8rem;
-    padding: 0.75rem 0.5rem;
-    gap: 0.3rem;
-  }
-
-  .tabContent {
-    padding: 1rem;
-  }
+  .tab        { font-size: 0.8rem; padding: 0.75rem 0.5rem; gap: 0.3rem; }
+  .tabContent { padding: 1rem; }
 }
 
-/* ── Phone (≤ 480px) ── */
 @media (max-width: 480px) {
-  .profileContainer {
-    padding: 0.75rem;
-  }
+  .profileContainer      { padding: 0.75rem; }
+  .profileCard           { padding: 1rem; }
+  .profilePictureWrapper { width: 90px; height: 90px; }
 
-  .profileCard {
-    padding: 1rem;
-  }
-
-  .profilePictureWrapper {
-    width: 90px;
-    height: 90px;
-  }
-
-  /* statsGrid: 3 cols → 1 row of 3 tiny cards */
   .statsGrid {
     grid-template-columns: repeat(3, 1fr);
     gap: 0.5rem;
@@ -1310,8 +1298,6 @@
   .statValue  { font-size: 1rem; }
   .statLabel  { font-size: 0.65rem; }
 
-  /* tabs: icon only, hide text via font-size trick isn't reliable —
-     instead allow horizontal scroll if all 3 don't fit */
   .tabs {
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
@@ -1324,41 +1310,17 @@
     flex-shrink: 0;
   }
 
-  .tabContent {
-    padding: 0.75rem;
-  }
+  .tabContent            { padding: 0.75rem; }
+  .historyImg            { width: 68px; min-width: 68px; }
+  .historyImgPlaceholder { min-height: 68px; }
+  .historyDetails        { padding: 10px; }
+  .historyItemTitle      { font-size: 0.82rem; }
 
-  /* history item: tighter */
-  .historyImg {
-    width: 68px;
-    min-width: 68px;
-  }
-
-  .historyImgPlaceholder {
-    min-height: 68px;
-  }
-
-  .historyDetails {
-    padding: 10px 10px 10px 10px;
-  }
-
-  .historyItemTitle {
-    font-size: 0.82rem;
-  }
-
-  /* Listings compact grid: 2 col → 1 col on very small */
-  .listingsGridCompact {
-    grid-template-columns: repeat(2, 1fr);
-    gap: 8px;
-  }
+  .listingsGridCompact { grid-template-columns: repeat(2, 1fr); gap: 8px; }
+  .tradeItemImage      { width: 56px; height: 56px; }
 }
 
 @media (max-width: 360px) {
-  .listingsGridCompact {
-    grid-template-columns: 1fr;
-  }
-
-  .statsGrid {
-    grid-template-columns: repeat(3, 1fr);
-  }
+  .listingsGridCompact { grid-template-columns: 1fr; }
+  .statsGrid           { grid-template-columns: repeat(3, 1fr); }
 }

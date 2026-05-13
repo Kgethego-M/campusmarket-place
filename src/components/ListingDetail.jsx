@@ -1,5 +1,21 @@
 // src/components/ListingDetail.jsx
 import { useEffect, useState, useRef, useCallback } from 'react';
+
+const CLOUDINARY_CLOUD_NAME    = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME;
+const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
+
+async function uploadTradeImageToCloudinary(file) {
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
+  const res = await fetch(
+    `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`,
+    { method: 'POST', body: formData }
+  );
+  if (!res.ok) throw new Error(`Image upload failed: ${res.statusText}`);
+  const data = await res.json();
+  return data.secure_url;
+}
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   doc, getDoc, collection, query, where,
@@ -11,7 +27,7 @@ import { createTransaction } from '../services/transactionService';
 import { notifySellerOfOffer } from '../services/notificationService';
 import NavBarTemp from './NavBarTemp';
 import ReportModal from './ReportModal';
-import PromoteListingModal from './PromoteListingModal';   // ✅ ADDED
+import PromoteListingModal from './PromoteListingModal';
 
 // ── Toast ─────────────────────────────────────────────────────────────────────
 function Toast({ toast }) {
@@ -210,12 +226,26 @@ const IconLoader = () => (
   </svg>
 );
 
+// ── Trade item categories ─────────────────────────────────────────────────────
+const TRADE_CATEGORIES = [
+  'Electronics', 'Books & Study Materials', 'Clothing & Accessories',
+  'Furniture & Decor', 'Sports & Fitness', 'Gaming', 'Music & Instruments',
+  'Art & Crafts', 'Kitchen & Appliances', 'Stationery', 'Other',
+];
+
+const TRADE_CONDITIONS = [
+  { label: 'New',      color: '#4CAF50', bg: '#f0fdf4', border: '#86efac' },
+  { label: 'Like New', color: '#8BC34A', bg: '#f7fee7', border: '#bef264' },
+  { label: 'Good',     color: '#d97706', bg: '#fffbeb', border: '#fcd34d' },
+  { label: 'Fair',     color: '#ea580c', bg: '#fff7ed', border: '#fdba74' },
+  { label: 'Poor',     color: '#dc2626', bg: '#fef2f2', border: '#fca5a5' },
+];
+
 // ── Inner view ────────────────────────────────────────────────────────────────
 export function ListingDetailView({ listing, currentUser, existingTransaction = null, navigate }) {
   const [isModalOpen, setIsModalOpen]     = useState(false);
   const [purchaseType, setPurchaseType]   = useState('');
   const [agreedPrice, setAgreedPrice]     = useState(listing.price);
-  const [tradeItem, setTradeItem]         = useState('');
   const [paymentType, setPaymentType]     = useState('full_online');
   const [partialAmount, setPartialAmount] = useState('');
   const [terms, setTerms]                 = useState('');
@@ -226,7 +256,16 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
   const [inCart, setInCart]               = useState(false);
   const [cartLoading, setCartLoading]     = useState(false);
   const [toast, setToast]                 = useState(null);
-  const [showPromoteModal, setShowPromoteModal] = useState(false);   // ✅ ADDED
+  const [showPromoteModal, setShowPromoteModal] = useState(false);
+
+  // ── Trade item structured state ────────────────────────────────────────────
+  const [tradeItemName,      setTradeItemName]      = useState('');
+  const [tradeItemCategory,  setTradeItemCategory]  = useState('');
+  const [tradeItemCondition, setTradeItemCondition] = useState('');
+  const [tradeItemDesc,      setTradeItemDesc]      = useState('');
+  const [tradeImageFile,     setTradeImageFile]      = useState(null);   // File object for Cloudinary
+  const [tradeImagePreview,  setTradeImagePreview]  = useState(null);   // local blob preview
+  const [tradeImageUploading, setTradeImageUploading] = useState(false);
 
   const showToast = (msg, type = 'success') => {
     setToast({ msg, type });
@@ -235,6 +274,17 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
 
   const sellerId     = listing.sellerUID || listing.sellerId;
   const isOwnListing = currentUser && currentUser.uid === sellerId;
+
+  // ── Reset trade fields when modal closes ──────────────────────────────────
+  const closeModal = () => {
+    setIsModalOpen(false);
+    setTradeItemName('');
+    setTradeItemCategory('');
+    setTradeItemCondition('');
+    setTradeItemDesc('');
+    setTradeImageFile(null);
+    setTradeImagePreview(null);
+  };
 
   // ── Check if already in cart ───────────────────────────────────────────────
   useEffect(() => {
@@ -324,12 +374,68 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
     navigate(isOwnListing ? '/profile' : `/profile/${sellerId}`);
   }
 
-  // ── Offer ──────────────────────────────────────────────────────────────────
+  // ── Offer with payment validation ──────────────────────────────────────────────────
   const handleTransaction = async () => {
     if (submitting) return;
-    if (!purchaseType)                           { showToast('Please select a transaction type', 'warn'); alert('Please select a transaction type'); return; }
-    if (purchaseType === 'sale' && !agreedPrice) { showToast('Please enter an agreed price', 'warn'); alert('Please enter an agreed price'); return; }
-    if (purchaseType === 'trade' && !tradeItem)  { showToast('Please describe what you want to trade', 'warn'); alert('Please describe what you want to trade'); return; }
+    if (!purchaseType) {
+      showToast('Please select a transaction type', 'warn');
+      alert('Please select a transaction type');
+      return;
+    }
+    
+    // SALE VALIDATIONS
+    if (purchaseType === 'sale') {
+      if (!agreedPrice) {
+        showToast('Please enter an agreed price', 'warn');
+        alert('Please enter an agreed price');
+        return;
+      }
+      
+      const agreedPriceNum = Number(agreedPrice);
+      if (isNaN(agreedPriceNum) || agreedPriceNum < 10) {
+        showToast('Agreed price must be at least R10', 'warn');
+        alert('Agreed price must be at least R10');
+        return;
+      }
+      
+      if (paymentType === 'partial') {
+        const partialAmountNum = Number(partialAmount);
+        if (!partialAmount || isNaN(partialAmountNum) || partialAmountNum < 10) {
+          showToast('Partial online payment amount must be at least R10', 'warn');
+          alert('Partial online payment amount must be at least R10');
+          return;
+        }
+        if (partialAmountNum > agreedPriceNum) {
+          showToast('Partial payment amount cannot exceed the total agreed price', 'warn');
+          alert('Partial payment amount cannot exceed the total agreed price');
+          return;
+        }
+      }
+    }
+    
+    // Trade item validation
+    if (purchaseType === 'trade') {
+      if (!tradeItemName) {
+        showToast('Please enter your trade item name', 'warn');
+        alert('Please enter your trade item name');
+        return;
+      }
+      if (!tradeItemCategory) {
+        showToast('Please select a category for your trade item', 'warn');
+        alert('Please select a category for your trade item');
+        return;
+      }
+      if (!tradeItemCondition) {
+        showToast('Please select the condition of your trade item', 'warn');
+        alert('Please select the condition of your trade item');
+        return;
+      }
+      if (!tradeImagePreview && !tradeImageFile) {
+        showToast('Please upload a photo of your trade item', 'warn');
+        alert('Please upload a photo of your trade item');
+        return;
+      }
+    }
 
     setSubmitting(true);
 
@@ -339,6 +445,32 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
       else if (paymentType === 'cash')   paymentMethod = 'cod';
       else if (paymentType === 'partial') paymentMethod = 'partial';
     }
+
+    // Upload trade item image to Cloudinary (same as CreateListing)
+    let tradeImageUrl = null;
+    if (purchaseType === 'trade' && tradeImageFile) {
+      setTradeImageUploading(true);
+      try {
+        tradeImageUrl = await uploadTradeImageToCloudinary(tradeImageFile);
+      } catch (uploadErr) {
+        console.error('Trade image upload failed:', uploadErr);
+        showToast('Failed to upload trade item photo. Please try again.', 'error');
+        setSubmitting(false);
+        setTradeImageUploading(false);
+        return;
+      } finally {
+        setTradeImageUploading(false);
+      }
+    }
+
+    // Build the structured tradeItem object
+    const tradeItemPayload = purchaseType === 'trade' ? {
+      name:        tradeItemName,
+      category:    tradeItemCategory,
+      condition:   tradeItemCondition,
+      description: tradeItemDesc || null,
+      imageUrl:    tradeImageUrl,   // Cloudinary URL
+    } : null;
 
     const transactionData = {
       type:          purchaseType,
@@ -352,7 +484,7 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
       paymentType:   purchaseType === 'sale' ? paymentType : null,
       paymentMethod,
       partialAmount: paymentType === 'partial' ? Number(partialAmount) : null,
-      tradeItem:     purchaseType === 'trade' ? tradeItem : null,
+      tradeItem:     tradeItemPayload,
       terms:         terms || null,
       createdAt:     new Date().toISOString(),
     };
@@ -365,12 +497,13 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
         buyerName:    currentUser.displayName || 'Student',
         listingTitle: listing.title,
       });
-      setIsModalOpen(false);
+      closeModal();
       setOfferSent(true);
       showToast('Offer sent! The seller will review it shortly.');
     } catch (err) {
       console.error('Transaction error:', err);
-      showToast('Failed to create offer. Please try again.', 'error'); alert('Failed to create offer. Please try again.');
+      showToast('Failed to create offer. Please try again.', 'error');
+      alert('Failed to create offer. Please try again.');
       setSubmitting(false);
     }
   };
@@ -428,7 +561,6 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
         reportedName={listing.title}
       />
 
-      {/* ✅ Promote modal */}
       {showPromoteModal && (
         <PromoteListingModal
           listing={listing}
@@ -438,7 +570,7 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
 
       <div style={styles.page}>
 
-        {/* ── Images (Shein-style) ── */}
+        {/* ── Images ── */}
         <div style={styles.imageSection}>
           <ImageScroller photos={photos} title={listing.title} />
         </div>
@@ -497,12 +629,21 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
             >
               {cartLoading
                 ? <IconLoader />
-                : <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
-                    <circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/>
-                    <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/>
-                  </svg>
+                : <svg
+  width="16"
+  height="16"
+  viewBox="0 0 24 24"
+  fill={inCart ? "currentColor" : "none"}
+  stroke="currentColor"
+  strokeWidth="2"
+  strokeLinecap="round"
+  strokeLinejoin="round"
+  style={{ flexShrink: 0 }}
+>
+  <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
+</svg>
               }
-              <span>{inCart ? 'Remove from cart' : 'Save to cart'}</span>
+              <span>{inCart ? 'Remove from cart' : 'Add to favorites'}</span>
             </button>
           )}
 
@@ -538,15 +679,11 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
             </div>
           )}
 
-          {/* ✅ PROMOTE LISTING BUTTON (only for owner) */}
+          {/* ── Promote listing (owner only) ── */}
           {isOwnListing && (
             <button
               onClick={() => setShowPromoteModal(true)}
-              style={{
-                ...styles.buyBtn,
-                backgroundColor: '#ff9800',
-                marginTop: '8px',
-              }}
+              style={{ ...styles.buyBtn, backgroundColor: '#ff9800', marginTop: '8px' }}
             >
               ✦ Promote listing
             </button>
@@ -584,7 +721,7 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
                 <h2 style={{ margin: 0, fontSize: '1.1rem' }}>
                   {purchaseType === 'trade' ? 'Initiate Trade' : 'Initiate Purchase'}
                 </h2>
-                <button onClick={() => setIsModalOpen(false)} style={modalStyles.closeBtn} aria-label="Close modal">
+                <button onClick={closeModal} style={modalStyles.closeBtn} aria-label="Close modal">
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
                     <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
                   </svg>
@@ -595,6 +732,7 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
                 Review and confirm your details for "{listing.title}"
               </p>
 
+              {/* ── Choose type (For Sale or Trade listings) ── */}
               {(() => {
                 const lt = listing.listingType || listing.type;
                 return lt === 'For Sale or Trade' && !purchaseType;
@@ -608,9 +746,12 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
                 </div>
               )}
 
+              {/* ── Sale fields ── */}
               {purchaseType === 'sale' && (
                 <div style={modalStyles.section}>
-                  <label htmlFor="agreed-price" style={modalStyles.label}>Agreed Price (R)</label>
+                  <label htmlFor="agreed-price" style={modalStyles.label}>
+                    Agreed Price (R) <span style={{ color: '#dc2626' }}>* (Minimum R10)</span>
+                  </label>
                   <input id="agreed-price" type="number" value={agreedPrice}
                     onChange={(e) => setAgreedPrice(e.target.value)} style={modalStyles.input}/>
                   <label htmlFor="payment-method" style={modalStyles.label}>Payment Method</label>
@@ -621,47 +762,229 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
                     <option value="cash">Full Cash on Delivery</option>
                   </select>
                   {paymentType === 'partial' && (
-                    <input type="number" placeholder="Enter online payment amount"
-                      value={partialAmount} onChange={(e) => setPartialAmount(e.target.value)} style={modalStyles.input}/>
+                    <>
+                      <label htmlFor="partial-amount" style={modalStyles.label}>
+                        Online Payment Amount (R) <span style={{ color: '#dc2626' }}>* (Minimum R10)</span>
+                      </label>
+                      <input 
+                        id="partial-amount"
+                        type="number" 
+                        placeholder="Enter online payment amount"
+                        value={partialAmount} 
+                        onChange={(e) => setPartialAmount(e.target.value)} 
+                        style={modalStyles.input}
+                      />
+                      <p style={{ fontSize: '0.72rem', color: '#6b7280', marginTop: '-5px', marginBottom: '5px' }}>
+                        Cash amount to pay on delivery: R {(Number(agreedPrice) - Number(partialAmount || 0)).toLocaleString()}
+                      </p>
+                    </>
                   )}
                 </div>
               )}
 
+              {/* ── Trade fields (structured) ── */}
               {purchaseType === 'trade' && (
                 <div style={modalStyles.section}>
-                  <label style={modalStyles.label}>What are you offering to trade?</label>
-                  <input type="text" placeholder="Describe your trade item..."
-                    value={tradeItem} onChange={(e) => setTradeItem(e.target.value)} style={modalStyles.input}/>
+
+                  {/* Info banner */}
+                  <div style={{
+                    display: 'flex', gap: 10, padding: '10px 13px', marginBottom: 16,
+                    backgroundColor: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 8,
+                    fontSize: '0.78rem', color: '#1e40af', fontFamily: 'Segoe UI, system-ui, sans-serif', lineHeight: '1.5',
+                  }}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" strokeWidth="2" strokeLinecap="round" style={{ flexShrink: 0, marginTop: 1 }}>
+                      <circle cx="12" cy="12" r="10"/>
+                      <line x1="12" y1="8" x2="12" y2="12"/>
+                      <line x1="12" y1="16" x2="12.01" y2="16"/>
+                    </svg>
+                    <span>
+                      This information will be used to <strong>verify your item at the trade faculty</strong>.
+                      Please be accurate and upload a clear photo.
+                    </span>
+                  </div>
+
+                  {/* Item name */}
+                  <label style={modalStyles.label}>
+                    Item Name <span style={{ color: '#dc2626' }}>*</span>
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Sony WH-1000XM4 Headphones"
+                    value={tradeItemName}
+                    onChange={(e) => setTradeItemName(e.target.value)}
+                    style={modalStyles.input}
+                  />
+
+                  {/* Category */}
+                  <label style={modalStyles.label}>
+                    Category <span style={{ color: '#dc2626' }}>*</span>
+                  </label>
+                  <select
+                    value={tradeItemCategory}
+                    onChange={(e) => setTradeItemCategory(e.target.value)}
+                    style={{ ...modalStyles.input, color: tradeItemCategory ? '#1a1a1a' : '#9ca3af' }}
+                  >
+                    <option value="" disabled>Select a category…</option>
+                    {TRADE_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+
+                  {/* Condition */}
+                  <label style={modalStyles.label}>
+                    Condition <span style={{ color: '#dc2626' }}>*</span>
+                  </label>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 6, marginBottom: 14 }}>
+                    {TRADE_CONDITIONS.map(({ label, color, bg, border }) => (
+                      <button
+                        key={label}
+                        type="button"
+                        onClick={() => setTradeItemCondition(label)}
+                        style={{
+                          padding: '8px 4px',
+                          borderRadius: 8,
+                          border: `2px solid ${tradeItemCondition === label ? color : '#e5e7eb'}`,
+                          backgroundColor: tradeItemCondition === label ? bg : '#fff',
+                          color: tradeItemCondition === label ? color : '#6b7280',
+                          fontWeight: tradeItemCondition === label ? '700' : '500',
+                          fontSize: '0.7rem',
+                          cursor: 'pointer',
+                          fontFamily: 'Segoe UI, system-ui, sans-serif',
+                          transition: 'all 0.15s',
+                          lineHeight: '1.3',
+                        }}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Description */}
+                  <label style={modalStyles.label}>
+                    Description{' '}
+                    <span style={{ color: '#6b7280', fontWeight: '400' }}>(optional)</span>
+                  </label>
+                  <textarea
+                    placeholder="Brand, model, age, included accessories, any defects…"
+                    value={tradeItemDesc}
+                    onChange={(e) => setTradeItemDesc(e.target.value)}
+                    style={{ ...modalStyles.textarea, marginBottom: 14 }}
+                  />
+
+                  {/* Image upload */}
+                  <label style={modalStyles.label}>
+                    Photo of your item <span style={{ color: '#dc2626' }}>*</span>
+                    <span style={{ color: '#6b7280', fontWeight: '400', marginLeft: 4 }}>(for verification)</span>
+                  </label>
+
+                  {tradeImagePreview ? (
+                    <div style={{ position: 'relative', marginBottom: 4 }}>
+                      <img
+                        src={tradeImagePreview}
+                        alt="Trade item preview"
+                        style={{
+                          width: '100%', maxHeight: 200, objectFit: 'cover',
+                          borderRadius: 10, border: '2px solid #86efac', display: 'block',
+                        }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (tradeImagePreview) URL.revokeObjectURL(tradeImagePreview);
+                          setTradeImageFile(null);
+                          setTradeImagePreview(null);
+                        }}
+                        style={{
+                          position: 'absolute', top: 8, right: 8,
+                          background: 'rgba(0,0,0,0.55)', border: 'none', color: '#fff',
+                          width: 28, height: 28, borderRadius: '50%', cursor: 'pointer',
+                          fontSize: '0.85rem', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        }}
+                        aria-label="Remove image"
+                      >✕</button>
+                      <p style={{ fontSize: '0.72rem', color: '#16a34a', margin: '6px 0 0', fontFamily: 'Segoe UI, system-ui, sans-serif' }}>
+                        ✓ Photo ready
+                      </p>
+                    </div>
+                  ) : (
+                    <label
+                      htmlFor="trade-image-upload"
+                      style={{
+                        display: 'flex', flexDirection: 'column', alignItems: 'center',
+                        justifyContent: 'center', gap: 8, padding: '20px 16px',
+                        border: '2px dashed #d1d5db', borderRadius: 10, cursor: 'pointer',
+                        backgroundColor: '#f9fafb', marginBottom: 4, transition: 'border-color 0.15s',
+                      }}
+                      onDragOver={(e) => e.preventDefault()}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        const file = e.dataTransfer.files[0];
+                        if (!file || !file.type.startsWith('image/')) return;
+                        if (file.size > 5 * 1024 * 1024) { showToast('Image must be under 5 MB', 'warn'); return; }
+                        if (tradeImagePreview) URL.revokeObjectURL(tradeImagePreview);
+                        setTradeImageFile(file);
+                        setTradeImagePreview(URL.createObjectURL(file));
+                      }}
+                    >
+                      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="1.5" strokeLinecap="round">
+                        <rect x="3" y="3" width="18" height="18" rx="2"/>
+                        <circle cx="8.5" cy="8.5" r="1.5"/>
+                        <path d="M21 15l-5-5L5 21"/>
+                      </svg>
+                      <span style={{ fontSize: '0.82rem', color: '#6b7280', textAlign: 'center', fontFamily: 'Segoe UI, system-ui, sans-serif' }}>
+                        Click to upload or drag & drop<br/>
+                        <span style={{ fontSize: '0.75rem', color: '#9ca3af' }}>JPG, PNG or WEBP · max 5 MB</span>
+                      </span>
+                      <input
+                        id="trade-image-upload"
+                        type="file"
+                        accept="image/*"
+                        style={{ display: 'none' }}
+                        onChange={(e) => {
+                          const file = e.target.files[0];
+                          if (!file) return;
+                          if (file.size > 5 * 1024 * 1024) { showToast('Image must be under 5 MB', 'warn'); return; }
+                          if (tradeImagePreview) URL.revokeObjectURL(tradeImagePreview);
+                          setTradeImageFile(file);
+                          setTradeImagePreview(URL.createObjectURL(file));
+                          e.target.value = '';
+                        }}
+                      />
+                    </label>
+                  )}
                 </div>
               )}
 
+              {/* ── Optional terms ── */}
               <div style={modalStyles.section}>
                 <label style={modalStyles.label}>Changes to terms (optional)</label>
-                <textarea placeholder="E.g. Seller agreed to include charger..."
-                  value={terms} onChange={(e) => setTerms(e.target.value)} style={modalStyles.textarea}/>
+                <textarea
+                  placeholder="E.g. Seller agreed to include charger..."
+                  value={terms}
+                  onChange={(e) => setTerms(e.target.value)}
+                  style={modalStyles.textarea}
+                />
               </div>
 
               <button
                 onClick={handleTransaction}
-                disabled={submitting}
+                disabled={submitting || tradeImageUploading}
                 style={{
                   ...styles.buyBtn,
-                  opacity:         submitting ? 0.6 : 1,
-                  cursor:          submitting ? 'not-allowed' : 'pointer',
-                  backgroundColor: submitting ? '#a0c4e8' : '#6AA6DA',
+                  opacity:         (submitting || tradeImageUploading) ? 0.6 : 1,
+                  cursor:          (submitting || tradeImageUploading) ? 'not-allowed' : 'pointer',
+                  backgroundColor: (submitting || tradeImageUploading) ? '#a0c4e8' : '#6AA6DA',
                   display:         'flex',
                   alignItems:      'center',
                   justifyContent:  'center',
                   gap:             '8px',
                 }}
               >
-                {submitting && (
+                {(submitting || tradeImageUploading) && (
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"
                     style={{ animation: 'spin 0.8s linear infinite', flexShrink: 0 }}>
                     <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
                   </svg>
                 )}
-                {submitting ? 'Sending offer…' : 'Confirm & Send Offer'}
+                {tradeImageUploading ? 'Uploading photo…' : submitting ? 'Sending offer…' : 'Confirm & Send Offer'}
               </button>
             </div>
           </div>
@@ -772,12 +1095,12 @@ const styles = {
 
 const modalStyles = {
   overlay:   { position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 },
-  modal:     { backgroundColor: 'white', padding: '28px', borderRadius: '16px', width: '90%', maxWidth: '500px', boxShadow: '0 10px 30px rgba(0,0,0,0.2)', fontFamily: 'Segoe UI, system-ui, sans-serif' },
+  modal:     { backgroundColor: 'white', padding: '28px', borderRadius: '16px', width: '90%', maxWidth: '500px', maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 10px 30px rgba(0,0,0,0.2)', fontFamily: 'Segoe UI, system-ui, sans-serif' },
   header:    { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' },
   closeBtn:  { background: '#f3f4f6', border: 'none', cursor: 'pointer', color: '#555', width: '32px', height: '32px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' },
   section:   { marginBottom: '18px' },
   label:     { display: 'block', fontWeight: '600', marginBottom: '8px', fontSize: '13px', color: '#333' },
   input:     { width: '100%', padding: '11px 13px', borderRadius: '8px', border: '1.5px solid #e2e8f0', marginBottom: '10px', boxSizing: 'border-box', fontSize: '14px', fontFamily: 'inherit', outline: 'none' },
-  textarea:  { width: '100%', padding: '11px 13px', borderRadius: '8px', border: '1.5px solid #e2e8f0', height: '80px', boxSizing: 'border-box', fontFamily: 'inherit', fontSize: '14px', outline: 'none' },
+  textarea:  { width: '100%', padding: '11px 13px', borderRadius: '8px', border: '1.5px solid #e2e8f0', height: '80px', boxSizing: 'border-box', fontFamily: 'inherit', fontSize: '14px', outline: 'none', resize: 'vertical' },
   choiceBtn: { flex: 1, padding: '12px', borderRadius: '8px', border: '1.5px solid #6AA6DA', cursor: 'pointer', backgroundColor: '#f0f7ff', color: '#166bc0', fontWeight: '600', fontFamily: 'inherit' },
 };

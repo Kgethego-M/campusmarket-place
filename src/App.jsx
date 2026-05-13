@@ -34,7 +34,6 @@ import ReportsPage from './components/ReportsPage';
 import ModerationSummaryPage from './components/ModerationSummaryPage';
 
 import CreateListingAzure from './components/CreateListingAzure';
-// import EditListingAzure from './pages/EditListingAzure';
 
 import Chat from './components/Chat';
 import Profile from './components/Profile';
@@ -45,7 +44,6 @@ import ProfileListingCard from './components/ProfileListingCard';
 import TradeFacility from './components/TradeFacility';
 import BookDropOff from './components/BookDropOff';
 import BookPickUp from './components/BookPickUp';
-
 import BookCollection from './components/BookCollection';
 
 // SPRINT 3 IMPORTS
@@ -135,7 +133,6 @@ function ProtectedRoute({ children, allowedRoles }) {
 // -------------------------
 function LandingPageWrapper() {
   const navigate = useNavigate();
-
   return <LandingPage onGetStarted={() => navigate('/login')} />;
 }
 
@@ -215,7 +212,6 @@ export function AppRoutes() {
       <Route path="/chat" element={<ProtectedRoute allowedRoles={['student']}><Chat/></ProtectedRoute>} />
       <Route path="/chat/:transactionId" element={<Chat />} />
       <Route path="/edit-listing/:id" element={<EditListing />} />
-      <Route path="/access-denied" element={<AccessDenied />} />
       <Route path="/staff" element={<ProtectedRoute allowedRoles={['staff']}><StaffDashboard /></ProtectedRoute>} />
       <Route path="/admin" element={<ProtectedRoute allowedRoles={['admin']}><AdminDashboard /></ProtectedRoute>}/>
       
@@ -252,14 +248,18 @@ export function AppRoutes() {
         }
       />
 
+      {/* NEW: Favourites route (renamed from cart) */}
       <Route
-        path="/cart"
+        path="/favourites"
         element={
           <ProtectedRoute allowedRoles={['student']}>
             <ViewCart />
           </ProtectedRoute>
         }
       />
+
+      {/* Redirect old /cart to /favourites */}
+      <Route path="/cart" element={<Navigate to="/favourites" replace />} />
 
       <Route
         path="/chat"
@@ -297,7 +297,6 @@ export function AppRoutes() {
         }
       />
 
-      {/* Added from your stash — was missing from develop */}
       <Route
         path="/book-collection/:transactionId"
         element={
@@ -353,7 +352,7 @@ export function AppRoutes() {
         }
       />
 
-      {/* Staff Routes */}
+      /* Staff Routes */
       <Route
         path="/staff"
         element={
@@ -363,7 +362,7 @@ export function AppRoutes() {
         }
       />
 
-      {/* Admin Routes */}
+      /* Admin Routes */
       <Route
         path="/admin"
         element={
