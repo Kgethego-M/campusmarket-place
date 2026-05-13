@@ -106,8 +106,9 @@ export default function Navbar() {
         setNotificationsOpen(false);
         if (n.source === 'offer') {
             await markOfferAsRead(n.id);
-            if (n.type === 'new_offer')       navigate('/profile?tab=offers&highlight=' + (n.transactionId || n.listingId || ''));
+            if (n.type === 'new_offer')         navigate('/profile?tab=offers&highlight=' + (n.transactionId || n.listingId || ''));
             else if (n.type === 'offer_accepted') navigate(`/payment/${n.transactionId}`);
+            else if (n.type === 'trade_waiting')  navigate('/trade-facility');
             else if (n.type === 'offer_declined') navigate('/view-listing');
             else await resolveAndNavigate(n, currentUser, navigate);
         } else if (n.source === 'rating') {
@@ -136,6 +137,7 @@ export default function Navbar() {
         if (type === 'buyer_paid')                           return 'fa-money-bill-wave';
         if (type === 'new_offer')                            return 'fa-shopping-cart';
         if (type === 'offer_accepted')                       return 'fa-circle-check';
+        if (type === 'trade_waiting')                        return 'fa-clock';
         if (type === 'offer_declined')                       return 'fa-circle-xmark';
         if (type === 'rate_seller' || type === 'rate_buyer') return 'fa-star';
         if (type === 'item_received_at_facility')            return 'fa-box-archive';
@@ -152,6 +154,7 @@ export default function Navbar() {
         if (type === 'buyer_paid')                           return '#16a34a';
         if (type === 'new_offer')                            return '#3b82f6';
         if (type === 'offer_accepted')                       return '#22c55e';
+        if (type === 'trade_waiting')                        return '#f59e0b';
         if (type === 'offer_declined')                       return '#ef4444';
         if (type === 'rate_seller' || type === 'rate_buyer') return '#f59e0b';
         if (type === 'item_received_at_facility')            return '#f59e0b';
@@ -170,7 +173,8 @@ export default function Navbar() {
         const buyer = n.buyerName || 'A student';
         if (n.type === 'buyer_paid')                return `${buyer} has paid for ${title}. Book a drop-off slot now.`;
         if (n.type === 'new_offer')                 return `${buyer} made an offer on ${title}${price}`;
-        if (n.type === 'offer_accepted')            return `Your offer on ${title} was accepted!${price}`;
+        if (n.type === 'offer_accepted')            return `Your offer on ${title} was accepted! Head to payment.${price}`;
+        if (n.type === 'trade_waiting')             return `Your trade offer on ${title} was accepted — head to the trade facility to book a drop-off slot.`;
         if (n.type === 'offer_declined')            return `Your offer on ${title} was declined.`;
         if (n.type === 'item_received_at_facility') return `${title} has been received at the trade facility.${price}`;
         if (n.type === 'item_at_facility')          return `${title} is now at the trade facility. Book your collection slot.${price}`;
@@ -178,7 +182,7 @@ export default function Navbar() {
         if (n.type === 'item_collected')            return `${title} has been collected. Transaction complete!${price}`;
         if (n.type === 'transaction_complete')      return `Your sale of ${title} is complete${price}.`;
         if (n.type === 'collection_booked')         return n.message || `Collection slot booked for ${title}.`;
-        if (n.type === 'dropoff_booked')            return n.message || `Drop-off slot booked for ${title}.`;
+        if (n.type === 'dropoff_booked')            return n.message || `Your offer on ${title} was accepted — book your drop-off slot now.`;
         if (n.type === 'rate_seller') return `Rate your experience with ${n.reviewedUserName} as a seller${n.listingTitle ? ` for "${n.listingTitle}"${price}` : ''}`;
         if (n.type === 'rate_buyer')  return `Rate your buyer ${n.reviewedUserName}${n.listingTitle ? ` — "${n.listingTitle}"${price}` : ''}`;
         return n.message || 'Notification';

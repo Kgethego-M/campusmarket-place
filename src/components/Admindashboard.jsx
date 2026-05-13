@@ -186,7 +186,7 @@ export default function AdminDashboard() {
   const [activeTab, setActiveTab]       = useState("users");
   const [modSubTab, setModSubTab]       = useState("listings"); // "listings" | "reports" | "summary"
   const [reportSearch, setReportSearch] = useState("");
-  const [expandedReport, setExpandedReport] = useState(null); // id of expanded report row
+  const [expandedReport, setExpandedReport] = useState(null);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [userSearch, setUserSearch] = useState("");
@@ -293,6 +293,23 @@ export default function AdminDashboard() {
     if (type === "review")  return "⭐";
     return "👤";
   };
+
+  // ── Helper: navigate to the reported item ─────────────────────────────────
+  const navigateToReported = (e, report) => {
+    e.stopPropagation();
+    if (report.reportType === "listing") navigate(`/listing/${report.reportedId}?preview=true`);
+    else if (report.reportType === "user") navigate(`/profile/${report.reportedId}`);
+  };
+
+  const reportedNameStyle = (reportType) => ({
+    fontWeight: 700,
+    fontSize: "0.88rem",
+    color: reportType === "listing" || reportType === "user" ? "#2563eb" : "#0f172a",
+    cursor: reportType === "listing" || reportType === "user" ? "pointer" : "default",
+    textDecoration: reportType === "listing" || reportType === "user" ? "underline" : "none",
+    textDecorationStyle: "dotted",
+  });
+
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (user) => {
       if (!user) { navigate("/login"); return; }
@@ -573,15 +590,15 @@ export default function AdminDashboard() {
           ))}
         </div>
 
-        {/* Tabs - Only Dashboard tabs, Reports and Moderation Summary are separate pages */}
+        {/* Tabs */}
         <div className={styles.tabs}>
           {[
-            { id: "users", icon: "fas fa-users", label: "Users" },
-            { id: "suspended", icon: "fas fa-ban", label: "Suspended" },
-            { id: "moderation", icon: "fas fa-shield-alt", label: "Moderation" },
-            { id: "payments", icon: "fas fa-credit-card", label: "Payments" },
+            { id: "users",       icon: "fas fa-users",       label: "Users" },
+            { id: "suspended",   icon: "fas fa-ban",          label: "Suspended" },
+            { id: "moderation",  icon: "fas fa-shield-alt",   label: "Moderation" },
+            { id: "payments",    icon: "fas fa-credit-card",  label: "Payments" },
             { id: "utilisation", icon: "fas fa-calendar-alt", label: "Utilisation Reports" },
-            { id: "settings", icon: "fas fa-cog", label: "Settings" },
+            { id: "settings",    icon: "fas fa-cog",          label: "Settings" },
           ].map(t => (
             <button
               key={t.id}
@@ -693,43 +710,9 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* ── MODERATION TAB (sub-tabbed: Listings / Reports / Summary) ── */}
+        {/* ── MODERATION TAB*/}
         {activeTab === "moderation" && (
           <div className={styles.tabContent}>
-
-            {/* Sub-tab pill selector */}
-            <div style={{ display: "flex", gap: 8, marginBottom: 20, flexWrap: "wrap" }}>
-              {[
-                { key: "listings", icon: "fas fa-shield-alt", label: "Listings" },
-                { key: "reports",  icon: "fas fa-flag",       label: "Reports" },
-                { key: "summary",  icon: "fas fa-chart-bar",  label: "Moderation Summary" },
-              ].map(sub => (
-                <button
-                  key={sub.key}
-                  onClick={() => setModSubTab(sub.key)}
-                  style={{
-                    display: "flex", alignItems: "center", gap: 7,
-                    padding: "8px 18px", borderRadius: 24,
-                    border: "1.5px solid",
-                    borderColor: modSubTab === sub.key ? "#6AA6DA" : "#e2e8f0",
-                    background:  modSubTab === sub.key ? "#6AA6DA" : "#fff",
-                    color:       modSubTab === sub.key ? "#fff"    : "#64748b",
-                    fontSize: "0.83rem", fontWeight: 600,
-                    cursor: "pointer", fontFamily: "inherit", transition: "all 0.15s",
-                  }}
-                >
-                  <i className={sub.icon} style={{ fontSize: "0.78rem" }} />
-                  {sub.label}
-                  {sub.key === "reports" && unreadReports > 0 && (
-                    <span style={{ background: modSubTab === "reports" ? "rgba(255,255,255,0.35)" : "#dc2626", color: "#fff", borderRadius: 20, padding: "1px 7px", fontSize: "0.65rem", fontWeight: 700 }}>
-                      {unreadReports}
-                    </span>
-                  )}
-                </button>
-              ))}
-            </div>
-
-            {/* ── Listings sub-tab ── */}
             {modSubTab === "listings" && (
               <ReportCard title="Listing Moderation" headers={listingsHeaders} data={listingsExportData}>
                 <div className={styles.cardHeader}>
@@ -765,129 +748,9 @@ export default function AdminDashboard() {
                 )}
               </ReportCard>
             )}
-
-            {/* ── Reports sub-tab ── */}
-            {modSubTab === "reports" && (
-              <ReportCard title="Reports" headers={reportsHeaders} data={reportsExportData}>
-                {/* Search */}
-                <div className={styles.cardHeader}>
-                  <div className={styles.searchWrap}>
-                    <i className="fas fa-search" />
-                    <input className={styles.searchInput} type="text" placeholder="Search reported names…" value={reportSearch} onChange={e => setReportSearch(e.target.value)} />
-                  </div>
-                </div>
-
-                {/* Pending */}
-                <h3 className={styles.cardTitle} style={{ marginTop: 12 }}>
-                  Pending Reports
-                  {filteredReports.filter(r => r.status === "pending").length > 0 && (
-                    <span style={{ marginLeft: 10, background: "#dc2626", color: "#fff", borderRadius: 20, padding: "2px 10px", fontSize: "0.72rem", fontWeight: 700 }}>
-                      {filteredReports.filter(r => r.status === "pending").length}
-                    </span>
-                  )}
-                </h3>
-
-                {filteredReports.filter(r => r.status === "pending").length === 0 ? (
-                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, padding: "28px 0" }}>
-                    <i className="fas fa-check-circle" style={{ fontSize: "2rem", color: "#16a34a" }} />
-                    <p className={styles.emptyNote}>{reportSearch ? "No reports match your search." : "No pending reports — all clear!"}</p>
-                  </div>
-                ) : (
-                  <div className={styles.modList}>
-                    {filteredReports.filter(r => r.status === "pending").map(r => {
-                      const isExpanded = expandedReport === r.id;
-                      return (
-                        <div key={r.id} style={{ border: "1.5px solid", borderColor: isExpanded ? "#6AA6DA" : "#e2e8f0", borderRadius: 12, marginBottom: 10, overflow: "hidden", background: "#fff" }}>
-                          {/* Collapsed row — always visible */}
-                          <div
-                            onClick={() => setExpandedReport(isExpanded ? null : r.id)}
-                            style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 16px", cursor: "pointer", background: isExpanded ? "#f0f7ff" : "#fff" }}
-                          >
-                            <span style={{ fontSize: "1.3rem", flexShrink: 0 }}>{reportTypeIcon(r.reportType)}</span>
-                            <div style={{ flex: 1, minWidth: 0 }}>
-                              <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                                <span style={{ fontWeight: 700, fontSize: "0.88rem", color: "#0f172a" }}>{r.reportedName || r.reportedId}</span>
-                                <span style={{ fontSize: "0.68rem", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", background: "#eff6ff", color: "#2563eb", padding: "2px 8px", borderRadius: 20 }}>{r.reportType}</span>
-                              </div>
-                              <div style={{ display: "flex", alignItems: "center", gap: 5, fontSize: "0.78rem", color: "#dc2626", fontWeight: 600, marginTop: 2 }}>
-                                <i className="fas fa-flag" style={{ fontSize: "0.68rem" }} />{r.reason}
-                              </div>
-                              <span style={{ fontSize: "0.72rem", color: "#94a3b8" }}>
-                                Reported by {r.reporterName} · {r.createdAt?.toDate ? r.createdAt.toDate().toLocaleDateString("en-ZA", { day: "numeric", month: "short" }) : "Recently"}
-                              </span>
-                            </div>
-                            <i className={`fas fa-chevron-${isExpanded ? "up" : "down"}`} style={{ color: "#94a3b8", fontSize: "0.75rem", flexShrink: 0 }} />
-                          </div>
-
-                          {/* Expanded detail panel */}
-                          {isExpanded && (
-                            <div style={{ borderTop: "1px solid #e2e8f0", padding: "16px 16px 14px" }}>
-
-                              {/* Review content box */}
-                              {r.reportType === "review" && r.reviewComment && (
-                                <div style={{ marginBottom: 12, padding: "10px 14px", background: "#fef9f0", border: "1px solid #fed7aa", borderLeft: "3px solid #f97316", borderRadius: 8 }}>
-                                  <p style={{ margin: "0 0 4px", fontSize: "0.7rem", fontWeight: 700, color: "#c2410c", textTransform: "uppercase", letterSpacing: "0.05em" }}>Reported review content</p>
-                                  <p style={{ margin: 0, fontSize: "0.85rem", color: "#374151", fontStyle: "italic", lineHeight: 1.55 }}>"{r.reviewComment}"</p>
-                                  {r.reviewRating && (
-                                    <p style={{ margin: "5px 0 0", fontSize: "0.78rem", color: "#f59e0b", fontStyle: "normal" }}>
-                                      {"★".repeat(r.reviewRating)}{"☆".repeat(5 - r.reviewRating)}
-                                      <span style={{ color: "#94a3b8", marginLeft: 5 }}>({r.reviewRating}/5)</span>
-                                    </p>
-                                  )}
-                                </div>
-                              )}
-
-                              {/* Reporter's additional notes */}
-                              {r.details && (
-                                <div style={{ marginBottom: 12, padding: "8px 12px", background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 8 }}>
-                                  <p style={{ margin: "0 0 3px", fontSize: "0.7rem", fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.05em" }}>Reporter notes</p>
-                                  <p style={{ margin: 0, fontSize: "0.83rem", color: "#374151" }}>"{r.details}"</p>
-                                </div>
-                              )}
-
-                              {/* Action buttons */}
-                              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                                <button className={styles.btnApprove} onClick={() => handleResolveReport(r, "dismiss")}>Dismiss</button>
-                                {r.reportType === "user"    && <button className={styles.btnSuspend} onClick={() => handleResolveReport(r, "suspend_user")}>Suspend User</button>}
-                                {r.reportType === "listing" && <button className={styles.btnReject}  onClick={() => handleResolveReport(r, "remove_listing")}>Remove Listing</button>}
-                                {r.reportType === "review"  && <button className={styles.btnReject}  onClick={() => handleResolveReport(r, "remove_review")}>Delete Review</button>}
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-
-                {/* Resolved */}
-                {filteredReports.filter(r => r.status !== "pending").length > 0 && (
-                  <>
-                    <h3 className={styles.cardTitle} style={{ marginTop: 24 }}>Resolved Reports</h3>
-                    <div className={styles.modList}>
-                      {filteredReports.filter(r => r.status !== "pending").map(r => (
-                        <div key={r.id} className={styles.modRow} style={{ opacity: 0.6 }}>
-                          <div style={{ fontSize: "1.2rem", flexShrink: 0 }}>{reportTypeIcon(r.reportType)}</div>
-                          <div className={styles.modInfo}>
-                            <span className={styles.modTitle}>{r.reportedName || r.reportedId}</span>
-                            <span className={styles.modMeta}>{r.reason}</span>
-                          </div>
-                          <span style={{ fontSize: "0.75rem", fontWeight: 700, color: "#16a34a", background: "#f0fdf4", padding: "4px 10px", borderRadius: 20 }}>✓ {r.resolution || "resolved"}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </>
-                )}
-              </ReportCard>
-            )}
-
-            {/* ── Moderation Summary sub-tab ── */}
-            {modSubTab === "summary" && (
-              <ModerationSummaryTab reports={reports} />
-            )}
-
           </div>
         )}
+
         {/* ── PAYMENTS TAB ── */}
         {activeTab === "payments" && (
           <div className={styles.tabContent}>
@@ -997,8 +860,6 @@ export default function AdminDashboard() {
           </div>
         )}
       </main>
-
-
     </div>
   );
 }

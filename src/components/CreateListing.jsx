@@ -300,7 +300,7 @@ export default function CreateListing() {
                 />
 
                 {/* ── Specification ── */}
-                <label className={styles.label}>Specification</label>
+                <label className={styles.label}>Specification (Optional)</label>
                 <textarea
                     className={styles.textarea}
                     rows={3}
