@@ -340,7 +340,9 @@ export default function OfferItem({ offer }) {
                 {hasTrade && (
                   <>
                     <span style={odStyles.label}>Trade offer</span>
-                    <span style={odStyles.value}>{offer.tradeItem}</span>
+                    <span style={odStyles.value}>
+                      {typeof offer.tradeItem === 'string' ? offer.tradeItem : offer.tradeItem?.name || 'Trade item'}
+                    </span>
                   </>
                 )}
 
