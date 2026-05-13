@@ -2,13 +2,19 @@ import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { auth, db } from "../firebase";
 import { signOut, onAuthStateChanged } from "firebase/auth";
-import { collection, query, orderBy, onSnapshot, writeBatch, doc, updateDoc, deleteDoc } from "firebase/firestore";
+import {
+  collection, query, orderBy, onSnapshot,
+  writeBatch, doc, getDoc, getDocs, updateDoc, deleteDoc,
+} from "firebase/firestore";
 import styles from "./ReportsPage.module.css";
 import ConfirmModal from "./ConfirmModal";
 import ReportCard from "./ReportCard";
 import useExportReport from "../hooks/useExportReport";
 import AdminNavbar from "./AdminNavbar";
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Toast
+// ─────────────────────────────────────────────────────────────────────────────
 function Toast({ message, type = "success", onDismiss }) {
   useEffect(() => {
     const t = setTimeout(onDismiss, 3500);
@@ -29,59 +35,79 @@ function Toast({ message, type = "success", onDismiss }) {
   );
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Main component
+// ─────────────────────────────────────────────────────────────────────────────
 export default function ReportsPage() {
   const navigate = useNavigate();
   const dropdownRef = useRef(null);
-  const [dropdownOpen, setDropdownOpen] = useState(false);
-  const [isLoggingOut, setIsLoggingOut] = useState(false);
-  const [adminUser, setAdminUser] = useState({ name: "Admin", email: "", photoURL: "", initials: "A" });
-  const [reports, setReports] = useState([]);
-  const [authReady, setAuthReady] = useState(false);
-  const [reportsReady, setReportsReady] = useState(false);
-  const [unreadReports, setUnreadReports] = useState(0);
-  const [reportSearch, setReportSearch] = useState("");
-  const [confirm, setConfirm] = useState({ open: false, title: "", message: "", onConfirm: null, variant: "danger" });
-  const [toast, setToast] = useState(null);
-  const [allUsers, setAllUsers] = useState([]);
-  const [listings, setListings] = useState([]);
 
-  const showToast = (message, type = "success") => setToast({ message, type });
-  const hideToast = () => setToast(null);
+  const [dropdownOpen, setDropdownOpen]   = useState(false);
+  const [isLoggingOut, setIsLoggingOut]   = useState(false);
+  const [adminUser, setAdminUser]         = useState({ name: "Admin", email: "", photoURL: "", initials: "A" });
+  const [reports, setReports]             = useState([]);
+  const [authReady, setAuthReady]         = useState(false);
+  const [reportsReady, setReportsReady]   = useState(false);
+  const [unreadReports, setUnreadReports] = useState(0);
+  const [reportSearch, setReportSearch]   = useState("");
+  const [confirm, setConfirm]             = useState({ open: false, title: "", message: "", onConfirm: null, variant: "danger" });
+  const [toast, setToast]                 = useState(null);
+  const [allUsers, setAllUsers]           = useState([]);
+  const [listings, setListings]           = useState([]);
+
+  const showToast  = (message, type = "success") => setToast({ message, type });
+  const hideToast  = () => setToast(null);
 
   const openConfirm = ({ title, message, variant = "danger", onConfirm }) =>
     setConfirm({ open: true, title, message, variant, onConfirm });
   const closeConfirm = () => setConfirm(c => ({ ...c, open: false }));
 
+  // ── Helpers ───────────────────────────────────────────────────────────────
   const reportTypeIcon = (type) => {
     if (type === "listing") return "🛍️";
-    if (type === "review") return "⭐";
+    if (type === "review")  return "⭐";
     return "👤";
   };
 
-  // Export data
+  const isNavigable = (reportType) => reportType === "listing" || reportType === "user";
+
+  const handleNavigateToReported = (report) => {
+    if (report.reportType === "listing") navigate(`/listing/${report.reportedId}`);
+    else if (report.reportType === "user") navigate(`/profile/${report.reportedId}`);
+  };
+
+  const navigableTitleStyle = (reportType) => ({
+    color:          isNavigable(reportType) ? "#2563eb" : "inherit",
+    cursor:         isNavigable(reportType) ? "pointer"  : "default",
+    textDecoration: isNavigable(reportType) ? "underline dotted" : "none",
+    textUnderlineOffset: "3px",
+  });
+
+  // ── Export ────────────────────────────────────────────────────────────────
   const filteredReports = reports.filter(r =>
     (r.reportedName || "").toLowerCase().includes(reportSearch.toLowerCase())
   );
+
   const reportsExportData = filteredReports.map(r => ({
-    Type: r.reportType || "",
+    Type:         r.reportType || "",
     ReportedItem: r.reportedName || r.reportedId,
-    Reason: r.reason || "",
-    Details: r.details || "",
-    ReportedBy: r.reporterName || "",
-    Status: r.status || "pending",
-    Resolution: r.resolution || "",
-    Date: r.createdAt?.toDate ? r.createdAt.toDate().toLocaleDateString() : "",
+    Reason:       r.reason || "",
+    Details:      r.details || "",
+    ReportedBy:   r.reporterName || "",
+    Status:       r.status || "pending",
+    Resolution:   r.resolution || "",
+    Date:         r.createdAt?.toDate ? r.createdAt.toDate().toLocaleDateString() : "",
   }));
   const reportsHeaders = ["Type", "ReportedItem", "Reason", "Details", "ReportedBy", "Status", "Resolution", "Date"];
-  
+
   const { exportToCSV: exportReportsCSV, exportToPDF: exportReportsPDF } = useExportReport(
     "Reports_Data", reportsHeaders, reportsExportData
   );
 
-  const pendingReports = reports.filter(r => r.status === "pending");
+  const pendingReports  = reports.filter(r => r.status === "pending");
   const resolvedReports = reports.filter(r => r.status !== "pending");
 
-  // Auth guard
+  // ── Auth guard ────────────────────────────────────────────────────────────
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (user) => {
       if (!user) { navigate("/login"); return; }
@@ -90,10 +116,10 @@ export default function ReportsPage() {
         const data = snap.exists() ? snap.data() : {};
         if (data.userType !== "admin") { navigate("/"); return; }
         const fn = data.firstName || user.displayName?.split(" ")[0] || "Admin";
-        const ln = data.lastName || user.displayName?.split(" ").slice(1).join(" ") || "";
+        const ln = data.lastName  || user.displayName?.split(" ").slice(1).join(" ") || "";
         setAdminUser({
-          name: `${fn} ${ln}`.trim(),
-          email: data.email || user.email,
+          name:     `${fn} ${ln}`.trim(),
+          email:    data.email    || user.email,
           photoURL: data.photoURL || user.photoURL || "",
           initials: `${fn[0] || "A"}${ln[0] || ""}`.toUpperCase(),
         });
@@ -103,7 +129,7 @@ export default function ReportsPage() {
     return () => unsub();
   }, [navigate]);
 
-  // Fetch users and listings
+  // ── Fetch users & listings ────────────────────────────────────────────────
   useEffect(() => {
     async function fetchData() {
       try {
@@ -111,45 +137,37 @@ export default function ReportsPage() {
         setAllUsers(usersSnap.docs.map(d => ({ id: d.id, ...d.data() })));
         const listSnap = await getDocs(collection(db, "listings"));
         setListings(listSnap.docs.map(d => ({ id: d.id, ...d.data() })));
-      } catch (e) {
-        console.error(e);
-      }
+      } catch (e) { console.error(e); }
     }
     fetchData();
   }, []);
 
-  // Real-time reports
+  // ── Real-time reports ─────────────────────────────────────────────────────
   useEffect(() => {
     const q = query(collection(db, "reports"), orderBy("createdAt", "desc"));
     const unsub = onSnapshot(q, (snap) => {
       const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       setReports(data);
-      const pending = data.filter(r => r.status === "pending").length;
-      setUnreadReports(pending);
+      setUnreadReports(data.filter(r => r.status === "pending").length);
       setReportsReady(true);
     });
     return () => unsub();
   }, []);
 
+  // ── Resolve report ────────────────────────────────────────────────────────
   const handleResolveReport = async (report, action) => {
     const doResolve = async () => {
       closeConfirm();
       try {
         const batch = writeBatch(db);
         batch.update(doc(db, "reports", report.id), {
-          status: "resolved",
+          status:     "resolved",
           resolution: action,
           resolvedAt: new Date(),
         });
-        if (action === "suspend_user") {
-          batch.update(doc(db, "users", report.reportedId), { suspended: true });
-        }
-        if (action === "remove_listing") {
-          batch.delete(doc(db, "listings", report.reportedId));
-        }
-        if (action === "remove_review") {
-          batch.delete(doc(db, "reviews", report.reportedId));
-        }
+        if (action === "suspend_user")   batch.update(doc(db, "users",    report.reportedId), { suspended: true });
+        if (action === "remove_listing") batch.delete(doc(db, "listings", report.reportedId));
+        if (action === "remove_review")  batch.delete(doc(db, "reviews",  report.reportedId));
         await batch.commit();
         showToast(action === "dismiss" ? "Report dismissed." : "Report resolved & action taken.");
       } catch (err) {
@@ -160,35 +178,36 @@ export default function ReportsPage() {
 
     if (action === "dismiss") {
       openConfirm({
-        title: "Dismiss Report",
-        message: "Mark this report as dismissed? No action will be taken against the reported content.",
-        variant: "info",
+        title:     "Dismiss Report",
+        message:   "Mark this report as dismissed? No action will be taken against the reported content.",
+        variant:   "info",
         onConfirm: doResolve,
       });
     } else if (action === "suspend_user") {
       openConfirm({
-        title: "Suspend Reported User",
-        message: `Suspend "${report.reportedName}"? This will block their access to the platform.`,
-        variant: "warning",
+        title:     "Suspend Reported User",
+        message:   `Suspend "${report.reportedName}"? This will block their access to the platform.`,
+        variant:   "warning",
         onConfirm: doResolve,
       });
     } else if (action === "remove_listing") {
       openConfirm({
-        title: "Remove Reported Listing",
-        message: `Permanently remove the listing "${report.reportedName}"?`,
-        variant: "danger",
+        title:     "Remove Reported Listing",
+        message:   `Permanently remove the listing "${report.reportedName}"?`,
+        variant:   "danger",
         onConfirm: doResolve,
       });
     } else if (action === "remove_review") {
       openConfirm({
-        title: "Remove Reported Review",
-        message: "Permanently delete this review? This cannot be undone.",
-        variant: "danger",
+        title:     "Remove Reported Review",
+        message:   "Permanently delete this review? This cannot be undone.",
+        variant:   "danger",
         onConfirm: doResolve,
       });
     }
   };
 
+  // ── Logout ────────────────────────────────────────────────────────────────
   const handleLogout = async () => {
     setIsLoggingOut(true);
     setTimeout(async () => {
@@ -201,6 +220,7 @@ export default function ReportsPage() {
     }, 1500);
   };
 
+  // ── Close dropdown on outside click ──────────────────────────────────────
   useEffect(() => {
     const handler = (e) => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target))
@@ -250,13 +270,22 @@ export default function ReportsPage() {
 
         <div className={styles.tabContent}>
           <ReportCard title="Reports" headers={reportsHeaders} data={reportsExportData}>
+
+            {/* Search */}
             <div className={styles.cardHeader}>
               <div className={styles.searchWrap}>
                 <i className="fas fa-search" />
-                <input className={styles.searchInput} type="text" placeholder="Search reported names…" value={reportSearch} onChange={e => setReportSearch(e.target.value)} />
+                <input
+                  className={styles.searchInput}
+                  type="text"
+                  placeholder="Search reported names…"
+                  value={reportSearch}
+                  onChange={e => setReportSearch(e.target.value)}
+                />
               </div>
             </div>
 
+            {/* ── Pending ── */}
             <h3 className={styles.cardTitle} style={{ marginTop: 12 }}>
               Pending Reports
               {pendingReports.length > 0 && (
@@ -264,19 +293,30 @@ export default function ReportsPage() {
               )}
             </h3>
 
-            {pendingReports.length === 0 ? (
+            {filteredReports.filter(r => r.status === "pending").length === 0 ? (
               <div className={styles.emptyState}>
                 <i className="fas fa-check-circle" />
-                <p>No pending reports — all clear!</p>
+                <p>{reportSearch ? "No reports match your search." : "No pending reports — all clear!"}</p>
               </div>
             ) : (
               <div className={styles.modList}>
                 {filteredReports.filter(r => r.status === "pending").map(r => (
                   <div key={r.id} className={styles.modRow}>
                     <div className={styles.reportIcon}>{reportTypeIcon(r.reportType)}</div>
+
                     <div className={styles.modInfo}>
                       <span className={styles.modTitle}>
-                        {r.reportedName || r.reportedId}
+                        {/* ── Clickable reported name ── */}
+                        <span
+                          onClick={isNavigable(r.reportType) ? () => handleNavigateToReported(r) : undefined}
+                          title={
+                            r.reportType === "listing" ? "View listing →" :
+                            r.reportType === "user"    ? "View profile →" : undefined
+                          }
+                          style={navigableTitleStyle(r.reportType)}
+                        >
+                          {r.reportedName || r.reportedId}
+                        </span>
                         <span className={styles.reportTypePill}>{r.reportType}</span>
                       </span>
                       <span className={styles.modMeta}>{r.reason}</span>
@@ -286,16 +326,25 @@ export default function ReportsPage() {
                         {r.createdAt?.toDate ? r.createdAt.toDate().toLocaleDateString() : "Recently"}
                       </span>
                     </div>
+
                     <div className={styles.reportActions}>
-                      <button className={styles.btnDismiss} onClick={() => handleResolveReport(r, "dismiss")}>Dismiss</button>
+                      <button className={styles.btnDismiss} onClick={() => handleResolveReport(r, "dismiss")}>
+                        Dismiss
+                      </button>
                       {r.reportType === "user" && (
-                        <button className={styles.btnSuspend} onClick={() => handleResolveReport(r, "suspend_user")}>Suspend User</button>
+                        <button className={styles.btnSuspend} onClick={() => handleResolveReport(r, "suspend_user")}>
+                          Suspend User
+                        </button>
                       )}
                       {r.reportType === "listing" && (
-                        <button className={styles.btnRemove} onClick={() => handleResolveReport(r, "remove_listing")}>Remove Listing</button>
+                        <button className={styles.btnRemove} onClick={() => handleResolveReport(r, "remove_listing")}>
+                          Remove Listing
+                        </button>
                       )}
                       {r.reportType === "review" && (
-                        <button className={styles.btnRemove} onClick={() => handleResolveReport(r, "remove_review")}>Remove Review</button>
+                        <button className={styles.btnRemove} onClick={() => handleResolveReport(r, "remove_review")}>
+                          Remove Review
+                        </button>
                       )}
                     </div>
                   </div>
@@ -303,6 +352,7 @@ export default function ReportsPage() {
               </div>
             )}
 
+            {/* ── Resolved ── */}
             {resolvedReports.length > 0 && (
               <>
                 <h3 className={styles.cardTitle} style={{ marginTop: 24 }}>Resolved Reports</h3>
@@ -311,7 +361,18 @@ export default function ReportsPage() {
                     <div key={r.id} className={`${styles.modRow} ${styles.resolvedRow}`}>
                       <div className={styles.reportIcon}>{reportTypeIcon(r.reportType)}</div>
                       <div className={styles.modInfo}>
-                        <span className={styles.modTitle}>{r.reportedName || r.reportedId}</span>
+                        {/* ── Clickable reported name ── */}
+                        <span
+                          className={styles.modTitle}
+                          onClick={isNavigable(r.reportType) ? () => handleNavigateToReported(r) : undefined}
+                          title={
+                            r.reportType === "listing" ? "View listing →" :
+                            r.reportType === "user"    ? "View profile →" : undefined
+                          }
+                          style={navigableTitleStyle(r.reportType)}
+                        >
+                          {r.reportedName || r.reportedId}
+                        </span>
                         <span className={styles.modMeta}>{r.reason}</span>
                       </div>
                       <span className={styles.resolvedBadge}>✓ {r.resolution || "resolved"}</span>
@@ -320,11 +381,10 @@ export default function ReportsPage() {
                 </div>
               </>
             )}
+
           </ReportCard>
         </div>
       </main>
-
-
     </div>
   );
 }
