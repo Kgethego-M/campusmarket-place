@@ -588,10 +588,15 @@ function Profile() {
                     ? new Date(item.date).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric' })
                     : null;
 
-                  // Resolve display string for legacy tradeItem
-                  const tradeItemDisplay = isTrade && item.tradeItem
-                    ? (typeof item.tradeItem === 'string' ? item.tradeItem : item.tradeItem.name)
-                    : null;
+                  // FIX: Safely extract trade item display string
+                  let tradeItemDisplay = null;
+                  if (isTrade && item.tradeItem) {
+                    if (typeof item.tradeItem === 'string') {
+                      tradeItemDisplay = item.tradeItem;
+                    } else if (item.tradeItem && typeof item.tradeItem === 'object') {
+                      tradeItemDisplay = item.tradeItem.name || null;
+                    }
+                  }
 
                   return (
                     <div key={item.id} className={styles.historyItem}>
