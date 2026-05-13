@@ -484,27 +484,37 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
           {renderButton()}
 
           {/* ── Add to Cart ── */}
-         {currentUser && !isOwnListing && (
-  <button
-    style={{
-      ...styles.cartBtn,
-      backgroundColor: inCart ? '#f0fdf4' : '#f8fafc',
-      borderColor:     inCart ? '#86efac' : '#d1d5db',
-      color:           inCart ? '#15803d' : '#374151',
-    }}
-    onClick={handleCartToggle}
-    disabled={cartLoading}
-  >
-    {cartLoading ? (
-      <IconLoader />
-    ) : inCart ? (
-      <i className="fas fa-heart-broken" style={{ color: '#dc2626' }} />
-    ) : (
-      <i className="far fa-heart" />
-    )}
-    <span>{inCart ? 'Remove from favourites' : 'Save to favourites'}</span>
-  </button>
-)}
+          {currentUser && !isOwnListing && (
+            <button
+              style={{
+                ...styles.cartBtn,
+                backgroundColor: inCart ? '#f0fdf4' : '#f8fafc',
+                borderColor:     inCart ? '#86efac' : '#d1d5db',
+                color:           inCart ? '#15803d' : '#374151',
+              }}
+              onClick={handleCartToggle}
+              disabled={cartLoading}
+            >
+              {cartLoading
+                ? <IconLoader />
+                : <svg
+  width="16"
+  height="16"
+  viewBox="0 0 24 24"
+  fill={inCart ? "currentColor" : "none"}
+  stroke="currentColor"
+  strokeWidth="2"
+  strokeLinecap="round"
+  strokeLinejoin="round"
+  style={{ flexShrink: 0 }}
+>
+  <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
+</svg>
+              }
+              <span>{inCart ? 'Remove from cart' : 'Add to favorites'}</span>
+            </button>
+          )}
+
           {/* ── Message Seller ── */}
           {currentUser && !isOwnListing && (
             <button style={styles.messageBtn} onClick={handleMessageSeller} disabled={chatLoading}>
