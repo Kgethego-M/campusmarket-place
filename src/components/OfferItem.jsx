@@ -7,15 +7,13 @@ import {
 import { db } from '../firebase';
 import styles from './OfferItem.module.css';
 
-// Shimmer style defined in JS so no missing @keyframes reference
 const shimmerStyle = {
   background: 'linear-gradient(90deg, #f0f2f5 25%, #e8ecf0 50%, #f0f2f5 75%)',
   backgroundSize: '200% 100%',
-  animation: 'none', // avoid missing keyframe 404
+  animation: 'none',
   borderRadius: 6,
 };
 
-// ── Offer Details inline styles ──────────────────────────────────────────────
 const odStyles = {
   box: {
     marginTop: '12px',
@@ -65,7 +63,7 @@ export default function OfferItem({ offer }) {
   const [buyer,   setBuyer]   = useState(null);
   const [loading, setLoading] = useState(true);
   const [working, setWorking] = useState(false);
-  const [done,    setDone]    = useState(false); // hides card after action
+  const [done,    setDone]    = useState(false);
 
   useEffect(() => {
     async function fetchInfo() {
@@ -87,83 +85,121 @@ export default function OfferItem({ offer }) {
 
   // ── Accept ────────────────────────────────────────────────────
   const handleAccept = async () => {
-  if (working) return;
-  setWorking(true);
-  try {
-    console.log('Step 1: updating transaction', offer.id);
-    await updateDoc(doc(db, 'transactions', offer.id), {
-      status:    'accepted',
-      updatedAt: serverTimestamp(),
-    });
-    console.log('Step 1 done ✓');
+    if (working) return;
+    setWorking(true);
+    try {
+      const isTrade = offer.type === 'trade';
+      const newStatus = isTrade ? 'waiting' : 'accepted';
 
-    console.log('Step 2: updating listing', offer.listingId);
-    await updateDoc(doc(db, 'listings', offer.listingId), {
-      status:    'accepted',
-      updatedAt: serverTimestamp(),
-    });
-    console.log('Step 2 done ✓');
+      console.log('Step 1: updating transaction', offer.id, '→', newStatus);
+      await updateDoc(doc(db, 'transactions', offer.id), {
+        status:    newStatus,
+        updatedAt: serverTimestamp(),
+      });
+      console.log('Step 1 done ✓');
 
-    console.log('Step 3: finding other pending offers');
-    const otherSnap = await getDocs(
-      query(
-        collection(db, 'transactions'),
-        where('listingId', '==', offer.listingId),
-        where('status',    '==', 'pending'),
-      )
-    );
-    console.log('Step 3 done ✓ — found', otherSnap.docs.length, 'others');
+      console.log('Step 2: updating listing', offer.listingId, '→', newStatus);
+      await updateDoc(doc(db, 'listings', offer.listingId), {
+        status:    newStatus,
+        updatedAt: serverTimestamp(),
+      });
+      console.log('Step 2 done ✓');
 
-    console.log('Step 4: declining others');
-    await Promise.all(
-      otherSnap.docs
-        .filter(d => d.id !== offer.id)
-        .map(async (txDoc) => {
-          const tx = txDoc.data();
-          console.log('  Notifying buyer', tx.buyerId, 'of decline');
-          await addDoc(collection(db, 'notifications'), {
-            userId:        tx.buyerId,
-            type:          'offer_declined',
-            transactionId: txDoc.id,
-            listingId:     offer.listingId,
-            read:          false,
-            createdAt:     serverTimestamp(),
-          });
-          console.log('  Deleting transaction', txDoc.id);
-          await deleteDoc(doc(db, 'transactions', txDoc.id));
-          console.log('  Done with', txDoc.id, '✓');
-        })
-    );
-    console.log('Step 4 done ✓');
+      console.log('Step 3: finding other pending offers');
+      const otherSnap = await getDocs(
+        query(
+          collection(db, 'transactions'),
+          where('listingId', '==', offer.listingId),
+          where('status',    '==', 'pending'),
+        )
+      );
+      console.log('Step 3 done ✓ — found', otherSnap.docs.length, 'others');
 
-    console.log('Step 5: notifying accepted buyer', offer.buyerId);
-    await addDoc(collection(db, 'notifications'), {
-      userId:        offer.buyerId,
-      type:          'offer_accepted',
-      transactionId: offer.id,
-      listingId:     offer.listingId,
-      read:          false,
-      createdAt:     serverTimestamp(),
-    });
-    console.log('Step 5 done ✓');
+      console.log('Step 4: declining others');
+      await Promise.all(
+        otherSnap.docs
+          .filter(d => d.id !== offer.id)
+          .map(async (txDoc) => {
+            const tx = txDoc.data();
+            console.log('  Notifying buyer', tx.buyerId, 'of decline');
+            await addDoc(collection(db, 'notifications'), {
+              userId:        tx.buyerId,
+              type:          'offer_declined',
+              transactionId: txDoc.id,
+              listingId:     offer.listingId,
+              read:          false,
+              createdAt:     serverTimestamp(),
+            });
+            console.log('  Deleting transaction', txDoc.id);
+            await deleteDoc(doc(db, 'transactions', txDoc.id));
+            console.log('  Done with', txDoc.id, '✓');
+          })
+      );
+      console.log('Step 4 done ✓');
 
-    setDone(true);
-  } catch (err) {
-    console.error('Accept error:', err);
-    console.error('Error code:', err.code);
-    console.error('Error message:', err.message);
-    alert(`Failed at: ${err.message}`);
-  } finally {
-    setWorking(false);
-  }
-};
+      if (isTrade) {
+        // ── Trade: notify buyer their trade offer was accepted + book drop-off
+        console.log('Step 5 (trade): notifying buyer', offer.buyerId, '→ trade_waiting + book_dropoff');
+        await addDoc(collection(db, 'notifications'), {
+          userId:        offer.buyerId,
+          type:          'trade_waiting',
+          transactionId: offer.id,
+          listingId:     offer.listingId,
+          read:          false,
+          createdAt:     serverTimestamp(),
+        });
+
+        // ── Trade: notify seller to book a drop-off slot
+        console.log('Step 6 (trade): notifying seller', offer.sellerId, '→ book_dropoff');
+        await addDoc(collection(db, 'notifications'), {
+          userId:        offer.sellerId,
+          type:          'dropoff_booked',
+          transactionId: offer.id,
+          listingId:     offer.listingId,
+          read:          false,
+          createdAt:     serverTimestamp(),
+        });
+      } else {
+        // ── Sale: notify buyer their offer was accepted (proceeds to payment)
+        console.log('Step 5 (sale): notifying accepted buyer', offer.buyerId, '→ offer_accepted');
+        await addDoc(collection(db, 'notifications'), {
+          userId:        offer.buyerId,
+          type:          'offer_accepted',
+          transactionId: offer.id,
+          listingId:     offer.listingId,
+          read:          false,
+          createdAt:     serverTimestamp(),
+        });
+
+        // ── Sale: notify seller the buyer has been accepted + book drop-off
+        console.log('Step 6 (sale): notifying seller', offer.sellerId, '→ dropoff_booked');
+        await addDoc(collection(db, 'notifications'), {
+          userId:        offer.sellerId,
+          type:          'dropoff_booked',
+          transactionId: offer.id,
+          listingId:     offer.listingId,
+          read:          false,
+          createdAt:     serverTimestamp(),
+        });
+      }
+      console.log('All steps done ✓');
+
+      setDone(true);
+    } catch (err) {
+      console.error('Accept error:', err);
+      console.error('Error code:', err.code);
+      console.error('Error message:', err.message);
+      alert(`Failed at: ${err.message}`);
+    } finally {
+      setWorking(false);
+    }
+  };
 
   // ── Decline ───────────────────────────────────────────────────
   const handleDecline = async () => {
     if (working) return;
     setWorking(true);
     try {
-      // Notify buyer
       await addDoc(collection(db, 'notifications'), {
         userId:        offer.buyerId,
         type:          'offer_declined',
@@ -172,10 +208,7 @@ export default function OfferItem({ offer }) {
         read:          false,
         createdAt:     serverTimestamp(),
       });
-
-      // Delete the transaction
       await deleteDoc(doc(db, 'transactions', offer.id));
-
       setDone(true);
     } catch (err) {
       console.error('Decline error:', err);
@@ -197,7 +230,6 @@ export default function OfferItem({ offer }) {
     </div>
   );
 
-  // ── Done — card fades out ─────────────────────────────────────
   if (done) return null;
 
   const imageUrl  = listing?.photos?.[0] || listing?.imageUrl || null;
@@ -206,9 +238,9 @@ export default function OfferItem({ offer }) {
     : 'Unknown Buyer';
 
   const TYPE_COLORS = {
-    'For Sale': '#e07b3a', sale:  '#e07b3a',
-    'For Trade': '#3a7be0', trade: '#3a7be0',
-    Both: '#7b3ae0', Either: '#7b3ae0', either: '#7b3ae0',
+    'For Sale':  '#e07b3a', sale:   '#e07b3a',
+    'For Trade': '#3a7be0', trade:  '#3a7be0',
+    Both:        '#7b3ae0', Either: '#7b3ae0', either: '#7b3ae0',
   };
   const offerType = offer.type || '';
 
@@ -268,7 +300,6 @@ export default function OfferItem({ offer }) {
               </span>
             </>
           )}
-
         </div>
 
         {listing?.description && (
@@ -291,9 +322,15 @@ export default function OfferItem({ offer }) {
           const hasTerms       = !!offer.terms;
           const hasPartial     = offer.paymentType === 'partial' && offer.partialAmount != null;
 
-          // Always show this panel for any offer that has details worth showing
           const showPanel = hasPriceChange || hasPayment || hasTrade || hasTerms || offer.agreedPrice != null;
           if (!showPanel) return null;
+
+          // Safely extract trade item display string
+          const tradeItemLabel = hasTrade
+            ? typeof offer.tradeItem === 'string'
+              ? offer.tradeItem
+              : offer.tradeItem?.name || 'Trade item'
+            : null;
 
           return (
             <div style={odStyles.box}>
@@ -337,12 +374,10 @@ export default function OfferItem({ offer }) {
                   </>
                 )}
 
-                {hasTrade && (
+                {hasTrade && tradeItemLabel && (
                   <>
                     <span style={odStyles.label}>Trade offer</span>
-                    <span style={odStyles.value}>
-                      {typeof offer.tradeItem === 'string' ? offer.tradeItem : offer.tradeItem?.name || 'Trade item'}
-                    </span>
+                    <span style={odStyles.value}>{tradeItemLabel}</span>
                   </>
                 )}
 
