@@ -3,26 +3,6 @@
  *
  * Data source: Stats SA Consumer Price Index (CPI), published monthly.
  * Reference: P0141 Statistical release — https://www.statssa.gov.za/
- *
- * Reliability justification
- * ─────────────────────────
- * Stats SA is the official South African national statistics agency,
- * mandated by the Statistics Act (No. 6 of 1999). The CPI release (P0141)
- * is the most authoritative consumer-price dataset for SA and is referenced
- * by the South African Reserve Bank (SARB) for monetary policy decisions.
- * It covers 12 major expenditure divisions aligned to COICOP, making it
- * straightforward to map to product listing categories.
- *
- * Fallback strategy
- * ─────────────────
- * Because the Stats SA API may be rate-limited or unavailable in some
- * environments, this service falls back to a hardcoded CPI baseline
- * (Jan 2024) so the UI always shows a useful suggestion.
- *
- * Algorithm
- * ─────────
- * suggestedPrice = baselinePrice × (currentCPI / baselineCPI)
- * Range shown to seller = ±15% of suggested mid-point.
  */
 
 /* ── Category value (matches CreateListing.jsx <option> values) ─── */
@@ -96,20 +76,6 @@ async function fetchCurrentCPI() {
 }
 
 /* ── Main export ──────────────────────────────────────────────────── */
-/**
- * getPriceSuggestion(category)
- *
- * @param {string} category  — the <select> value from CreateListing.jsx
- * @returns {Promise<{
- *   category: string,
- *   cpiDivision: string,
- *   suggestedLow: number,
- *   suggestedHigh: number,
- *   currentCPI: number,
- *   dataSource: string,
- *   isLive: boolean,
- * }>}
- */
 export async function getPriceSuggestion(category) {
   const baseline  = BASELINE_PRICES[category] ?? BASELINE_PRICES["other"];
   const cpiResult = await fetchCurrentCPI();

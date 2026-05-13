@@ -24,11 +24,91 @@ const toRawListingType = (displayType) => {
 
 const HISTORY_STATUSES  = new Set(['sold', 'completed', 'traded']);
 const READONLY_STATUSES = new Set(['accepted']);
-
-// Any transaction in one of these statuses means the listing is "spoken for"
-// and should NOT also appear as a standalone history entry via fetchUserListings.
-// This prevents a listing appearing in both the History and Offers tabs.
 const ACTIVE_TX_STATUSES = ['completed', 'accepted', 'sold', 'traded'];
+
+// ── Trade item detail card (shown in Offers tab) ──────────────────────────────
+function TradeItemCard({ tradeItem }) {
+  if (!tradeItem) return null;
+
+  // Support both legacy string and new structured object
+  if (typeof tradeItem === 'string') {
+    return (
+      <div className={styles.tradeItemCard}>
+        <div className={styles.tradeItemHeader}>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+            <path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/>
+            <path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>
+          </svg>
+          <span>Buyer's Trade Item</span>
+        </div>
+        <p className={styles.tradeItemLegacyText}>{tradeItem}</p>
+      </div>
+    );
+  }
+
+  const conditionColors = {
+    'New':      { color: '#0369a1', bg: '#e0f2fe' },
+    'Like New': { color: '#0284c7', bg: '#f0f9ff' },
+    'Good':     { color: '#0e7490', bg: '#ecfeff' },
+    'Fair':     { color: '#d97706', bg: '#fffbeb' },
+    'Poor':     { color: '#dc2626', bg: '#fef2f2' },
+  };
+  const condStyle = conditionColors[tradeItem.condition] || { color: '#6b7280', bg: '#f3f4f6' };
+
+  return (
+    <div className={styles.tradeItemCard}>
+      <div className={styles.tradeItemHeader}>
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+          <path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/>
+          <path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>
+        </svg>
+        <span>Buyer's Trade Item</span>
+      </div>
+      <div className={styles.tradeItemBody}>
+        {tradeItem.imageUrl && (
+          <img
+            src={tradeItem.imageUrl}
+            alt={tradeItem.name}
+            className={styles.tradeItemImage}
+          />
+        )}
+        <div className={styles.tradeItemInfo}>
+          <p className={styles.tradeItemName}>{tradeItem.name}</p>
+          <div className={styles.tradeItemMeta}>
+            {tradeItem.category && (
+              <span className={styles.tradeItemChip} style={{ background: '#f0f9ff', color: '#0369a1' }}>
+                {tradeItem.category}
+              </span>
+            )}
+            {tradeItem.condition && (
+              <span className={styles.tradeItemChip} style={{ background: condStyle.bg, color: condStyle.color }}>
+                {tradeItem.condition}
+              </span>
+            )}
+          </div>
+          {tradeItem.description && (
+            <p className={styles.tradeItemDesc}>{tradeItem.description}</p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Offer card wrapper that shows trade item details ──────────────────────────
+function EnrichedOfferCard({ offer, highlighted }) {
+  const isTrade = offer.type === 'trade';
+  return (
+    <div className={`${styles.offerCard} ${highlighted ? styles.highlightedOffer : ''}`}>
+      <OfferItem offer={offer} />
+      {isTrade && offer.tradeItem && (
+        <div style={{ padding: '0 14px 14px' }}>
+          <TradeItemCard tradeItem={offer.tradeItem} />
+        </div>
+      )}
+    </div>
+  );
+}
 
 function Profile() {
   const navigate     = useNavigate();
@@ -100,7 +180,6 @@ function Profile() {
         )),
       ]);
 
-      // ── Rating aggregation ──
       let liveRating = 0;
       let liveTotalRatings = 0;
       if (!reviewSnap.empty) {
@@ -113,7 +192,6 @@ function Profile() {
           : 0;
       }
 
-      // ── Sales aggregation ──
       const SOLD_STATUSES = new Set(['sold', 'completed', 'traded']);
       const soldListings = allUserListingsSnap.docs.filter(doc => {
         const status = doc.data().status?.toLowerCase?.() ?? '';
@@ -138,7 +216,6 @@ function Profile() {
 
       const liveTotalTrades = Math.max(tradedFromListings, tradedFromTransactions);
 
-      // ── Sync to Firestore if changed ──
       const updates = {};
       if (liveRating       !== safeNumber(d.rating))       updates.rating       = liveRating;
       if (liveTotalRatings !== safeNumber(d.totalRatings)) updates.totalRatings = liveTotalRatings;
@@ -198,11 +275,6 @@ function Profile() {
       });
 
       if (doneItems.length) {
-        // FIX: Check for ANY active/completed transaction (not just 'completed') so that
-        // listings with 'accepted', 'sold', or 'traded' transactions are also excluded
-        // from appearing as standalone history entries. Without this, a listing with an
-        // 'accepted' transaction would appear in History even though fetchUserPurchases
-        // only pulls 'completed' transactions — causing potential double-display.
         const coveredByTx = await Promise.all(
           doneItems.map(async (l) => {
             try {
@@ -211,7 +283,7 @@ function Profile() {
                 where('listingId', '==', l.id),
                 where('status', 'in', ACTIVE_TX_STATUSES),
               ));
-              return txSnap.empty ? null : l.id; // null = not covered, id = covered by tx
+              return txSnap.empty ? null : l.id;
             } catch { return null; }
           })
         );
@@ -222,15 +294,9 @@ function Profile() {
           const newItems = doneItems
             .filter(l => !existingIds.has(l.id) && !coveredIds.has(l.id))
             .map(l => ({
-              id:           l.id,
-              item:         l.title,
-              type:         'sale',
-              side:         'seller',
-              date:         l.date,
-              price:        l.price != null ? `R${Number(l.price).toLocaleString()}` : null,
-              buyer:        null,
-              status:       'sold',
-              listingImage: l.photos?.[0] || l.imageUrl || null,
+              id: l.id, item: l.title, type: 'sale', side: 'seller',
+              date: l.date, price: l.price != null ? `R${Number(l.price).toLocaleString()}` : null,
+              buyer: null, status: 'sold', listingImage: l.photos?.[0] || l.imageUrl || null,
             }));
           return newItems.length ? [...prev, ...newItems] : prev;
         });
@@ -245,9 +311,7 @@ function Profile() {
             if (!txSnap.empty) {
               const tx = txSnap.docs[0].data();
               buyerName = tx.buyerName || null;
-              if (!buyerName && tx.buyerId) {
-                buyerName = await getUserName(tx.buyerId);
-              }
+              if (!buyerName && tx.buyerId) buyerName = await getUserName(tx.buyerId);
               const rawDate = tx.updatedAt || tx.createdAt;
               if (rawDate) date = rawDate?.toDate ? rawDate.toDate() : new Date(rawDate);
             }
@@ -267,19 +331,10 @@ function Profile() {
   const fetchUserPurchases = async (uid) => {
     try {
       const [asBuyerSnap, asSellerSnap] = await Promise.all([
-        getDocs(query(
-          collection(db, 'transactions'),
-          where('buyerId',  '==', uid),
-          where('status',   '==', 'completed'),
-        )),
-        getDocs(query(
-          collection(db, 'transactions'),
-          where('sellerId', '==', uid),
-          where('status',   '==', 'completed'),
-        )),
+        getDocs(query(collection(db, 'transactions'), where('buyerId', '==', uid), where('status', '==', 'completed'))),
+        getDocs(query(collection(db, 'transactions'), where('sellerId', '==', uid), where('status', '==', 'completed'))),
       ]);
 
-      // Deduplicate — a trade doc can appear in both queries
       const seen = new Set();
       const allDocs = [
         ...asBuyerSnap.docs.map(d  => ({ d, side: 'buyer'  })),
@@ -295,10 +350,9 @@ function Profile() {
       const enriched = await Promise.all(
         allDocs.map(async ({ d: txDoc, side }) => {
           const p      = txDoc.data();
-          const type   = p.type?.toLowerCase?.() ?? 'sale'; // 'sale' | 'trade'
+          const type   = p.type?.toLowerCase?.() ?? 'sale';
           const isTrade = type === 'trade';
 
-          // ── Resolve listing title + image ──
           let itemTitle    = p.listingTitle || null;
           let listingImage = p.listingImage || p.productImage || null;
           let price        = p.price ?? p.amount ?? p.agreedPrice ?? null;
@@ -308,15 +362,14 @@ function Profile() {
               const ls = await getDoc(doc(db, 'listings', p.listingId));
               if (ls.exists()) {
                 const ld  = ls.data();
-                itemTitle    = itemTitle    || ld.title            || null;
-                listingImage = listingImage || ld.photos?.[0]      || ld.imageUrl || null;
+                itemTitle    = itemTitle    || ld.title       || null;
+                listingImage = listingImage || ld.photos?.[0] || ld.imageUrl || null;
                 price        = price        ?? ld.price;
               }
             } catch { /* non-fatal */ }
           }
           itemTitle = itemTitle || (side === 'buyer' ? 'Purchase' : 'Sale');
 
-          // ── Resolve other party name ──
           let otherName = null;
           if (side === 'buyer') {
             otherName = p.sellerName || await getUserName(p.sellerId);
@@ -324,31 +377,18 @@ function Profile() {
             otherName = p.buyerName  || await getUserName(p.buyerId);
           }
 
-          // ── Date ──
           const rawDate = p.completedAt || p.updatedAt || p.createdAt;
           const date    = rawDate?.toDate ? rawDate.toDate() : rawDate ? new Date(rawDate) : new Date();
 
-          // ── tradeItem — what was offered in exchange ──
           const tradeItem = p.tradeItem ?? null;
-
-          // ── History type logic ──
-          // Buyer:  type=sale  → 'purchase' (badge: Bought)
-          //         type=trade → 'trade'    (badge: Traded) + tradeItem if present
-          // Seller: type=sale  → 'sale'     (badge: Sold)
-          //         type=trade → 'trade'    (badge: Traded) + tradeItem if present
           const historyType = isTrade ? 'trade' : side === 'buyer' ? 'purchase' : 'sale';
 
           return {
-            id:           txDoc.id,
-            item:         itemTitle,
-            type:         historyType,
-            side,
-            date,
-            price:        price != null ? `R${Number(price).toLocaleString()}` : null,
-            seller:       side === 'buyer'  ? otherName : null,
-            buyer:        side === 'seller' ? otherName : null,
-            tradeItem,
-            listingImage,
+            id: txDoc.id, item: itemTitle, type: historyType, side, date,
+            price: price != null ? `R${Number(price).toLocaleString()}` : null,
+            seller: side === 'buyer'  ? otherName : null,
+            buyer:  side === 'seller' ? otherName : null,
+            tradeItem, listingImage,
           };
         })
       );
@@ -455,9 +495,7 @@ function Profile() {
     </div>
   );
 
-  if (showRatings) {
-    return <ProfileRating onClose={() => setShowRatings(false)} />;
-  }
+  if (showRatings) return <ProfileRating onClose={() => setShowRatings(false)} />;
 
   const totalSales        = safeNumber(profileData.totalSales);
   const totalTrades       = safeNumber(profileData.totalTrades);
@@ -465,8 +503,7 @@ function Profile() {
 
   const activeListings   = listings.filter(l => !HISTORY_STATUSES.has(l.status?.toLowerCase?.()) && !READONLY_STATUSES.has(l.status?.toLowerCase?.()));
   const acceptedListings = listings.filter(l => READONLY_STATUSES.has(l.status?.toLowerCase?.()));
-
-  const sortedHistory = [...history].sort((a, b) => new Date(b.date) - new Date(a.date));
+  const sortedHistory    = [...history].sort((a, b) => new Date(b.date) - new Date(a.date));
 
   return (
     <div className={styles.profileContainer}>
@@ -479,7 +516,8 @@ function Profile() {
         <div className={styles.profileLeft}>
           <div className={styles.profilePictureSection}>
             <div className={styles.profilePictureWrapper}>
-              <img src={profileData.photoURL || '/default-avatar.png'} alt="Profile" className={styles.profilePicture} onError={e => { e.target.src = '/default-avatar.png'; }} />
+              <img src={profileData.photoURL || '/default-avatar.png'} alt="Profile" className={styles.profilePicture}
+                onError={e => { e.target.src = '/default-avatar.png'; }} />
               {isEditing && <button className={styles.editPhotoButton} onClick={() => fileInputRef.current?.click()}><i className="fas fa-camera" /></button>}
               <input ref={fileInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handlePhotoUpload} />
             </div>
@@ -508,15 +546,10 @@ function Profile() {
             <div className={styles.ratingStars}>{renderStars(profileData.rating)}</div>
             <span className={styles.ratingValue}>{safeNumber(profileData.rating).toFixed(1)}</span>
             <span className={styles.totalRatings}>({safeNumber(profileData.totalRatings)} ratings)</span>
-            <button
-              className={styles.viewRatingsLink}
-              onClick={() => setShowRatings(true)}
-              title="View all your ratings and reviews"
-            >
+            <button className={styles.viewRatingsLink} onClick={() => setShowRatings(true)} title="View all your ratings and reviews">
               <i className="fas fa-chevron-right" /> View reviews
             </button>
           </div>
-
           <div className={styles.statsGrid}>
             <div className={styles.statItem}><i className="fas fa-tag" /><div className={styles.statInfo}><span className={styles.statValue}>{totalSales}</span><span className={styles.statLabel}>Sales</span></div></div>
             <div className={styles.statItem}><i className="fas fa-exchange-alt" /><div className={styles.statInfo}><span className={styles.statValue}>{totalTrades}</span><span className={styles.statLabel}>Trades</span></div></div>
@@ -555,10 +588,18 @@ function Profile() {
                     ? new Date(item.date).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric' })
                     : null;
 
+                  // FIX: Safely extract trade item display string
+                  let tradeItemDisplay = null;
+                  if (isTrade && item.tradeItem) {
+                    if (typeof item.tradeItem === 'string') {
+                      tradeItemDisplay = item.tradeItem;
+                    } else if (item.tradeItem && typeof item.tradeItem === 'object') {
+                      tradeItemDisplay = item.tradeItem.name || null;
+                    }
+                  }
+
                   return (
                     <div key={item.id} className={styles.historyItem}>
-
-                      {/* ── Listing image ── */}
                       <div className={styles.historyImg}>
                         {item.listingImage
                           ? <img src={item.listingImage} alt={item.item} />
@@ -574,8 +615,6 @@ function Profile() {
                           {isTrade                  && <i className="fas fa-exchange-alt" />}
                         </span>
                       </div>
-
-                      {/* ── Details ── */}
                       <div className={styles.historyDetails}>
                         <h4 className={styles.historyItemTitle}>{item.item}</h4>
                         <div className={styles.historyMeta}>
@@ -590,20 +629,16 @@ function Profile() {
                               {isBuyer ? `From: ${otherParty}` : `To: ${otherParty}`}
                             </span>
                           )}
-                          {/* Price only shown for sales, not trades */}
                           {item.price && !isTrade && (
                             <span className={styles.historyMetaPrice}>{item.price}</span>
                           )}
-                          {/* tradeItem shown only when present and it was a trade */}
-                          {isTrade && item.tradeItem && (
+                          {tradeItemDisplay && (
                             <span className={styles.historyMetaChip}>
-                              <i className="fas fa-exchange-alt" /> Traded for: {item.tradeItem}
+                              <i className="fas fa-exchange-alt" /> Traded for: {tradeItemDisplay}
                             </span>
                           )}
                         </div>
                       </div>
-
-                      {/* ── Badge ── */}
                       <div className={styles.historyBadgeWrap}>
                         <span className={`${styles.historyBadge} ${
                           item.type === 'purchase' ? styles.historyBadgeBought
@@ -615,7 +650,6 @@ function Profile() {
                           {isTrade                  && 'Traded'}
                         </span>
                       </div>
-
                     </div>
                   );
                 })}
@@ -652,16 +686,10 @@ function Profile() {
                 {acceptedListings.map(listing => (
                   <div key={listing.id} className={`${styles.listingCardCompact} ${styles.listingCardAccepted}`}>
                     <ProfileListingCard
-                      listing={listing}
-                      isEditing={false}
-                      editData={{}}
-                      onEdit={null}
-                      onDelete={() => handleDeleteListing(listing.id)}
-                      onEditChange={() => {}}
-                      onSave={() => {}}
-                      onCancel={() => {}}
-                      compact={true}
-                      readOnly={true}
+                      listing={listing} isEditing={false} editData={{}}
+                      onEdit={null} onDelete={() => handleDeleteListing(listing.id)}
+                      onEditChange={() => {}} onSave={() => {}} onCancel={() => {}}
+                      compact={true} readOnly={true}
                     />
                     <div className={styles.acceptedBanner}>
                       <i className="fas fa-handshake" />
@@ -682,12 +710,11 @@ function Profile() {
             ) : (
               <div className={styles.offersGrid}>
                 {incomingOffers.map((offer, i) => (
-                  <div
-                    key={offer.id}
-                    className={`${styles.offerCard} ${highlightedOfferId === offer.id ? styles.highlightedOffer : ''}`}
-                    style={{ animationDelay: `${i * 60}ms` }}
-                  >
-                    <OfferItem offer={offer} />
+                  <div key={offer.id} style={{ animationDelay: `${i * 60}ms` }}>
+                    <EnrichedOfferCard
+                      offer={offer}
+                      highlighted={highlightedOfferId === offer.id}
+                    />
                   </div>
                 ))}
               </div>
