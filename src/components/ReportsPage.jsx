@@ -54,6 +54,7 @@ export default function ReportsPage() {
   const [toast, setToast]                 = useState(null);
   const [allUsers, setAllUsers]           = useState([]);
   const [listings, setListings]           = useState([]);
+  const [reviewsCache, setReviewsCache]   = useState({});  // reportedId → review data
 
   const showToast  = (message, type = "success") => setToast({ message, type });
   const hideToast  = () => setToast(null);
@@ -69,11 +70,15 @@ export default function ReportsPage() {
     return "👤";
   };
 
-  const isNavigable = (reportType) => reportType === "listing" || reportType === "user";
+  const isNavigable = (reportType) => reportType === "listing" || reportType === "user" || reportType === "review";
 
   const handleNavigateToReported = (report) => {
-    if (report.reportType === "listing") navigate(`/listing/${report.reportedId}`);
-    else if (report.reportType === "user") navigate(`/profile/${report.reportedId}`);
+    if (report.reportType === "listing") {
+      navigate(`/listing/${report.reportedId}?preview=true`);
+    } 
+    else if (report.reportType === "user") {
+      navigate(`/profile/${report.reportedId}?preview=true`);
+    }
   };
 
   const navigableTitleStyle = (reportType) => ({
@@ -104,8 +109,10 @@ export default function ReportsPage() {
     "Reports_Data", reportsHeaders, reportsExportData
   );
 
-  const pendingReports  = reports.filter(r => r.status === "pending");
-  const resolvedReports = reports.filter(r => r.status !== "pending");
+  const pendingReports   = reports.filter(r => r.status === "pending");
+  const resolvedReports  = reports.filter(r => r.status !== "pending");
+  const removedListings  = reports.filter(r => r.resolution === "remove_listing").length;
+  const removedReviews   = reports.filter(r => r.resolution === "remove_review").length;
 
   // ── Auth guard ────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -154,20 +161,72 @@ export default function ReportsPage() {
     return () => unsub();
   }, []);
 
+  // ── Fetch actual review content for review-type reports ───────────────────
+  useEffect(() => {
+    if (!reports.length) return;
+    const reviewReports = reports.filter(r => r.reportType === "review");
+    if (!reviewReports.length) return;
+    const uncached = reviewReports.filter(r => !(r.reportedId in reviewsCache));
+    if (!uncached.length) return;
+    const fetchReviews = async () => {
+      const entries = await Promise.all(
+        uncached.map(async (r) => {
+          try {
+            const snap = await getDoc(doc(db, "reviews", r.reportedId));
+            return [r.reportedId, snap.exists() ? snap.data() : null];
+          } catch {
+            return [r.reportedId, null];
+          }
+        })
+      );
+      setReviewsCache(prev => ({ ...prev, ...Object.fromEntries(entries) }));
+    };
+    fetchReviews();
+  }, [reports]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // ── Resolve report ────────────────────────────────────────────────────────
   const handleResolveReport = async (report, action) => {
+    const currentUser = auth.currentUser;
+    if (!currentUser) return;
+
     const doResolve = async () => {
       closeConfirm();
       try {
         const batch = writeBatch(db);
+
+        // ── Write resolution info to the REPORT document only.
+        //    resolvedBy stores the admin's userId so it can be looked up later.
+        //    We never touch the admin's own user document here.
         batch.update(doc(db, "reports", report.id), {
-          status:     "resolved",
-          resolution: action,
-          resolvedAt: new Date(),
+          status:          "resolved",
+          resolution:      action,
+          resolvedAt:      new Date(),
+          resolvedBy:      currentUser.uid,   // admin userId — not the admin's profile
+          resolvedByName:  adminUser.name,
         });
-        if (action === "suspend_user")   batch.update(doc(db, "users",    report.reportedId), { suspended: true });
-        if (action === "remove_listing") batch.delete(doc(db, "listings", report.reportedId));
-        if (action === "remove_review")  batch.delete(doc(db, "reviews",  report.reportedId));
+
+        if (action === "suspend_user") {
+          // Write to the REPORTED user's doc — not the admin's own profile
+          if (report.reportedId === currentUser.uid) {
+            showToast("You cannot suspend your own account.", "error");
+            return;
+          }
+          batch.update(doc(db, "users", report.reportedId), {
+            suspended:       true,
+            suspendedBy:     currentUser.uid,
+            suspendedAt:     new Date(),
+            suspendedByName: adminUser.name,
+          });
+        }
+
+        if (action === "remove_listing") {
+          batch.delete(doc(db, "listings", report.reportedId));
+        }
+
+        if (action === "remove_review") {
+          batch.delete(doc(db, "reviews", report.reportedId));
+        }
+
         await batch.commit();
         showToast(action === "dismiss" ? "Report dismissed." : "Report resolved & action taken.");
       } catch (err) {
@@ -271,6 +330,24 @@ export default function ReportsPage() {
         <div className={styles.tabContent}>
           <ReportCard title="Reports" headers={reportsHeaders} data={reportsExportData}>
 
+            {/* ── Stats strip ── */}
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 16 }}>
+              {[
+                { icon: "fas fa-clock",        label: "Pending",          value: pendingReports.length,  color: pendingReports.length  > 0 ? "#d97706" : "#64748b", bg: pendingReports.length  > 0 ? "#fef3c7" : "#f1f5f9" },
+                { icon: "fas fa-check-circle", label: "Resolved",         value: resolvedReports.length, color: "#16a34a",                                           bg: "#f0fdf4" },
+                { icon: "fas fa-store",        label: "Listings Removed", value: removedListings,        color: removedListings > 0 ? "#dc2626" : "#64748b",         bg: removedListings > 0 ? "#fef2f2" : "#f1f5f9" },
+                { icon: "fas fa-star",         label: "Reviews Removed",  value: removedReviews,         color: removedReviews  > 0 ? "#dc2626" : "#64748b",         bg: removedReviews  > 0 ? "#fef2f2" : "#f1f5f9" },
+              ].map(({ icon, label, value, color, bg }) => (
+                <div key={label} style={{ flex: "1 1 120px", background: bg, borderRadius: 10, padding: "12px 14px", display: "flex", flexDirection: "column", gap: 4 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <i className={icon} style={{ color, fontSize: "0.78rem" }} />
+                    <span style={{ fontSize: "0.68rem", fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.05em" }}>{label}</span>
+                  </div>
+                  <span style={{ fontSize: "1.6rem", fontWeight: 800, color, lineHeight: 1 }}>{value}</span>
+                </div>
+              ))}
+            </div>
+
             {/* Search */}
             <div className={styles.cardHeader}>
               <div className={styles.searchWrap}>
@@ -285,7 +362,7 @@ export default function ReportsPage() {
               </div>
             </div>
 
-            {/* ── Pending ── */}
+            {/* ── Pending Reports ── */}
             <h3 className={styles.cardTitle} style={{ marginTop: 12 }}>
               Pending Reports
               {pendingReports.length > 0 && (
@@ -300,84 +377,158 @@ export default function ReportsPage() {
               </div>
             ) : (
               <div className={styles.modList}>
-                {filteredReports.filter(r => r.status === "pending").map(r => (
-                  <div key={r.id} className={styles.modRow}>
-                    <div className={styles.reportIcon}>{reportTypeIcon(r.reportType)}</div>
+                {filteredReports.filter(r => r.status === "pending").map(r => {
+                  const review = r.reportType === "review" ? reviewsCache[r.reportedId] : null;
+                  return (
+                    <div key={r.id} className={styles.modRow}>
+                      <div className={styles.reportIcon}>{reportTypeIcon(r.reportType)}</div>
 
-                    <div className={styles.modInfo}>
-                      <span className={styles.modTitle}>
-                        {/* ── Clickable reported name ── */}
-                        <span
-                          onClick={isNavigable(r.reportType) ? () => handleNavigateToReported(r) : undefined}
-                          title={
-                            r.reportType === "listing" ? "View listing →" :
-                            r.reportType === "user"    ? "View profile →" : undefined
-                          }
-                          style={navigableTitleStyle(r.reportType)}
-                        >
-                          {r.reportedName || r.reportedId}
+                      <div className={styles.modInfo}>
+                        <span className={styles.modTitle}>
+                          <span
+                            onClick={isNavigable(r.reportType) ? () => handleNavigateToReported(r) : undefined}
+                            title={
+                              r.reportType === "listing" ? "View listing →" :
+                              r.reportType === "user"    ? "View profile →" : undefined
+                            }
+                            style={navigableTitleStyle(r.reportType)}
+                          >
+                            {r.reportedName || r.reportedId}
+                          </span>
+                          <span className={styles.reportTypePill}>{r.reportType}</span>
                         </span>
-                        <span className={styles.reportTypePill}>{r.reportType}</span>
-                      </span>
-                      <span className={styles.modMeta}>{r.reason}</span>
-                      {r.details && <span className={styles.reportDetails}>"{r.details}"</span>}
-                      <span className={styles.reportMeta}>
-                        Reported by {r.reporterName} ·{" "}
-                        {r.createdAt?.toDate ? r.createdAt.toDate().toLocaleDateString() : "Recently"}
-                      </span>
-                    </div>
+                        <span className={styles.modMeta}>{r.reason}</span>
+                        {r.details && <span className={styles.reportDetails}>"{r.details}"</span>}
 
-                    <div className={styles.reportActions}>
-                      <button className={styles.btnDismiss} onClick={() => handleResolveReport(r, "dismiss")}>
-                        Dismiss
-                      </button>
-                      {r.reportType === "user" && (
-                        <button className={styles.btnSuspend} onClick={() => handleResolveReport(r, "suspend_user")}>
-                          Suspend User
+                        {/* ── Inline review content ── */}
+                        {r.reportType === "review" && review && (
+                          <div style={{
+                            marginTop: 6, background: "#f8fafc", border: "1px solid #e2e8f0",
+                            borderRadius: 8, padding: "8px 12px", fontSize: "0.8rem", color: "#374151",
+                          }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
+                              <span style={{ color: "#f59e0b", fontSize: "0.85rem" }}>
+                                {"★".repeat(review.rating || 0)}{"☆".repeat(5 - (review.rating || 0))}
+                              </span>
+                              <span style={{ fontWeight: 600, color: "#0f172a", fontSize: "0.78rem" }}>
+                                {review.reviewerName || "Unknown reviewer"}
+                              </span>
+                            </div>
+                            {review.comment && (
+                              <p style={{ margin: 0, fontStyle: "italic", color: "#4b5563", lineHeight: 1.45 }}>
+                                "{review.comment}"
+                              </p>
+                            )}
+                          </div>
+                        )}
+                        {r.reportType === "review" && review === undefined && (
+                          <span style={{ fontSize: "0.75rem", color: "#94a3b8", marginTop: 4, display: "block" }}>
+                            Loading review…
+                          </span>
+                        )}
+                        {r.reportType === "review" && review === null && (
+                          <span style={{ fontSize: "0.75rem", color: "#94a3b8", marginTop: 4, display: "block" }}>
+                            Review no longer exists.
+                          </span>
+                        )}
+
+                        <span className={styles.reportMeta}>
+                          Reported by {r.reporterName} ·{" "}
+                          {r.createdAt?.toDate ? r.createdAt.toDate().toLocaleDateString() : "Recently"}
+                        </span>
+                      </div>
+
+                      <div className={styles.reportActions}>
+                        <button className={styles.btnDismiss} onClick={() => handleResolveReport(r, "dismiss")}>
+                          Dismiss
                         </button>
-                      )}
-                      {r.reportType === "listing" && (
-                        <button className={styles.btnRemove} onClick={() => handleResolveReport(r, "remove_listing")}>
-                          Remove Listing
-                        </button>
-                      )}
-                      {r.reportType === "review" && (
-                        <button className={styles.btnRemove} onClick={() => handleResolveReport(r, "remove_review")}>
-                          Remove Review
-                        </button>
-                      )}
+                        {r.reportType === "user" && (
+                          <button className={styles.btnSuspend} onClick={() => handleResolveReport(r, "suspend_user")}>
+                            Suspend User
+                          </button>
+                        )}
+                        {r.reportType === "listing" && (
+                          <button className={styles.btnRemove} onClick={() => handleResolveReport(r, "remove_listing")}>
+                            Remove Listing
+                          </button>
+                        )}
+                        {r.reportType === "review" && (
+                          <button className={styles.btnRemove} onClick={() => handleResolveReport(r, "remove_review")}>
+                            Remove Review
+                          </button>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
 
-            {/* ── Resolved ── */}
+            {/* ── Resolved Reports ── */}
             {resolvedReports.length > 0 && (
               <>
                 <h3 className={styles.cardTitle} style={{ marginTop: 24 }}>Resolved Reports</h3>
                 <div className={styles.modList}>
-                  {filteredReports.filter(r => r.status !== "pending").map(r => (
-                    <div key={r.id} className={`${styles.modRow} ${styles.resolvedRow}`}>
-                      <div className={styles.reportIcon}>{reportTypeIcon(r.reportType)}</div>
-                      <div className={styles.modInfo}>
-                        {/* ── Clickable reported name ── */}
-                        <span
-                          className={styles.modTitle}
-                          onClick={isNavigable(r.reportType) ? () => handleNavigateToReported(r) : undefined}
-                          title={
-                            r.reportType === "listing" ? "View listing →" :
-                            r.reportType === "user"    ? "View profile →" : undefined
-                          }
-                          style={navigableTitleStyle(r.reportType)}
-                        >
-                          {r.reportedName || r.reportedId}
-                        </span>
-                        <span className={styles.modMeta}>{r.reason}</span>
+                  {filteredReports.filter(r => r.status !== "pending").map(r => {
+                    const review = r.reportType === "review" ? reviewsCache[r.reportedId] : null;
+                    return (
+                      <div key={r.id} className={`${styles.modRow} ${styles.resolvedRow}`}>
+                        <div className={styles.reportIcon}>{reportTypeIcon(r.reportType)}</div>
+                        <div className={styles.modInfo}>
+                          <span
+                            className={styles.modTitle}
+                            onClick={isNavigable(r.reportType) ? () => handleNavigateToReported(r) : undefined}
+                            title={
+                              r.reportType === "listing" ? "View listing →" :
+                              r.reportType === "user"    ? "View profile →" : undefined
+                            }
+                            style={navigableTitleStyle(r.reportType)}
+                          >
+                            {r.reportedName || r.reportedId}
+                          </span>
+                          <span className={styles.modMeta}>{r.reason}</span>
+
+                          {/* ── Inline review content for resolved reviews ── */}
+                          {r.reportType === "review" && review && (
+                            <div style={{
+                              marginTop: 6, background: "#f8fafc", border: "1px solid #e2e8f0",
+                              borderRadius: 8, padding: "8px 12px", fontSize: "0.8rem", color: "#374151",
+                              opacity: 0.75,
+                            }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 3 }}>
+                                <span style={{ color: "#f59e0b", fontSize: "0.8rem" }}>
+                                  {"★".repeat(review.rating || 0)}{"☆".repeat(5 - (review.rating || 0))}
+                                </span>
+                                <span style={{ fontWeight: 600, color: "#0f172a", fontSize: "0.75rem" }}>
+                                  {review.reviewerName || "Unknown reviewer"}
+                                </span>
+                              </div>
+                              {review.comment && (
+                                <p style={{ margin: 0, fontStyle: "italic", color: "#6b7280", fontSize: "0.78rem" }}>
+                                  "{review.comment}"
+                                </p>
+                              )}
+                            </div>
+                          )}
+                          {r.reportType === "review" && review === null && (
+                            <span style={{ fontSize: "0.73rem", color: "#94a3b8", marginTop: 3, display: "block" }}>
+                              Review was removed.
+                            </span>
+                          )}
+
+                          {r.resolvedByName && (
+                            <span className={styles.reportMeta}>
+                              Resolved by {r.resolvedByName}
+                              {r.resolvedAt?.toDate
+                                ? ` · ${r.resolvedAt.toDate().toLocaleDateString()}`
+                                : ""}
+                            </span>
+                          )}
+                        </div>
+                        <span className={styles.resolvedBadge}>✓ {r.resolution || "resolved"}</span>
                       </div>
-                      <span className={styles.resolvedBadge}>✓ {r.resolution || "resolved"}</span>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </>
             )}

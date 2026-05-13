@@ -16,7 +16,7 @@ async function uploadTradeImageToCloudinary(file) {
   const data = await res.json();
   return data.secure_url;
 }
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   doc, getDoc, collection, query, where,
   getDocs, addDoc, serverTimestamp, setDoc, updateDoc, arrayUnion, arrayRemove,
@@ -242,7 +242,7 @@ const TRADE_CONDITIONS = [
 ];
 
 // ── Inner view ────────────────────────────────────────────────────────────────
-export function ListingDetailView({ listing, currentUser, existingTransaction = null, navigate }) {
+export function ListingDetailView({ listing, currentUser, existingTransaction = null, navigate, isAdminPreview = false }) {
   const [isModalOpen, setIsModalOpen]     = useState(false);
   const [purchaseType, setPurchaseType]   = useState('');
   const [agreedPrice, setAgreedPrice]     = useState(listing.price);
@@ -613,10 +613,33 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
             </div>
           )}
 
-          {renderButton()}
+          {/* ── Admin preview banner ── */}
+          {isAdminPreview && (
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 10,
+              padding: '10px 14px', backgroundColor: '#a9cff3',
+              border: '1px solid hsl(226, 51%, 62%)', borderRadius: 10,
+              fontSize: '0.82rem', fontWeight: 600, color: '#0e3892',
+              fontFamily: 'Segoe UI, system-ui, sans-serif',
+            }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                <circle cx="12" cy="12" r="3"/>
+              </svg>
+              Admin preview
+              <button
+                onClick={() => navigate(-1)}
+                style={{ marginLeft: 'auto', background: 'none', border: '1px solid hsl(226, 51%, 62%)', borderRadius: 6, padding: '3px 10px', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.78rem', fontWeight: 700, color: '#0e3892' }}
+              >
+                ← Back to reports
+              </button>
+            </div>
+          )}
+
+          {!isAdminPreview && renderButton()}
 
           {/* ── Add to Cart ── */}
-          {currentUser && !isOwnListing && (
+          {!isAdminPreview && currentUser && !isOwnListing && (
             <button
               style={{
                 ...styles.cartBtn,
@@ -648,7 +671,7 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
           )}
 
           {/* ── Message Seller ── */}
-          {currentUser && !isOwnListing && (
+          {!isAdminPreview && currentUser && !isOwnListing && (
             <button style={styles.messageBtn} onClick={handleMessageSeller} disabled={chatLoading}>
               {chatLoading
                 ? <><IconLoader /><span>Opening chat…</span></>
@@ -658,7 +681,7 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
           )}
 
           {/* ── Report Listing ── */}
-          {currentUser && !isOwnListing && (
+          {!isAdminPreview && currentUser && !isOwnListing && (
             <button style={styles.reportBtn} onClick={() => setReportOpen(true)}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
                 <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/>
@@ -669,7 +692,7 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
           )}
 
           {/* ── Owner banner ── */}
-          {isOwnListing && (
+          {!isAdminPreview && isOwnListing && (
             <div style={styles.ownerBanner} data-testid="owner-listing-banner">
               <IconTag />
               <div>
@@ -680,7 +703,7 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
           )}
 
           {/* ── Promote listing (owner only) ── */}
-          {isOwnListing && (
+          {!isAdminPreview && isOwnListing && (
             <button
               onClick={() => setShowPromoteModal(true)}
               style={{ ...styles.buyBtn, backgroundColor: '#ff9800', marginTop: '8px' }}
@@ -690,28 +713,30 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
           )}
 
           {/* ── Seller card ── */}
-          <div
-            onClick={handleSellerCardClick}
-            onKeyDown={(e) => e.key === 'Enter' && handleSellerCardClick()}
-            style={styles.sellerCard}
-            role="button"
-            tabIndex={0}
-            title={isOwnListing ? 'Go to your profile' : 'View seller profile'}
-          >
-            <div style={styles.sellerAvatar}>
-              {listing.sellerAvatar
-                ? <img src={listing.sellerAvatar} alt={listing.sellerName} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }}/>
-                : <span style={styles.sellerInitial}>{listing.sellerName?.[0]?.toUpperCase() ?? '?'}</span>
-              }
+          {!isAdminPreview && (
+            <div
+              onClick={handleSellerCardClick}
+              onKeyDown={(e) => e.key === 'Enter' && handleSellerCardClick()}
+              style={styles.sellerCard}
+              role="button"
+              tabIndex={0}
+              title={isOwnListing ? 'Go to your profile' : 'View seller profile'}
+            >
+              <div style={styles.sellerAvatar}>
+                {listing.sellerAvatar
+                  ? <img src={listing.sellerAvatar} alt={listing.sellerName} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }}/>
+                  : <span style={styles.sellerInitial}>{listing.sellerName?.[0]?.toUpperCase() ?? '?'}</span>
+                }
+              </div>
+              <div style={{ flex: 1 }}>
+                <p style={styles.sellerName}>{listing.sellerName ?? 'Student'}</p>
+                <p style={styles.sellerSub}>{isOwnListing ? 'View your profile →' : 'View profile & ratings →'}</p>
+              </div>
+              <span style={styles.sellerChevron}>›</span>
             </div>
-            <div style={{ flex: 1 }}>
-              <p style={styles.sellerName}>{listing.sellerName ?? 'Student'}</p>
-              <p style={styles.sellerSub}>{isOwnListing ? 'View your profile →' : 'View profile & ratings →'}</p>
-            </div>
-            <span style={styles.sellerChevron}>›</span>
+          )}
           </div>
-
-        </div>
+          
 
         {/* ── Purchase modal ── */}
         {isModalOpen && (
@@ -998,6 +1023,8 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
 export default function ListingDetail() {
   const { id }       = useParams();
   const navigate     = useNavigate();
+  const [searchParams]                                = useSearchParams();
+  const isAdminPreview                                = searchParams.get('preview') === 'true';
   const [listing, setListing]                         = useState(null);
   const [currentUser, setCurrentUser]                 = useState(null);
   const [loading, setLoading]                         = useState(true);
@@ -1045,15 +1072,18 @@ export default function ListingDetail() {
 
   return (
     <>
-      <NavBarTemp />
-      <div style={{ padding: '16px 32px' }}>
-        <button onClick={() => navigate(-1)} style={styles.backBtn}>← Back to listings</button>
-      </div>
+      {!isAdminPreview && <NavBarTemp />}
+      {!isAdminPreview && (
+        <div style={{ padding: '16px 32px' }}>
+          <button onClick={() => navigate(-1)} style={styles.backBtn}>← Back to listings</button>
+        </div>
+      )}
       <ListingDetailView
         listing={listing}
         currentUser={currentUser}
         existingTransaction={existingTransaction}
         navigate={navigate}
+        isAdminPreview={isAdminPreview}
       />
     </>
   );
