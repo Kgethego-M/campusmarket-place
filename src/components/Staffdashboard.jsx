@@ -7,6 +7,7 @@ import {
     collection, addDoc, query, where, getDocs, onSnapshot,
 } from "firebase/firestore";
 import styles from "./Staffdashboard.module.css";
+import { recordCashCollected } from "../services/revenueService";
 
 
 // ─── Firestore helpers ────────────────────────────────────────────────────────
@@ -1806,6 +1807,12 @@ export default function StaffDashboard() {
                             )}
                             {tab.key === "overdue" && overdueCount > 0 && (
                                 <span className={styles.tabDot} />
+                            )}
+                            {tab.key === "collections" && transactions.filter(t => t.status === "awaiting_collection" && !isCollectionOverdue(t)).length > 0 && (
+                                <span className={styles.tabDot} />
+                            )}
+                            {tab.key === "overdue" && overdueCount > 0 && (
+                                <span className={styles.tabBadgeRed}>{overdueCount}</span>
                             )}
                         </button>
                     ))}

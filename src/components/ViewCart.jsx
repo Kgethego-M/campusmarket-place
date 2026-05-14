@@ -142,8 +142,6 @@ export default function ViewCart() {
           <div className={styles.container}>
             <div className={styles.header}>
               <div className={styles.headerLeft}>
-                <h1 className={styles.pageTitle}>My Favourites</h1>
-                <h1 className={styles.pageTitle}>My Favourites</h1>
               </div>
             </div>
             <div className={styles.grid}>

@@ -351,7 +351,7 @@ export default function BookDropOff() {
           userId:        transaction.sellerId,
           type:          "dropoff_booked",
           transactionId: transaction.id,
-          title:         "Drop-off slot booked ✓",
+          title:         "Drop-off slot booked",
           message:       `Your drop-off for "${listingTitle}" is confirmed for ${selectedDate} at ${selectedTimeSlot}. Head to the Trade Facility to track progress.`,
           linkTo:        "/trade-facility",
           read:          false,
@@ -363,7 +363,7 @@ export default function BookDropOff() {
           userId:        transaction.buyerId,
           type:          "dropoff_booked",
           transactionId: transaction.id,
-          title:         "Seller booked their drop-off 📦",
+          title:         "Seller booked their drop-off",
           message:       `The seller has scheduled drop-off for "${listingTitle}" on ${selectedDate} at ${selectedTimeSlot}. Track progress in the Trade Facility.`,
           linkTo:        "/trade-facility",
           read:          false,
@@ -380,7 +380,7 @@ export default function BookDropOff() {
             userId:        transaction.buyerId,
             type:          "trade_dropoff_required",
             transactionId: transaction.id,
-            title:         "Book your drop-off slot 🔄",
+            title:         "Book your drop-off slot",
             message:       `This is a trade! You also need to drop off "${tradeItemName || 'your trade item'}" at the facility. Book your slot now.`,
             linkTo:        `/book-dropoff/${transaction.id}`,
             read:          false,
@@ -441,7 +441,7 @@ export default function BookDropOff() {
           userId:        transaction.buyerId,
           type:          "buyer_dropoff_booked",
           transactionId: transaction.id,
-          title:         "Your trade drop-off is booked ✓",
+          title:         "Your trade drop-off is booked",
           message:       `Your drop-off of "${tradeItemName}" is confirmed for ${selectedDate} at ${selectedTimeSlot}. Track progress in the Trade Facility.`,
           linkTo:        "/trade-facility",
           read:          false,
@@ -453,7 +453,7 @@ export default function BookDropOff() {
           userId:        transaction.sellerId,
           type:          "buyer_dropoff_booked",
           transactionId: transaction.id,
-          title:         `Buyer booked trade drop-off 🔄`,
+          title:         `Buyer booked trade drop-off`,
           message:       `The buyer will drop off "${tradeItemName}" (for your "${listingTitle}") on ${selectedDate} at ${selectedTimeSlot}.`,
           linkTo:        "/trade-facility",
           read:          false,
@@ -616,29 +616,7 @@ export default function BookDropOff() {
           </p>
         </div>
 
-        {/* ── Deadline info card (integrated, not floating) ── */}
-        {maxDate && (
-          <div className={styles.deadlineCard}>
-            <div className={styles.deadlineIcon}>
-              <i className="fas fa-clock" style={{ fontSize: "18px" }} />
-            </div>
-            <div className={styles.deadlineContent}>
-              <span className={styles.deadlineLabel}>
-                <i className="fas fa-hourglass-half" style={{ marginRight: "4px", fontSize: "10px" }} />
-                Drop-off deadline
-              </span>
-              <span className={styles.deadlineValue}>
-                Must be booked within <strong>{DROP_OFF_WINDOW_DAYS} days</strong> of payment
-              </span>
-              <span className={styles.deadlineDate}>
-                <i className="fas fa-calendar-alt" style={{ marginRight: "4px", fontSize: "10px" }} />
-                Latest allowed date: <strong>{maxDate}</strong>
-              </span>
-            </div>
-          </div>
-        )}
-
-        {/* ── Deadline info card (integrated, not floating) ── */}
+        {/* ── Deadline info card (single, not duplicated) ── */}
         {maxDate && (
           <div className={styles.deadlineCard}>
             <div className={styles.deadlineIcon}>
@@ -797,7 +775,7 @@ export default function BookDropOff() {
                   <p style={{ margin: 0, fontSize: '0.75rem', color: '#4a6a8a', lineHeight: 1.5 }}>{tradeItemObj.description}</p>
                 )}
                 {tradeImageFile && (
-                  <p style={{ margin: '6px 0 0', fontSize: '0.7rem', color: '#16a34a' }}>✓ New photo selected — will be saved on submit</p>
+                  <p style={{ margin: '6px 0 0', fontSize: '0.7rem', color: '#16a34a' }}>New photo selected — will be saved on submit</p>
                 )}
               </div>
             </div>

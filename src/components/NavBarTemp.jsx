@@ -13,7 +13,7 @@ const NAV_LINKS = [
     { label: "Trade Facility", path: "/trade-facility" },
     { label: "Messages",       path: "/chat" },
     { label: "My Purchases",   path: "/my-purchases" },
-    { label: "Favorite",       path: "/cart", isFavorite: true },
+    { label: "Favorites", path: "/favourites", isFavorite: true },
 ];
 
 const formatTime = (ts) => {

@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { auth, db } from "../firebase";
 import { onAuthStateChanged } from "firebase/auth";
 import { doc, getDoc, collection, getDocs } from "firebase/firestore";
+import { getRevenueAnalytics } from "../services/revenueService";
 import styles from "./AdminAnalytics.module.css";
 import AdminNavbar from "./AdminNavbar";
 
@@ -10,6 +11,7 @@ export default function AdminAnalytics() {
     const navigate = useNavigate();
 
     const [data, setData] = useState(null);
+    const [revenueData, setRevenueData] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
     const [adminUser, setAdminUser] = useState({ name: "Admin", email: "", initials: "A" });
@@ -40,17 +42,21 @@ export default function AdminAnalytics() {
             setLoading(true);
             setError("");
             try {
-                const [usersSnap, listSnap, bookingsSnap, txnSnap] = await Promise.all([
+                const [usersSnap, listSnap, bookingsSnap, txnSnap, revenueStats] = await Promise.all([
                     getDocs(collection(db, "users")),
                     getDocs(collection(db, "listings")),
                     getDocs(collection(db, "bookings")),
                     getDocs(collection(db, "transactions")),
+                    getRevenueAnalytics(),
                 ]);
 
                 const users = usersSnap.docs.map(d => d.data());
                 const lists = listSnap.docs.map(d => d.data());
                 const bookings = bookingsSnap.docs.map(d => d.data());
                 const txns = txnSnap.docs.map(d => d.data());
+
+                // Set revenue data from dedicated analytics collection
+                setRevenueData(revenueStats);
 
                 const userTypes = users.reduce((acc, u) => {
                     const t = u.userType || "student";
@@ -176,7 +182,7 @@ export default function AdminAnalytics() {
             <div className={styles.barChart}>
                 {entries.map(([label, value]) => (
                     <div key={label} className={styles.barGroup}>
-                        <span className={styles.barValue}>{value}</span>
+                        <span className={styles.barValue}>R{value.toLocaleString()}</span>
                         <div className={styles.barTrack} style={{ height }}>
                             <div className={styles.barFill} style={{ height: `${(value / max) * 100}%`, background: color }} />
                         </div>
@@ -208,7 +214,37 @@ export default function AdminAnalytics() {
         );
     }
 
-    // ── Early returns — navbar never mounts during loading/error ──
+    function RevenueMetricsCards() {
+        if (!revenueData) return null;
+        
+        const cards = [
+            { label: "Total Revenue", value: `R ${(revenueData.totalRevenue || 0).toLocaleString()}`, icon: "fas fa-chart-line", color: "#10b981" },
+            { label: "Online Payments", value: `R ${(revenueData.onlineRevenue || 0).toLocaleString()}`, icon: "fas fa-credit-card", color: "#3b82f6" },
+            { label: "Cash Collected", value: `R ${(revenueData.collectedCashRevenue || 0).toLocaleString()}`, icon: "fas fa-money-bill", color: "#f59e0b" },
+            { label: "Pending Cash", value: `R ${(revenueData.pendingCashRevenue || 0).toLocaleString()}`, icon: "fas fa-hourglass-half", color: "#8b5cf6" },
+            { label: "Total Payouts", value: `R ${(revenueData.totalPayouts || 0).toLocaleString()}`, icon: "fas fa-arrow-up", color: "#ef4444" },
+            { label: "Total Refunds", value: `R ${(revenueData.totalRefunds || 0).toLocaleString()}`, icon: "fas fa-undo-alt", color: "#f97316" },
+            { label: "Available Balance", value: `R ${(revenueData.availableBalance || 0).toLocaleString()}`, icon: "fas fa-wallet", color: "#06b6d4" },
+        ];
+        
+        return (
+            <div className={styles.revenueMetricsGrid}>
+                {cards.map(({ label, value, icon, color }) => (
+                    <div key={label} className={styles.revenueMetricCard}>
+                        <div className={styles.revenueMetricIcon} style={{ backgroundColor: `${color}15`, color }}>
+                            <i className={icon} />
+                        </div>
+                        <div className={styles.revenueMetricInfo}>
+                            <span className={styles.revenueMetricValue}>{value}</span>
+                            <span className={styles.revenueMetricLabel}>{label}</span>
+                        </div>
+                    </div>
+                ))}
+            </div>
+        );
+    }
+
+    // ── Early returns ──
     if (loading) return (
         <div className={styles.loadingScreen}>
             <div className={styles.spinner} />
@@ -232,17 +268,25 @@ export default function AdminAnalytics() {
             <main className={styles.main}>
                 <div className={styles.pageTitle}>
                     <h1><i className="fas fa-chart-bar" style={{ marginRight: 10, color: "#6AA6DA" }} />Analytics</h1>
-                    <p>Live platform overview — users, listings, bookings &amp; revenue</p>
+                    <p>Live platform overview — revenue, users, listings, bookings &amp; more</p>
+                </div>
+
+                {/* ── Revenue Metrics Section (NEW) ── */}
+                <div className={styles.section}>
+                    <h2 className={styles.sectionTitle}>
+                        <i className="fas fa-wallet" style={{ marginRight: 8, color: "#10b981" }} />
+                        Revenue Overview
+                    </h2>
+                    <RevenueMetricsCards />
                 </div>
 
                 {/* ── Summary stat cards ── */}
                 <div className={styles.statsRow}>
                     {[
-                        { label: "Total Listings",     value: data.totalListings,                        icon: "fas fa-tag",           color: "#6AA6DA" },
-                        { label: "Total Bookings",     value: data.totalBookings,                        icon: "fas fa-calendar-check", color: "#34d399" },
-                        { label: "Total Transactions", value: data.totalTxns,                            icon: "fas fa-exchange-alt",   color: "#f59e0b" },
-                        { label: "Total Revenue",      value: `R ${data.totalRevenue.toLocaleString()}`, icon: "fas fa-wallet",         color: "#a78bfa" },
-                        { label: "Avg Utilisation",    value: `${data.avgUtilisation || 0}%`,            icon: "fas fa-chart-line",     color: "#f97316" },
+                        { label: "Total Listings", value: data.totalListings, icon: "fas fa-tag", color: "#6AA6DA" },
+                        { label: "Total Bookings", value: data.totalBookings, icon: "fas fa-calendar-check", color: "#34d399" },
+                        { label: "Total Transactions", value: data.totalTxns, icon: "fas fa-exchange-alt", color: "#f59e0b" },
+                        { label: "Avg Utilisation", value: `${data.avgUtilisation || 0}%`, icon: "fas fa-chart-line", color: "#f97316" },
                     ].map(({ label, value, icon, color }) => (
                         <div key={label} className={styles.statCard} style={{ borderTop: `3px solid ${color}` }}>
                             <i className={icon} style={{ color, fontSize: "1.4rem", marginBottom: 8 }} />
@@ -290,11 +334,11 @@ export default function AdminAnalytics() {
                     <HorizontalBarChart data={data.byCategory} />
                 </div>
 
-                {/* ── Revenue by month ── */}
+                {/* ── Revenue by month (from sold listings) ── */}
                 <div className={styles.card}>
                     <h3 className={styles.cardTitle}>
                         <i className="fas fa-chart-line" style={{ marginRight: 8, color: "#34d399" }} />
-                        Revenue by month
+                        Revenue by month (completed sales)
                     </h3>
                     <div className={styles.revenueContainer}>
                         {Object.keys(data.revenueByMonth).length === 0
