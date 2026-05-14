@@ -13,6 +13,43 @@ import {
 } from '../utils/payment.utils';
 import styles from './Payment.module.css';
 
+// Add this import at the top
+import { recordOnlinePayment, recordCashConfirmation } from '../services/revenueService';
+
+// Then in the handleCashPayment function, add revenue recording:
+const handleCashPayment = useCallback(async () => {
+  if (!tx || !currentUser) return;
+  setProcessing(true);
+  setError('');
+  try {
+    await updateTransactionStatus(tx.id, 'waiting', {
+      paymentProvider: 'cash',
+      paymentStatus:   'cash_pending',
+      paymentSettled:  false,
+      onlineAmount:    0,
+      cashAmount:      getCashAmount(tx),
+    });
+    
+    // ── NEW: Record cash confirmation for revenue tracking ──
+    const cashAmount = getCashAmount(tx);
+    await recordCashConfirmation(tx.id, cashAmount);
+    
+    await notifySellerPaymentConfirmed({
+      sellerId:      tx.sellerId,
+      buyerName:     currentUser.displayName || currentUser.email || 'The buyer',
+      listingId:     tx.listingId,
+      listingTitle:  tx.listingTitle || listing?.title || 'your item',
+      transactionId: tx.id,
+    });
+    setStep('cash_waiting');
+  } catch (e) {
+    console.error(e);
+    setError('Something went wrong. Please try again.');
+  } finally {
+    setProcessing(false);
+  }
+}, [tx, currentUser, listing]);
+
 // ─── Helper: notify seller ────────────────────────────────────────────────────
 async function notifySellerPaymentConfirmed({ sellerId, buyerName, listingId, listingTitle, transactionId }) {
   try {

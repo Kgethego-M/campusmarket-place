@@ -7,6 +7,7 @@ import {
     collection, addDoc, query, where, getDocs, onSnapshot,
 } from "firebase/firestore";
 import styles from "./Staffdashboard.module.css";
+import { recordCashCollected } from "../services/revenueService";
 
 // ─── Firestore helpers ────────────────────────────────────────────────────────
 
@@ -203,18 +204,32 @@ function TransactionDetailPanel({ txn, onClose, onConfirmDropOff, onConfirmColle
     async function handleConfirmCash() {
         setCashConfirmed(true); setSaving(true);
         try {
-            await updateDoc(doc(db, "transactions", txn.id), { cashShortfall: 0, paymentStatus: "Fully Paid", cashConfirmedAt: serverTimestamp() });
+            const cashAmount = txn.cashShortfall || txn.price || 0;
+            
+            // Update transaction
+            await updateDoc(doc(db, "transactions", txn.id), { 
+                cashShortfall: 0, 
+                paymentStatus: "Fully Paid", 
+                cashConfirmedAt: serverTimestamp() 
+            });
+            
+            // ─── RECORD CASH COLLECTED FOR REVENUE ───
+            await recordCashCollected(txn.id, cashAmount);
+            
         } catch (err) { console.error(err); } finally { setSaving(false); }
     }
+    
     async function handleAlertOverdue() {
         setAlertSending(true);
         try { await onAlertOverdue(txn, isOverdueDropOff ? "drop_off" : "collection"); setAlertSent(true); }
         catch (err) { console.error(err); } finally { setAlertSending(false); }
     }
+    
     async function handleDropOff() {
         setDropOffLoading(true);
         try { await onConfirmDropOff(txn.id); onClose(); } finally { setDropOffLoading(false); }
     }
+    
     async function handleCollection() {
         setCollectionLoading(true);
         try { await onConfirmCollection(txn.id); onClose(); } finally { setCollectionLoading(false); }
