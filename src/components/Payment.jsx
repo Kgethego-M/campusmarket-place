@@ -12,43 +12,7 @@ import {
   PAYMENT_LABELS,
 } from '../utils/payment.utils';
 import styles from './Payment.module.css';
-
-// Add this import at the top
-import { recordOnlinePayment, recordCashConfirmation } from '../services/revenueService';
-
-// Then in the handleCashPayment function, add revenue recording:
-const handleCashPayment = useCallback(async () => {
-  if (!tx || !currentUser) return;
-  setProcessing(true);
-  setError('');
-  try {
-    await updateTransactionStatus(tx.id, 'waiting', {
-      paymentProvider: 'cash',
-      paymentStatus:   'cash_pending',
-      paymentSettled:  false,
-      onlineAmount:    0,
-      cashAmount:      getCashAmount(tx),
-    });
-    
-    // ── NEW: Record cash confirmation for revenue tracking ──
-    const cashAmount = getCashAmount(tx);
-    await recordCashConfirmation(tx.id, cashAmount);
-    
-    await notifySellerPaymentConfirmed({
-      sellerId:      tx.sellerId,
-      buyerName:     currentUser.displayName || currentUser.email || 'The buyer',
-      listingId:     tx.listingId,
-      listingTitle:  tx.listingTitle || listing?.title || 'your item',
-      transactionId: tx.id,
-    });
-    setStep('cash_waiting');
-  } catch (e) {
-    console.error(e);
-    setError('Something went wrong. Please try again.');
-  } finally {
-    setProcessing(false);
-  }
-}, [tx, currentUser, listing]);
+import { recordCashConfirmation } from '../services/revenueService';
 
 // ─── Helper: notify seller ────────────────────────────────────────────────────
 async function notifySellerPaymentConfirmed({ sellerId, buyerName, listingId, listingTitle, transactionId }) {
@@ -78,7 +42,7 @@ export default function Payment() {
   const [loading, setLoading]             = useState(true);
   const [error, setError]                 = useState('');
   const [processing, setProcessing]       = useState(false);
-  const [step, setStep]                   = useState('summary'); // 'summary' | 'redirecting' | 'success' | 'cash_waiting'
+  const [step, setStep]                   = useState('summary');
   const [stripeRef, setStripeRef]         = useState('');
   const [cashConfirmed, setCashConfirmed] = useState(false);
   const [sellerName, setSellerName]       = useState('');
@@ -118,13 +82,7 @@ export default function Payment() {
         } catch (_) {}
       }
 
-      // ── FIX 1: Detect Stripe payment already completed via webhook ────────────
-      // If Firestore already has status=waiting + paymentStatus=paid,
-      // jump straight to success screen (handles webhook arriving before redirect)
-      if (
-        data.paymentProvider === 'stripe' &&
-        data.paymentStatus === 'paid'
-      ) {
+      if (data.paymentProvider === 'stripe' && data.paymentStatus === 'paid') {
         setStripeRef(
           data.stripeRef ||
           data.stripeCheckoutSessionId ||
@@ -136,12 +94,7 @@ export default function Payment() {
         return;
       }
 
-      // Persist cash_waiting screen if Firestore re-fires
-      if (
-        data.status === 'waiting' &&
-        data.paymentProvider === 'cash' &&
-        data.paymentStatus === 'cash_pending'
-      ) {
+      if (data.status === 'waiting' && data.paymentProvider === 'cash' && data.paymentStatus === 'cash_pending') {
         setStep('cash_waiting');
       }
 
@@ -163,6 +116,11 @@ export default function Payment() {
         onlineAmount:    0,
         cashAmount:      getCashAmount(tx),
       });
+      
+      // Record cash confirmation for revenue tracking
+      const cashAmount = getCashAmount(tx);
+      await recordCashConfirmation(tx.id, cashAmount);
+      
       await notifySellerPaymentConfirmed({
         sellerId:      tx.sellerId,
         buyerName:     currentUser.displayName || currentUser.email || 'The buyer',
@@ -179,7 +137,7 @@ export default function Payment() {
     }
   }, [tx, currentUser, listing]);
 
-  // ── Stripe: user clicks button, THEN redirects ────────────────────────────────
+  // ── Stripe payment ────────────────────────────────────────────────────────────
   const handleOnlinePayment = useCallback(async () => {
     if (!tx || !currentUser) return;
     setProcessing(true);
@@ -205,7 +163,6 @@ export default function Payment() {
         successUrl:       `${window.location.origin}/payment-success?tx=${tx.id}`,
         cancelUrl:        `${window.location.origin}/payment-cancelled?tx=${tx.id}`,
       });
-      // Browser navigates away to Stripe — nothing runs after this
     } catch (e) {
       console.error('Stripe redirect failed:', e);
       setError(e?.message || 'Could not redirect to Stripe. Please try again.');
@@ -239,7 +196,7 @@ export default function Payment() {
     </div></div></>
   );
 
-  // ── Success screen — BEFORE already-processed guard ───────────────────────────
+  // ── Success screen ───────────────────────────────────────────────────────────
   if (step === 'success') return (
     <>
       <NavBar />
@@ -274,7 +231,7 @@ export default function Payment() {
     </>
   );
 
-  // ── Cash waiting screen — BEFORE already-processed guard ─────────────────────
+  // ── Cash waiting screen ───────────────────────────────────────────────────────
   if (step === 'cash_waiting') return (
     <>
       <NavBar />
@@ -330,8 +287,7 @@ export default function Payment() {
     </>
   );
 
-  // ── FIX 2: Already processed guard — blocks re-entry after Stripe OR cash paid
-  // Checks paymentStatus=paid first, then falls back to status check
+  // ── Already processed guard ───────────────────────────────────────────────────
   if (tx && (
     tx.paymentStatus === 'paid' ||
     tx.paymentStatus === 'cash_pending' ||
@@ -380,7 +336,7 @@ export default function Payment() {
                   <div className={styles.itemInfo}>
                     <p className={styles.itemTitle}>{itemTitle}</p>
                     <p className={styles.itemSeller}>
-                      <i className="fas fa-user" /> {sellerName || tx.sellerName || 'Unknown Seller'}
+                      <i className="fas fa-user" /> {sellerName || tx?.sellerName || 'Unknown Seller'}
                     </p>
                     <span className={styles.payTypeBadge}>{PAYMENT_LABELS[paymentType] || paymentType}</span>
                   </div>
@@ -424,11 +380,9 @@ export default function Payment() {
 
             {/* ── Right: payment action ── */}
             <div className={styles.actionCol}>
-              {/* FIX 3: card has overflow:hidden to keep button inside */}
               <div className={styles.card} style={{ overflow: 'hidden' }}>
                 <p className={styles.cardLabel}>{isCashOnly ? 'Confirm & proceed' : 'Pay online'}</p>
 
-                {/* Online amount display */}
                 {!isCashOnly && (
                   <div className={styles.amountDisplay}>
                     <span className={styles.amountLabel}>{isPartial ? 'Online portion' : 'Amount due'}</span>
@@ -436,7 +390,6 @@ export default function Payment() {
                   </div>
                 )}
 
-                {/* Cash amount display */}
                 {isCashOnly && (
                   <div className={styles.amountDisplay}>
                     <span className={styles.amountLabel}>Cash to bring</span>
@@ -448,7 +401,6 @@ export default function Payment() {
                   <div className={styles.errorMsg}><i className="fas fa-circle-exclamation" /> {error}</div>
                 )}
 
-                {/* Cash flow */}
                 {isCashOnly ? (
                   <>
                     <label className={styles.confirmCheck}>
@@ -473,7 +425,6 @@ export default function Payment() {
                     </button>
                   </>
                 ) : (
-                  /* Stripe flow */
                   <>
                     <div className={styles.stripeInfoBox}>
                       <i className="fab fa-stripe" style={{ fontSize: '1.5rem', color: '#6772e5', flexShrink: 0 }} />
