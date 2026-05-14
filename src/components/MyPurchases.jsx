@@ -20,6 +20,7 @@ const STATUS_CONFIG = {
   ready_to_release:    { label: 'Ready to Collect',    color: '#f97316', bg: '#ffedd5', icon: 'fa-circle-check'   },
   awaiting_collection: { label: 'Awaiting Collection', color: '#8b5cf6', bg: '#ede9fe', icon: 'fa-person-walking' },
   cancelled:           { label: 'Cancelled',           color: '#94a3b8', bg: '#f1f5f9', icon: 'fa-ban'            },
+  overdue_cancelled:   { label: 'Overdue — Cancelled', color: '#6b7280', bg: '#f3f4f6', icon: 'fa-clock-rotate-left' },
 };
 
 const TYPE_CONFIG = {
@@ -216,6 +217,7 @@ export default function MyPurchases() {
       const ORDER = {
         pending: 0, accepted: 1, pending_payment: 1, waiting: 2,
         ready_to_release: 3, awaiting_collection: 4, cancelled: 5,
+        overdue_cancelled: 6,
       };
       results.sort((a, b) => {
         const diff = (ORDER[a.status] ?? 99) - (ORDER[b.status] ?? 99);
@@ -339,6 +341,7 @@ export default function MyPurchases() {
                 const status          = getDisplayStatus(tx);
                 const type            = TYPE_CONFIG[tx.type] || TYPE_CONFIG.sale;
                 const isActive        = ['pending', 'accepted', 'pending_payment', 'waiting', 'ready_to_release', 'awaiting_collection'].includes(tx.status);
+                const isOverdueCancelled = tx.status === 'overdue_cancelled';
                 const paymentType     = getPaymentType(tx);
                 const isPartialTx     = paymentType === 'partial';
                 const isCashTx        = paymentType === 'cash' || paymentType === 'cod';
@@ -353,11 +356,14 @@ export default function MyPurchases() {
                     key={tx.id}
                     ref={openTxId === tx.id ? openTxRef : null}
                     className={`${styles.card} ${isActive ? styles.cardActive : ''} ${showPaymentButton ? styles.cardAccepted : ''}`}
-                    style={openTxId === tx.id ? { boxShadow: '0 0 0 3px #8b5cf6, 0 4px 20px rgba(139,92,246,0.18)', borderColor: '#8b5cf6' } : undefined}
-                    onClick={() => handleArrowClick(tx)}
-                    role="button"
-                    tabIndex={0}
-                    onKeyDown={(e) => { if (e.key === 'Enter') handleArrowClick(tx); }}
+                    style={{
+                      ...(openTxId === tx.id ? { boxShadow: '0 0 0 3px #8b5cf6, 0 4px 20px rgba(139,92,246,0.18)', borderColor: '#8b5cf6' } : {}),
+                      ...(isOverdueCancelled ? { filter: 'grayscale(1)', opacity: 0.7, cursor: 'default', pointerEvents: 'none' } : {}),
+                    }}
+                    onClick={isOverdueCancelled ? undefined : () => handleArrowClick(tx)}
+                    role={isOverdueCancelled ? undefined : "button"}
+                    tabIndex={isOverdueCancelled ? -1 : 0}
+                    onKeyDown={isOverdueCancelled ? undefined : (e) => { if (e.key === 'Enter') handleArrowClick(tx); }}
                   >
                     {/* Image */}
                     <div className={styles.cardImage}>
@@ -592,6 +598,23 @@ export default function MyPurchases() {
                         <div className={styles.statusMsg} style={{ borderColor: '#94a3b8', background: '#f8fafc' }}>
                           <i className="fas fa-ban" style={{ color: '#94a3b8' }} />
                           <span>This transaction was cancelled.</span>
+                        </div>
+                      )}
+
+                      {tx.status === 'overdue_cancelled' && (
+                        <div className={styles.statusMsg} style={{ borderColor: '#9ca3af', background: '#f9fafb' }}>
+                          <i className="fas fa-clock-rotate-left" style={{ color: '#6b7280' }} />
+                          <span style={{ color: '#4b5563' }}>
+                            {tx.cancelReason === 'seller_no_dropoff'
+                              ? <>This transaction was <strong>cancelled</strong> because the seller did not drop off the item in time.{' '}
+                                  {['online', 'full_online', 'partial'].includes((tx.paymentType || tx.paymentMethod || '').toLowerCase())
+                                    ? <strong style={{ color: '#374151' }}>Your online payment will be refunded within 24 hours.</strong>
+                                    : 'No payment was collected.'
+                                  }
+                                </>
+                              : <>This transaction was <strong>cancelled</strong> because the item was not collected in time. It has been returned to the seller.</>
+                            }
+                          </span>
                         </div>
                       )}
                     </div>

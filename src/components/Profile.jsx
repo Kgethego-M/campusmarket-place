@@ -331,7 +331,7 @@ function Profile() {
   const fetchUserPurchases = async (uid) => {
     try {
       const [asBuyerSnap, asSellerSnap] = await Promise.all([
-        getDocs(query(collection(db, 'transactions'), where('buyerId', '==', uid), where('status', '==', 'completed'))),
+        getDocs(query(collection(db, 'transactions'), where('buyerId', '==', uid), where('status', 'in', ['completed', 'overdue_cancelled']))),
         getDocs(query(collection(db, 'transactions'), where('sellerId', '==', uid), where('status', '==', 'completed'))),
       ]);
 
@@ -389,6 +389,8 @@ function Profile() {
             seller: side === 'buyer'  ? otherName : null,
             buyer:  side === 'seller' ? otherName : null,
             tradeItem, listingImage,
+            status:       p.status       || null,
+            cancelReason: p.cancelReason || null,
           };
         })
       );
@@ -599,20 +601,24 @@ function Profile() {
                   }
 
                   return (
-                    <div key={item.id} className={styles.historyItem}>
+                    <div key={item.id} className={styles.historyItem}
+                      style={item.status === 'overdue_cancelled' ? { filter: 'grayscale(1)', opacity: 0.75 } : undefined}
+                    >
                       <div className={styles.historyImg}>
                         {item.listingImage
                           ? <img src={item.listingImage} alt={item.item} />
                           : <div className={styles.historyImgPlaceholder}><i className="fas fa-image" /></div>
                         }
                         <span className={`${styles.historyTypeDot} ${
-                          item.type === 'purchase' ? styles.historyTypeDotBought
+                          item.status === 'overdue_cancelled' ? styles.historyTypeDotCancelled
+                          : item.type === 'purchase' ? styles.historyTypeDotBought
                           : isTrade               ? styles.historyTypeDotTrade
                           : styles.historyTypeDotSold
                         }`}>
-                          {item.type === 'purchase' && <i className="fas fa-shopping-cart" />}
-                          {item.type === 'sale'     && <i className="fas fa-tag" />}
-                          {isTrade                  && <i className="fas fa-exchange-alt" />}
+                          {item.status === 'overdue_cancelled' && <i className="fas fa-clock-rotate-left" />}
+                          {item.status !== 'overdue_cancelled' && item.type === 'purchase' && <i className="fas fa-shopping-cart" />}
+                          {item.status !== 'overdue_cancelled' && item.type === 'sale'     && <i className="fas fa-tag" />}
+                          {item.status !== 'overdue_cancelled' && isTrade                  && <i className="fas fa-exchange-alt" />}
                         </span>
                       </div>
                       <div className={styles.historyDetails}>
@@ -629,26 +635,37 @@ function Profile() {
                               {isBuyer ? `From: ${otherParty}` : `To: ${otherParty}`}
                             </span>
                           )}
-                          {item.price && !isTrade && (
+                          {item.price && !isTrade && item.status !== 'overdue_cancelled' && (
                             <span className={styles.historyMetaPrice}>{item.price}</span>
                           )}
-                          {tradeItemDisplay && (
+                          {tradeItemDisplay && item.status !== 'overdue_cancelled' && (
                             <span className={styles.historyMetaChip}>
                               <i className="fas fa-exchange-alt" /> Traded for: {tradeItemDisplay}
+                            </span>
+                          )}
+                          {item.status === 'overdue_cancelled' && (
+                            <span className={styles.historyMetaChip} style={{ color: '#6b7280' }}>
+                              <i className="fas fa-ban" /> Transaction overdue — cancelled
                             </span>
                           )}
                         </div>
                       </div>
                       <div className={styles.historyBadgeWrap}>
-                        <span className={`${styles.historyBadge} ${
-                          item.type === 'purchase' ? styles.historyBadgeBought
-                          : isTrade               ? styles.historyBadgeTrade
-                          : styles.historyBadgeSold
-                        }`}>
-                          {item.type === 'purchase' && 'Bought'}
-                          {item.type === 'sale'     && 'Sold'}
-                          {isTrade                  && 'Traded'}
-                        </span>
+                        {item.status === 'overdue_cancelled' ? (
+                          <span className={styles.historyBadge} style={{ background: '#e5e7eb', color: '#6b7280', border: '1px solid #d1d5db' }}>
+                            Overdue
+                          </span>
+                        ) : (
+                          <span className={`${styles.historyBadge} ${
+                            item.type === 'purchase' ? styles.historyBadgeBought
+                            : isTrade               ? styles.historyBadgeTrade
+                            : styles.historyBadgeSold
+                          }`}>
+                            {item.type === 'purchase' && 'Bought'}
+                            {item.type === 'sale'     && 'Sold'}
+                            {isTrade                  && 'Traded'}
+                          </span>
+                        )}
                       </div>
                     </div>
                   );

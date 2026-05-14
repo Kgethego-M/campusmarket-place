@@ -14,19 +14,17 @@ function formatPrice(value) {
 function getPipelineStage(txn) {
   const status        = txn.status;
   const dropOffStatus = txn.dropOffStatus;
-  if (status === "completed" || status === "awaiting_collection") return 5;
-  if (status === "ready_for_release")                             return 4;
-  if (status === "in_facility")                                   return 3;
-  if (dropOffStatus === "scheduled")                              return 2;
+  if (status === "completed")          return 5;
+  if (status === "awaiting_collection") return 4;
+  if (dropOffStatus === "scheduled")    return 2;
   return 1;
 }
 
 const PIPELINE_STEPS = [
-  { label: "Waiting for seller to book drop-off"    },
-  { label: "Drop-off booked — awaiting delivery"    },
-  { label: "Item received — being inspected"        },
-  { label: "Evaluation complete — ready for pick-up"},
-  { label: "Collected"                              },
+  { label: "Waiting for seller to book drop-off" },
+  { label: "Drop-off booked — awaiting delivery" },
+  { label: "Item confirmed — ready for pick-up"  },
+  { label: "Collected"                           },
 ];
 
 const CONDITION_COLORS = {
@@ -258,7 +256,6 @@ function getSellerStatusBadge(txn) {
   const s = txn.dropOffStatus;
   if (s === "inspection_pass")       return { label: "Inspection passed", color: "#166534", bg: "#dcfce7" };
   if (s === "inspection_fail")       return { label: "Inspection failed",  color: "#791F1F", bg: "#FCEBEB" };
-  if (txn.status === "in_facility")  return { label: "In Facility",        color: "#0369a1", bg: "#e0f2fe" };
   if (s === "dropped_off")           return { label: "Item dropped off",   color: "#166534", bg: "#dcfce7" };
   if (s === "scheduled")             return { label: "Drop-off scheduled", color: "#92400e", bg: "#fef3c7" };
   return                                    { label: "Awaiting drop-off",  color: "#1e40af", bg: "#dbeafe" };
@@ -295,8 +292,7 @@ export default function TradeFacility() {
     setLoading(true);
     try {
       const ACTIVE_STATUSES = [
-        "waiting", "accepted", "in_facility",
-        "ready_to_release", "awaiting_collection",
+        "waiting", "accepted", "awaiting_collection", "completed",
       ];
 
       const [sellerResults, buyerResults] = await Promise.all([
@@ -354,7 +350,7 @@ export default function TradeFacility() {
         })),
       ]);
 
-      const ORDER = { waiting: 0, accepted: 1, in_facility: 2, ready_to_release: 3, awaiting_collection: 4 };
+      const ORDER = { waiting: 0, accepted: 1, awaiting_collection: 2 };
       enrichedSeller.sort((a, b) => (ORDER[a.status] ?? 9) - (ORDER[b.status] ?? 9));
       enrichedBuyer.sort((a, b)  => (ORDER[a.status] ?? 9) - (ORDER[b.status] ?? 9));
 
@@ -375,13 +371,13 @@ export default function TradeFacility() {
 
   const canBookBuyerDropOff = (txn) =>
     !txn.isSeller && txn.type === 'trade' && !txn.buyerBookingId &&
-    ["waiting", "accepted", "in_facility"].includes(txn.status);
+    ["waiting", "accepted", "awaiting_collection"].includes(txn.status);
 
   const hasBuyerDropOffBooked = (txn) =>
     !txn.isSeller && txn.type === 'trade' && !!txn.buyerBookingId;
 
   const canBookCollection = (txn) => {
-    const itemAtFacility = ["in_facility", "ready_to_release", "awaiting_collection"].includes(txn.status);
+    const itemAtFacility = txn.status === "awaiting_collection";
     if (!itemAtFacility || txn.collectionBookingId) return false;
     if (!txn.isSeller) return true;
     return txn.type === "trade";

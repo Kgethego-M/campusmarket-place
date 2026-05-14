@@ -1,0 +1,1 @@
+var IconHoverQueryTag;(function(n){function i(){for(var t=_d.querySelectorAll(".b_defFavicon, .b_ad .b_titleBL"),n=0;n<t.length;n++)sj_be(t[n],"mouseenter",r)}function r(){t||(t=!0,Log&&Log.LogFilterFlare&&Log.LogFilterFlare(["IconHovTag"]))}var t=!1;n.init=i;i()})(IconHoverQueryTag||(IconHoverQueryTag={}))
