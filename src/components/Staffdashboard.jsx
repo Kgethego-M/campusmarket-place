@@ -392,7 +392,9 @@ function TransactionDetailPanel({ txn, onClose, onConfirmDropOff, onConfirmColle
     async function handleConfirmCash() {
         setCashConfirmed(true); setSaving(true);
         try {
+            const cashAmount = shortfall > 0 ? shortfall : totalPrice;
             await updateDoc(doc(db, "transactions", txn.id), { cashShortfall: 0, paymentStatus: "Fully Paid", cashConfirmedAt: serverTimestamp() });
+            await recordCashCollected(txn.id, cashAmount);
         } catch (err) { console.error(err); } finally { setSaving(false); }
     }
     async function handleAlertOverdue() {
@@ -1806,13 +1808,7 @@ export default function StaffDashboard() {
                                 <span className={styles.tabDot} />
                             )}
                             {tab.key === "overdue" && overdueCount > 0 && (
-                                <span className={styles.tabDot} />
-                            )}
-                            {tab.key === "collections" && transactions.filter(t => t.status === "awaiting_collection" && !isCollectionOverdue(t)).length > 0 && (
-                                <span className={styles.tabDot} />
-                            )}
-                            {tab.key === "overdue" && overdueCount > 0 && (
-                                <span className={styles.tabBadgeRed}>{overdueCount}</span>
+                                <span className={styles.tabDot}/>
                             )}
                         </button>
                     ))}
