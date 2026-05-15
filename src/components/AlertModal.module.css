@@ -111,3 +111,79 @@
 .submitBtn:hover {
   background: #b91c1c;
 }
+
+/* Add to AlertModal.module.css */
+
+/* Two-button layout */
+.footer {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  padding: 14px 20px 20px;
+  border-top: 1px solid #f1f5f9;
+}
+
+/* Cancel button (for confirm dialogs) */
+.cancelBtn {
+  padding: 9px 20px;
+  border-radius: 8px;
+  border: 1.5px solid #e2e8f0;
+  background: #fff;
+  color: #374151;
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s;
+  flex: 1;
+  max-width: 120px;
+}
+
+.cancelBtn:hover {
+  background: #f8fafc;
+}
+
+/* Submit/Confirm button base */
+.submitBtn {
+  padding: 9px 20px;
+  border-radius: 8px;
+  border: none;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+  flex: 1;
+  max-width: 120px;
+}
+
+/* Button variants by type */
+.errorBtn {
+  background: #dc2626;
+  color: #fff;
+}
+.errorBtn:hover {
+  background: #b91c1c;
+}
+
+.warningBtn {
+  background: #f59e0b;
+  color: #fff;
+}
+.warningBtn:hover {
+  background: #d97706;
+}
+
+.successBtn {
+  background: #16a34a;
+  color: #fff;
+}
+.successBtn:hover {
+  background: #15803d;
+}
+
+.infoBtn {
+  background: #3b82f6;
+  color: #fff;
+}
+.infoBtn:hover {
+  background: #2563eb;
+}

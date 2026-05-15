@@ -2,7 +2,17 @@
 import React from 'react';
 import styles from './AlertModal.module.css';
 
-export default function AlertModal({ open, onClose, title, message, type = 'error' }) {
+export default function AlertModal({ 
+  open, 
+  onClose, 
+  title, 
+  message, 
+  type = 'error',
+  confirmText = 'OK',
+  onConfirm,
+  showCancel = false,
+  cancelText = 'Cancel'
+}) {
   if (!open) return null;
 
   const getIcon = () => {
@@ -22,6 +32,13 @@ export default function AlertModal({ open, onClose, title, message, type = 'erro
             <path d="M12 2L2 20h20L12 2z" />
           </svg>
         );
+      case 'success':
+        return (
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#16a34a" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="10" />
+            <polyline points="9 12 12 15 16 9" />
+          </svg>
+        );
       default:
         return (
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -37,8 +54,23 @@ export default function AlertModal({ open, onClose, title, message, type = 'erro
     switch (type) {
       case 'error': return '#fef2f2';
       case 'warning': return '#fffbeb';
+      case 'success': return '#f0fdf4';
       default: return '#eff6ff';
     }
+  };
+
+  const getButtonClass = () => {
+    switch (type) {
+      case 'error': return styles.errorBtn;
+      case 'warning': return styles.warningBtn;
+      case 'success': return styles.successBtn;
+      default: return styles.infoBtn;
+    }
+  };
+
+  const handleConfirm = () => {
+    if (onConfirm) onConfirm();
+    onClose();
   };
 
   return (
@@ -62,8 +94,13 @@ export default function AlertModal({ open, onClose, title, message, type = 'erro
         </div>
 
         <div className={styles.footer}>
-          <button className={styles.submitBtn} onClick={onClose}>
-            OK
+          {showCancel && (
+            <button className={styles.cancelBtn} onClick={onClose}>
+              {cancelText}
+            </button>
+          )}
+          <button className={`${styles.submitBtn} ${getButtonClass()}`} onClick={handleConfirm}>
+            {confirmText}
           </button>
         </div>
       </div>
