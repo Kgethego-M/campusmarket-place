@@ -215,10 +215,13 @@ const PAYMENT_CONFIG = {
     partial:     { label: "Partial Online",   icon: "fa-credit-card",         color: "#f59e0b", bg: "#fed7aa", staffNote: "Online portion is confirmed. Collect the remaining cash from the buyer at collection — not at drop-off." },
     cash:        { label: "Full Cash",        icon: "fa-money-bill",          color: "#ef4444", bg: "#fee2e2", staffNote: "Full cash payment is collected by staff at collection. Nothing to collect at drop-off." },
     cod:         { label: "Cash on Delivery", icon: "fa-hand-holding-dollar", color: "#ef4444", bg: "#fee2e2", staffNote: "Full cash payment is collected by staff at collection. Nothing to collect at drop-off." },
+    trade:       { label: "Trade",            icon: "fa-arrows-rotate",       color: "#7c3aed", bg: "#ede9fe", staffNote: "This is a trade transaction — no cash payment involved. Verify both items are present before releasing." },
     unknown:     { label: "Unknown",          icon: "fa-question",            color: "#6b7280", bg: "#f3f4f6", staffNote: "Verify payment details with buyer before releasing." },
 };
 
 function getPaymentConfig(txn) {
+    // Trade transactions have no monetary payment
+    if ((txn.type || "").toLowerCase() === "trade") return PAYMENT_CONFIG.trade;
     const method = (txn.paymentType || txn.paymentMethod || "").toLowerCase();
     if (method === "full_online" || method === "online" || method === "fully_online" || method === "fully online") return PAYMENT_CONFIG.full_online;
     if (method === "partial" || method === "partial_online" || method === "partially_online" || method === "partially online") return PAYMENT_CONFIG.partial;
@@ -341,20 +344,21 @@ function TransactionDetailPanel({ txn, onClose, onConfirmDropOff, onConfirmColle
 
     // ── Payment method helpers ────────────────────────────────
     const paymentConfig    = getPaymentConfig(txn);
+    const isTrade          = (txn.type || "").toLowerCase() === "trade";
     const paymentMethod    = (txn.paymentMethod || txn.paymentType || "cash").toLowerCase();
-    const isFullyOnline    = paymentMethod === "online"  || paymentMethod === "full_online" || paymentMethod === "fully_online"  || paymentMethod === "fully online";
-    const isFullyCash      = paymentMethod === "cash"    || paymentMethod === "cod"          || paymentMethod === "fully_cash"  || paymentMethod === "fully cash"   || paymentMethod === "in_person" || paymentMethod === "in person";
-    const isPartial        = paymentMethod === "partial" || paymentMethod === "partial_online" || paymentMethod === "split" || paymentMethod === "partially online" || paymentMethod === "partially_online";
+    const isFullyOnline    = !isTrade && (paymentMethod === "online"  || paymentMethod === "full_online" || paymentMethod === "fully_online"  || paymentMethod === "fully online");
+    const isFullyCash      = !isTrade && (paymentMethod === "cash"    || paymentMethod === "cod"          || paymentMethod === "fully_cash"  || paymentMethod === "fully cash"   || paymentMethod === "in_person" || paymentMethod === "in person");
+    const isPartial        = !isTrade && (paymentMethod === "partial" || paymentMethod === "partial_online" || paymentMethod === "split" || paymentMethod === "partially online" || paymentMethod === "partially_online");
 
     const totalPrice       = txn.price ?? 0;
     const onlineAmountPaid = txn.onlineAmountPaid ?? 0;
-    const shortfall        = isFullyOnline
+    const shortfall        = isTrade || isFullyOnline
         ? 0
         : isPartial
             ? Math.max(0, totalPrice - onlineAmountPaid)
             : (txn.cashShortfall > 0 ? txn.cashShortfall : totalPrice);
 
-    const hasShortfall = !isFullyOnline && (isFullyCash || isPartial);
+    const hasShortfall = !isTrade && !isFullyOnline && (isFullyCash || isPartial);
 
     // Online payment is always auto-confirmed; cash/partial confirmed by staff at collection
     const [cashConfirmed, setCashConfirmed] = useState(
@@ -456,7 +460,7 @@ function TransactionDetailPanel({ txn, onClose, onConfirmDropOff, onConfirmColle
                     <div className={styles.paymentInstructionBanner} style={{ background: paymentConfig.bg, borderLeftColor: paymentConfig.color }}>
                         <i className={`fa-solid ${paymentConfig.icon}`} style={{ color: paymentConfig.color }} />
                         <div>
-                            <strong>{paymentConfig.label} Payment</strong>
+                            <strong>{isTrade ? "Trade Transaction" : `${paymentConfig.label} Payment`}</strong>
                             <p>{paymentConfig.staffNote}</p>
                         </div>
                     </div>
@@ -500,7 +504,7 @@ function TransactionDetailPanel({ txn, onClose, onConfirmDropOff, onConfirmColle
                                 <span className={styles.detailInfoValue}>{txn.type}</span>
                             </div>
                             <div className={styles.detailInfoRow}>
-                                <span className={styles.detailInfoLabel}>Payment Method</span>
+                                <span className={styles.detailInfoLabel}>{isTrade ? "Transaction Type" : "Payment Method"}</span>
                                 <span className={styles.detailInfoValue}>
                                     <span className={styles.paymentMethodChip} style={{ background: paymentConfig.bg, color: paymentConfig.color }}>
                                         <i className={`fa-solid ${paymentConfig.icon}`} />
@@ -909,7 +913,7 @@ function TransactionCard({ txn, onConfirmDropOff, onConfirmCollection, onRelease
 
                     <div className={styles.txnMain}>
                         <div className={styles.txnTopRow}>
-                            <span className={styles.txnTitle}>{txn.item}</span>
+                            <span className={styles.txnTitle} style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "260px", display: "inline-block" }}>{txn.item}</span>
                             <div className={styles.txnBadges}>
                                 <span className={styles.paymentBadgeSmall} style={{ background: paymentConfig.bg, color: paymentConfig.color }}>
                                     <i className={`fa-solid ${paymentConfig.icon}`} />
@@ -1143,8 +1147,7 @@ export default function StaffDashboard() {
     const [overdueSubTab, setOverdueSubTab]   = useState("drop_offs");
     const [selectedOverdue, setSelectedOverdue] = useState(new Set());
     const [bulkActioning, setBulkActioning]     = useState(false);
-    const [search, setSearch]                 = useState("");
-    const [collectionSearch, setCollectionSearch] = useState("");
+    const [search, setSearch] = useState("");
     const [transactions, setTransactions]     = useState([]);
     const [campus, setCampus]                 = useState("All Campuses");
     const [isLoggingOut, setIsLoggingOut] = useState(false);
@@ -1653,11 +1656,13 @@ export default function StaffDashboard() {
 
     const visibleTxns = transactions
         .filter(t => {
+            const s = search.toLowerCase();
             const matchSearch = !search ||
-                t.item.toLowerCase().includes(search.toLowerCase())   ||
-                t.seller.toLowerCase().includes(search.toLowerCase()) ||
-                t.buyer.toLowerCase().includes(search.toLowerCase())  ||
-                getReceiptRef(t).toLowerCase().includes(search.toLowerCase());
+                t.item.toLowerCase().includes(s)          ||
+                t.seller.toLowerCase().includes(s)        ||
+                t.buyer.toLowerCase().includes(s)         ||
+                getReceiptRef(t).toLowerCase().includes(s)||
+                (t.receiptId && t.receiptId.toLowerCase().includes(s));
             const matchCampus = campus === "All Campuses" || t.campus === campus;
             const isOvDrop = isDropOffOverdue(t);
             const isOvColl = isCollectionOverdue(t);
@@ -1669,12 +1674,7 @@ export default function StaffDashboard() {
             }
             if (activeTab === "collections") {
                 // Items awaiting collection that are NOT yet overdue
-                const matchColl = !collectionSearch ||
-                    t.item.toLowerCase().includes(collectionSearch.toLowerCase())     ||
-                    t.seller.toLowerCase().includes(collectionSearch.toLowerCase())   ||
-                    t.buyer.toLowerCase().includes(collectionSearch.toLowerCase())    ||
-                    (t.receiptId && t.receiptId.toLowerCase().includes(collectionSearch.toLowerCase()));
-                return matchColl && matchCampus && t.status === "awaiting_collection" && !isOvColl;
+                return matchSearch && matchCampus && t.status === "awaiting_collection" && !isOvColl;
             }
             if (activeTab === "overdue") {
                 if (overdueSubTab === "drop_offs") return matchSearch && matchCampus && isOvDrop && t.status !== "overdue_cancelled";
@@ -1814,31 +1814,7 @@ export default function StaffDashboard() {
                     ))}
                 </div>
 
-                {/* Collections search bar */}
-                {activeTab === "collections" && (
-                    <div className={styles.controlRow} style={{ marginTop: 0 }}>
-                        <div className={styles.searchWrap}>
-                            <i className="fa-solid fa-magnifying-glass" />
-                            <input
-                                className={styles.searchInput}
-                                type="text"
-                                placeholder="Search by item, buyer, seller or receipt ID..."
-                                value={collectionSearch}
-                                onChange={e => setCollectionSearch(e.target.value)}
-                                autoFocus
-                            />
-                            {collectionSearch && (
-                                <button
-                                    onClick={() => setCollectionSearch("")}
-                                    style={{ background: "none", border: "none", cursor: "pointer", color: "#94a3b8", padding: "0 4px" }}
-                                    title="Clear search"
-                                >
-                                    <i className="fa-solid fa-xmark" />
-                                </button>
-                            )}
-                        </div>
-                    </div>
-                )}
+
 
                 {/* ── Overdue Tab ── */}
                 {activeTab === "overdue" ? (() => {
