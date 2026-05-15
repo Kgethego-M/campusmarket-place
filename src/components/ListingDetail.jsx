@@ -1,4 +1,4 @@
-// src/components/ListingDetail.jsx
+// ListingDetails.jsx
 import { useEffect, useState, useRef, useCallback } from 'react';
 
 const CLOUDINARY_CLOUD_NAME    = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME;
@@ -263,8 +263,8 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
   const [tradeItemCategory,  setTradeItemCategory]  = useState('');
   const [tradeItemCondition, setTradeItemCondition] = useState('');
   const [tradeItemDesc,      setTradeItemDesc]      = useState('');
-  const [tradeImageFile,     setTradeImageFile]      = useState(null);   // File object for Cloudinary
-  const [tradeImagePreview,  setTradeImagePreview]  = useState(null);   // local blob preview
+  const [tradeImageFile,     setTradeImageFile]      = useState(null);
+  const [tradeImagePreview,  setTradeImagePreview]  = useState(null);
   const [tradeImageUploading, setTradeImageUploading] = useState(false);
 
   const showToast = (msg, type = 'success') => {
@@ -374,12 +374,38 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
     navigate(isOwnListing ? '/profile' : `/profile/${sellerId}`);
   }
 
-  // ── Offer with payment validation ──────────────────────────────────────────────────
+  // ── Partial payment validation (must be LESS THAN agreed price) ───────────
+  const validatePartialAmount = (amount, totalPrice) => {
+    if (!amount) return true;
+    const amountNum = Number(amount);
+    const totalNum = Number(totalPrice);
+    if (isNaN(amountNum) || isNaN(totalNum)) return true;
+    return amountNum < totalNum; // Must be strictly less than
+  };
+
+  const handlePartialAmountChange = (e) => {
+    const value = e.target.value;
+    const amountNum = Number(value);
+    const totalNum = Number(agreedPrice);
+    
+    if (!validatePartialAmount(value, agreedPrice)) {
+      showToast(`Partial online payment must be less than the total agreed price of R${totalNum.toLocaleString()}`, 'warn');
+      // Auto-correct to agreedPrice - 1 if total > 0 and amount >= total
+      if (amountNum >= totalNum && totalNum > 0) {
+        setPartialAmount((totalNum - 1).toString());
+      } else {
+        setPartialAmount('');
+      }
+    } else {
+      setPartialAmount(value);
+    }
+  };
+
+  // ── Offer with payment validation ──────────────────────────────────────────
   const handleTransaction = async () => {
     if (submitting) return;
     if (!purchaseType) {
       showToast('Please select a transaction type', 'warn');
-      alert('Please select a transaction type');
       return;
     }
     
@@ -387,14 +413,12 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
     if (purchaseType === 'sale') {
       if (!agreedPrice) {
         showToast('Please enter an agreed price', 'warn');
-        alert('Please enter an agreed price');
         return;
       }
       
       const agreedPriceNum = Number(agreedPrice);
       if (isNaN(agreedPriceNum) || agreedPriceNum < 10) {
         showToast('Agreed price must be at least R10', 'warn');
-        alert('Agreed price must be at least R10');
         return;
       }
       
@@ -402,12 +426,10 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
         const partialAmountNum = Number(partialAmount);
         if (!partialAmount || isNaN(partialAmountNum) || partialAmountNum < 10) {
           showToast('Partial online payment amount must be at least R10', 'warn');
-          alert('Partial online payment amount must be at least R10');
           return;
         }
-        if (partialAmountNum > agreedPriceNum) {
-          showToast('Partial payment amount cannot exceed the total agreed price', 'warn');
-          alert('Partial payment amount cannot exceed the total agreed price');
+        if (partialAmountNum >= agreedPriceNum) { // Must be less than, not less than or equal
+          showToast('Partial online payment must be less than the total agreed price', 'warn');
           return;
         }
       }
@@ -417,10 +439,8 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
     if (purchaseType === 'trade') {
       if (!tradeItemName) {
         showToast('Please describe what you want to trade', 'warn');
-        alert('Please describe what you want to trade');
         return;
       }
-      // Soft hints for structured fields — don't block submission so partial offers still go through
       if (!tradeItemCategory) showToast('Tip: Adding a category helps the seller understand your offer', 'warn');
       if (!tradeItemCondition) showToast('Tip: Selecting a condition helps the seller evaluate your item', 'warn');
     }
@@ -434,7 +454,7 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
       else if (paymentType === 'partial') paymentMethod = 'partial';
     }
 
-    // Upload trade item image to Cloudinary (same as CreateListing)
+    // Upload trade item image to Cloudinary
     let tradeImageUrl = null;
     if (purchaseType === 'trade' && tradeImageFile) {
       setTradeImageUploading(true);
@@ -457,7 +477,7 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
       category:    tradeItemCategory,
       condition:   tradeItemCondition,
       description: tradeItemDesc || null,
-      imageUrl:    tradeImageUrl,   // Cloudinary URL
+      imageUrl:    tradeImageUrl,
     } : null;
 
     const transactionData = {
@@ -472,8 +492,8 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
       paymentType:   purchaseType === 'sale' ? paymentType : null,
       paymentMethod,
       partialAmount: paymentType === 'partial' ? Number(partialAmount) : null,
-      tradeItem:     purchaseType === 'trade' ? tradeItemName : null,  // string for compatibility
-      tradeItemDetails: tradeItemPayload,                               // structured object
+      tradeItem:     purchaseType === 'trade' ? tradeItemName : null,
+      tradeItemDetails: tradeItemPayload,
       terms:         terms || null,
       createdAt:     new Date().toISOString(),
     };
@@ -492,7 +512,6 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
     } catch (err) {
       console.error('Transaction error:', err);
       showToast('Failed to create offer. Please try again.', 'error');
-      alert('Failed to create offer. Please try again.');
       setSubmitting(false);
     }
   };
@@ -778,18 +797,18 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
                   {paymentType === 'partial' && (
                     <>
                       <label htmlFor="partial-amount" style={modalStyles.label}>
-                        Online Payment Amount (R) <span style={{ color: '#dc2626' }}>* (Minimum R10)</span>
+                        Online Payment Amount (R) <span style={{ color: '#dc2626' }}>* (Minimum R10, Must be less than total)</span>
                       </label>
                       <input 
                         id="partial-amount"
                         type="number" 
                         placeholder="Enter online payment amount"
                         value={partialAmount} 
-                        onChange={(e) => setPartialAmount(e.target.value)} 
+                        onChange={handlePartialAmountChange}
                         style={modalStyles.input}
                       />
                       <p style={{ fontSize: '0.72rem', color: '#6b7280', marginTop: '-5px', marginBottom: '5px' }}>
-                        Cash amount to pay on delivery: R {(Number(agreedPrice) - Number(partialAmount || 0)).toLocaleString()}
+                        Cash amount to pay on delivery: R {(Math.max(0, Number(agreedPrice) - Number(partialAmount || 0))).toLocaleString()}
                       </p>
                     </>
                   )}
