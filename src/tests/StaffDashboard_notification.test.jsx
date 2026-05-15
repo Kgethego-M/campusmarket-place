@@ -667,7 +667,7 @@ describe("Overdue alert notifications appear in the NavBar bell", () => {
             listingId:     "listing-001",
             transactionId: "txn-001",
             listingTitle:  "Patek Philippe watch (Pre-owned)",
-            message:       `The seller has not yet dropped off "Patek Philippe watch (Pre-owned)" at the trade facility. We have sent them a reminder. You will be notified once it arrives.`,
+            message:       `The seller has not yet dropped off "Patek Philippe watch (Pre-owned)" at the trade facility. You have 24 hours to drop off the item. We have sent them a reminder. You will be notified once it arrives.`,
             createdAt:     { toDate: () => new Date(Date.now() - 5000) },
           }),
         }],
@@ -688,7 +688,7 @@ describe("Overdue alert notifications appear in the NavBar bell", () => {
             listingId:     "listing-001",
             transactionId: "txn-001",
             listingTitle:  "Patek Philippe watch (Pre-owned)",
-            message:       `You did not collect "Patek Philippe watch (Pre-owned)" within the collection period. The item will be returned to the seller. Please contact the trade facility if you need assistance.`,
+            message:       `You did not collect "Patek Philippe watch (Pre-owned)" within the collection period. Please come to the trade facility as soon as possible. The item will be returned to the seller. Please contact the trade facility if you need assistance.`,
             createdAt:     { toDate: () => new Date(Date.now() - 5000) },
           }),
         }],
@@ -787,6 +787,7 @@ describe("Overdue alert notifications appear in the NavBar bell", () => {
             data: () => ({
               userId: "buyer-uid", read: false, type: "overdue_dropoff_buyer",
               transactionId: "txn-001", listingTitle: "Patek Philippe watch (Pre-owned)",
+              message: "Test message 1",
               createdAt: { toDate: () => new Date() },
             }),
           },
@@ -795,6 +796,7 @@ describe("Overdue alert notifications appear in the NavBar bell", () => {
             data: () => ({
               userId: "buyer-uid", read: false, type: "overdue_collection_buyer",
               transactionId: "txn-002", listingTitle: "Canon EOS R5",
+              message: "Test message 2",
               createdAt: { toDate: () => new Date() },
             }),
           },
