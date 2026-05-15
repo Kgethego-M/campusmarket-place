@@ -28,6 +28,7 @@ import { notifySellerOfOffer } from '../services/notificationService';
 import NavBarTemp from './NavBarTemp';
 import ReportModal from './ReportModal';
 import PromoteListingModal from './PromoteListingModal';
+import AlertModal from './AlertModal';
 
 // ── Toast ─────────────────────────────────────────────────────────────────────
 function Toast({ toast }) {
@@ -257,6 +258,12 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
   const [cartLoading, setCartLoading]     = useState(false);
   const [toast, setToast]                 = useState(null);
   const [showPromoteModal, setShowPromoteModal] = useState(false);
+  
+  // Alert Modal states
+  const [showPriceAlert, setShowPriceAlert] = useState(false);
+  const [showPartialAlert, setShowPartialAlert] = useState(false);
+  const [showPartialExceedAlert, setShowPartialExceedAlert] = useState(false);
+  const [alertMessage, setAlertMessage] = useState('');
 
   // ── Trade item structured state ────────────────────────────────────────────
   const [tradeItemName,      setTradeItemName]      = useState('');
@@ -378,36 +385,36 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
   const handleTransaction = async () => {
     if (submitting) return;
     if (!purchaseType) {
-      showToast('Please select a transaction type', 'warn');
-      alert('Please select a transaction type');
+      setAlertMessage('Please select a transaction type');
+      setShowPriceAlert(true);
       return;
     }
     
     // SALE VALIDATIONS
     if (purchaseType === 'sale') {
       if (!agreedPrice) {
-        showToast('Please enter an agreed price', 'warn');
-        alert('Please enter an agreed price');
+        setAlertMessage('Please enter an agreed price');
+        setShowPriceAlert(true);
         return;
       }
       
       const agreedPriceNum = Number(agreedPrice);
       if (isNaN(agreedPriceNum) || agreedPriceNum < 10) {
-        showToast('Agreed price must be at least R10', 'warn');
-        alert('Agreed price must be at least R10');
+        setAlertMessage('Agreed price must be at least R10');
+        setShowPriceAlert(true);
         return;
       }
       
       if (paymentType === 'partial') {
         const partialAmountNum = Number(partialAmount);
         if (!partialAmount || isNaN(partialAmountNum) || partialAmountNum < 10) {
-          showToast('Partial online payment amount must be at least R10', 'warn');
-          alert('Partial online payment amount must be at least R10');
+          setAlertMessage('Online payment amount must be at least R10');
+          setShowPartialAlert(true);
           return;
         }
         if (partialAmountNum > agreedPriceNum) {
-          showToast('Partial payment amount cannot exceed the total agreed price', 'warn');
-          alert('Partial payment amount cannot exceed the total agreed price');
+          setAlertMessage('Partial payment amount cannot exceed the total agreed price');
+          setShowPartialExceedAlert(true);
           return;
         }
       }
@@ -416,13 +423,13 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
     // Trade item validation
     if (purchaseType === 'trade') {
       if (!tradeItemName) {
-        showToast('Please describe what you want to trade', 'warn');
-        alert('Please describe what you want to trade');
+        setAlertMessage('Please describe what you want to trade');
+        setShowPriceAlert(true);
         return;
       }
       // Soft hints for structured fields — don't block submission so partial offers still go through
       if (!tradeItemCategory) showToast('Tip: Adding a category helps the seller understand your offer', 'warn');
-      if (!tradeItemCondition) showToast('Tip: Selecting a condition helps the seller evaluate your item', 'warn');
+      if (!tradeItemCondition) showToast('Tip: Selecting a condition helps the seller evaluate your offer', 'warn');
     }
 
     setSubmitting(true);
@@ -492,7 +499,6 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
     } catch (err) {
       console.error('Transaction error:', err);
       showToast('Failed to create offer. Please try again.', 'error');
-      alert('Failed to create offer. Please try again.');
       setSubmitting(false);
     }
   };
@@ -1026,6 +1032,31 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
             </div>
           </div>
         )}
+
+        {/* Alert Modals */}
+        <AlertModal
+          open={showPriceAlert}
+          onClose={() => setShowPriceAlert(false)}
+          title="Validation Error"
+          message={alertMessage}
+          type="error"
+        />
+
+        <AlertModal
+          open={showPartialAlert}
+          onClose={() => setShowPartialAlert(false)}
+          title="Minimum Payment Amount"
+          message={alertMessage || "Online payment amount must be at least R10. Please enter a valid amount of R10 or more."}
+          type="error"
+        />
+
+        <AlertModal
+          open={showPartialExceedAlert}
+          onClose={() => setShowPartialExceedAlert(false)}
+          title="Invalid Amount"
+          message={alertMessage || "Partial payment amount cannot exceed the total agreed price."}
+          type="error"
+        />
       </div>
     </>
   );
