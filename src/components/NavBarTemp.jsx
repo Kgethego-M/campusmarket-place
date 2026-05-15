@@ -79,8 +79,8 @@ const buildMessage = (n) => {
         case 'collection_booked':         return `Your collection slot for ${title} is confirmed.`;
         case 'item_collected':            return `${title} has been collected. Transaction complete.`;
         case 'transaction_complete':      return `Your sale of ${title} is complete.`;
-        case 'rate_seller':               return `Rate your experience with ${n.reviewedUserName || 'the seller'} for ${title}.`;
-        case 'rate_buyer':                return `Rate your buyer ${n.reviewedUserName || ''} for ${title}.`;
+        case 'rate_seller':               return `How was ${n.reviewedUserName || 'the seller'} as a seller for ${title}?`;
+        case 'rate_buyer':                return `How was ${n.reviewedUserName || 'the buyer'} as a buyer for ${title}?`;
         default:                          return 'You have a new notification.';
     }
 };
@@ -127,16 +127,21 @@ async function resolveDestination(n, currentUser) {
     }
 
     return '/trade-facility';
+}
 
-    const BUYER_TYPES = [
-        'item_at_facility',
-        'item_ready_for_collection',
-        'item_collected',
-        'overdue_collection_buyer',
-        'overdue_dropoff_buyer',
-    ];
-    const isBuyerNotification = BUYER_TYPES.includes(notification.type);
-    navigate(isBuyerNotification ? '/my-purchases' : '/trade-facility');
+// ── fetchListingTitle helper ──────────────────────────────────────────────────
+
+async function fetchListingTitle(listingId) {
+    if (!listingId) return { title: null };
+    try {
+        const snap = await getDoc(doc(db, 'listings', listingId));
+        if (snap.exists()) {
+            return { title: snap.data().title || null, price: snap.data().price || null };
+        }
+    } catch (err) {
+        console.error('Failed to fetch listing title:', err);
+    }
+    return { title: null, price: null };
 }
 
 // ── Deduplication ─────────────────────────────────────────────────────────────
@@ -154,7 +159,6 @@ function deduplicate(notifications) {
         if (!seen.has(key)) seen.set(key, n);
     }
     return Array.from(seen.values());
-    
 }
 
 export default function Navbar() {
@@ -213,9 +217,7 @@ export default function Navbar() {
                 navigate(dest);
             }
         } else if (n.source === 'rating') {
-            // Save to localStorage so the test (and any session-level tracking) can confirm
-            // the click was registered — but we do NOT remove it from state here.
-            // The notification stays in the bell until the user actually submits a review.
+            // Save to localStorage so the test can confirm the click was registered
             markRatingAsRead(n.id);
             navigate(
                 `/review/${n.listingId}` +
@@ -234,94 +236,11 @@ export default function Navbar() {
         if (pendingOffers.length === 0) return;
 
         // Mark each offer notification as read in Firestore.
-        // The onSnapshot listener removes them from state once Firestore confirms.
         try {
             await Promise.all(pendingOffers.map((n) => markOfferAsRead(n.id)));
         } catch (err) {
             console.error('Failed to mark all as read:', err);
         }
-    };
-
-    const notificationIcon = (type) => {
-        if (type === 'buyer_paid')                           return 'fa-money-bill-wave';
-        if (type === 'new_offer')                            return 'fa-shopping-cart';
-        if (type === 'offer_accepted')                       return 'fa-circle-check';
-        if (type === 'trade_waiting')                        return 'fa-clock';
-        if (type === 'offer_declined')                       return 'fa-circle-xmark';
-        if (type === 'rate_seller' || type === 'rate_buyer') return 'fa-star';
-        if (type === 'item_received_at_facility')            return 'fa-box-archive';
-        if (type === 'item_at_facility')                     return 'fa-warehouse';
-        if (type === 'item_ready_for_collection')            return 'fa-person-walking';
-        if (type === 'item_collected')                       return 'fa-handshake';
-        if (type === 'transaction_complete')                 return 'fa-circle-check';
-        if (type === 'collection_booked')                    return 'fa-calendar-check';
-        if (type === 'dropoff_booked')                       return 'fa-calendar-check';
-        if (type === 'overdue_collection_buyer')             return 'fa-triangle-exclamation';
-        if (type === 'overdue_collection_seller')            return 'fa-triangle-exclamation';
-        if (type === 'overdue_dropoff_seller')               return 'fa-triangle-exclamation';
-        if (type === 'overdue_dropoff_buyer')                return 'fa-clock';
-        if (type === 'cancelled_dropoff_seller')             return 'fa-ban';
-        if (type === 'cancelled_dropoff_buyer')              return 'fa-ban';
-        if (type === 'cancelled_collection_seller')          return 'fa-ban';
-        if (type === 'cancelled_collection_buyer')           return 'fa-ban';
-        return 'fa-bell';
-    };
-
-    const notificationIconColor = (type) => {
-        if (type === 'buyer_paid')                           return '#16a34a';
-        if (type === 'new_offer')                            return '#3b82f6';
-        if (type === 'offer_accepted')                       return '#22c55e';
-        if (type === 'trade_waiting')                        return '#f59e0b';
-        if (type === 'offer_declined')                       return '#ef4444';
-        if (type === 'rate_seller' || type === 'rate_buyer') return '#f59e0b';
-        if (type === 'item_received_at_facility')            return '#f59e0b';
-        if (type === 'item_at_facility')                     return '#6AA6DA';
-        if (type === 'item_ready_for_collection')            return '#8b5cf6';
-        if (type === 'item_collected')                       return '#22c55e';
-        if (type === 'transaction_complete')                 return '#22c55e';
-        if (type === 'collection_booked')                    return '#6d28d9';
-        if (type === 'dropoff_booked')                       return '#92400e';
-        if (type === 'overdue_collection_buyer')             return '#dc2626';
-        if (type === 'overdue_collection_seller')            return '#dc2626';
-        if (type === 'overdue_dropoff_seller')               return '#dc2626';
-        if (type === 'overdue_dropoff_buyer')                return '#f59e0b';
-        if (type === 'cancelled_dropoff_seller')             return '#dc2626';
-        if (type === 'cancelled_dropoff_buyer')              return '#dc2626';
-        if (type === 'cancelled_collection_seller')          return '#dc2626';
-        if (type === 'cancelled_collection_buyer')           return '#dc2626';
-        return '#94a3b8';
-    };
-
-    const notificationMessage = (n) => {
-        const title = n.listingTitle ? `"${n.listingTitle}"` : (n.itemTitle ? `"${n.itemTitle}"` : (n.message ? null : 'your item'));
-        const price = n.listingPrice ? ` · R${Number(n.listingPrice).toLocaleString('en-ZA')}` : '';
-        const buyer = n.buyerName || 'A student';
-        if (n.type === 'buyer_paid')                return `${buyer} has paid for ${title || 'your item'}. Book a drop-off slot now.`;
-        if (n.type === 'new_offer')                 return title ? `${buyer} made an offer on ${title}${price}` : (n.message || `${buyer} made you an offer${price}`);
-        if (n.type === 'offer_accepted')            return `Your offer on ${title || 'your item'} was accepted! Head to payment.${price}`;
-        if (n.type === 'trade_waiting')             return `Your trade offer on ${title || 'your item'} was accepted — head to the trade facility to book a drop-off slot.`;
-        if (n.type === 'offer_declined')            return `Your offer on ${title || 'your item'} was declined.`;
-        if (n.type === 'item_received_at_facility') return `${title} has been received at the trade facility.${price}`;
-        if (n.type === 'item_at_facility')          return `${title} has been dropped off and is ready to collect from the trade facility. Show your receipt to staff when collecting.`;
-        if (n.type === 'item_ready_for_collection') return `${title} is ready for collection at the trade facility.${price}`;
-        if (n.type === 'item_collected')            return `${title} has been collected. Transaction complete!${price}`;
-        if (n.type === 'transaction_complete')      return `Your sale of ${title} is complete${price}.`;
-        if (n.type === 'collection_booked')         return n.message || `Collection slot booked for ${title}.`;
-        if (n.type === 'dropoff_booked')            return n.message || `Drop-off slot booked for ${title}.`;
-        if (n.type === 'overdue_collection_buyer')  return `Your collection of ${title} is overdue. Please come to the trade facility as soon as possible to collect your item.`;
-        if (n.type === 'overdue_collection_seller') return `The buyer has not yet collected ${title}. They have been notified and given 24 hours to collect.`;
-        if (n.type === 'overdue_dropoff_seller')    return `Your drop-off for ${title} is overdue. Please bring your item to the trade facility as soon as possible.`;
-        if (n.type === 'overdue_dropoff_buyer')     return `The seller has not yet dropped off ${title}. They have been notified and given 24 hours to drop off.`;
-        if (n.type === 'cancelled_dropoff_seller')   return `Your transaction for ${title} has been cancelled due to a missed drop-off.`;
-        if (n.type === 'cancelled_dropoff_buyer')    return `Your transaction for ${title} was cancelled — the seller did not drop off in time.`;
-        if (n.type === 'cancelled_collection_seller') return `The buyer did not collect ${title} — the transaction has been cancelled. Please come to the trade facility to collect your item.`;
-        if (n.type === 'cancelled_collection_buyer') return `Your transaction for ${title} was cancelled due to non-collection.`;
-
-        if (n.type === 'rate_seller') return `Rate your experience with ${n.reviewedUserName} as a seller${n.listingTitle ? ` for "${n.listingTitle}"${price}` : ''}`;
-        if (n.type === 'rate_buyer')  return `Rate your buyer ${n.reviewedUserName}${n.listingTitle ? ` — "${n.listingTitle}"${price}` : ''}`;
-       
-
-        return n.message || 'Notification';
     };
 
     // ── Auth + profile ────────────────────────────────────────────────────────
@@ -413,7 +332,7 @@ export default function Navbar() {
             const raw = snapshot.docs.map((d) => ({ id: d.id, source: 'offer', ...d.data() }));
             const enriched = await Promise.all(
                 raw.map(async (n) => {
-                    const details = await fetchListingDetails(n.listingId);
+                    const details = await fetchListingTitle(n.listingId);
                     return { ...n, listingTitle: n.listingTitle || details.title || null, listingPrice: n.agreedPrice || details.price || null };
                 })
             );
@@ -511,10 +430,11 @@ export default function Navbar() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [currentUser]);
 
-    const totalCount = offerNotifications.length + ratingNotifications.length;
+    // Combine notifications for display
+    const allNotifications = [...offerNotifications, ...ratingNotifications];
+    const totalCount = allNotifications.length;
 
-    // ── Priority order for notification types ─────────────────────────────────
-    // Lower number = shown first
+    // Priority order for notification types (lower number = shown first)
     const TYPE_PRIORITY = {
         trade_dropoff_required:    0,
         offer_accepted:            1,
@@ -534,7 +454,7 @@ export default function Navbar() {
         rate_buyer:                12,
     };
 
-    const sortedOfferNotifs = [...offerNotifications].sort((a, b) => {
+    const sortedNotifications = [...allNotifications].sort((a, b) => {
         const pa = TYPE_PRIORITY[a.type] ?? 99;
         const pb = TYPE_PRIORITY[b.type] ?? 99;
         if (pa !== pb) return pa - pb;
@@ -592,12 +512,12 @@ export default function Navbar() {
                         >
                             <i className="fa-solid fa-bell" />
                             {totalCount > 0 && (
-                                <span className={styles.notificationBadge}>{totalCount}</span>
+                                <span className={styles.notificationBadge} data-testid="notification-badge">{totalCount}</span>
                             )}
                         </button>
 
                         {notificationsOpen && (
-                            <div className={styles.notificationDropdown}>
+                            <div className={styles.notificationDropdown} data-testid="notification-dropdown">
                                 <div className={styles.notificationHeader}>
                                     <span>Notifications</span>
                                     {totalCount > 0 && (
@@ -615,77 +535,33 @@ export default function Navbar() {
                                         </div>
                                     ) : (
                                         <>
-                                            {/* Action-required notifications (trades, offers, drop-offs) */}
-                                            {sortedOfferNotifs.length > 0 && (
-                                                <>
-                                                    {ratingNotifications.length > 0 && (
-                                                        <div className={styles.notificationSectionLabel}>
-                                                            <i className="fas fa-bolt" /> Activity
+                                            {sortedNotifications.map((n, index) => {
+                                                const cfg = getConfig(n.type);
+                                                return (
+                                                    <div
+                                                        key={n.id}
+                                                        className={styles.notificationItem}
+                                                        onClick={() => handleNotificationClick(n)}
+                                                        role="button"
+                                                        tabIndex={0}
+                                                        onKeyDown={(e) => e.key === 'Enter' && handleNotificationClick(n)}
+                                                        data-testid={`notification-item-${n.id}`}
+                                                    >
+                                                        <div
+                                                            className={styles.notificationIconWrap}
+                                                            style={{ color: cfg.color, background: `${cfg.color}18` }}
+                                                        >
+                                                            <i className={`fas ${cfg.icon}`} />
                                                         </div>
-                                                    )}
-                                                    {sortedOfferNotifs.map((n) => {
-                                                        const cfg = getConfig(n.type);
-                                                        return (
-                                                            <div
-                                                                key={n.id}
-                                                                className={styles.notificationItem}
-                                                                onClick={() => handleNotificationClick(n)}
-                                                                role="button"
-                                                                tabIndex={0}
-                                                                onKeyDown={(e) => e.key === 'Enter' && handleNotificationClick(n)}
-                                                            >
-                                                                <div
-                                                                    className={styles.notificationIconWrap}
-                                                                    style={{ color: cfg.color, background: `${cfg.color}18` }}
-                                                                >
-                                                                    <i className={`fas ${cfg.icon}`} />
-                                                                </div>
-                                                                <div className={styles.notificationContent}>
-                                                                    <p className={styles.notificationLabel}>{cfg.label}</p>
-                                                                    <p className={styles.notificationMsg}>{buildMessage(n)}</p>
-                                                                    <span className={styles.notificationTime}>{formatTime(n.createdAt)}</span>
-                                                                </div>
-                                                                <i className="fas fa-chevron-right" style={{ color: '#cbd5e1', fontSize: '0.6rem', flexShrink: 0 }} />
-                                                            </div>
-                                                        );
-                                                    })}
-                                                </>
-                                            )}
-
-                                            {/* Rating notifications */}
-                                            {ratingNotifications.length > 0 && (
-                                                <>
-                                                    <div className={styles.notificationSectionLabel}>
-                                                        <i className="fas fa-star" /> Rate &amp; Review
+                                                        <div className={styles.notificationContent}>
+                                                            <p className={styles.notificationLabel}>{cfg.label}</p>
+                                                            <p className={styles.notificationMsg}>{buildMessage(n)}</p>
+                                                            <span className={styles.notificationTime}>{formatTime(n.createdAt)}</span>
+                                                        </div>
+                                                        <i className="fas fa-chevron-right" style={{ color: '#cbd5e1', fontSize: '0.6rem', flexShrink: 0 }} />
                                                     </div>
-                                                    {ratingNotifications.map((n) => {
-                                                        const cfg = getConfig(n.type);
-                                                        return (
-                                                            <div
-                                                                key={n.id}
-                                                                className={styles.notificationItem}
-                                                                onClick={() => handleNotificationClick(n)}
-                                                                role="button"
-                                                                tabIndex={0}
-                                                                onKeyDown={(e) => e.key === 'Enter' && handleNotificationClick(n)}
-                                                            >
-                                                                <div
-                                                                    className={styles.notificationIconWrap}
-                                                                    style={{ color: cfg.color, background: `${cfg.color}18` }}
-                                                                >
-                                                                    <i className={`fas ${cfg.icon}`} />
-                                                                </div>
-                                                                <div className={styles.notificationContent}>
-                                                                    <p className={styles.notificationLabel}>{cfg.label}</p>
-                                                                    <p className={styles.notificationMsg}>{buildMessage(n)}</p>
-                                                                    <span className={styles.notificationTime}>{formatTime(n.createdAt)}</span>
-                                                                </div>
-                                                                <i className="fas fa-chevron-right" style={{ color: '#cbd5e1', fontSize: '0.6rem', flexShrink: 0 }} />
-                                                            </div>
-                                                        );
-                                                    })}
-                                                </>
-                                            )}
+                                                );
+                                            })}
                                         </>
                                     )}
                                 </div>

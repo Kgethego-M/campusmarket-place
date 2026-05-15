@@ -291,6 +291,11 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
     setTradeItemDesc('');
     setTradeImageFile(null);
     setTradeImagePreview(null);
+    // Reset alert states
+    setShowPriceAlert(false);
+    setShowPartialAlert(false);
+    setShowPartialExceedAlert(false);
+    setAlertMessage('');
   };
 
   // ── Check if already in cart ───────────────────────────────────────────────
@@ -396,7 +401,8 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
     const totalNum = Number(agreedPrice);
     
     if (!validatePartialAmount(value, agreedPrice)) {
-      showToast(`Partial online payment must be less than the total agreed price of R${totalNum.toLocaleString()}`, 'warn');
+      setAlertMessage(`Partial online payment must be less than the total agreed price of R${totalNum.toLocaleString()}`);
+      setShowPartialExceedAlert(true);
       // Auto-correct to agreedPrice - 1 if total > 0 and amount >= total
       if (amountNum >= totalNum && totalNum > 0) {
         setPartialAmount((totalNum - 1).toString());
@@ -412,31 +418,36 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
   const handleTransaction = async () => {
     if (submitting) return;
     if (!purchaseType) {
-      showToast('Please select a transaction type', 'warn');
+      setAlertMessage('Please select a transaction type');
+      setShowPriceAlert(true);
       return;
     }
     
     // SALE VALIDATIONS
     if (purchaseType === 'sale') {
       if (!agreedPrice) {
-        showToast('Please enter an agreed price', 'warn');
+        setAlertMessage('Please enter an agreed price');
+        setShowPriceAlert(true);
         return;
       }
       
       const agreedPriceNum = Number(agreedPrice);
       if (isNaN(agreedPriceNum) || agreedPriceNum < 10) {
-        showToast('Agreed price must be at least R10', 'warn');
+        setAlertMessage('Agreed price must be at least R10');
+        setShowPriceAlert(true);
         return;
       }
       
       if (paymentType === 'partial') {
         const partialAmountNum = Number(partialAmount);
         if (!partialAmount || isNaN(partialAmountNum) || partialAmountNum < 10) {
-          showToast('Partial online payment amount must be at least R10', 'warn');
+          setAlertMessage('Partial online payment amount must be at least R10');
+          setShowPartialAlert(true);
           return;
         }
-        if (partialAmountNum >= agreedPriceNum) { // Must be less than, not less than or equal
-          showToast('Partial online payment must be less than the total agreed price', 'warn');
+        if (partialAmountNum >= agreedPriceNum) {
+          setAlertMessage('Partial online payment must be less than the total agreed price');
+          setShowPartialExceedAlert(true);
           return;
         }
       }
@@ -445,11 +456,25 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
     // Trade item validation
     if (purchaseType === 'trade') {
       if (!tradeItemName) {
-        showToast('Please describe what you want to trade', 'warn');
+        setAlertMessage('Please describe what you want to trade');
+        setShowPriceAlert(true);
         return;
       }
-      if (!tradeItemCategory) showToast('Tip: Adding a category helps the seller understand your offer', 'warn');
-      if (!tradeItemCondition) showToast('Tip: Selecting a condition helps the seller evaluate your offer', 'warn');
+      if (!tradeItemCategory) {
+        setAlertMessage('Please select a category for your trade item');
+        setShowPriceAlert(true);
+        return;
+      }
+      if (!tradeItemCondition) {
+        setAlertMessage('Please select a condition for your trade item');
+        setShowPriceAlert(true);
+        return;
+      }
+      if (!tradeImageFile && !tradeImagePreview) {
+        setAlertMessage('Please upload a photo of your trade item');
+        setShowPriceAlert(true);
+        return;
+      }
     }
 
     setSubmitting(true);
