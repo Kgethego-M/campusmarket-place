@@ -1,6 +1,6 @@
 // src/components/ReportModal.jsx
 import { useState } from 'react';
-import { collection, addDoc, serverTimestamp, getDocs, query, where } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { db, auth } from '../firebase';
 import { notifyAdminsOfReport } from '../services/notificationService';
 import styles from './ReportModal.module.css';
@@ -42,29 +42,28 @@ export default function ReportModal({ open, onClose, reportType = 'user', report
   };
 
   const handleSubmit = async () => {
-    if (!reason) { setError('Please select a reason.'); return; }
+    // Validate that a reason is selected
+    if (!reason) { 
+      setError('Please select a reason.'); 
+      return; 
+    }
+    
+    // If reason is 'Other', validate that details are provided
+    if (reason === 'Other' && (!details || details.trim() === '')) {
+      setError('Please provide details when selecting "Other".');
+      return;
+    }
+    
     setError('');
     setSubmitting(true);
 
     try {
       const user = auth.currentUser;
+      console.log('[ReportModal] auth.currentUser:', user?.uid ?? 'NOT LOGGED IN');
+
       const reporterName = user?.displayName || user?.email || 'Anonymous';
 
-      // ── Enforce: one report per item per user (regardless of status) ──────
-      const dupCheck = await getDocs(
-        query(
-          collection(db, 'reports'),
-          where('reportedId', '==', reportedId),
-          where('reporterId', '==', user?.uid || null),
-        )
-      );
-      if (!dupCheck.empty) {
-        setError('You have already reported this. Our team is reviewing it.');
-        setSubmitting(false);
-        return;
-      }
-
-      // Save report to Firestore
+      console.log('[ReportModal] saving report to Firestore...', { reportType, reportedId, reportedName, reason });
       const reportRef = await addDoc(collection(db, 'reports'), {
         reportType,
         reportedId,
@@ -73,26 +72,30 @@ export default function ReportModal({ open, onClose, reportType = 'user', report
         reporterName,
         reason,
         details: details.trim() || null,
-        // Extra fields for review reports (comment + rating visible to admin)
         ...extraData,
         status: 'pending',
         createdAt: serverTimestamp(),
       });
-
-      // Notify all admins
-      await notifyAdminsOfReport({
-        reportId: reportRef.id,
-        reportType,
-        reportedId,
-        reportedName,
-        reporterName,
-        reason,
-      });
+      console.log('[ReportModal] report saved, id:', reportRef.id);
 
       setDone(true);
+
+      // Notify admins — non-critical, never block the submission
+      try {
+        await notifyAdminsOfReport({
+          reportId: reportRef.id,
+          reportType,
+          reportedId,
+          reportedName,
+          reporterName,
+          reason,
+        });
+      } catch (notifyErr) {
+        console.warn('[ReportModal] Admin notification failed (non-critical):', notifyErr);
+      }
     } catch (err) {
-      console.error('Report submission error:', err);
-      setError('Something went wrong. Please try again.');
+      console.error('[ReportModal] SUBMISSION ERROR:', err?.code, err?.message, err);
+      setError(`Something went wrong: ${err?.message || err?.code || 'unknown error'}`);
     } finally {
       setSubmitting(false);
     }
@@ -142,7 +145,11 @@ export default function ReportModal({ open, onClose, reportType = 'user', report
                   <button
                     key={r}
                     className={`${styles.reasonBtn} ${reason === r ? styles.reasonSelected : ''}`}
-                    onClick={() => setReason(r)}
+                    onClick={() => {
+                      setReason(r);
+                      // Clear the error when user changes reason
+                      if (error) setError('');
+                    }}
                   >
                     <span className={styles.radioCircle}>{reason === r && <span className={styles.radioDot} />}</span>
                     {r}
@@ -151,13 +158,19 @@ export default function ReportModal({ open, onClose, reportType = 'user', report
               </div>
 
               <label className={styles.detailsLabel}>
-                Additional details <span className={styles.optional}>(optional)</span>
+                Additional details {reason === 'Other' ? <span className={styles.required}>(required)</span> : <span className={styles.optional}>(optional)</span>}
               </label>
               <textarea
-                className={styles.textarea}
-                placeholder="Describe what happened…"
+                className={`${styles.textarea} ${error && reason === 'Other' && (!details || details.trim() === '') ? styles.textareaError : ''}`}
+                placeholder={reason === 'Other' ? "Please describe the issue in detail..." : "Describe what happened… (optional)"}
                 value={details}
-                onChange={(e) => setDetails(e.target.value)}
+                onChange={(e) => {
+                  setDetails(e.target.value);
+                  // Clear the error when user starts typing for "Other"
+                  if (error && reason === 'Other' && e.target.value.trim() !== '') {
+                    setError('');
+                  }
+                }}
                 rows={3}
                 maxLength={400}
               />
@@ -168,7 +181,11 @@ export default function ReportModal({ open, onClose, reportType = 'user', report
 
             <div className={styles.footer}>
               <button className={styles.cancelBtn} onClick={handleClose}>Cancel</button>
-              <button className={styles.submitBtn} onClick={handleSubmit} disabled={submitting}>
+              <button 
+                className={styles.submitBtn} 
+                onClick={handleSubmit} 
+                disabled={submitting}
+              >
                 {submitting ? (
                   <><span className={styles.spinner} /> Submitting…</>
                 ) : 'Submit Report'}

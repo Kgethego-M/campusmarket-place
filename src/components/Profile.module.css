@@ -1,6 +1,7 @@
 .profileContainer {
-    max-width: 1200px;
-    margin: 0 auto;
+    display:grid;
+    width: 100%;
+    margin: 0;
     padding: 2rem;
     background-color: #f5f7fa;
     min-height: 100vh;

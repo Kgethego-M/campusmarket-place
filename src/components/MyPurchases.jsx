@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState, useEffect, useRef } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { auth, db } from '../firebase';
 import {
   collection,
@@ -20,6 +20,7 @@ const STATUS_CONFIG = {
   ready_to_release:    { label: 'Ready to Collect',    color: '#f97316', bg: '#ffedd5', icon: 'fa-circle-check'   },
   awaiting_collection: { label: 'Awaiting Collection', color: '#8b5cf6', bg: '#ede9fe', icon: 'fa-person-walking' },
   cancelled:           { label: 'Cancelled',           color: '#94a3b8', bg: '#f1f5f9', icon: 'fa-ban'            },
+  overdue_cancelled:   { label: 'Overdue — Cancelled', color: '#6b7280', bg: '#f3f4f6', icon: 'fa-clock-rotate-left' },
 };
 
 const TYPE_CONFIG = {
@@ -59,10 +60,30 @@ const getFilterStatus = (tx) => {
   if (tx.status === 'pending_payment') return 'accepted';
   return tx.status;
 };
-const canBookCollection = (tx) =>
-  ['ready_to_release'].includes(tx.status) && !tx.collectionBookingId;
-const hasCollectionBooked = (tx) =>
-  ['ready_to_release', 'awaiting_collection'].includes(tx.status) && !!tx.collectionBookingId;
+
+// Generate a simple receipt reference from transaction id
+const getReceiptRef = (tx) => tx.receiptRef || `RCP-${tx.id?.slice(-8).toUpperCase()}`;
+
+// Deadline for collection (7 days from dropOffConfirmedAt or droppedOffAt or updatedAt)
+const getCollectionDeadline = (tx) => {
+  const base = tx.droppedOffAt || tx.dropOffConfirmedAt || tx.updatedAt;
+  if (!base) return null;
+  const d = base?.toDate ? base.toDate() : new Date(base);
+  const deadline = new Date(d);
+  deadline.setDate(deadline.getDate() + 7);
+  return deadline;
+};
+
+const formatDeadline = (date) => {
+  if (!date) return null;
+  return date.toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric' });
+};
+
+const daysRemaining = (deadline) => {
+  if (!deadline) return null;
+  const diff = Math.ceil((deadline - Date.now()) / (1000 * 60 * 60 * 24));
+  return diff;
+};
 
 function getTradeItemLabel(tradeItem) {
   if (!tradeItem) return null;
@@ -134,6 +155,7 @@ function TradeItemCard({ tradeItem }) {
 
 export default function MyPurchases() {
   const navigate = useNavigate();
+  const location = useLocation();
 
   const [currentUser, setCurrentUser]   = useState(null);
   const [transactions, setTransactions] = useState([]);
@@ -141,6 +163,24 @@ export default function MyPurchases() {
   const [loading, setLoading]           = useState(true);
   const [hasFetched, setHasFetched]     = useState(false);
   const [activeFilter, setActiveFilter] = useState('all');
+   const [openTxId, setOpenTxId]         = useState(null);
+  const openTxRef = useRef(null);
+
+  // Read URL params: ?filter=awaiting_collection&open=txnId
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const filterParam = params.get('filter');
+    const openParam   = params.get('open');
+    if (filterParam) setActiveFilter(filterParam);
+    if (openParam)   setOpenTxId(openParam);
+  }, [location.search]);
+
+  // Scroll to opened transaction card when enriched data loads
+  useEffect(() => {
+    if (openTxId && openTxRef.current) {
+      openTxRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }, [openTxId, enriched]);
 
   useEffect(() => {
     return onAuthStateChanged(auth, (user) => {
@@ -230,6 +270,7 @@ export default function MyPurchases() {
       const ORDER = {
         pending: 0, accepted: 1, pending_payment: 1, waiting: 2,
         ready_to_release: 3, awaiting_collection: 4, cancelled: 5,
+        overdue_cancelled: 6,
       };
       results.sort((a, b) => {
         const diff = (ORDER[a.status] ?? 99) - (ORDER[b.status] ?? 99);
@@ -358,6 +399,7 @@ export default function MyPurchases() {
                 const status          = getDisplayStatus(tx);
                 const type            = TYPE_CONFIG[tx.type] || TYPE_CONFIG.sale;
                 const isActive        = ['pending', 'accepted', 'pending_payment', 'waiting', 'ready_to_release', 'awaiting_collection'].includes(tx.status);
+                const isOverdueCancelled = tx.status === 'overdue_cancelled';
                 const paymentType     = getPaymentType(tx);
                 const isPartialTx     = paymentType === 'partial';
                 const isCashTx        = paymentType === 'cash' || paymentType === 'cod';
@@ -381,11 +423,16 @@ export default function MyPurchases() {
                 return (
                   <div
                     key={tx.id}
+                    ref={openTxId === tx.id ? openTxRef : null}
                     className={`${styles.card} ${isActive ? styles.cardActive : ''} ${showPaymentButton ? styles.cardAccepted : ''} ${needsTradeDropOff(tx) ? styles.cardTradeAction : ''} ${!clickable ? styles.cardStatic : ''}`}
-                    onClick={() => clickable && handleCardClick(tx)}
-                    role={clickable ? 'button' : undefined}
-                    tabIndex={clickable ? 0 : undefined}
-                    onKeyDown={clickable ? (e) => { if (e.key === 'Enter') handleCardClick(tx); } : undefined}
+                    style={{
+                      ...(openTxId === tx.id ? { boxShadow: '0 0 0 3px #8b5cf6, 0 4px 20px rgba(139,92,246,0.18)', borderColor: '#8b5cf6' } : {}),
+                      ...(isOverdueCancelled ? { filter: 'grayscale(1)', opacity: 0.7, cursor: 'default', pointerEvents: 'none' } : {}),
+                    }}
+                    onClick={isOverdueCancelled ? undefined : () => clickable && handleCardClick(tx)}
+                    role={isOverdueCancelled ? undefined : {clickable ? 'button' : undefined}}
+                    tabIndex={isOverdueCancelled ? -1 : clickable ? 0 : undefined}
+                    onKeyDown={isOverdueCancelled ? undefined : clickable ? (e) => { if (e.key === 'Enter') handleCardClick(tx); } : undefined}
                     style={{ cursor: clickable ? 'pointer' : 'default' }}
                   >
                     {/* Image */}
@@ -599,34 +646,69 @@ export default function MyPurchases() {
                       {tx.status === 'ready_to_release' && (
                         <div className={styles.statusMsg} style={{ borderColor: '#0ea5e9', background: '#f0f9ff' }}>
                           <i className="fas fa-warehouse" style={{ color: '#0ea5e9' }} />
-                          <span>
-                            Your item is at the trade facility.{' '}
-                            {canBookCollection(tx)
-                              ? 'Book a collection slot to pick it up.'
-                              : 'Collection slot already booked.'
-                            }
-                          </span>
+                          <span>Your item has been received. Staff will complete the inspection and notify you when it is ready to collect.</span>
                         </div>
                       )}
 
-                      {tx.status === 'awaiting_collection' && (
-                        <div className={styles.statusMsg} style={{ borderColor: '#8b5cf6', background: '#f5f3ff' }}>
-                          <i className="fas fa-person-walking" style={{ color: '#8b5cf6' }} />
-                          <span>
-                            {tx.collectionDate && tx.collectionTimeSlot
-                              ? <>Collection booked for <strong>{tx.collectionDate}</strong> at <strong>{tx.collectionTimeSlot}</strong>. Please bring your student card.</>
-                              : 'Your item is ready — please collect it from the trade facility.'
-                            }
-                          </span>
+                      {tx.status === 'awaiting_collection' && (() => {
+                        const deadline = getCollectionDeadline(tx);
+                        const days = daysRemaining(deadline);
+                        const receiptRef = getReceiptRef(tx);
+                        return (
+                          <>
+                            <div className={styles.statusMsg} style={{ borderColor: '#8b5cf6', background: '#f5f3ff' }}>
+                              <i className="fas fa-person-walking" style={{ color: '#8b5cf6' }} />
+                              <span>
+                                Your item is ready to collect from the trade facility.{' '}
+                                {deadline && (
+                                  <strong style={{ color: days <= 2 ? '#ef4444' : '#7c3aed' }}>
+                                    Collect within {days > 0 ? `${days} day${days !== 1 ? 's' : ''}` : 'today'}{' '}
+                                    (by {formatDeadline(deadline)}).
+                                  </strong>
+                                )}{' '}
+                                Show your receipt to staff when collecting.
+                              </span>
+                            </div>
+                            {/* Receipt card */}
+                            <div style={{
+                              marginTop: 6,
+                              padding: '0.6rem 0.75rem',
+                              background: '#faf5ff',
+                              border: '1.5px dashed #a78bfa',
+                              borderRadius: 8,
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '0.75rem',
+                            }}>
+                              <div style={{ flexShrink: 0, width: 32, height: 32, background: '#7c3aed', borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                <i className="fas fa-receipt" style={{ color: '#fff', fontSize: '0.85rem' }} />
+                              </div>
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ fontSize: '0.68rem', fontWeight: 700, color: '#7c3aed', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Collection Receipt</div>
+                                <div style={{ fontSize: '0.82rem', fontWeight: 700, color: '#1a1a1a', fontFamily: 'monospace', letterSpacing: '0.08em' }}>{receiptRef}</div>
+                                <div style={{ fontSize: '0.7rem', color: '#6b7280' }}>{tx.listingTitle}</div>
+                              </div>
+                              <div style={{ fontSize: '0.7rem', color: '#7c3aed', fontWeight: 600, textAlign: 'right', flexShrink: 0 }}>
+                                <i className="fas fa-qrcode" style={{ fontSize: '1.2rem', display: 'block', marginBottom: 2 }} />
+                                Show to staff
+                              </div>
+                            </div>
+                          </>
+                        );
+                      })()}
+
+
+                      {tx.status === 'completed' && (
+                        <div className={styles.statusMsg} style={{ borderColor: '#22c55e', background: '#f0fdf4' }}>
+                          <i className="fas fa-check-double" style={{ color: '#22c55e' }} />
+                          <span>Transaction complete.</span>
                         </div>
                       )}
 
-                      {hasCollectionBooked(tx) && tx.collectionDate && (
-                        <div className={styles.statusMsg} style={{ borderColor: '#0ea5e9', background: '#f0f9ff', marginTop: 6 }}>
-                          <i className="fas fa-calendar-check" style={{ color: '#0ea5e9' }} />
-                          <span>
-                            Collection slot: <strong>{tx.collectionDate}</strong> at <strong>{tx.collectionTimeSlot}</strong>
-                          </span>
+                      {tx.status === 'declined' && (
+                        <div className={styles.statusMsg} style={{ borderColor: '#ef4444', background: '#fef2f2' }}>
+                          <i className="fas fa-circle-xmark" style={{ color: '#ef4444' }} />
+                          <span>Your offer was declined. You can browse other listings.</span>
                         </div>
                       )}
 
@@ -637,6 +719,22 @@ export default function MyPurchases() {
                         </div>
                       )}
 
+                      {tx.status === 'overdue_cancelled' && (
+                        <div className={styles.statusMsg} style={{ borderColor: '#9ca3af', background: '#f9fafb' }}>
+                          <i className="fas fa-clock-rotate-left" style={{ color: '#6b7280' }} />
+                          <span style={{ color: '#4b5563' }}>
+                            {tx.cancelReason === 'seller_no_dropoff'
+                              ? <>This transaction was <strong>cancelled</strong> because the seller did not drop off the item in time.{' '}
+                                  {['online', 'full_online', 'partial'].includes((tx.paymentType || tx.paymentMethod || '').toLowerCase())
+                                    ? <strong style={{ color: '#374151' }}>Your online payment will be refunded within 24 hours.</strong>
+                                    : 'No payment was collected.'
+                                  }
+                                </>
+                              : <>This transaction was <strong>cancelled</strong> because the item was not collected in time. It has been returned to the seller.</>
+                            }
+                          </span>
+                        </div>
+                      )}
                     </div>
 
                     {/* Action buttons column */}
@@ -649,19 +747,6 @@ export default function MyPurchases() {
                           title="Complete payment"
                         >
                           <i className="fas fa-credit-card" />
-                        </button>
-                      )}
-
-                      {/* Collection booking button */}
-                      {canBookCollection(tx) && (
-                        <button
-                          className={styles.viewBtn}
-                          style={{ background: '#0ea5e9', fontSize: '0.72rem', padding: '6px 10px', borderRadius: 8, color: '#fff', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}
-                          onClick={(e) => { e.stopPropagation(); navigate(`/book-collection/${tx.id}`); }}
-                          title="Book collection slot"
-                        >
-                          <i className="fas fa-calendar-plus" />
-                          Book Collection
                         </button>
                       )}
 

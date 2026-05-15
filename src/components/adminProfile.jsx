@@ -47,7 +47,18 @@ function Profile() {
   const [activeTab, setActiveTab] = useState('history');
   const [editingListingId, setEditingListingId] = useState(null);
   const [editListingData, setEditListingData]   = useState({});
-  const [adminStats, setAdminStats] = useState({ resolved: 0, pending: 0, dismissed: 0, suspended: 0, totalReports: 0 });
+  const [adminStats, setAdminStats] = useState({ 
+    resolved: 0, 
+    pending: 0, 
+    dismissed: 0, 
+    suspended: 0, 
+    totalReports: 0,
+    resolvedByMe: 0,
+    dismissedByMe: 0,
+    suspendedByMe: 0,
+    removedListings: 0,
+    removedReviews: 0,
+  });
 
   useEffect(() => {
     const params    = new URLSearchParams(location.search);
@@ -66,19 +77,61 @@ function Profile() {
     try {
       const userSnap = await getDoc(doc(db, 'users', uid));
       if (!userSnap.exists() || userSnap.data().userType !== 'admin') return;
+      
       const [reportsSnap, usersSnap] = await Promise.all([
         getDocs(collection(db, 'reports')),
         getDocs(collection(db, 'users')),
       ]);
-      const allReports = reportsSnap.docs.map(d => d.data());
+      
+      const allReports = reportsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+      
+      // Count reports resolved by THIS admin
+      const resolvedByMe = allReports.filter(r => 
+        r.status === 'resolved' && r.resolvedBy === uid
+      ).length;
+      
+      // Count dismissed by THIS admin
+      const dismissedByMe = allReports.filter(r => 
+        r.resolution === 'dismiss' && r.resolvedBy === uid
+      ).length;
+      
+      // Count suspensions made by THIS admin
+      const suspendedByMe = usersSnap.docs.filter(d => 
+        d.data().suspended === true && d.data().suspendedBy === uid
+      ).length;
+
+      // Count listings removed by THIS admin
+      const removedListings = allReports.filter(r =>
+        r.resolution === 'remove_listing' && r.resolvedBy === uid
+      ).length;
+
+      // Count reviews removed by THIS admin
+      const removedReviews = allReports.filter(r =>
+        r.resolution === 'remove_review' && r.resolvedBy === uid
+      ).length;
+      
+      // Count pending reports (global, not admin-specific)
+      const pendingReports = allReports.filter(r => r.status === 'pending').length;
+      
+      // Total reports (global)
+      const totalReports = allReports.length;
+      
+      // Total resolved by anyone (for comparison)
+      const totalResolved = allReports.filter(r => r.status === 'resolved').length;
+      
       setAdminStats({
-        totalReports: allReports.length,
-        resolved:     allReports.filter(r => r.status === 'resolved' && r.resolvedBy === uid).length,
-        pending:      allReports.filter(r => r.status === 'pending').length,
-        dismissed:    allReports.filter(r => r.resolution === 'dismiss' && r.resolvedBy === uid).length,
-        suspended:    usersSnap.docs.filter(d => d.data().suspended === true && d.data().suspendedBy === uid).length,
+        totalReports: totalReports,
+        pending: pendingReports,
+        resolved: totalResolved,
+        resolvedByMe: resolvedByMe,
+        dismissed: dismissedByMe,
+        suspended: suspendedByMe,
+        removedListings: removedListings,
+        removedReviews: removedReviews,
       });
-    } catch (err) { console.error('fetchAdminStats:', err); }
+    } catch (err) { 
+      console.error('fetchAdminStats:', err); 
+    }
   };
 
   useEffect(() => {
@@ -222,7 +275,7 @@ function Profile() {
                 where('listingId', '==', l.id),
                 where('status', '==', 'completed'),
               ));
-              return txSnap.empty ? null : l.id; // null = not covered, id = covered by tx
+              return txSnap.empty ? null : l.id;
             } catch { return null; }
           })
         );
@@ -231,7 +284,7 @@ function Profile() {
         setHistory(prev => {
           const existingIds = new Set(prev.map(h => h.id));
           const newItems = doneItems
-            .filter(l => !existingIds.has(l.id) && !coveredIds.has(l.id)) // ← skip if tx exists
+            .filter(l => !existingIds.has(l.id) && !coveredIds.has(l.id))
             .map(l => ({
               id:           l.id,
               item:         l.title,
@@ -277,7 +330,6 @@ function Profile() {
 
   const fetchUserPurchases = async (uid) => {
     try {
-      // Only look at the transactions collection, status = completed
       const [asBuyerSnap, asSellerSnap] = await Promise.all([
         getDocs(query(
           collection(db, 'transactions'),
@@ -291,7 +343,6 @@ function Profile() {
         )),
       ]);
 
-      // Deduplicate — a trade doc can appear in both queries
       const seen = new Set();
       const allDocs = [
         ...asBuyerSnap.docs.map(d  => ({ d, side: 'buyer'  })),
@@ -307,10 +358,9 @@ function Profile() {
       const enriched = await Promise.all(
         allDocs.map(async ({ d: txDoc, side }) => {
           const p      = txDoc.data();
-          const type   = p.type?.toLowerCase?.() ?? 'sale'; // 'sale' | 'trade'
+          const type   = p.type?.toLowerCase?.() ?? 'sale';
           const isTrade = type === 'trade';
 
-          // ── Resolve listing title + image ──
           let itemTitle    = p.listingTitle || null;
           let listingImage = p.listingImage || p.productImage || null;
           let price        = p.price ?? p.amount ?? p.agreedPrice ?? null;
@@ -328,7 +378,6 @@ function Profile() {
           }
           itemTitle = itemTitle || (side === 'buyer' ? 'Purchase' : 'Sale');
 
-          // ── Resolve other party name ──
           let otherName = null;
           if (side === 'buyer') {
             otherName = p.sellerName || await getUserName(p.sellerId);
@@ -336,18 +385,10 @@ function Profile() {
             otherName = p.buyerName  || await getUserName(p.buyerId);
           }
 
-          // ── Date ──
           const rawDate = p.completedAt || p.updatedAt || p.createdAt;
           const date    = rawDate?.toDate ? rawDate.toDate() : rawDate ? new Date(rawDate) : new Date();
 
-          // ── tradeItem — what was offered in exchange ──
           const tradeItem = p.tradeItem ?? null;
-
-          // ── History type logic ──
-          // Buyer:  type=sale  → 'purchase' (badge: Bought)
-          //         type=trade → 'trade'    (badge: Traded) + tradeItem if present
-          // Seller: type=sale  → 'sale'     (badge: Sold)
-          //         type=trade → 'trade'    (badge: Traded) + tradeItem if present
           const historyType = isTrade ? 'trade' : side === 'buyer' ? 'purchase' : 'sale';
 
           return {
@@ -373,7 +414,6 @@ function Profile() {
     } catch (err) {
       console.warn('fetchUserPurchases:', err);
     }
-    
   };
 
   const handleInputChange = (e) => {
@@ -533,30 +573,87 @@ function Profile() {
               </div>
               <div className={styles.adminStatsGrid}>
                 <div className={styles.adminStatCard}>
-                  <div className={styles.adminStatIcon} style={{ background: '#f0fdf4', color: '#16a34a' }}><i className="fas fa-check-circle" /></div>
-                  <div className={styles.adminStatInfo}><span className={styles.adminStatValue}>{adminStats.resolved}</span><span className={styles.adminStatLabel}>Reports Resolved</span></div>
-                </div>
-                <div className={styles.adminStatCard}>
-                  <div className={styles.adminStatIcon} style={{ background: '#fef3c7', color: '#d97706' }}><i className="fas fa-clock" /></div>
-                  <div className={styles.adminStatInfo}><span className={styles.adminStatValue} style={{ color: adminStats.pending > 0 ? '#d97706' : undefined }}>{adminStats.pending}</span><span className={styles.adminStatLabel}>Pending</span></div>
-                </div>
-                <div className={styles.adminStatCard}>
-                  <div className={styles.adminStatIcon} style={{ background: '#fff1f2', color: '#dc2626' }}><i className="fas fa-ban" /></div>
-                  <div className={styles.adminStatInfo}><span className={styles.adminStatValue} style={{ color: adminStats.suspended > 0 ? '#dc2626' : undefined }}>{adminStats.suspended}</span><span className={styles.adminStatLabel}>Users Suspended</span></div>
-                </div>
-                <div className={styles.adminStatCard}>
-                  <div className={styles.adminStatIcon} style={{ background: '#f1f5f9', color: '#64748b' }}><i className="fas fa-times-circle" /></div>
-                  <div className={styles.adminStatInfo}><span className={styles.adminStatValue}>{adminStats.dismissed}</span><span className={styles.adminStatLabel}>Dismissed</span></div>
-                </div>
-                <div className={styles.adminStatCard}>
-                  <div className={styles.adminStatIcon} style={{ background: '#eff6ff', color: '#2563eb' }}><i className="fas fa-flag" /></div>
-                  <div className={styles.adminStatInfo}><span className={styles.adminStatValue}>{adminStats.totalReports}</span><span className={styles.adminStatLabel}>Total Reports</span></div>
-                </div>
-                <div className={styles.adminStatCard}>
-                  <div className={styles.adminStatIcon} style={{ background: '#f5f3ff', color: '#7c3aed' }}><i className="fas fa-percent" /></div>
+                  <div className={styles.adminStatIcon} style={{ background: '#eff6ff', color: '#2563eb' }}>
+                    <i className="fas fa-flag" />
+                  </div>
                   <div className={styles.adminStatInfo}>
-                    <span className={styles.adminStatValue}>{adminStats.totalReports > 0 ? `${Math.round((adminStats.resolved / adminStats.totalReports) * 100)}%` : '—'}</span>
-                    <span className={styles.adminStatLabel}>Resolution Rate</span>
+                    <span className={styles.adminStatValue}>{adminStats.totalReports}</span>
+                    <span className={styles.adminStatLabel}>Total Reports</span>
+                  </div>
+                </div>
+                <div className={styles.adminStatCard}>
+                  <div className={styles.adminStatIcon} style={{ background: '#fef3c7', color: '#d97706' }}>
+                    <i className="fas fa-clock" />
+                  </div>
+                  <div className={styles.adminStatInfo}>
+                    <span className={styles.adminStatValue} style={{ color: adminStats.pending > 0 ? '#d97706' : undefined }}>
+                      {adminStats.pending}
+                    </span>
+                    <span className={styles.adminStatLabel}>Pending Reports</span>
+                  </div>
+                </div>
+                <div className={styles.adminStatCard}>
+                  <div className={styles.adminStatIcon} style={{ background: '#f0fdf4', color: '#16a34a' }}>
+                    <i className="fas fa-check-circle" />
+                  </div>
+                  <div className={styles.adminStatInfo}>
+                    <span className={styles.adminStatValue}>{adminStats.resolvedByMe}</span>
+                    <span className={styles.adminStatLabel}>Reports Resolved</span>
+                  </div>
+                </div>
+                <div className={styles.adminStatCard}>
+                  <div className={styles.adminStatIcon} style={{ background: '#fff1f2', color: '#dc2626' }}>
+                    <i className="fas fa-ban" />
+                  </div>
+                  <div className={styles.adminStatInfo}>
+                    <span className={styles.adminStatValue} style={{ color: adminStats.suspended > 0 ? '#dc2626' : undefined }}>
+                      {adminStats.suspended}
+                    </span>
+                    <span className={styles.adminStatLabel}>Users Suspended</span>
+                  </div>
+                </div>
+                <div className={styles.adminStatCard}>
+                  <div className={styles.adminStatIcon} style={{ background: '#f1f5f9', color: '#64748b' }}>
+                    <i className="fas fa-times-circle" />
+                  </div>
+                  <div className={styles.adminStatInfo}>
+                    <span className={styles.adminStatValue}>{adminStats.dismissed}</span>
+                    <span className={styles.adminStatLabel}>Dismissed</span>
+                  </div>
+                </div>
+                <div className={styles.adminStatCard}>
+                  <div className={styles.adminStatIcon} style={{ background: adminStats.removedListings > 0 ? '#fef2f2' : '#f1f5f9', color: adminStats.removedListings > 0 ? '#dc2626' : '#64748b' }}>
+                    <i className="fas fa-store" />
+                  </div>
+                  <div className={styles.adminStatInfo}>
+                    <span className={styles.adminStatValue} style={{ color: adminStats.removedListings > 0 ? '#dc2626' : undefined }}>
+                      {adminStats.removedListings}
+                    </span>
+                    <span className={styles.adminStatLabel}>Listings Removed</span>
+                  </div>
+                </div>
+                <div className={styles.adminStatCard}>
+                  <div className={styles.adminStatIcon} style={{ background: adminStats.removedReviews > 0 ? '#fef2f2' : '#f1f5f9', color: adminStats.removedReviews > 0 ? '#dc2626' : '#64748b' }}>
+                    <i className="fas fa-star" />
+                  </div>
+                  <div className={styles.adminStatInfo}>
+                    <span className={styles.adminStatValue} style={{ color: adminStats.removedReviews > 0 ? '#dc2626' : undefined }}>
+                      {adminStats.removedReviews}
+                    </span>
+                    <span className={styles.adminStatLabel}>Reviews Removed</span>
+                  </div>
+                </div>
+                <div className={styles.adminStatCard}>
+                  <div className={styles.adminStatIcon} style={{ background: '#f5f3ff', color: '#7c3aed' }}>
+                    <i className="fas fa-percent" />
+                  </div>
+                  <div className={styles.adminStatInfo}>
+                    <span className={styles.adminStatValue}>
+                      {adminStats.totalReports > 0 
+                        ? `${Math.round((adminStats.resolvedByMe / adminStats.totalReports) * 100)}%` 
+                        : '—'}
+                    </span>
+                    <span className={styles.adminStatLabel}>Your Resolution Rate</span>
                   </div>
                 </div>
               </div>
