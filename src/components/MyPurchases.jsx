@@ -92,7 +92,7 @@ function getTradeItemLabel(tradeItem) {
   return null;
 }
 
-// Trade item mini display card
+// Trade item mini display card - REMOVED description and specifications
 function TradeItemCard({ tradeItem }) {
   if (!tradeItem || typeof tradeItem !== 'object') return null;
   const CONDITION_COLORS = {
@@ -147,6 +147,7 @@ function TradeItemCard({ tradeItem }) {
               </span>
             )}
           </div>
+          {/* REMOVED: description and specifications */}
         </div>
       </div>
     </div>
@@ -163,7 +164,7 @@ export default function MyPurchases() {
   const [loading, setLoading]           = useState(true);
   const [hasFetched, setHasFetched]     = useState(false);
   const [activeFilter, setActiveFilter] = useState('all');
-   const [openTxId, setOpenTxId]         = useState(null);
+  const [openTxId, setOpenTxId]         = useState(null);
   const openTxRef = useRef(null);
 
   // Read URL params: ?filter=awaiting_collection&open=txnId
@@ -192,15 +193,16 @@ export default function MyPurchases() {
   useEffect(() => {
     if (!currentUser) return;
 
+    // ✅ Only fetch active statuses (no cancelled/overdue by default unless user filters)
     const ACTIVE_STATUSES = [
       'pending', 'accepted', 'pending_payment', 'waiting',
-      'ready_to_release', 'awaiting_collection', 'cancelled',
+      'ready_to_release', 'awaiting_collection'
     ];
 
     const q = query(
       collection(db, 'transactions'),
       where('buyerId', '==', currentUser.uid),
-      where('status', 'in', ACTIVE_STATUSES.slice(0, 10))
+      where('status', 'in', ACTIVE_STATUSES)
     );
 
     const unsub = onSnapshot(q, (snap) => {
@@ -253,9 +255,6 @@ export default function MyPurchases() {
               }
             }
           } catch (_) {}
-
-          // buyerBookingId, buyerDropOffDate, buyerDropOffTimeSlot are written
-          // directly to the transaction by the buyer — already present on tx.
 
           return {
             ...tx,
@@ -384,7 +383,7 @@ export default function MyPurchases() {
               <i className="fas fa-shopping-bag" />
               <p>
                 {activeFilter === 'all'
-                  ? "You haven't made any offers yet"
+                  ? "You haven't made any active offers yet"
                   : `No ${activeFilter.replace('_', ' ')} offers`}
               </p>
               {activeFilter === 'all' && (
@@ -428,12 +427,12 @@ export default function MyPurchases() {
                     style={{
                       ...(openTxId === tx.id ? { boxShadow: '0 0 0 3px #8b5cf6, 0 4px 20px rgba(139,92,246,0.18)', borderColor: '#8b5cf6' } : {}),
                       ...(isOverdueCancelled ? { filter: 'grayscale(1)', opacity: 0.7, cursor: 'default', pointerEvents: 'none' } : {}),
+                      cursor: clickable && !isOverdueCancelled ? 'pointer' : 'default'
                     }}
                     onClick={isOverdueCancelled ? undefined : () => clickable && handleCardClick(tx)}
-                    role={isOverdueCancelled ? undefined : {clickable ? 'button' : undefined}}
-                    tabIndex={isOverdueCancelled ? -1 : clickable ? 0 : undefined}
-                    onKeyDown={isOverdueCancelled ? undefined : clickable ? (e) => { if (e.key === 'Enter') handleCardClick(tx); } : undefined}
-                    style={{ cursor: clickable ? 'pointer' : 'default' }}
+                    role={isOverdueCancelled ? undefined : (clickable ? 'button' : undefined)}
+                    tabIndex={isOverdueCancelled ? -1 : (clickable ? 0 : undefined)}
+                    onKeyDown={isOverdueCancelled ? undefined : (clickable ? (e) => { if (e.key === 'Enter' || e.key === ' ') handleCardClick(tx); } : undefined)}
                   >
                     {/* Image */}
                     <div className={styles.cardImage}>
@@ -480,6 +479,8 @@ export default function MyPurchases() {
                           </span>
                         )}
                       </div>
+
+                      {/* REMOVED: description and specifications from card details */}
 
                       {/* Offer Details Panel — trade cards exclude money */}
                       {showPanel && (
@@ -564,14 +565,14 @@ export default function MyPurchases() {
                             )}
                           </div>
 
-                          {/* Trade item visual card */}
+                          {/* Trade item visual card - REMOVED description */}
                           {isTrade && tx.tradeItem && typeof tx.tradeItem === 'object' && (
                             <TradeItemCard tradeItem={tx.tradeItem} />
                           )}
                         </div>
                       )}
 
-                      {/* Status messages */}
+                      {/* Status messages - kept as is */}
                       {tx.status === 'pending' && (
                         <div className={styles.statusMsg} style={{ borderColor: '#f59e0b', background: '#fffbeb' }}>
                           <i className="fas fa-clock" style={{ color: '#f59e0b' }} />
@@ -697,7 +698,6 @@ export default function MyPurchases() {
                         );
                       })()}
 
-
                       {tx.status === 'completed' && (
                         <div className={styles.statusMsg} style={{ borderColor: '#22c55e', background: '#f0fdf4' }}>
                           <i className="fas fa-check-double" style={{ color: '#22c55e' }} />
@@ -756,8 +756,6 @@ export default function MyPurchases() {
                           <i className="fas fa-chevron-right" style={{ fontSize: '0.7rem' }} />
                         </div>
                       )}
-
-                      {/* Non-trade, non-payment, non-collection: no action */}
                     </div>
                   </div>
                 );
