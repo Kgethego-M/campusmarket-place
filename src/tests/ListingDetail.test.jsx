@@ -45,6 +45,20 @@ vi.mock('../components/ReportModal', () => ({
   default: () => null,
 }));
 
+// Mock AlertModal to make testing easier
+vi.mock('../components/AlertModal', () => ({
+  default: ({ open, onClose, title, message }) => {
+    if (!open) return null;
+    return (
+      <div data-testid="alert-modal" role="dialog">
+        <h3 data-testid="alert-title">{title}</h3>
+        <p data-testid="alert-message">{message}</p>
+        <button onClick={onClose} data-testid="alert-close-btn">OK</button>
+      </div>
+    );
+  },
+}));
+
 // ─── Shared mock data ─────────────────────────────────────────────────────────
 
 const mockNavigate = vi.fn();
@@ -366,13 +380,22 @@ describe('ListingDetailView - trade transaction', () => {
     );
   });
 
-  it('shows alert when trade item is empty', async () => {
-    const alertMock = vi.spyOn(window, 'alert').mockImplementation(() => {});
+  it('shows alert modal when trade item is empty', async () => {
     render(<ListingDetail listing={tradeListing} currentUser={mockBuyer} navigate={mockNavigate} />);
     fireEvent.click(screen.getByRole('button', { name: /make trade offer/i }));
     fireEvent.click(screen.getByRole('button', { name: /confirm/i }));
-    await waitFor(() => expect(alertMock).toHaveBeenCalledWith('Please describe what you want to trade'));
-    alertMock.mockRestore();
+    
+    // Wait for the AlertModal to appear
+    await waitFor(() => {
+      expect(screen.getByTestId('alert-modal')).toBeInTheDocument();
+      expect(screen.getByTestId('alert-message')).toHaveTextContent('Please describe what you want to trade');
+    });
+    
+    // Close the modal
+    fireEvent.click(screen.getByTestId('alert-close-btn'));
+    await waitFor(() => {
+      expect(screen.queryByTestId('alert-modal')).not.toBeInTheDocument();
+    });
   });
 });
 
@@ -412,14 +435,16 @@ describe('ListingDetailView - offer sent', () => {
     );
   });
 
-  it('shows alert when createTransaction fails', async () => {
+  it('shows error toast when createTransaction fails', async () => {
     createTransaction.mockRejectedValueOnce(new Error('Network error'));
-    const alertMock = vi.spyOn(window, 'alert').mockImplementation(() => {});
     render(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} />);
     fireEvent.click(screen.getByRole('button', { name: /buy now/i }));
     fireEvent.click(screen.getByRole('button', { name: /confirm/i }));
-    await waitFor(() => expect(alertMock).toHaveBeenCalledWith('Failed to create offer. Please try again.'));
-    alertMock.mockRestore();
+    
+    // Wait for the toast error message
+    await waitFor(() => {
+      expect(screen.getByText('Failed to create offer. Please try again.')).toBeInTheDocument();
+    });
   });
 });
 
@@ -455,15 +480,20 @@ describe('ListingDetailView - edge cases', () => {
     expect(screen.getByTestId('owner-listing-banner')).toBeInTheDocument();
   });
 
-  it('line 157 — shows alert when no purchase type selected and confirm clicked', async () => {
-    const alertMock = vi.spyOn(window, 'alert').mockImplementation(() => {});
+  it('line 157 — shows alert modal when no purchase type selected and confirm clicked', async () => {
     render(<ListingDetail listing={eitherListing} currentUser={mockBuyer} navigate={mockNavigate} />);
     fireEvent.click(screen.getByRole('button', { name: /buy now \/ make trade offer/i }));
     fireEvent.click(screen.getByRole('button', { name: /confirm/i }));
-    await waitFor(() =>
-      expect(alertMock).toHaveBeenCalledWith('Please select a transaction type')
-    );
-    alertMock.mockRestore();
+    
+    await waitFor(() => {
+      expect(screen.getByTestId('alert-modal')).toBeInTheDocument();
+      expect(screen.getByTestId('alert-message')).toHaveTextContent('Please select a transaction type');
+    });
+    
+    fireEvent.click(screen.getByTestId('alert-close-btn'));
+    await waitFor(() => {
+      expect(screen.queryByTestId('alert-modal')).not.toBeInTheDocument();
+    });
   });
 
   it('line 332 — renders nothing for unrecognised listing type', () => {
