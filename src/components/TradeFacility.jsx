@@ -122,84 +122,6 @@ function TradeItemMini({ tradeItem, label = "Buyer's trade item" }) {
   );
 }
 
-// ── Buyer drop-off card (shown in "Book Drop-off" seller tab) ─────────────────
-function BuyerDropOffCard({ txn, idx, onBookDropOff }) {
-  const isTrade       = txn.type === 'trade';
-  if (!isTrade) return null;
-
-  const hasBooked     = !!txn.buyerBookingId;
-  const tradeItem     = txn.tradeItem;
-  const tradeItemObj  = tradeItem && typeof tradeItem === 'object' ? tradeItem : null;
-  const tradeItemName = tradeItemObj?.name ?? (typeof tradeItem === 'string' ? tradeItem : 'Trade item');
-  const cs            = CONDITION_COLORS[tradeItemObj?.condition] || { color: '#6b7280', bg: '#f3f4f6' };
-
-  return (
-    <div className={styles.buyerDropOffCard} style={{ animationDelay: `${idx * 0.06}s` }}>
-      {/* Header */}
-      <div className={styles.buyerDropOffHeader}>
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-          <path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/>
-          <path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>
-        </svg>
-        Buyer's Trade Drop-off
-        {hasBooked && (
-          <span className={styles.buyerDropOffBooked}>
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
-              <polyline points="20 6 9 17 4 12"/>
-            </svg>
-            Booked
-          </span>
-        )}
-      </div>
-
-      <div className={styles.buyerDropOffBody}>
-        {/* Trade item preview */}
-        <div className={styles.buyerDropOffItemWrap}>
-          {tradeItemObj?.imageUrl
-            ? <img src={tradeItemObj.imageUrl} alt={tradeItemName} className={styles.buyerDropOffImg} />
-            : <div className={styles.buyerDropOffImgPlaceholder}>
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#c4b5fd" strokeWidth="1.5">
-                  <path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/>
-                  <path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>
-                </svg>
-              </div>
-          }
-        </div>
-
-        <div className={styles.buyerDropOffInfo}>
-          <p className={styles.buyerDropOffItemName}>{tradeItemName}</p>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 3 }}>
-            {tradeItemObj?.category && (
-              <span className={styles.buyerDropOffChip} style={{ background: '#ede9fe', color: '#6d28d9' }}>
-                {tradeItemObj.category}
-              </span>
-            )}
-            {tradeItemObj?.condition && (
-              <span className={styles.buyerDropOffChip} style={{ background: cs.bg, color: cs.color }}>
-                {tradeItemObj.condition}
-              </span>
-            )}
-          </div>
-
-          {hasBooked ? (
-            <div className={styles.buyerDropOffScheduled}>
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                <rect x="3" y="4" width="18" height="18" rx="2"/>
-                <line x1="16" y1="2" x2="16" y2="6"/>
-                <line x1="8" y1="2" x2="8" y2="6"/>
-                <line x1="3" y1="10" x2="21" y2="10"/>
-              </svg>
-              {txn.buyerDropOffDate} · {txn.buyerDropOffTimeSlot}
-            </div>
-          ) : (
-            <p className={styles.buyerDropOffPending}>Awaiting buyer drop-off booking</p>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
 // ── Buyer tracker card ────────────────────────────────────────────────────────
 function BuyerTrackerCard({ txn, idx }) {
   const stage    = getPipelineStage(txn);
@@ -402,9 +324,6 @@ export default function TradeFacility() {
           txn.tradeItem = txn.tradeItemDetails ?? txn.tradeItem ?? null;
           txn.isSeller = true;
 
-          // buyerBookingId, buyerDropOffDate, buyerDropOffTimeSlot are now written
-          // directly to the transaction by the buyer — no extra queries needed.
-
           return txn;
         })),
 
@@ -426,18 +345,16 @@ export default function TradeFacility() {
           txn.tradeItem = txn.tradeItemDetails ?? txn.tradeItem ?? null;
           txn.isSeller = false;
 
-          // buyerBookingId, buyerDropOffDate, buyerDropOffTimeSlot are now written
-          // directly to the transaction — they're already on txn, nothing extra needed.
-
           return txn;
         })),
       ]);
 
-      const ORDER = { waiting: 0, accepted: 1, awaiting_collection: 2 };
+      const ORDER = { waiting: 0, accepted: 1, awaiting_collection: 2, completed: 3 };
       enrichedSeller.sort((a, b) => (ORDER[a.status] ?? 9) - (ORDER[b.status] ?? 9));
       enrichedBuyer.sort((a, b)  => (ORDER[a.status] ?? 9) - (ORDER[b.status] ?? 9));
 
-      setTransactions(enriched);
+      setSellerTransactions(enrichedSeller);
+      setBuyerTransactions(enrichedBuyer);
     } catch (err) {
       console.error("Error fetching transactions:", err);
     } finally {
@@ -588,20 +505,6 @@ export default function TradeFacility() {
             <p className={styles.emptySub}>
               When a buyer confirms payment on your listing, or you accept a trade offer, you'll book your drop-off here.
             </p>
-            <button className={styles.primaryBtn} onClick={() => navigate("/view-listing")}>
-              Browse listings
-            </button>
-          </div>
-        ) : activeTab === "buyer" && buyerTransactions.length === 0 ? (
-          <div className={styles.empty}>
-            <div className={styles.emptyIcon}>
-              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/>
-                <polyline points="9 22 9 12 15 12 15 22"/>
-              </svg>
-            </div>
-            <p className={styles.emptyTitle}>No active purchases</p>
-            <p className={styles.emptySub}>When you purchase an item, you can track its progress here.</p>
             <button className={styles.primaryBtn} onClick={() => navigate("/view-listing")}>
               Browse listings
             </button>

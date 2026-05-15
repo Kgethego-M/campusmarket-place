@@ -4,7 +4,7 @@ import { auth, db } from "../firebase.js";
 import { signOut, onAuthStateChanged } from "firebase/auth";
 import {
     doc, getDoc, updateDoc, serverTimestamp,
-    collection, addDoc, query, where, getDocs, onSnapshot,
+    collection, addDoc, query, where, getDocs, onSnapshot, deleteDoc,
 } from "firebase/firestore";
 import styles from "./Staffdashboard.module.css";
 import { recordCashCollected } from "../services/revenueService";
@@ -22,6 +22,23 @@ async function sendNotification(userId, payload) {
         });
     } catch (err) {
         console.error("sendNotification failed:", err);
+    }
+}
+
+// Check if a notification already exists for this transaction and type
+async function notificationAlreadyExists(txnId, type) {
+    try {
+        const q = query(
+            collection(db, "notifications"),
+            where("transactionId", "==", txnId),
+            where("type", "==", type),
+            where("createdAt", ">=", new Date(Date.now() - 24 * 60 * 60 * 1000)) // Last 24 hours
+        );
+        const snapshot = await getDocs(q);
+        return !snapshot.empty;
+    } catch (err) {
+        console.error("Failed to check existing notification:", err);
+        return false;
     }
 }
 
@@ -77,48 +94,62 @@ async function notifyOverdueCollection(txn) {
     if (!txn.buyerId || !txn.sellerId) return;
     const title = txn.listingTitle || txn.item;
 
-    const buyerMsg  = `Your collection of "${title}" is overdue. You have 24 hours to collect your item from the trade facility — please come in as soon as possible. If the item is not collected within 24 hours, this transaction will be automatically cancelled and the item returned to the seller.`;
-    const sellerMsg = `The buyer has not yet collected "${title}". They have been notified and given 24 hours to collect. If they do not collect within 24 hours, the transaction will be cancelled and you will be asked to come collect your item.`;
+    // Check if already sent to prevent duplicates
+    const buyerExists = await notificationAlreadyExists(txn.id, "overdue_collection_buyer");
+    const sellerExists = await notificationAlreadyExists(txn.id, "overdue_collection_seller");
+    
+    if (!buyerExists) {
+        const buyerMsg = `Your collection of "${title}" is overdue. You have 24 hours to collect your item from the trade facility — please come in as soon as possible. If the item is not collected within 24 hours, this transaction will be automatically cancelled and the item returned to the seller.`;
+        await sendNotification(txn.buyerId, {
+            type:          "overdue_collection_buyer",
+            listingId:     txn.listingId || null,
+            transactionId: txn.id,
+            listingTitle:  title,
+            message:       buyerMsg,
+        });
+    }
 
-    await sendNotification(txn.buyerId, {
-        type:          "overdue_collection_buyer",
-        listingId:     txn.listingId || null,
-        transactionId: txn.id,
-        listingTitle:  title,
-        message:       buyerMsg,
-    });
-
-    await sendNotification(txn.sellerId, {
-        type:          "overdue_collection_seller",
-        listingId:     txn.listingId || null,
-        transactionId: txn.id,
-        listingTitle:  title,
-        message:       sellerMsg,
-    });
+    if (!sellerExists) {
+        const sellerMsg = `The buyer has not yet collected "${title}". They have been notified and given 24 hours to collect. If they do not collect within 24 hours, the transaction will be cancelled and you will be asked to come collect your item.`;
+        await sendNotification(txn.sellerId, {
+            type:          "overdue_collection_seller",
+            listingId:     txn.listingId || null,
+            transactionId: txn.id,
+            listingTitle:  title,
+            message:       sellerMsg,
+        });
+    }
 }
 
 async function notifyOverdueDropOff(txn) {
     if (!txn.buyerId || !txn.sellerId) return;
     const title = txn.listingTitle || txn.item;
 
-    const sellerMsg = `Your drop-off for "${title}" is overdue. You have 24 hours to drop off the item at the trade facility. If the item is not dropped off within 24 hours, this transaction will be automatically cancelled.`;
-    const buyerMsg  = `The seller has not yet dropped off "${title}" at the trade facility. They have been notified and given 24 hours to drop off. If they do not drop off within 24 hours, this transaction will be cancelled.`;
+    // Check if already sent to prevent duplicates
+    const buyerExists = await notificationAlreadyExists(txn.id, "overdue_dropoff_buyer");
+    const sellerExists = await notificationAlreadyExists(txn.id, "overdue_dropoff_seller");
+    
+    if (!sellerExists) {
+        const sellerMsg = `Your drop-off for "${title}" is overdue. You have 24 hours to drop off the item at the trade facility. If the item is not dropped off within 24 hours, this transaction will be automatically cancelled.`;
+        await sendNotification(txn.sellerId, {
+            type:          "overdue_dropoff_seller",
+            listingId:     txn.listingId || null,
+            transactionId: txn.id,
+            listingTitle:  title,
+            message:       sellerMsg,
+        });
+    }
 
-    await sendNotification(txn.sellerId, {
-        type:          "overdue_dropoff_seller",
-        listingId:     txn.listingId || null,
-        transactionId: txn.id,
-        listingTitle:  title,
-        message:       sellerMsg,
-    });
-
-    await sendNotification(txn.buyerId, {
-        type:          "overdue_dropoff_buyer",
-        listingId:     txn.listingId || null,
-        transactionId: txn.id,
-        listingTitle:  title,
-        message:       buyerMsg,
-    });
+    if (!buyerExists) {
+        const buyerMsg = `The seller has not yet dropped off "${title}" at the trade facility. They have been notified and given 24 hours to drop off. If they do not drop off within 24 hours, this transaction will be cancelled.`;
+        await sendNotification(txn.buyerId, {
+            type:          "overdue_dropoff_buyer",
+            listingId:     txn.listingId || null,
+            transactionId: txn.id,
+            listingTitle:  title,
+            message:       buyerMsg,
+        });
+    }
 }
 
 async function notifyCancelledDropOff(txn) {
@@ -1677,6 +1708,12 @@ export default function StaffDashboard() {
     }, []);
 
     const handleAlertOverdue = async (txn, type) => {
+        // Prevent duplicate alerts by checking if already sent
+        if (txn.overdueAlertSentAt) {
+            console.log(`Alert already sent for transaction ${txn.id}`);
+            return;
+        }
+        
         try {
             await updateDoc(doc(db, "transactions", txn.id), {
                 overdueAlertSentAt: serverTimestamp(),
@@ -1725,23 +1762,33 @@ export default function StaffDashboard() {
         }
     };
 
+    // Fixed autoAlert to prevent duplicate notifications
     useEffect(() => {
         if (transactions.length === 0) return;
+        
         async function autoAlert() {
             for (const txn of transactions) {
-                if (txn.overdueAlertSentAt) continue;
+                // Skip if already cancelled or alert already sent
                 if (txn.status === "overdue_cancelled") continue;
+                if (txn.overdueAlertSentAt) continue;
+                
                 const overdueDropOff    = isDropOffOverdue(txn);
                 const overdueCollection = isCollectionOverdue(txn);
+                
                 if (!overdueDropOff && !overdueCollection) continue;
+                
                 try {
                     await handleAlertOverdue(txn, overdueDropOff ? "drop_off" : "collection");
+                    // Update local state to reflect alert was sent
                     setTransactions(prev => prev.map(t =>
                         t.id === txn.id ? { ...t, overdueAlertSentAt: new Date().toISOString() } : t
                     ));
-                } catch (err) { console.error("Auto-alert failed:", txn.id, err); }
+                } catch (err) { 
+                    console.error("Auto-alert failed:", txn.id, err); 
+                }
             }
         }
+        
         autoAlert();
         const interval = setInterval(autoAlert, 60_000);
         return () => clearInterval(interval);
