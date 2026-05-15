@@ -313,17 +313,25 @@ export default function CreateListing() {
                 {/* ── Price + Listing Type ── */}
                 <div className={styles.row}>
                     <div>
-                        <label className={styles.label}>Price</label>
+                        <label className={styles.label}>
+                            Price
+                            {listingType === "trade" && (
+                                <span style={{ marginLeft: 8, fontSize: "0.75rem", fontWeight: 500, color: "#9ca3af" }}>
+                                    (not applicable for trade-only listings)
+                                </span>
+                            )}
+                        </label>
                         <input
                             className={styles.input}
                             type="number"
-                            value={price}
+                            value={listingType === "trade" ? "" : price}
                             onChange={(e) => setPrice(e.target.value)}
-                            placeholder="Enter price"
+                            placeholder={listingType === "trade" ? "N/A — trade only" : "Enter price"}
                             min="0"
                             step="0.01"
                             required={listingType !== "trade"}
-                            disabled={loading}
+                            disabled={loading || listingType === "trade"}
+                            style={listingType === "trade" ? { opacity: 0.45, cursor: "not-allowed", backgroundColor: "#f3f4f6" } : undefined}
                         />
                     </div>
                     <div>
@@ -331,7 +339,11 @@ export default function CreateListing() {
                         <select
                             className={styles.select}
                             value={listingType}
-                            onChange={(e) => setListingType(e.target.value)}
+                            onChange={(e) => {
+                                const val = e.target.value;
+                                setListingType(val);
+                                if (val === "trade") setPrice("");
+                            }}
                             required
                             disabled={loading}
                         >

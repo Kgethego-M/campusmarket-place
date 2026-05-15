@@ -79,6 +79,25 @@
 
 .sub strong { color: #1a1a2e; }
 
+/* ── Item chip ────────────────────────────── */
+.itemChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #f1f5f9;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 0.72rem;
+  color: #475569;
+  margin-top: 8px;
+}
+
+.itemPrice {
+  font-weight: 700;
+  color: #6AA6DA;
+  margin-left: 4px;
+}
+
 /* ── Section ──────────────────────────────── */
 .section {
   display: flex;
@@ -100,36 +119,51 @@
 }
 
 /* ── Stars ────────────────────────────────── */
+/* Stars container - centered */
 .stars {
   display: flex;
-  gap: 6px;
+  gap: 8px;
+  justify-content: center;
+  padding: 8px 0;
 }
 
+/* Individual star button */
 .star {
   background: none;
   border: none;
   font-size: 2.2rem;
-  color: #e2e8f0;
   cursor: pointer;
   padding: 0;
   line-height: 1;
-  transition: color 0.12s, transform 0.1s;
+  transition: transform 0.1s ease;
+  color: #e2e8f0;
 }
 
-.star:hover,
+/* Only filled stars get the gold color - NO hover fill effect */
 .starFilled {
   color: #f5a623;
 }
 
-.star:hover {
-  transform: scale(1.15);
+/* Subtle scale effect when clicked (not on hover) */
+.star:active {
+  transform: scale(0.9);
 }
 
+/* Focus ring for accessibility */
+.star:focus-visible {
+  outline: 2px solid #6AA6DA;
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Rating label that appears after selection */
 .ratingLabel {
   font-size: 0.82rem;
   font-weight: 700;
   color: #6AA6DA;
   margin: 0;
+  text-align: center;
+  letter-spacing: 0.3px;
 }
 
 /* ── Textarea ─────────────────────────────── */
@@ -251,5 +285,9 @@
 
   .star {
     font-size: 1.9rem;
+  }
+  
+  .stars {
+    gap: 6px;
   }
 }

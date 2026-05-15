@@ -152,7 +152,15 @@ function Profile() {
 
       const unsubOffers = onSnapshot(
         query(collection(db, 'transactions'), where('sellerId', '==', user.uid), where('status', '==', 'pending')),
-        (snap) => setIncomingOffers(snap.docs.map(d => ({ id: d.id, ...d.data() })))
+        (snap) => setIncomingOffers(snap.docs.map(d => {
+          const data = d.data();
+          return {
+            id: d.id,
+            ...data,
+            // Prefer structured object (has imageUrl) over legacy string
+            tradeItem: data.tradeItemDetails ?? data.tradeItem ?? null,
+          };
+        }))
       );
       return () => unsubOffers();
     });
@@ -379,7 +387,8 @@ function Profile() {
           const rawDate = p.completedAt || p.updatedAt || p.createdAt;
           const date    = rawDate?.toDate ? rawDate.toDate() : rawDate ? new Date(rawDate) : new Date();
 
-          const tradeItem = p.tradeItem ?? null;
+          // Prefer structured tradeItemDetails (has imageUrl); fall back to legacy string
+          const tradeItem = p.tradeItemDetails ?? p.tradeItem ?? null;
           const historyType = isTrade ? 'trade' : side === 'buyer' ? 'purchase' : 'sale';
 
           return {

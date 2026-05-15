@@ -49,7 +49,7 @@ export default function ViewListings() {
                     const txSnap = await getDocs(
                         query(
                             collection(db, "transactions"),
-                            where("status", "in", ["accepted", "completed"])
+                            where("status", "in", ["accepted", "completed", "waiting", "awaiting_collection"])
                         )
                     );
                     txSnap.docs.forEach(d => {
@@ -112,7 +112,7 @@ export default function ViewListings() {
                 ];
 
                 // 4. Remove listings that are hidden due to transaction or status
-                const UNAVAILABLE = new Set(["accepted", "completed", "sold", "traded", "inactive", "waiting"]);
+                const UNAVAILABLE = new Set(["accepted", "completed", "sold", "traded", "inactive", "waiting", "waiting", "awaiting_collection"]);
                 const visible = merged.filter(l => {
                     if (hiddenListingIds.has(l.id)) return false;
                     if (l.status && UNAVAILABLE.has(l.status.toLowerCase())) return false;
