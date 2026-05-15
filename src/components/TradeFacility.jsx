@@ -326,6 +326,8 @@ export default function TradeFacility() {
           } else {
             txn.counterpartyName = "Unknown Buyer";
           }
+          // Prefer structured tradeItemDetails (has imageUrl) over legacy string
+          txn.tradeItem = txn.tradeItemDetails ?? txn.tradeItem ?? null;
           txn.isSeller = true;
           return txn;
         })),
@@ -345,6 +347,8 @@ export default function TradeFacility() {
           } else {
             txn.counterpartyName = "Unknown Seller";
           }
+          // Prefer structured tradeItemDetails (has imageUrl) over legacy string
+          txn.tradeItem = txn.tradeItemDetails ?? txn.tradeItem ?? null;
           txn.isSeller = false;
           return txn;
         })),
@@ -363,8 +367,15 @@ export default function TradeFacility() {
     }
   }
 
-  const canBookDropOff = (txn) =>
-    txn.isSeller && ["waiting", "accepted"].includes(txn.status) && !txn.bookingId;
+  const canBookDropOff = (txn) => {
+    if (!txn.isSeller) return false;
+    if (!["waiting", "accepted"].includes(txn.status)) return false;
+    if (txn.bookingId) return false;
+    // For sale or "either" transactions, require buyer to have confirmed payment
+    const isTrade = txn.type === 'trade';
+    if (!isTrade && !txn.paymentConfirmed) return false;
+    return true;
+  };
 
   const hasDropOffBooked = (txn) =>
     txn.isSeller && (txn.dropOffStatus === "scheduled" || !!txn.bookingId);
@@ -584,6 +595,13 @@ export default function TradeFacility() {
                         </svg>
                         Book drop-off
                       </button>
+                    )}
+
+                    {/* Payment not yet confirmed — block drop-off booking */}
+                    {txn.isSeller && ["waiting", "accepted"].includes(txn.status) && !txn.bookingId && txn.type !== 'trade' && !txn.paymentConfirmed && (
+                      <p style={{ fontSize: "0.75rem", color: "#92400e", marginTop: 6, background: "#fef3c7", borderRadius: 6, padding: "5px 10px", display: "inline-block", fontWeight: 600 }}>
+                        ⏳ Waiting for the buyer to confirm payment before you can book a drop-off
+                      </p>
                     )}
 
                     {hasDropOffBooked(txn) && (

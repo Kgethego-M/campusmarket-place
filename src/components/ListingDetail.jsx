@@ -499,9 +499,10 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
 
   const openPurchaseModal = () => {
     const lt = listing.listingType || listing.type;
-    setPurchaseType(
-      lt === 'For Sale or Trade' ? '' : lt.toLowerCase().includes('sale') ? 'sale' : 'trade'
-    );
+    const isEither   = lt === 'For Sale or Trade' || lt === 'either';
+    const isSaleOnly = lt === 'For Sale' || lt === 'sale';
+    const isTradeOnly = lt === 'For Trade' || lt === 'trade';
+    setPurchaseType(isEither ? '' : isSaleOnly ? 'sale' : isTradeOnly ? 'trade' : '');
     setIsModalOpen(true);
   };
 
@@ -518,15 +519,20 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
         </div>
       );
     }
-    const type = listing.listingType || listing.type;
+    const lt = listing.listingType || listing.type;
+    const isTradeOnly = lt === 'For Trade' || lt === 'trade';
+    const isSaleOnly  = lt === 'For Sale'  || lt === 'sale';
+    const isEither    = lt === 'For Sale or Trade' || lt === 'either';
+
     let label = '';
-    if (type === 'For Sale' || type === 'sale')        label = 'Buy Now';
-    else if (type === 'For Trade' || type === 'trade') label = 'Make Trade Offer';
-    else if (type === 'For Sale or Trade')             label = 'Buy Now / Make Trade Offer';
+    if (isSaleOnly)  label = 'Buy Now';
+    else if (isTradeOnly) label = 'Make Trade Offer';
+    else if (isEither)    label = 'Buy Now / Make Trade Offer';
     else return null;
+
     return (
       <button onClick={openPurchaseModal} style={styles.buyBtn}>
-        {label} — R {Number(listing.price).toLocaleString()}
+        {label}{!isTradeOnly && listing.price ? ` — R ${Number(listing.price).toLocaleString()}` : ''}
       </button>
     );
   };
@@ -535,7 +541,17 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
   const type      = listing.listingType || listing.type || '';
   const condition = listing.condition || '';
   const conditionColor = { New: '#4CAF50', 'Like New': '#8BC34A', Good: '#FFC107', Fair: '#FF9800', Poor: '#F44336' };
-  const typeColor      = { 'For Sale': '#e07b3a', 'For Trade': '#3a7be0', 'For Sale or Trade': '#7b3ae0', sale: '#e07b3a', trade: '#3a7be0' };
+  const typeColor      = { 'For Sale': '#e07b3a', 'For Trade': '#3a7be0', 'For Sale or Trade': '#7b3ae0', sale: '#e07b3a', trade: '#3a7be0', either: '#7b3ae0' };
+
+  // Normalise "either" → human-readable label for the badge
+  const typeBadgeLabel = {
+    'For Sale':         'For Sale',
+    'For Trade':        'For Trade',
+    'For Sale or Trade':'For Sale or Trade',
+    sale:               'For Sale',
+    trade:              'For Trade',
+    either:             'For Sale or Trade',
+  }[type] || type;
 
   return (
     <>
@@ -569,12 +585,15 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
 
           <div style={styles.badgeRow}>
             {condition && <span style={{ ...styles.badge, backgroundColor: conditionColor[condition] || '#999', color: '#fff' }}>{condition}</span>}
-            {type      && <span style={{ ...styles.badge, backgroundColor: typeColor[type] || '#555', color: '#fff' }}>{type}</span>}
+            {type      && <span style={{ ...styles.badge, backgroundColor: typeColor[type] || '#555', color: '#fff' }}>{typeBadgeLabel}</span>}
             {listing.category && <span style={{ ...styles.badge, backgroundColor: '#E1E5AC', color: '#5a5a00' }}>{listing.category}</span>}
           </div>
 
           <h1 style={styles.title}>{listing.title}</h1>
-          <p style={styles.price}>R {Number(listing.price).toLocaleString()}</p>
+          {/* Hide price for trade-only listings */}
+          {type !== 'For Trade' && type !== 'trade' && (
+            <p style={styles.price}>R {Number(listing.price).toLocaleString()}</p>
+          )}
 
           {listing.description && (
             <div style={styles.descBox}>
@@ -733,7 +752,7 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
             <div style={modalStyles.modal}>
               <div style={modalStyles.header}>
                 <h2 style={{ margin: 0, fontSize: '1.1rem' }}>
-                  {purchaseType === 'trade' ? 'Initiate Trade' : 'Initiate Purchase'}
+                  {purchaseType === 'trade' ? 'Initiate Trade' : purchaseType === 'sale' ? 'Initiate Purchase' : 'Make an Offer'}
                 </h2>
                 <button onClick={closeModal} style={modalStyles.closeBtn} aria-label="Close modal">
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
@@ -746,16 +765,20 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
                 Review and confirm your details for "{listing.title}"
               </p>
 
-              {/* ── Choose type (For Sale or Trade listings) ── */}
+              {/* ── Choose type (For Sale or Trade / either listings) ── */}
               {(() => {
                 const lt = listing.listingType || listing.type;
-                return lt === 'For Sale or Trade' && !purchaseType;
+                return (lt === 'For Sale or Trade' || lt === 'either') && !purchaseType;
               })() && (
                 <div style={modalStyles.section}>
-                  <label style={modalStyles.label}>Choose Transaction Type</label>
+                  <label style={modalStyles.label}>How would you like to proceed?</label>
                   <div style={{ display: 'flex', gap: '10px' }}>
-                    <button onClick={() => setPurchaseType('sale')}  style={modalStyles.choiceBtn}>Cash Purchase</button>
-                    <button onClick={() => setPurchaseType('trade')} style={modalStyles.choiceBtn}>Trade Item</button>
+                    <button onClick={() => setPurchaseType('sale')}  style={modalStyles.choiceBtn}>
+                      Cash Purchase
+                    </button>
+                    <button onClick={() => setPurchaseType('trade')} style={modalStyles.choiceBtn}>
+                      Trade Item
+                    </button>
                   </div>
                 </div>
               )}

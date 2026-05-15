@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { auth, db } from '../firebase';
 import {
@@ -116,6 +116,7 @@ export default function MyPurchases() {
   const [hasFetched, setHasFetched]     = useState(false);
   const [activeFilter, setActiveFilter] = useState('all');
   const [openTxId, setOpenTxId]         = useState(null);
+  const [expandedCards, setExpandedCards] = useState({});
   const openTxRef = useRef(null);
 
   // Read URL params: ?filter=awaiting_collection&open=txnId
@@ -180,15 +181,23 @@ export default function MyPurchases() {
           let listingImage = null;
           let listingPrice = tx.agreedPrice ?? tx.price ?? null;
           let sellerName   = tx.sellerName  || null;
+          let listingDetails = null;
 
           try {
             if (tx.listingId) {
               const ls = await getDoc(doc(db, 'listings', tx.listingId));
               if (ls.exists()) {
                 const ld = ls.data();
-                listingTitle = listingTitle || ld.title || 'Unknown Item';
-                listingImage = ld.photos?.[0] || ld.imageUrl || null;
-                listingPrice = listingPrice ?? ld.price ?? null;
+                listingTitle   = listingTitle || ld.title || 'Unknown Item';
+                listingImage   = ld.photos?.[0] || ld.imageUrl || null;
+                listingPrice   = listingPrice ?? ld.price ?? null;
+                listingDetails = {
+                  photos:      ld.photos      || (ld.imageUrl ? [ld.imageUrl] : []),
+                  condition:   ld.condition   || null,
+                  category:    ld.category    || null,
+                  description: ld.description || null,
+                  listingType: ld.listingType || null,
+                };
               }
             }
           } catch (_) {}
@@ -203,12 +212,36 @@ export default function MyPurchases() {
             }
           } catch (_) {}
 
+          // For waiting transactions, fetch full seller profile
+          let sellerProfile = null;
+          try {
+            if (tx.status === 'waiting' && tx.sellerId) {
+              const us = await getDoc(doc(db, 'users', tx.sellerId));
+              if (us.exists()) {
+                const ud = us.data();
+                sellerProfile = {
+                  name:         `${ud.firstName || ''} ${ud.lastName || ''}`.trim() || ud.email || 'Unknown Seller',
+                  photoURL:     ud.photoURL     || null,
+                  rating:       ud.rating       ?? null,
+                  totalRatings: ud.totalRatings ?? 0,
+                  bio:          ud.bio          || null,
+                  memberSince:  ud.createdAt
+                    ? new Date(ud.createdAt?.toDate ? ud.createdAt.toDate() : ud.createdAt)
+                        .toLocaleDateString('en-ZA', { month: 'long', year: 'numeric' })
+                    : null,
+                };
+              }
+            }
+          } catch (_) {}
+
           return {
             ...tx,
             listingTitle: listingTitle || 'Unknown Item',
             listingImage,
             listingPrice,
+            listingDetails,
             sellerName: sellerName || 'Unknown Seller',
+            sellerProfile,
           };
         })
       );
@@ -267,6 +300,20 @@ export default function MyPurchases() {
     }
     if (tx.listingId) navigate(`/listing/${tx.listingId}`);
   };
+
+  // ── Waiting card helpers ───────────────────────────────────────────────────
+  const badgeStyle = (bg) => ({
+    padding: '3px 11px', borderRadius: 20, fontSize: '0.75rem',
+    fontWeight: 600, background: bg, color: '#fff',
+    fontFamily: '"Segoe UI", system-ui, sans-serif',
+  });
+  const conditionBadgeColor = (c) => ({
+    'New': '#22c55e', 'Like New': '#3b82f6', 'Good': '#f59e0b',
+    'Fair': '#f97316', 'Poor': '#ef4444',
+  }[c] || '#6b7280');
+  const normaliseListingType = (t) => ({
+    sale: 'For Sale', trade: 'For Trade', either: 'For Sale or Trade',
+  }[t] || t);
 
   return (
     <>
@@ -352,18 +399,18 @@ export default function MyPurchases() {
                 const showPanel       = tx.agreedPrice != null || paymentType || tx.tradeItem || tx.terms;
 
                 return (
+                  <React.Fragment key={tx.id}>
                   <div
-                    key={tx.id}
                     ref={openTxId === tx.id ? openTxRef : null}
                     className={`${styles.card} ${isActive ? styles.cardActive : ''} ${showPaymentButton ? styles.cardAccepted : ''}`}
                     style={{
                       ...(openTxId === tx.id ? { boxShadow: '0 0 0 3px #8b5cf6, 0 4px 20px rgba(139,92,246,0.18)', borderColor: '#8b5cf6' } : {}),
                       ...(isOverdueCancelled ? { filter: 'grayscale(1)', opacity: 0.7, cursor: 'default', pointerEvents: 'none' } : {}),
                     }}
-                    onClick={isOverdueCancelled ? undefined : () => handleArrowClick(tx)}
+                    onClick={isOverdueCancelled ? undefined : tx.status === 'waiting' ? (e) => { setExpandedCards(prev => ({ ...prev, [tx.id]: !prev[tx.id] })); } : () => handleArrowClick(tx)}
                     role={isOverdueCancelled ? undefined : "button"}
                     tabIndex={isOverdueCancelled ? -1 : 0}
-                    onKeyDown={isOverdueCancelled ? undefined : (e) => { if (e.key === 'Enter') handleArrowClick(tx); }}
+                    onKeyDown={isOverdueCancelled ? undefined : (e) => { if (e.key === 'Enter') { tx.status === 'waiting' ? setExpandedCards(prev => ({ ...prev, [tx.id]: !prev[tx.id] })) : handleArrowClick(tx); } }}
                   >
                     {/* Image */}
                     <div className={styles.cardImage}>
@@ -475,7 +522,11 @@ export default function MyPurchases() {
                             {tx.tradeItem && (
                               <>
                                 <span className={styles.offerPanelLabel}>Trade item</span>
-                                <span className={styles.offerPanelValue}>{tx.tradeItem}</span>
+                                <span className={styles.offerPanelValue}>
+                                  {typeof tx.tradeItem === "object"
+                                    ? (tx.tradeItem.name || tx.tradeItem.title || "Trade item")
+                                    : tx.tradeItem}
+                                </span>
                               </>
                             )}
                             {tx.terms && (
@@ -617,11 +668,93 @@ export default function MyPurchases() {
                           </span>
                         </div>
                       )}
+                      {/* ── Waiting: full listing-detail view ── */}
+                      {tx.status === 'waiting' && expandedCards[tx.id] && (
+                        <div style={{ marginTop: 8 }}>
+
+                          {/* Badge chips row — condition, listing type, category */}
+                          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+                            {tx.listingDetails?.condition && (
+                              <span style={badgeStyle(conditionBadgeColor(tx.listingDetails.condition))}>
+                                {tx.listingDetails.condition}
+                              </span>
+                            )}
+                            {tx.listingDetails?.listingType && (
+                              <span style={badgeStyle('#7b3ae0')}>
+                                {normaliseListingType(tx.listingDetails.listingType)}
+                              </span>
+                            )}
+                            {tx.listingDetails?.category && (
+                              <span style={badgeStyle('#6b7280')}>
+                                {tx.listingDetails.category}
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Title */}
+                          <p style={{ margin: '0 0 4px', fontWeight: 700, fontSize: '1rem', color: '#1a1a1a' }}>
+                            {tx.listingTitle}
+                          </p>
+
+                          {/* Price */}
+                          {tx.listingPrice != null && (
+                            <p style={{ margin: '0 0 10px', fontSize: '1.1rem', fontWeight: 700, color: '#6AA6DA' }}>
+                              R {Number(tx.listingPrice).toLocaleString('en-ZA')}
+                            </p>
+                          )}
+
+                          {/* Description block with left border */}
+                          {tx.listingDetails?.description && (
+                            <div style={{ borderLeft: '3px solid #6AA6DA', borderRadius: 4, background: '#fdf8f0', padding: '10px 12px', marginBottom: 10 }}>
+                              <p style={{ margin: '0 0 4px', fontSize: '0.7rem', fontWeight: 700, color: '#c07a10', textTransform: 'uppercase', letterSpacing: '0.07em' }}>
+                                Description
+                              </p>
+                              <p style={{ margin: 0, fontSize: '0.85rem', color: '#4a3000', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
+                                {tx.listingDetails.description}
+                              </p>
+                            </div>
+                          )}
+
+                          {/* Seller card */}
+                          {tx.sellerProfile && (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: 12, border: '1px solid #dde3ea', borderRadius: 10, background: '#fff' }}>
+                              {tx.sellerProfile.photoURL
+                                ? <img src={tx.sellerProfile.photoURL} alt={tx.sellerProfile.name}
+                                    style={{ width: 42, height: 42, borderRadius: '50%', objectFit: 'cover', border: '1.5px solid #e5e7eb', flexShrink: 0 }} />
+                                : <div style={{ width: 42, height: 42, borderRadius: '50%', background: '#6AA6DA', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontWeight: 700, color: '#fff', fontSize: '1rem' }}>
+                                    {tx.sellerProfile.name?.[0]?.toUpperCase() || '?'}
+                                  </div>
+                              }
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <p style={{ margin: '0 0 2px', fontWeight: 600, fontSize: '0.88rem', color: '#1a1a1a' }}>
+                                  {tx.sellerProfile.name}
+                                </p>
+                                {tx.sellerProfile.rating != null && (
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+                                    {Array.from({ length: 5 }, (_, i) => (
+                                      <i key={i}
+                                        className={i < Math.floor(tx.sellerProfile.rating) ? 'fas fa-star' : i < tx.sellerProfile.rating ? 'fas fa-star-half-alt' : 'far fa-star'}
+                                        style={{ fontSize: '0.6rem', color: '#f59e0b' }} />
+                                    ))}
+                                    <span style={{ fontSize: '0.7rem', color: '#6AA6DA', marginLeft: 3 }}>
+                                      View profile &amp; ratings →
+                                    </span>
+                                  </div>
+                                )}
+                                {!tx.sellerProfile.rating && (
+                                  <p style={{ margin: 0, fontSize: '0.75rem', color: '#6AA6DA' }}>View profile &amp; ratings →</p>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
                     </div>
 
                     {/* ── Action buttons ── */}
+                    {!isOverdueCancelled && (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 8, alignSelf: 'center' }}>
-                      {/* Payment button */}
                       {showPaymentButton && (
                         <button
                           className={`${styles.viewBtn} ${styles.viewBtnPay}`}
@@ -631,9 +764,17 @@ export default function MyPurchases() {
                           <i className="fas fa-credit-card" />
                         </button>
                       )}
-
-                      {/* View listing button — fallback when no action buttons */}
-                      {!showPaymentButton && tx.listingId && (
+                      {!showPaymentButton && tx.status === 'waiting' && (
+                        <button
+                          className={styles.viewBtn}
+                          onClick={(e) => { e.stopPropagation(); setExpandedCards(prev => ({ ...prev, [tx.id]: !prev[tx.id] })); }}
+                          title="View listing details"
+                          style={expandedCards[tx.id] ? { background: '#8b5cf6', color: '#fff' } : {}}
+                        >
+                          <i className={`fas fa-chevron-${expandedCards[tx.id] ? 'up' : 'down'}`} />
+                        </button>
+                      )}
+                      {!showPaymentButton && tx.status !== 'waiting' && tx.listingId && (
                         <button
                           className={styles.viewBtn}
                           onClick={(e) => { e.stopPropagation(); navigate(`/listing/${tx.listingId}`); }}
@@ -643,7 +784,10 @@ export default function MyPurchases() {
                         </button>
                       )}
                     </div>
+                    )}
+
                   </div>
+                  </React.Fragment>
                 );
               })}
             </div>

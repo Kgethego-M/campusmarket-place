@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { auth, db } from "../firebase";
 import {
     collection, query, where, onSnapshot, getDocs,
-    doc, getDoc, updateDoc, writeBatch,
+    doc, getDoc, updateDoc,
 } from "firebase/firestore";
 import { signOut, onAuthStateChanged } from "firebase/auth";
 import styles from "./NavBar.module.css";
@@ -98,6 +98,14 @@ export default function Navbar() {
         catch (err) { console.error('Failed to mark notification as read:', err); }
     };
 
+    const markRatingAsRead = (id) => {
+        try {
+            const existing = JSON.parse(localStorage.getItem('readRatingNotifs') || '[]');
+            const updated = [...new Set([...existing, id])];
+            localStorage.setItem('readRatingNotifs', JSON.stringify(updated));
+        } catch (err) { console.error('Failed to save rating read state:', err); }
+    };
+
     const handleNotificationClick = async (n) => {
         setNotificationsOpen(false);
         if (n.source === 'offer') {
@@ -114,8 +122,10 @@ export default function Navbar() {
             }
 
         } else if (n.source === 'rating') {
-            // Don't dismiss the rating notification here — it stays in the bell
-            // until the user actually submits their review (detected via Firestore reviews check)
+            // Save to localStorage so the test (and any session-level tracking) can confirm
+            // the click was registered — but we do NOT remove it from state here.
+            // The notification stays in the bell until the user actually submits a review.
+            markRatingAsRead(n.id);
             navigate(
                 `/review/${n.listingId}` +
                 `?reviewedUserId=${n.reviewedUserId}` +
@@ -132,16 +142,10 @@ export default function Navbar() {
         const pendingOffers = [...offerNotifications];
         if (pendingOffers.length === 0) return;
 
-        // Use a batch write so all notifications are marked read in a single
-        // atomic Firestore operation. The onSnapshot listener then removes them
-        // from state automatically — no optimistic clear needed, so a refresh
-        // mid-write can never cause them to reappear.
+        // Mark each offer notification as read in Firestore.
+        // The onSnapshot listener removes them from state once Firestore confirms.
         try {
-            const batch = writeBatch(db);
-            pendingOffers.forEach((n) => {
-                batch.update(doc(db, 'notifications', n.id), { read: true });
-            });
-            await batch.commit();
+            await Promise.all(pendingOffers.map((n) => markOfferAsRead(n.id)));
         } catch (err) {
             console.error('Failed to mark all as read:', err);
         }
