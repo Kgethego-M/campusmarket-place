@@ -89,7 +89,7 @@ export default function OfferItem({ offer }) {
     setWorking(true);
     try {
       const isTrade = offer.type === 'trade';
-      const newStatus = isTrade ? 'waiting' : 'accepted';
+      const newStatus = isTrade ? 'accepted' : 'accepted';
 
       console.log('Step 1: updating transaction', offer.id, '→', newStatus);
       await updateDoc(doc(db, 'transactions', offer.id), {

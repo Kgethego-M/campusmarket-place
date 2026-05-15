@@ -28,14 +28,6 @@ const TYPE_CONFIG = {
   either: { label: 'Offer',    icon: 'fa-handshake',     color: '#7b3ae0' },
 };
 
-const PAYMENT_LABELS = {
-  full_online: 'Fully Online',
-  partial:     'Partial Online + Cash',
-  cash:        'Full Cash on Delivery',
-  online:      'Fully Online',
-  cod:         'Full Cash on Delivery',
-};
-
 const formatDate = (ts) => {
   if (!ts) return '';
   const d = ts?.toDate ? ts.toDate() : new Date(ts);
@@ -43,9 +35,7 @@ const formatDate = (ts) => {
 };
 
 const getPaymentType = (tx) => tx.paymentType || tx.paymentMethod || 'cash';
-
 const getTotalAmount = (tx) => Number(tx.agreedPrice ?? tx.listingPrice ?? tx.price ?? 0);
-
 const getCashDue = (tx) => {
   const payType = getPaymentType(tx);
   const total   = getTotalAmount(tx);
@@ -53,40 +43,94 @@ const getCashDue = (tx) => {
   if (payType === 'partial') return Math.max(0, total - Number(tx.partialAmount ?? tx.onlineAmount ?? 0));
   return 0;
 };
-
 const hasStripePayment = (tx) => Boolean(
-  tx.paymentProvider === 'stripe' ||
-  tx.stripeRef ||
-  tx.stripeCheckoutSessionId ||
-  tx.stripePaymentIntentId ||
-  tx.stripeCheckoutUrl
+  tx.paymentProvider === 'stripe' || tx.stripeRef ||
+  tx.stripeCheckoutSessionId || tx.stripePaymentIntentId || tx.stripeCheckoutUrl
 );
-
-// Both accepted and pending_payment mean "needs payment"
 const canCompletePayment = (tx) => {
   if (!tx) return false;
   return tx.status === 'accepted' || tx.status === 'pending_payment';
 };
-
-// Show accepted badge for both accepted and pending_payment
 const getDisplayStatus = (tx) => {
   if (tx.status === 'pending_payment') return STATUS_CONFIG.accepted;
   return STATUS_CONFIG[tx.status] || STATUS_CONFIG.pending;
 };
-
-// For filter matching: pending_payment maps to accepted tab
 const getFilterStatus = (tx) => {
   if (tx.status === 'pending_payment') return 'accepted';
   return tx.status;
 };
-
-// Whether the buyer can book a collection slot
 const canBookCollection = (tx) =>
   ['ready_to_release'].includes(tx.status) && !tx.collectionBookingId;
-
-// Whether a collection slot is already booked
 const hasCollectionBooked = (tx) =>
   ['ready_to_release', 'awaiting_collection'].includes(tx.status) && !!tx.collectionBookingId;
+
+function getTradeItemLabel(tradeItem) {
+  if (!tradeItem) return null;
+  if (typeof tradeItem === 'string') return tradeItem;
+  if (typeof tradeItem === 'object') return tradeItem.name || 'Trade item';
+  return null;
+}
+
+// Trade item mini display card
+function TradeItemCard({ tradeItem }) {
+  if (!tradeItem || typeof tradeItem !== 'object') return null;
+  const CONDITION_COLORS = {
+    'New':      { color: '#0369a1', bg: '#e0f2fe' },
+    'Like New': { color: '#0284c7', bg: '#f0f9ff' },
+    'Good':     { color: '#0e7490', bg: '#ecfeff' },
+    'Fair':     { color: '#d97706', bg: '#fffbeb' },
+    'Poor':     { color: '#dc2626', bg: '#fef2f2' },
+  };
+  const cs = CONDITION_COLORS[tradeItem.condition] || { color: '#6b7280', bg: '#f3f4f6' };
+
+  return (
+    <div style={{
+      marginTop: 8,
+      background: '#f0f6ff', border: '1px solid #bdd6f0',
+      borderLeft: '3px solid #6AA6DA', borderRadius: 8,
+      overflow: 'hidden',
+    }}>
+      <div style={{
+        padding: '4px 10px', background: '#e8f2fb',
+        borderBottom: '1px solid #bdd6f0',
+        fontSize: '0.65rem', fontWeight: 700, color: '#1e4d8c',
+        textTransform: 'uppercase', letterSpacing: '0.06em',
+      }}>
+        Your Trade Item
+      </div>
+      <div style={{ display: 'flex', gap: 10, padding: '8px 10px', alignItems: 'flex-start' }}>
+        {tradeItem.imageUrl
+          ? <img src={tradeItem.imageUrl} alt={tradeItem.name}
+              style={{ width: 40, height: 40, borderRadius: 6, objectFit: 'cover',
+                       border: '1px solid #bdd6f0', flexShrink: 0 }} />
+          : <div style={{ width: 40, height: 40, borderRadius: 6, background: '#dbeafe',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <i className="fas fa-image" style={{ color: '#93c5fd', fontSize: 14 }} />
+            </div>
+        }
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <p style={{ margin: '0 0 3px', fontSize: '0.78rem', fontWeight: 700, color: '#1e3a5f' }}>
+            {tradeItem.name}
+          </p>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>
+            {tradeItem.category && (
+              <span style={{ fontSize: '0.65rem', fontWeight: 600, background: '#e0f2fe',
+                             color: '#0369a1', borderRadius: 99, padding: '1px 7px' }}>
+                {tradeItem.category}
+              </span>
+            )}
+            {tradeItem.condition && (
+              <span style={{ fontSize: '0.65rem', fontWeight: 600, background: cs.bg,
+                             color: cs.color, borderRadius: 99, padding: '1px 7px' }}>
+                {tradeItem.condition}
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function MyPurchases() {
   const navigate = useNavigate();
@@ -98,7 +142,6 @@ export default function MyPurchases() {
   const [hasFetched, setHasFetched]     = useState(false);
   const [activeFilter, setActiveFilter] = useState('all');
 
-  // ── Auth ───────────────────────────────────────────────────────────────────
   useEffect(() => {
     return onAuthStateChanged(auth, (user) => {
       if (!user) { navigate('/login'); return; }
@@ -106,13 +149,18 @@ export default function MyPurchases() {
     });
   }, [navigate]);
 
-  // ── Real-time listener ─────────────────────────────────────────────────────
   useEffect(() => {
     if (!currentUser) return;
 
+    const ACTIVE_STATUSES = [
+      'pending', 'accepted', 'pending_payment', 'waiting',
+      'ready_to_release', 'awaiting_collection', 'cancelled',
+    ];
+
     const q = query(
       collection(db, 'transactions'),
-      where('buyerId', '==', currentUser.uid)
+      where('buyerId', '==', currentUser.uid),
+      where('status', 'in', ACTIVE_STATUSES.slice(0, 10))
     );
 
     const unsub = onSnapshot(q, (snap) => {
@@ -125,7 +173,6 @@ export default function MyPurchases() {
     return () => { unsub(); clearTimeout(fallback); };
   }, [currentUser]);
 
-  // ── Enrich transactions ────────────────────────────────────────────────────
   useEffect(() => {
     if (!hasFetched) return;
 
@@ -167,17 +214,19 @@ export default function MyPurchases() {
             }
           } catch (_) {}
 
+          // buyerBookingId, buyerDropOffDate, buyerDropOffTimeSlot are written
+          // directly to the transaction by the buyer — already present on tx.
+
           return {
             ...tx,
-            listingTitle: listingTitle || 'Unknown Item',
+            listingTitle:         listingTitle || 'Unknown Item',
             listingImage,
             listingPrice,
-            sellerName: sellerName || 'Unknown Seller',
+            sellerName:           sellerName || 'Unknown Seller',
           };
         })
       );
 
-      // Sort by status then newest first
       const ORDER = {
         pending: 0, accepted: 1, pending_payment: 1, waiting: 2,
         ready_to_release: 3, awaiting_collection: 4, cancelled: 5,
@@ -197,7 +246,6 @@ export default function MyPurchases() {
     enrich();
   }, [transactions, hasFetched]);
 
-  // ── Filters ────────────────────────────────────────────────────────────────
   const FILTERS = [
     { key: 'all',                 label: 'All'                },
     { key: 'pending',             label: 'Pending'            },
@@ -223,13 +271,19 @@ export default function MyPurchases() {
     ['pending', 'accepted', 'pending_payment', 'waiting', 'ready_to_release', 'awaiting_collection'].includes(tx.status)
   ).length;
 
-  const handleArrowClick = (tx) => {
+  // A trade card is clickable to book drop-off while waiting and not yet booked
+  const needsTradeDropOff = (tx) =>
+    tx.type === 'trade' && tx.status === 'waiting' && !tx.buyerBookingId;
+
+  const handleCardClick = (tx) => {
     if (canCompletePayment(tx)) {
       navigate(`/payment/${tx.id}`);
-      return;
+    } else if (needsTradeDropOff(tx)) {
+      navigate(`/book-dropoff/${tx.id}`);
     }
-    if (tx.listingId) navigate(`/listing/${tx.listingId}`);
   };
+
+  const isCardClickable = (tx) => canCompletePayment(tx) || needsTradeDropOff(tx);
 
   return (
     <>
@@ -311,16 +365,28 @@ export default function MyPurchases() {
                 const cashDue         = getCashDue(tx);
                 const stripePaid      = hasStripePayment(tx) && tx.paymentStatus === 'paid';
                 const showPaymentButton = canCompletePayment(tx);
-                const showPanel       = tx.agreedPrice != null || paymentType || tx.tradeItem || tx.terms;
+                const clickable       = isCardClickable(tx);
+                const isTrade         = tx.type === 'trade';
+                const tradeItemLabel  = getTradeItemLabel(tx.tradeItem);
+                const dropOffBooked   = isTrade && !!tx.buyerBookingId;
+
+                // For trade cards: only show non-money offer fields
+                const showTradePanel  = isTrade && (tx.tradeItem || tx.terms);
+                // For non-trade cards: show panel if has relevant details
+                const showNonTradePanel = !isTrade && (
+                  tx.agreedPrice != null || paymentType || tx.terms
+                );
+                const showPanel = showTradePanel || showNonTradePanel;
 
                 return (
                   <div
                     key={tx.id}
-                    className={`${styles.card} ${isActive ? styles.cardActive : ''} ${showPaymentButton ? styles.cardAccepted : ''}`}
-                    onClick={() => handleArrowClick(tx)}
-                    role="button"
-                    tabIndex={0}
-                    onKeyDown={(e) => { if (e.key === 'Enter') handleArrowClick(tx); }}
+                    className={`${styles.card} ${isActive ? styles.cardActive : ''} ${showPaymentButton ? styles.cardAccepted : ''} ${needsTradeDropOff(tx) ? styles.cardTradeAction : ''} ${!clickable ? styles.cardStatic : ''}`}
+                    onClick={() => clickable && handleCardClick(tx)}
+                    role={clickable ? 'button' : undefined}
+                    tabIndex={clickable ? 0 : undefined}
+                    onKeyDown={clickable ? (e) => { if (e.key === 'Enter') handleCardClick(tx); } : undefined}
+                    style={{ cursor: clickable ? 'pointer' : 'default' }}
                   >
                     {/* Image */}
                     <div className={styles.cardImage}>
@@ -354,7 +420,8 @@ export default function MyPurchases() {
                         <span className={styles.metaChip}>
                           <i className="fas fa-user" />{tx.sellerName}
                         </span>
-                        {tx.listingPrice != null && (
+                        {/* Only show price chip on non-trade cards */}
+                        {!isTrade && tx.listingPrice != null && (
                           <span className={styles.metaChip}>
                             <i className="fas fa-tag" />
                             R {Number(tx.listingPrice).toLocaleString('en-ZA')}
@@ -367,14 +434,15 @@ export default function MyPurchases() {
                         )}
                       </div>
 
-                      {/* Offer Details Panel */}
+                      {/* Offer Details Panel — trade cards exclude money */}
                       {showPanel && (
                         <div className={styles.offerPanel}>
                           <p className={styles.offerPanelTitle}>
                             <i className="fas fa-file-invoice" /> Your Offer Details
                           </p>
                           <div className={styles.offerPanelGrid}>
-                            {tx.agreedPrice != null && (
+                            {/* Non-trade: show price + payment details */}
+                            {!isTrade && tx.agreedPrice != null && (
                               <>
                                 <span className={styles.offerPanelLabel}>Offered price</span>
                                 <span className={styles.offerPanelValueGreen}>
@@ -387,13 +455,15 @@ export default function MyPurchases() {
                                 </span>
                               </>
                             )}
-                            {paymentType && tx.type !== 'trade' && (
+                            {!isTrade && paymentType && (
                               <>
                                 <span className={styles.offerPanelLabel}>Payment</span>
-                                <span className={styles.offerPanelValue}>{PAYMENT_LABELS[paymentType] || paymentType}</span>
+                                <span className={styles.offerPanelValue}>
+                                  {({ full_online: 'Fully Online', partial: 'Partial Online + Cash', cash: 'Full Cash on Delivery', online: 'Fully Online', cod: 'Full Cash on Delivery' })[paymentType] || paymentType}
+                                </span>
                               </>
                             )}
-                            {tx.paymentProvider && (
+                            {!isTrade && tx.paymentProvider && (
                               <>
                                 <span className={styles.offerPanelLabel}>Provider</span>
                                 <span className={styles.offerPanelValue}>
@@ -401,7 +471,7 @@ export default function MyPurchases() {
                                 </span>
                               </>
                             )}
-                            {tx.paymentStatus && (
+                            {!isTrade && tx.paymentStatus && (
                               <>
                                 <span className={styles.offerPanelLabel}>Payment status</span>
                                 <span className={styles.offerPanelValue}>
@@ -409,7 +479,7 @@ export default function MyPurchases() {
                                 </span>
                               </>
                             )}
-                            {isPartialTx && (
+                            {!isTrade && isPartialTx && (
                               <>
                                 <span className={styles.offerPanelLabel}>Online</span>
                                 <span className={styles.offerPanelValueBlue}>
@@ -421,7 +491,7 @@ export default function MyPurchases() {
                                 </span>
                               </>
                             )}
-                            {isCashTx && (
+                            {!isTrade && isCashTx && (
                               <>
                                 <span className={styles.offerPanelLabel}>Cash due at drop-off</span>
                                 <span className={styles.offerPanelValueAmber}>
@@ -429,12 +499,16 @@ export default function MyPurchases() {
                                 </span>
                               </>
                             )}
-                            {tx.tradeItem && (
+
+                            {/* Trade: only show trade item name (no money) */}
+                            {isTrade && tradeItemLabel && (
                               <>
                                 <span className={styles.offerPanelLabel}>Trade item</span>
-                                <span className={styles.offerPanelValue}>{tx.tradeItem}</span>
+                                <span className={styles.offerPanelValue}>{tradeItemLabel}</span>
                               </>
                             )}
+
+                            {/* Terms for all */}
                             {tx.terms && (
                               <>
                                 <span className={styles.offerPanelLabel}>Terms</span>
@@ -442,10 +516,15 @@ export default function MyPurchases() {
                               </>
                             )}
                           </div>
+
+                          {/* Trade item visual card */}
+                          {isTrade && tx.tradeItem && typeof tx.tradeItem === 'object' && (
+                            <TradeItemCard tradeItem={tx.tradeItem} />
+                          )}
                         </div>
                       )}
 
-                      {/* ── Status messages ── */}
+                      {/* Status messages */}
                       {tx.status === 'pending' && (
                         <div className={styles.statusMsg} style={{ borderColor: '#f59e0b', background: '#fffbeb' }}>
                           <i className="fas fa-clock" style={{ color: '#f59e0b' }} />
@@ -453,7 +532,6 @@ export default function MyPurchases() {
                         </div>
                       )}
 
-                      {/* accepted AND pending_payment both show the pay prompt */}
                       {(tx.status === 'accepted' || tx.status === 'pending_payment') && (
                         <div
                           className={styles.statusMsg}
@@ -465,7 +543,7 @@ export default function MyPurchases() {
                         </div>
                       )}
 
-                      {tx.status === 'waiting' && (
+                      {tx.status === 'waiting' && !isTrade && (
                         <div className={styles.statusMsg} style={{ borderColor: '#8b5cf6', background: '#f5f3ff' }}>
                           <i className="fas fa-hourglass-half" style={{ color: '#8b5cf6' }} />
                           <span>
@@ -482,6 +560,42 @@ export default function MyPurchases() {
                         </div>
                       )}
 
+                      {/* Trade waiting — drop-off not yet booked: prominent CTA (whole card is clickable) */}
+                      {isTrade && tx.status === 'waiting' && !dropOffBooked && (
+                        <div className={styles.tradeDropOffCta}>
+                          <div className={styles.tradeDropOffCtaIcon}>
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                              <rect x="3" y="4" width="18" height="18" rx="2"/>
+                              <line x1="16" y1="2" x2="16" y2="6"/>
+                              <line x1="8" y1="2" x2="8" y2="6"/>
+                              <line x1="3" y1="10" x2="21" y2="10"/>
+                            </svg>
+                          </div>
+                          <div>
+                            <p className={styles.tradeDropOffCtaTitle}>Book your drop-off slot</p>
+                            <p className={styles.tradeDropOffCtaSub}>Your trade offer was accepted — tap to schedule your drop-off at the facility.</p>
+                          </div>
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" strokeWidth="2.5" strokeLinecap="round" style={{ flexShrink: 0 }}>
+                            <polyline points="9 18 15 12 9 6"/>
+                          </svg>
+                        </div>
+                      )}
+
+                      {/* Trade waiting — drop-off already booked */}
+                      {isTrade && tx.status === 'waiting' && dropOffBooked && (
+                        <div className={styles.statusMsg} style={{ borderColor: '#7c3aed', background: '#f5f3ff' }}>
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" strokeWidth="2.5">
+                            <rect x="3" y="4" width="18" height="18" rx="2"/>
+                            <line x1="16" y1="2" x2="16" y2="6"/>
+                            <line x1="8" y1="2" x2="8" y2="6"/>
+                            <line x1="3" y1="10" x2="21" y2="10"/>
+                          </svg>
+                          <span style={{ color: '#5b21b6' }}>
+                            Drop-off booked for <strong>{tx.buyerDropOffDate}</strong> at <strong>{tx.buyerDropOffTimeSlot}</strong>.
+                          </span>
+                        </div>
+                      )}
+
                       {tx.status === 'ready_to_release' && (
                         <div className={styles.statusMsg} style={{ borderColor: '#0ea5e9', background: '#f0f9ff' }}>
                           <i className="fas fa-warehouse" style={{ color: '#0ea5e9' }} />
@@ -489,7 +603,7 @@ export default function MyPurchases() {
                             Your item is at the trade facility.{' '}
                             {canBookCollection(tx)
                               ? 'Book a collection slot to pick it up.'
-                              : 'Collection slot already booked — see details below.'
+                              : 'Collection slot already booked.'
                             }
                           </span>
                         </div>
@@ -507,7 +621,6 @@ export default function MyPurchases() {
                         </div>
                       )}
 
-                      {/* Collection slot details if already booked */}
                       {hasCollectionBooked(tx) && tx.collectionDate && (
                         <div className={styles.statusMsg} style={{ borderColor: '#0ea5e9', background: '#f0f9ff', marginTop: 6 }}>
                           <i className="fas fa-calendar-check" style={{ color: '#0ea5e9' }} />
@@ -523,9 +636,10 @@ export default function MyPurchases() {
                           <span>This transaction was cancelled.</span>
                         </div>
                       )}
+
                     </div>
 
-                    {/* ── Action buttons ── */}
+                    {/* Action buttons column */}
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 8, alignSelf: 'center' }}>
                       {/* Payment button */}
                       {showPaymentButton && (
@@ -538,7 +652,7 @@ export default function MyPurchases() {
                         </button>
                       )}
 
-                      {/* Book collection button */}
+                      {/* Collection booking button */}
                       {canBookCollection(tx) && (
                         <button
                           className={styles.viewBtn}
@@ -551,16 +665,14 @@ export default function MyPurchases() {
                         </button>
                       )}
 
-                      {/* View listing button — fallback when no action buttons */}
-                      {!showPaymentButton && !canBookCollection(tx) && tx.listingId && (
-                        <button
-                          className={styles.viewBtn}
-                          onClick={(e) => { e.stopPropagation(); navigate(`/listing/${tx.listingId}`); }}
-                          title="View listing"
-                        >
-                          <i className="fas fa-arrow-right" />
-                        </button>
+                      {/* Trade: arrow chevron when not yet booked (card itself navigates) */}
+                      {isTrade && tx.status === 'waiting' && !dropOffBooked && (
+                        <div className={styles.viewBtn} style={{ color: '#7c3aed', borderLeftColor: '#e9d5ff' }}>
+                          <i className="fas fa-chevron-right" style={{ fontSize: '0.7rem' }} />
+                        </div>
                       )}
+
+                      {/* Non-trade, non-payment, non-collection: no action */}
                     </div>
                   </div>
                 );

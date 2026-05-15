@@ -26,14 +26,7 @@ async function uploadImageToCloudinary(file) {
   return data.secure_url;
 }
 
-// ── How many days after payment the seller has to drop off ──────
 const DROP_OFF_WINDOW_DAYS = 7;
-
-function formatPrice(value) {
-  const num = Number(String(value ?? "0").replace(/\s/g, ""));
-  if (isNaN(num)) return "0";
-  return num.toLocaleString("en-ZA", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
-}
 
 function getStatusLabel(status) {
   switch (status) {
@@ -46,37 +39,6 @@ function getStatusLabel(status) {
   }
 }
 
-function getPaymentLabel(method) {
-  switch (method) {
-    case "online":  return "Online (paid)";
-    case "cod":     return "Cash on delivery";
-    case "partial": return "Partial online + cash";
-    default:        return "Unknown";
-  }
-}
-
-function getPaymentBanner(method, price) {
-  switch (method) {
-    case "online":  return { variant: "online",  icon: "shield-check", headline: "No cash needed at drop-off", detail: `The buyer already paid R${price} in full online. Bring the item and the facility will handle the rest.` };
-    case "cod":     return { variant: "cod",     icon: "cash",         headline: `Collect R${price} cash at the facility`, detail: "This is a cash-on-delivery order. The buyer will pay when they collect the item — facility staff will verify the payment." };
-    case "partial": return { variant: "partial", icon: "credit-card",  headline: "Partial payment — confirm the split with the buyer", detail: `Part of the R${price} was paid online. Clarify with the buyer how much cash remains before you drop off.` };
-    default:        return { variant: "unknown", icon: "info-circle",   headline: `Transaction amount: R${price}`, detail: "Confirm payment details with the buyer before your drop-off." };
-  }
-}
-
-// ── Condition colors ──────────────────────────────────────────────────────────
-const CONDITION_COLORS = {
-  'New':      { color: '#0369a1', bg: '#e0f2fe' },
-  'Like New': { color: '#0284c7', bg: '#f0f9ff' },
-  'Good':     { color: '#0e7490', bg: '#ecfeff' },
-  'Fair':     { color: '#d97706', bg: '#fffbeb' },
-  'Poor':     { color: '#dc2626', bg: '#fef2f2' },
-};
-
-/**
- * Given a Firestore transaction, returns the payment confirmation date
- * as a JS Date. Falls back through several timestamp fields.
- */
 function getPaymentDate(txn) {
   const ts =
     txn.paymentConfirmedAt ||
@@ -89,14 +51,120 @@ function getPaymentDate(txn) {
   return ts?.toDate ? ts.toDate() : new Date(ts);
 }
 
-/**
- * Returns a "YYYY-MM-DD" string for a Date, adjusted to local midnight.
- */
 function toDateStr(date) {
   const y = date.getFullYear();
   const m = String(date.getMonth() + 1).padStart(2, "0");
   const d = String(date.getDate()).padStart(2, "0");
   return `${y}-${m}-${d}`;
+}
+
+const CONDITION_COLORS = {
+  'New':      { color: '#0369a1', bg: '#e0f2fe' },
+  'Like New': { color: '#0284c7', bg: '#f0f9ff' },
+  'Good':     { color: '#0e7490', bg: '#ecfeff' },
+  'Fair':     { color: '#d97706', bg: '#fffbeb' },
+  'Poor':     { color: '#dc2626', bg: '#fef2f2' },
+};
+
+// ── Trade exchange card ──────────────────────────────────────────
+function TradeExchangeCard({ listing, tradeItem, tradeImagePreview, tradeImageFile, onReplaceImage, isBuyerFlow }) {
+  const tradeItemObj  = tradeItem && typeof tradeItem === 'object' ? tradeItem : null;
+  const tradeItemName = tradeItemObj?.name ?? (typeof tradeItem === 'string' ? tradeItem : null);
+
+  return (
+    <div className={styles.tradeExchangeCard}>
+      <div className={styles.tradeExchangeHeader}>
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+          <path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/>
+          <path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>
+        </svg>
+        Trade Exchange Summary
+      </div>
+
+      <div className={styles.tradeExchangeBody}>
+        {/* Item being listed (seller's item) */}
+        <div className={styles.tradeExchangeItem}>
+          <div className={styles.tradeExchangeRole}>
+            {isBuyerFlow ? "You receive" : "You drop off"}
+          </div>
+          <div className={styles.tradeExchangeImgWrap}>
+            {listing?.photos?.[0]
+              ? <img src={listing.photos[0]} alt={listing.title} className={styles.tradeExchangeImg} />
+              : <div className={styles.tradeExchangeImgPlaceholder}>
+                  <i className="fas fa-image" />
+                </div>
+            }
+          </div>
+          <p className={styles.tradeExchangeItemName}>{listing?.title ?? "Listing item"}</p>
+          {listing?.condition && (
+            <span className={styles.tradeExchangeChip} style={CONDITION_COLORS[listing.condition] || {}}>
+              {listing.condition}
+            </span>
+          )}
+        </div>
+
+        {/* Arrow */}
+        <div className={styles.tradeExchangeArrow}>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#6AA6DA" strokeWidth="2.5" strokeLinecap="round">
+            <path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/>
+            <path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>
+          </svg>
+        </div>
+
+        {/* Buyer's trade item */}
+        <div className={styles.tradeExchangeItem}>
+          <div className={styles.tradeExchangeRole} style={{ color: '#6d28d9' }}>
+            {isBuyerFlow ? "You drop off" : "You receive"}
+          </div>
+          <div className={styles.tradeExchangeImgWrap} style={{ position: 'relative' }}>
+            {tradeImagePreview
+              ? <img src={tradeImagePreview} alt={tradeItemName} className={styles.tradeExchangeImg} />
+              : <div className={styles.tradeExchangeImgPlaceholder} style={{ background: '#ede9fe' }}>
+                  <i className="fas fa-exchange-alt" style={{ color: '#a78bfa' }} />
+                </div>
+            }
+            {isBuyerFlow && (
+              <label htmlFor="trade-img-replace" className={styles.tradeExchangeReplaceBtn} title="Replace photo">
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                  <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+                  <polyline points="17 8 12 3 7 8"/>
+                  <line x1="12" y1="3" x2="12" y2="15"/>
+                </svg>
+              </label>
+            )}
+          </div>
+          {isBuyerFlow && (
+            <input id="trade-img-replace" type="file" accept="image/*" style={{ display: 'none' }}
+              onChange={onReplaceImage}
+            />
+          )}
+          <p className={styles.tradeExchangeItemName}>{tradeItemName ?? "Your trade item"}</p>
+          {tradeItemObj?.condition && (
+            <span className={styles.tradeExchangeChip} style={CONDITION_COLORS[tradeItemObj.condition] || {}}>
+              {tradeItemObj.condition}
+            </span>
+          )}
+          {tradeItemObj?.category && (
+            <span className={styles.tradeExchangeChip} style={{ background: '#f0f9ff', color: '#0369a1' }}>
+              {tradeItemObj.category}
+            </span>
+          )}
+          {tradeImageFile && (
+            <p style={{ margin: '4px 0 0', fontSize: '0.65rem', color: '#16a34a', textAlign: 'center' }}>
+              New photo selected
+            </p>
+          )}
+        </div>
+      </div>
+
+      {tradeItemObj?.description && (
+        <div className={styles.tradeExchangeDesc}>
+          <i className="fas fa-info-circle" style={{ color: '#6AA6DA', marginRight: 5, fontSize: 11 }} />
+          {tradeItemObj.description}
+        </div>
+      )}
+    </div>
+  );
 }
 
 export default function BookDropOff() {
@@ -109,20 +177,16 @@ export default function BookDropOff() {
   const [transaction,      setTransaction]      = useState(null);
   const [listing,          setListing]          = useState(null);
   const [counterpartyName, setCounterpartyName] = useState("");
-  const [paymentMethod,    setPaymentMethod]    = useState(null);
   const [selectedDate,     setSelectedDate]     = useState("");
   const [selectedTimeSlot, setSelectedTimeSlot] = useState("");
   const [minDate,          setMinDate]          = useState("");
-  const [maxDate,          setMaxDate]           = useState("");
+  const [maxDate,          setMaxDate]          = useState("");
+  const [role,             setRole]             = useState(null);
 
-  // Who is the current user in this transaction?
-  const [role, setRole] = useState(null); // 'seller' | 'buyer'
-
-  // Buyer trade item state (for the buyer's drop-off of their own trade item)
-  const [buyerTradeItem,       setBuyerTradeItem]       = useState(null);   // existing from transaction
-  const [tradeImageFile,       setTradeImageFile]        = useState(null);
-  const [tradeImagePreview,    setTradeImagePreview]     = useState(null);
-  const [tradeImageUploading,  setTradeImageUploading]   = useState(false);
+  const [buyerTradeItem,      setBuyerTradeItem]      = useState(null);
+  const [tradeImageFile,      setTradeImageFile]      = useState(null);
+  const [tradeImagePreview,   setTradeImagePreview]   = useState(null);
+  const [tradeImageUploading, setTradeImageUploading] = useState(false);
 
   const [facilityConfig, setFacilityConfig] = useState(FALLBACK_CONFIG);
   const [slotCounts,     setSlotCounts]     = useState({});
@@ -170,34 +234,30 @@ export default function BookDropOff() {
 
       const txn = { id: transSnap.id, ...transSnap.data() };
 
-      // Determine role
       const isSeller = txn.sellerId === uid;
       const isBuyer  = txn.buyerId  === uid;
 
       if (!isSeller && !isBuyer)
         return setError("You are not part of this transaction.");
 
-      // Only trade transactions require buyer to also drop off
       if (isBuyer && txn.type !== 'trade')
         return setError("Buyers only book drop-offs for trade transactions.");
 
       const currentRole = isSeller ? 'seller' : 'buyer';
       setRole(currentRole);
 
-      // Check allowed statuses
       const ALLOWED_STATUSES = ["waiting", "accepted", "in_facility"];
       if (!ALLOWED_STATUSES.includes(txn.status))
         return setError(`Cannot book drop-off. Current status: ${txn.status}`);
 
-      // Seller: check if already booked a drop-off slot
       if (isSeller && txn.bookingId)
         return setError("A drop-off has already been booked for this transaction.");
 
-      // Buyer: check if buyer drop-off already booked
+      // Rules allow buyer to get their own transaction — buyerBookingId is now
+      // written directly to the transaction, so this simple check is sufficient.
       if (isBuyer && txn.buyerBookingId)
         return setError("You have already booked your drop-off slot for this trade.");
 
-      // ── Calculate the 7-day drop-off deadline ──────────────────
       const paymentDate = getPaymentDate(txn);
       const today = new Date();
       today.setHours(0, 0, 0, 0);
@@ -206,11 +266,8 @@ export default function BookDropOff() {
         const deadline = new Date(paymentDate);
         deadline.setHours(0, 0, 0, 0);
         deadline.setDate(deadline.getDate() + DROP_OFF_WINDOW_DAYS);
-
         if (deadline < today) {
-          setError(
-            `The ${DROP_OFF_WINDOW_DAYS}-day drop-off window has passed (deadline was ${toDateStr(deadline)}). Please contact support if you need assistance.`
-          );
+          setError(`The ${DROP_OFF_WINDOW_DAYS}-day drop-off window has passed (deadline was ${toDateStr(deadline)}). Please contact support.`);
         }
         setMaxDate(toDateStr(deadline));
       } else {
@@ -218,29 +275,14 @@ export default function BookDropOff() {
         fallbackDeadline.setDate(fallbackDeadline.getDate() + DROP_OFF_WINDOW_DAYS);
         setMaxDate(toDateStr(fallbackDeadline));
       }
-      // ──────────────────────────────────────────────────────────
 
       setTransaction(txn);
 
-      // Load trade item if buyer
       if (isBuyer && txn.tradeItem) {
         setBuyerTradeItem(txn.tradeItem);
-        if (txn.tradeItem.imageUrl) {
-          setTradeImagePreview(txn.tradeItem.imageUrl);
-        }
+        if (txn.tradeItem.imageUrl) setTradeImagePreview(txn.tradeItem.imageUrl);
       }
 
-      // Payment method (seller only relevant, but store anyway)
-      let pm = txn.paymentMethod;
-      if (!pm && txn.paymentType) {
-        pm = txn.paymentType === "full_online" ? "online"
-           : txn.paymentType === "cash"        ? "cod"
-           : txn.paymentType === "partial"     ? "partial"
-           : "unknown";
-      }
-      setPaymentMethod(pm ?? "unknown");
-
-      // Load listing + counterparty
       const counterpartyId = isSeller ? txn.buyerId : txn.sellerId;
       const [listingSnap, counterpartySnap] = await Promise.all([
         getDoc(doc(db, "listings", txn.listingId)),
@@ -271,11 +313,9 @@ export default function BookDropOff() {
     return () => unsub();
   }, [fetchTransaction]);
 
-  // ── Build slot counts when date changes ───────────────────────────────────
   useEffect(() => {
     if (!selectedDate) return;
     setSelectedTimeSlot("");
-
     (async () => {
       setSlotsLoading(true);
       try {
@@ -302,12 +342,10 @@ export default function BookDropOff() {
     })();
   }, [selectedDate, facilityConfig]);
 
-  // ── Submit ─────────────────────────────────────────────────────────────────
   async function handleSubmit(e) {
     e.preventDefault();
     if (!selectedDate)     return setError("Please select a date.");
     if (!selectedTimeSlot) return setError("Please select a time slot.");
-
     if (maxDate && selectedDate > maxDate) {
       return setError(`Please choose a date on or before ${maxDate} (${DROP_OFF_WINDOW_DAYS}-day drop-off window).`);
     }
@@ -316,11 +354,13 @@ export default function BookDropOff() {
     setError("");
 
     try {
-      const latest = await getDoc(doc(db, "transactions", transaction.id));
-      const latestData = latest.data();
-
-      // ── SELLER flow ───────────────────────────────────────────────────────
+      // ── SELLER PATH ────────────────────────────────────────────────────────
+      // Sellers can always read their own transaction, so re-fetch to guard
+      // against double-booking races.
       if (role === 'seller') {
+        const latest     = await getDoc(doc(db, "transactions", transaction.id));
+        const latestData = latest.data();
+
         if (latestData.bookingId)
           return setError("A drop-off was already booked for this transaction.");
 
@@ -347,54 +387,72 @@ export default function BookDropOff() {
 
         const listingTitle = listing?.title ?? "your item";
 
-        await addDoc(collection(db, "notifications"), {
-          userId:        transaction.sellerId,
-          type:          "dropoff_booked",
-          transactionId: transaction.id,
-          title:         "Drop-off slot booked ✓",
-          message:       `Your drop-off for "${listingTitle}" is confirmed for ${selectedDate} at ${selectedTimeSlot}. Head to the Trade Facility to track progress.`,
-          linkTo:        "/trade-facility",
-          read:          false,
-          createdAt:     serverTimestamp(),
-        });
-
-        // Notify buyer — their item is coming
-        await addDoc(collection(db, "notifications"), {
-          userId:        transaction.buyerId,
-          type:          "dropoff_booked",
-          transactionId: transaction.id,
-          title:         "Seller booked their drop-off 📦",
-          message:       `The seller has scheduled drop-off for "${listingTitle}" on ${selectedDate} at ${selectedTimeSlot}. Track progress in the Trade Facility.`,
-          linkTo:        "/trade-facility",
-          read:          false,
-          createdAt:     serverTimestamp(),
-        });
-
-        // For trades: also prompt buyer to book THEIR drop-off if not yet done
-        if (transaction.type === 'trade' && !latestData.buyerBookingId) {
-          const tradeItemName = typeof transaction.tradeItem === 'object'
-            ? transaction.tradeItem?.name
-            : transaction.tradeItem;
-
+        // Notify seller: their own drop-off is confirmed
+        try {
           await addDoc(collection(db, "notifications"), {
-            userId:        transaction.buyerId,
-            type:          "trade_dropoff_required",
+            userId:        transaction.sellerId,
+            type:          "dropoff_booked",
             transactionId: transaction.id,
-            title:         "Book your drop-off slot 🔄",
-            message:       `This is a trade! You also need to drop off "${tradeItemName || 'your trade item'}" at the facility. Book your slot now.`,
-            linkTo:        `/book-dropoff/${transaction.id}`,
+            listingId:     transaction.listingId,
+            listingTitle,
+            title:         "Drop-off slot booked",
+            message:       `Your drop-off for "${listingTitle}" is confirmed for ${selectedDate} at ${selectedTimeSlot}.`,
+            linkTo:        "/trade-facility",
             read:          false,
             createdAt:     serverTimestamp(),
           });
+        } catch (_) {}
+
+        // Notify buyer: different message depending on trade or sale
+        if (transaction.type === 'trade') {
+          // For trade: tell buyer the seller booked AND prompt them to book their own slot
+          const tradeItemName = typeof transaction.tradeItem === 'object'
+            ? transaction.tradeItem?.name
+            : (transaction.tradeItem || 'your trade item');
+          if (!latestData.buyerBookingId) {
+            try {
+              await addDoc(collection(db, "notifications"), {
+                userId:        transaction.buyerId,
+                type:          "trade_dropoff_required",
+                transactionId: transaction.id,
+                listingId:     transaction.listingId,
+                listingTitle,
+                title:         "Book your trade drop-off",
+                message:       `The seller has booked their drop-off for "${listingTitle}". Now book your slot to drop off "${tradeItemName}".`,
+                linkTo:        `/book-dropoff/${transaction.id}`,
+                read:          false,
+                createdAt:     serverTimestamp(),
+              });
+            } catch (_) {}
+          }
+        } else {
+          // For sale: just tell buyer the seller has booked
+          try {
+            await addDoc(collection(db, "notifications"), {
+              userId:        transaction.buyerId,
+              type:          "seller_dropoff_booked",
+              transactionId: transaction.id,
+              listingId:     transaction.listingId,
+              listingTitle,
+              title:         "Seller booked their drop-off",
+              message:       `The seller has scheduled drop-off for "${listingTitle}" on ${selectedDate} at ${selectedTimeSlot}.`,
+              linkTo:        "/my-purchases",
+              read:          false,
+              createdAt:     serverTimestamp(),
+            });
+          } catch (_) {}
         }
       }
 
-      // ── BUYER flow (trade only) ───────────────────────────────────────────
+      // ── BUYER PATH ─────────────────────────────────────────────────────────
+      // Rules allow buyer to update their own transaction (buyerId match).
+      // We mirror the seller pattern exactly:
+      //   1. addDoc to bookings  → get bookingRef.id
+      //   2. updateDoc on transaction with buyerBookingId + all drop-off fields
       if (role === 'buyer') {
-        if (latestData.buyerBookingId)
+        if (transaction.buyerBookingId)
           return setError("You have already booked your drop-off slot.");
 
-        // Upload new trade image to Cloudinary if user swapped it
         let finalImageUrl = buyerTradeItem?.imageUrl ?? null;
         if (tradeImageFile) {
           setTradeImageUploading(true);
@@ -405,60 +463,87 @@ export default function BookDropOff() {
           }
         }
 
-        // Updated trade item with (possibly new) Cloudinary URL
         const updatedTradeItem = buyerTradeItem
           ? { ...buyerTradeItem, imageUrl: finalImageUrl }
           : null;
 
-        const bookingRef = await addDoc(collection(db, "bookings"), {
-          transactionId:  transaction.id,
-          listingId:      transaction.listingId,
-          sellerId:       transaction.sellerId,
-          buyerId:        transaction.buyerId,
-          role:           'buyer',
-          date:           selectedDate,
-          timeSlot:       selectedTimeSlot,
-          status:         "scheduled",
-          createdAt:      serverTimestamp(),
-          updatedAt:      serverTimestamp(),
-        });
+        // 1. Create booking document
+        console.log("[BookDropOff] buyer: creating booking doc...");
+        console.log("[BookDropOff] transaction.id:", transaction.id);
+        console.log("[BookDropOff] transaction.buyerId:", transaction.buyerId);
+        console.log("[BookDropOff] auth uid:", auth.currentUser?.uid);
 
-        await updateDoc(doc(db, "transactions", transaction.id), {
-          buyerBookingId:       bookingRef.id,
-          buyerDropOffStatus:   "scheduled",
-          buyerDropOffDate:     selectedDate,
-          buyerDropOffTimeSlot: selectedTimeSlot,
-          // Persist updated trade item (with Cloudinary URL)
-          ...(updatedTradeItem ? { tradeItem: updatedTradeItem } : {}),
-          updatedAt: serverTimestamp(),
-        });
+        let bookingRef;
+        try {
+          bookingRef = await addDoc(collection(db, "bookings"), {
+            transactionId:   transaction.id,
+            listingId:       transaction.listingId,
+            sellerId:        transaction.sellerId,
+            buyerId:         transaction.buyerId,
+            role:            'buyer',
+            date:            selectedDate,
+            timeSlot:        selectedTimeSlot,
+            status:          "scheduled",
+            createdAt:       serverTimestamp(),
+            updatedAt:       serverTimestamp(),
+          });
+          console.log("[BookDropOff] booking created:", bookingRef.id);
+        } catch (bookingErr) {
+          console.error("[BookDropOff] FAILED at addDoc bookings:", bookingErr.code, bookingErr.message);
+          throw bookingErr;
+        }
+
+        // 2. Update transaction with buyer drop-off fields
+        console.log("[BookDropOff] buyer: updating transaction...");
+        try {
+          await updateDoc(doc(db, "transactions", transaction.id), {
+            buyerBookingId:       bookingRef.id,
+            buyerDropOffStatus:   "scheduled",
+            buyerDropOffDate:     selectedDate,
+            buyerDropOffTimeSlot: selectedTimeSlot,
+            ...(updatedTradeItem ? { tradeItem: updatedTradeItem } : {}),
+            updatedAt:            serverTimestamp(),
+          });
+          console.log("[BookDropOff] transaction updated successfully");
+        } catch (txnErr) {
+          console.error("[BookDropOff] FAILED at updateDoc transaction:", txnErr.code, txnErr.message);
+          throw txnErr;
+        }
 
         const tradeItemName = updatedTradeItem?.name ?? "your trade item";
         const listingTitle  = listing?.title ?? "the listing";
 
-        // Notify buyer
-        await addDoc(collection(db, "notifications"), {
-          userId:        transaction.buyerId,
-          type:          "buyer_dropoff_booked",
-          transactionId: transaction.id,
-          title:         "Your trade drop-off is booked ✓",
-          message:       `Your drop-off of "${tradeItemName}" is confirmed for ${selectedDate} at ${selectedTimeSlot}. Track progress in the Trade Facility.`,
-          linkTo:        "/trade-facility",
-          read:          false,
-          createdAt:     serverTimestamp(),
-        });
+        // Notify buyer: their trade drop-off is confirmed
+        try {
+          await addDoc(collection(db, "notifications"), {
+            userId:        transaction.buyerId,
+            type:          "buyer_dropoff_booked",
+            transactionId: transaction.id,
+            listingId:     transaction.listingId,
+            listingTitle,
+            title:         "Trade drop-off booked",
+            message:       `Your drop-off of "${tradeItemName}" is confirmed for ${selectedDate} at ${selectedTimeSlot}.`,
+            linkTo:        "/trade-facility",
+            read:          false,
+            createdAt:     serverTimestamp(),
+          });
+        } catch (_) {}
 
-        // Notify seller — buyer is bringing their trade item
-        await addDoc(collection(db, "notifications"), {
-          userId:        transaction.sellerId,
-          type:          "buyer_dropoff_booked",
-          transactionId: transaction.id,
-          title:         `Buyer booked trade drop-off 🔄`,
-          message:       `The buyer will drop off "${tradeItemName}" (for your "${listingTitle}") on ${selectedDate} at ${selectedTimeSlot}.`,
-          linkTo:        "/trade-facility",
-          read:          false,
-          createdAt:     serverTimestamp(),
-        });
+        // Notify seller: buyer has booked their trade drop-off
+        try {
+          await addDoc(collection(db, "notifications"), {
+            userId:        transaction.sellerId,
+            type:          "buyer_dropoff_booked",
+            transactionId: transaction.id,
+            listingId:     transaction.listingId,
+            listingTitle,
+            title:         "Buyer booked their trade drop-off",
+            message:       `The buyer will drop off "${tradeItemName}" for "${listingTitle}" on ${selectedDate} at ${selectedTimeSlot}.`,
+            linkTo:        "/trade-facility",
+            read:          false,
+            createdAt:     serverTimestamp(),
+          });
+        } catch (_) {}
       }
 
       navigate("/trade-facility");
@@ -470,7 +555,6 @@ export default function BookDropOff() {
     }
   }
 
-  // ── Slot grid renderer ────────────────────────────────────────────────────
   function renderSlotGrid() {
     const todayStr = new Date().toISOString().split("T")[0];
     const isToday  = selectedDate === todayStr;
@@ -546,10 +630,9 @@ export default function BookDropOff() {
     );
   }
 
-  const price  = transaction?.agreedPrice ?? transaction?.price ?? listing?.price ?? 0;
-  const banner = getPaymentBanner(paymentMethod, formatPrice(price));
+  const isBuyerFlow = role === 'buyer';
+  const isTrade     = transaction?.type === 'trade';
 
-  // ── Loading skeleton ──────────────────────────────────────────────────────
   if (loading) {
     return (
       <>
@@ -590,15 +673,12 @@ export default function BookDropOff() {
     );
   }
 
-  const isBuyerFlow  = role === 'buyer';
-  const tradeItemObj = buyerTradeItem && typeof buyerTradeItem === 'object' ? buyerTradeItem : null;
-
   return (
     <>
       <NavBar />
       <div className={styles.page}>
 
-        {/* ── Page header ── */}
+        {/* Page header */}
         <div className={styles.pageHeader}>
           <button className={styles.backLink} onClick={() => navigate("/trade-facility")}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -607,7 +687,7 @@ export default function BookDropOff() {
             Trade Facility
           </button>
           <h1 className={styles.heading}>
-            {isBuyerFlow ? "Book your trade item drop-off" : "Book drop-off slot"}
+            {isBuyerFlow ? "Book your trade item drop-off" : isTrade ? "Book trade drop-off" : "Book drop-off slot"}
           </h1>
           <p className={styles.subheading}>
             {isBuyerFlow
@@ -616,7 +696,7 @@ export default function BookDropOff() {
           </p>
         </div>
 
-        {/* ── Deadline info card (integrated, not floating) ── */}
+        {/* Deadline card */}
         {maxDate && (
           <div className={styles.deadlineCard}>
             <div className={styles.deadlineIcon}>
@@ -638,208 +718,75 @@ export default function BookDropOff() {
           </div>
         )}
 
-        {/* ── Deadline info card (integrated, not floating) ── */}
-        {maxDate && (
-          <div className={styles.deadlineCard}>
-            <div className={styles.deadlineIcon}>
-              <i className="fas fa-clock" style={{ fontSize: "18px" }} />
-            </div>
-            <div className={styles.deadlineContent}>
-              <span className={styles.deadlineLabel}>
-                <i className="fas fa-hourglass-half" style={{ marginRight: "4px", fontSize: "10px" }} />
-                Drop-off deadline
-              </span>
-              <span className={styles.deadlineValue}>
-                Must be booked within <strong>{DROP_OFF_WINDOW_DAYS} days</strong> of payment
-              </span>
-              <span className={styles.deadlineDate}>
-                <i className="fas fa-calendar-alt" style={{ marginRight: "4px", fontSize: "10px" }} />
-                Latest allowed date: <strong>{maxDate}</strong>
-              </span>
-            </div>
-          </div>
-        )}
-
-        {/* ── Role banner for buyers ── */}
-        {isBuyerFlow && (
-          <div style={{
-            display: 'flex', gap: 10, padding: '12px 16px', marginBottom: 14,
-            backgroundColor: '#ede9fe', border: '1px solid #c4b5fd', borderRadius: 10,
-            fontSize: '0.82rem', color: '#5b21b6', lineHeight: '1.5',
-          }}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" strokeWidth="2" strokeLinecap="round" style={{ flexShrink: 0, marginTop: 1 }}>
-              <path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/>
-              <path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>
-            </svg>
-            <span>
-              <strong>Trade drop-off:</strong> Both you and the seller need to drop off your respective items at the Trade Facility for inspection and exchange.
-            </span>
-          </div>
-        )}
-
-        {/* ── Item summary card ── */}
-        <div className={styles.summaryCard}>
-          <div className={styles.summaryTop}>
-            <div className={styles.summaryImgWrap}>
-              {listing?.photos?.[0]
-                ? <img src={listing.photos[0]} alt={listing.title} className={styles.summaryImg} />
-                : <div className={styles.summaryImgPlaceholder}>
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" opacity="0.4">
-                      <rect x="2" y="7" width="20" height="14" rx="2"/><polyline points="16 7 12 3 8 7"/>
-                    </svg>
-                  </div>
-              }
-            </div>
-            <div className={styles.summaryInfo}>
-              <p className={styles.summaryTitle}>{listing?.title ?? "Loading…"}</p>
-              <div className={styles.summaryPriceRow}>
-                <span className={styles.summaryPrice}>R{formatPrice(price)}</span>
-                <span className={`${styles.statusChip} ${styles[`status_${transaction?.status}`]}`}>
-                  {getStatusLabel(transaction?.status)}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          <div className={styles.summaryDivider} />
-
-          <div className={styles.txnGrid}>
-            <div className={styles.txnCell}>
-              <span className={styles.txnLabel}>{isBuyerFlow ? "Seller" : "Buyer"}</span>
-              <span className={styles.txnValue}>{counterpartyName}</span>
-            </div>
-            <div className={styles.txnCell}>
-              <span className={styles.txnLabel}>Amount</span>
-              <span className={`${styles.txnValue} ${styles.txnValueBlue}`}>R{formatPrice(price)}</span>
-            </div>
-            <div className={styles.txnCell}>
-              <span className={styles.txnLabel}>Payment</span>
-              <span className={`${styles.txnValue} ${
-                paymentMethod === "online" ? styles.txnValueGreen :
-                paymentMethod === "cod"    ? styles.txnValueAmber :
-                styles.txnValueBlue
-              }`}>{getPaymentLabel(paymentMethod)}</span>
-            </div>
-          </div>
-        </div>
-
-        {/* ── Trade item preview (buyer flow) ── */}
-        {isBuyerFlow && tradeItemObj && (
-          <div style={{
-            background: '#f0f6ff', border: '1px solid #bdd6f0',
-            borderLeft: '4px solid #6AA6DA', borderRadius: 12,
-            overflow: 'hidden', marginBottom: 14,
-          }}>
-            {/* Header */}
-            <div style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-              padding: '8px 14px', background: '#e8f2fb', borderBottom: '1px solid #bdd6f0',
-            }}>
-              <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#1e4d8c', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                Your Trade Item
-              </span>
-              <span style={{ fontSize: '0.7rem', color: '#4a6a8a' }}>This will be inspected at the facility</span>
-            </div>
-
-            <div style={{ display: 'flex', gap: 14, padding: 14, alignItems: 'flex-start' }}>
-              {/* Image with replace option */}
-              <div style={{ position: 'relative', flexShrink: 0 }}>
-                {tradeImagePreview
-                  ? <img src={tradeImagePreview} alt={tradeItemObj.name}
-                      style={{ width: 84, height: 84, borderRadius: 10, objectFit: 'cover', border: '2px solid #bdd6f0', display: 'block' }} />
-                  : <div style={{ width: 84, height: 84, borderRadius: 10, background: '#dbeafe', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#93c5fd" strokeWidth="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+        {/* Trade exchange card */}
+        {isTrade ? (
+          <TradeExchangeCard
+            listing={listing}
+            tradeItem={isBuyerFlow ? buyerTradeItem : transaction?.tradeItem}
+            tradeImagePreview={tradeImagePreview}
+            tradeImageFile={tradeImageFile}
+            isBuyerFlow={isBuyerFlow}
+            onReplaceImage={(e) => {
+              const file = e.target.files[0];
+              if (!file) return;
+              if (file.size > 5 * 1024 * 1024) { setError('Image must be under 5 MB'); return; }
+              setTradeImageFile(file);
+              const reader = new FileReader();
+              reader.onloadend = () => setTradeImagePreview(reader.result);
+              reader.readAsDataURL(file);
+            }}
+          />
+        ) : (
+          /* Standard item summary card (non-trade, seller only) */
+          <div className={styles.summaryCard}>
+            <div className={styles.summaryTop}>
+              <div className={styles.summaryImgWrap}>
+                {listing?.photos?.[0]
+                  ? <img src={listing.photos[0]} alt={listing.title} className={styles.summaryImg} />
+                  : <div className={styles.summaryImgPlaceholder}>
+                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" opacity="0.4">
+                        <rect x="2" y="7" width="20" height="14" rx="2"/><polyline points="16 7 12 3 8 7"/>
+                      </svg>
                     </div>
                 }
-                {/* Replace image button */}
-                <label htmlFor="trade-img-replace" style={{
-                  position: 'absolute', bottom: 4, right: 4,
-                  background: 'rgba(0,0,0,0.55)', color: '#fff', borderRadius: '50%',
-                  width: 22, height: 22, display: 'flex', alignItems: 'center',
-                  justifyContent: 'center', cursor: 'pointer', fontSize: '0.6rem',
-                }} title="Replace photo">
-                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-                    <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
-                  </svg>
-                </label>
-                <input id="trade-img-replace" type="file" accept="image/*" style={{ display: 'none' }}
-                  onChange={(e) => {
-                    const file = e.target.files[0];
-                    if (!file) return;
-                    if (file.size > 5 * 1024 * 1024) { setError('Image must be under 5 MB'); return; }
-                    setTradeImageFile(file);
-                    const reader = new FileReader();
-                    reader.onloadend = () => setTradeImagePreview(reader.result);
-                    reader.readAsDataURL(file);
-                  }}
-                />
               </div>
-
-              {/* Details */}
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <p style={{ margin: '0 0 6px', fontWeight: 700, fontSize: '0.9rem', color: '#1e3a5f' }}>{tradeItemObj.name}</p>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginBottom: 6 }}>
-                  {tradeItemObj.category && (
-                    <span style={{ fontSize: '0.7rem', fontWeight: 600, background: '#e0f2fe', color: '#0369a1', borderRadius: 99, padding: '2px 8px' }}>
-                      {tradeItemObj.category}
-                    </span>
-                  )}
-                  {tradeItemObj.condition && (() => {
-                    const cs = CONDITION_COLORS[tradeItemObj.condition] || { color: '#6b7280', bg: '#f3f4f6' };
-                    return (
-                      <span style={{ fontSize: '0.7rem', fontWeight: 600, background: cs.bg, color: cs.color, borderRadius: 99, padding: '2px 8px' }}>
-                        {tradeItemObj.condition}
-                      </span>
-                    );
-                  })()}
+              <div className={styles.summaryInfo}>
+                <p className={styles.summaryTitle}>{listing?.title ?? "Loading…"}</p>
+                <div className={styles.summaryPriceRow}>
+                  <span className={`${styles.statusChip} ${styles[`status_${transaction?.status}`]}`}>
+                    {getStatusLabel(transaction?.status)}
+                  </span>
                 </div>
-                {tradeItemObj.description && (
-                  <p style={{ margin: 0, fontSize: '0.75rem', color: '#4a6a8a', lineHeight: 1.5 }}>{tradeItemObj.description}</p>
-                )}
-                {tradeImageFile && (
-                  <p style={{ margin: '6px 0 0', fontSize: '0.7rem', color: '#16a34a' }}>✓ New photo selected — will be saved on submit</p>
-                )}
+              </div>
+            </div>
+            <div className={styles.summaryDivider} />
+            <div className={styles.txnGrid}>
+              <div className={styles.txnCell}>
+                <span className={styles.txnLabel}>Buyer</span>
+                <span className={styles.txnValue}>{counterpartyName}</span>
               </div>
             </div>
           </div>
         )}
 
-        {/* ── Payment banner (seller only) ── */}
-        {!isBuyerFlow && (
-          <div className={`${styles.paymentBanner} ${styles[`banner_${banner.variant}`]}`}>
-            <div className={styles.bannerIcon}>
-              {banner.variant === "online" && (
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-                  <polyline points="9 12 11 14 15 10"/>
-                </svg>
-              )}
-              {banner.variant === "cod" && (
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <rect x="2" y="6" width="20" height="12" rx="2"/>
-                  <circle cx="12" cy="12" r="3"/>
-                </svg>
-              )}
-              {(banner.variant === "partial" || banner.variant === "unknown") && (
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <rect x="2" y="5" width="20" height="14" rx="2"/>
-                  <line x1="2" y1="10" x2="22" y2="10"/>
-                </svg>
-              )}
+        {/* Trade participants row (for trades) */}
+        {isTrade && (
+          <div className={styles.tradePartiesRow}>
+            <div className={styles.tradePartyChip}>
+              <i className="fas fa-user" />
+              <span>{isBuyerFlow ? "Seller" : "Buyer"}: <strong>{counterpartyName}</strong></span>
             </div>
-            <div className={styles.bannerBody}>
-              <p className={styles.bannerHeadline}>{banner.headline}</p>
-              <p className={styles.bannerDetail}>{banner.detail}</p>
+            <div className={styles.tradePartyChip} style={{ background: '#ede9fe', borderColor: '#c4b5fd', color: '#5b21b6' }}>
+              <i className="fas fa-exchange-alt" />
+              <span>Trade transaction</span>
             </div>
           </div>
         )}
 
-        {/* ── Booking form ── */}
+        {/* Booking form */}
         <form className={styles.form} onSubmit={handleSubmit}>
           <div className={styles.fieldGroup}>
-            <label className={styles.label}>
-              Select drop-off date
-            </label>
+            <label className={styles.label}>Select drop-off date</label>
             <input
               type="date"
               className={styles.input}
@@ -894,11 +841,14 @@ export default function BookDropOff() {
             <button type="button" className={styles.cancelBtn} onClick={() => navigate("/trade-facility")}>
               Cancel
             </button>
-            <button type="submit" className={styles.submitBtn}
-              disabled={submitting || !selectedDate || !selectedTimeSlot || (maxDate && selectedDate > maxDate) || tradeImageUploading}>
+            <button
+              type="submit"
+              className={styles.submitBtn}
+              disabled={submitting || !selectedDate || !selectedTimeSlot || (maxDate && selectedDate > maxDate) || tradeImageUploading}
+            >
               {(submitting || tradeImageUploading)
                 ? <><span className={styles.spinner} /> {tradeImageUploading ? "Uploading image…" : "Booking…"}</>
-                : isBuyerFlow ? "Confirm trade drop-off" : "Confirm drop-off slot"
+                : isBuyerFlow ? "Confirm trade drop-off" : isTrade ? "Confirm trade drop-off" : "Confirm drop-off slot"
               }
             </button>
           </div>

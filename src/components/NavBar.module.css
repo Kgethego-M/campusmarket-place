@@ -639,3 +639,43 @@
         font-size: 20px;
     }
 }
+
+/* ── Notification section label ── */
+.notificationSectionLabel {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 14px 4px;
+    font-size: 0.68rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #94a3b8;
+    background: #f9fafb;
+    border-bottom: 1px solid #f3f4f6;
+}
+
+.notificationSectionLabel i {
+    font-size: 0.65rem;
+}
+
+/* ── Notification item content ── */
+.notificationLabel {
+    margin: 0 0 2px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: #374151;
+    line-height: 1.2;
+}
+
+.notificationMsg {
+    margin: 0 0 3px;
+    font-size: 0.8rem;
+    color: #4b5563;
+    line-height: 1.4;
+}
+
+.notificationTime {
+    font-size: 0.7rem;
+    color: #9ca3af;
+}

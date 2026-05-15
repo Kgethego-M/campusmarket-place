@@ -466,3 +466,53 @@
   .skeletonCard { height: 84px; }
   .skeletonImg { width: 72px; min-width: 72px; }
 }
+
+/* ── Trade drop-off action card state ── */
+.cardTradeAction {
+  border-color: #c4b5fd;
+  box-shadow: 0 0 0 1px #ede9fe;
+}
+
+.cardTradeAction:hover {
+  border-color: #7c3aed;
+  box-shadow: 0 4px 16px rgba(124, 58, 237, 0.12);
+}
+
+/* ── Trade drop-off CTA banner (inside card) ── */
+.tradeDropOffCta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  background: #faf5ff;
+  border: 1.5px solid #c4b5fd;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.tradeDropOffCtaIcon {
+  width: 30px;
+  height: 30px;
+  border-radius: 7px;
+  background: #7c3aed;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.tradeDropOffCtaTitle {
+  margin: 0 0 2px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #5b21b6;
+}
+
+.tradeDropOffCtaSub {
+  margin: 0;
+  font-size: 0.7rem;
+  color: #7c3aed;
+  line-height: 1.4;
+}

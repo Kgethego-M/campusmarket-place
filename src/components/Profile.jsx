@@ -26,7 +26,8 @@ const HISTORY_STATUSES  = new Set(['sold', 'completed', 'traded']);
 const READONLY_STATUSES = new Set(['accepted']);
 const ACTIVE_TX_STATUSES = ['completed', 'accepted', 'sold', 'traded'];
 
-// ── Trade item detail card (shown in Offers tab) ──────────────────────────────
+// ── Trade item detail card (shown in Offers tab) ──
+// REMOVED: description and specifications
 function TradeItemCard({ tradeItem }) {
   if (!tradeItem) return null;
 
@@ -86,16 +87,14 @@ function TradeItemCard({ tradeItem }) {
               </span>
             )}
           </div>
-          {tradeItem.description && (
-            <p className={styles.tradeItemDesc}>{tradeItem.description}</p>
-          )}
+          {/* REMOVED: description and specifications */}
         </div>
       </div>
     </div>
   );
 }
 
-// ── Offer card wrapper that shows trade item details ──────────────────────────
+// ── Offer card wrapper that shows trade item details ──
 function EnrichedOfferCard({ offer, highlighted }) {
   const isTrade = offer.type === 'trade';
   return (
@@ -527,13 +526,13 @@ function Profile() {
               <div className={styles.editForm}>
                 <div className={styles.formGroup}><label>First Name</label><input type="text" name="firstName" value={editFormData.firstName} disabled className={styles.disabledInput} /></div>
                 <div className={styles.formGroup}><label>Surname</label><input type="text" name="lastName" value={editFormData.lastName} disabled className={styles.disabledInput} /></div>
-                <div className={styles.formGroup}><label>Email</label><input type="email" value={profileData.email} disabled className={styles.disabledInput} /></div>
+                {/* REMOVED: Email field */}
                 <div className={styles.formGroup}><label>Bio</label><textarea name="bio" value={editFormData.bio} onChange={handleInputChange} placeholder="Tell us about yourself..." rows="3" /></div>
               </div>
             ) : (
               <>
                 <h2>{profileData.firstName} {profileData.lastName}</h2>
-                <p className={styles.email}>{profileData.email}</p>
+                {/* REMOVED: Email display */}
                 <p className={styles.bio}>{profileData.bio || 'No bio yet. Click edit to add one!'}</p>
                 <div className={styles.memberSince}><i className="fas fa-calendar-alt" /><span>Member since {profileData.memberSince}</span></div>
               </>
@@ -588,7 +587,6 @@ function Profile() {
                     ? new Date(item.date).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric' })
                     : null;
 
-                  // FIX: Safely extract trade item display string
                   let tradeItemDisplay = null;
                   if (isTrade && item.tradeItem) {
                     if (typeof item.tradeItem === 'string') {

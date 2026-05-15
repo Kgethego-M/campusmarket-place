@@ -112,7 +112,7 @@ export default function ViewListings() {
                 ];
 
                 // 4. Remove listings that are hidden due to transaction or status
-                const UNAVAILABLE = new Set(["accepted", "completed", "sold", "traded", "inactive"]);
+                const UNAVAILABLE = new Set(["accepted", "completed", "sold", "traded", "inactive", "waiting"]);
                 const visible = merged.filter(l => {
                     if (hiddenListingIds.has(l.id)) return false;
                     if (l.status && UNAVAILABLE.has(l.status.toLowerCase())) return false;

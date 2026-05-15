@@ -7,9 +7,7 @@
 }
 
 /* ── Page header ──────────────────────────────────────────────── */
-.pageHeader {
-  margin-bottom: 24px;
-}
+.pageHeader { margin-bottom: 24px; }
 
 .backLink {
   display: inline-flex;
@@ -43,6 +41,168 @@
   color: #6b7280;
   margin: 0;
   line-height: 1.5;
+}
+
+/* ── Trade Exchange Card ──────────────────────────────────────── */
+.tradeExchangeCard {
+  background: #f8faff;
+  border: 1px solid #bdd6f0;
+  border-radius: 14px;
+  overflow: hidden;
+  margin-bottom: 14px;
+}
+
+.tradeExchangeHeader {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 14px;
+  background: #e8f2fb;
+  border-bottom: 1px solid #bdd6f0;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #1e4d8c;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.tradeExchangeBody {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  padding: 16px 14px;
+}
+
+.tradeExchangeItem {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  text-align: center;
+}
+
+.tradeExchangeRole {
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #185FA5;
+}
+
+.tradeExchangeImgWrap {
+  width: 80px;
+  height: 80px;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1.5px solid #bdd6f0;
+  background: #f0f6ff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+.tradeExchangeImg {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.tradeExchangeImgPlaceholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #f0f6ff, #e8f2fb);
+  font-size: 22px;
+  color: #93c5fd;
+}
+
+.tradeExchangeReplaceBtn {
+  position: absolute;
+  bottom: 4px;
+  right: 4px;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  border-radius: 50%;
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 0.6rem;
+  transition: background 0.15s;
+}
+.tradeExchangeReplaceBtn:hover { background: rgba(0,0,0,0.75); }
+
+.tradeExchangeItemName {
+  margin: 0;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #1e3a5f;
+  max-width: 110px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tradeExchangeChip {
+  display: inline-block;
+  font-size: 0.62rem;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #f3f4f6;
+  color: #6b7280;
+}
+
+.tradeExchangeArrow {
+  flex-shrink: 0;
+  padding: 0 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.7;
+}
+
+.tradeExchangeDesc {
+  padding: 8px 14px 10px;
+  border-top: 1px solid #bdd6f0;
+  font-size: 0.74rem;
+  color: #4a6a8a;
+  line-height: 1.5;
+  background: #f0f6ff;
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+/* ── Trade parties row ────────────────────────────────────────── */
+.tradePartiesRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 20px;
+}
+
+.tradePartyChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  background: #f0f6ff;
+  border: 1px solid #bdd6f0;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  color: #1e4d8c;
+}
+
+.tradePartyChip i {
+  font-size: 0.7rem;
 }
 
 /* ── Summary card ─────────────────────────────────────────────── */
@@ -85,10 +245,7 @@
   justify-content: center;
 }
 
-.summaryInfo {
-  flex: 1;
-  min-width: 0;
-}
+.summaryInfo { flex: 1; min-width: 0; }
 
 .summaryTitle {
   font-size: 14px;
@@ -107,41 +264,33 @@
   flex-wrap: wrap;
 }
 
-.summaryPrice {
-  font-size: 14px;
-  font-weight: 600;
-  color: #185FA5;
-}
-
-/* ── Status chip — colour-coded by status ─────────────────────── */
+/* ── Status chip ──────────────────────────────────────────────── */
 .statusChip {
   font-size: 11px;
   font-weight: 600;
   padding: 3px 10px;
   border-radius: 999px;
   white-space: nowrap;
-  /* default (waiting = green/confirmed) */
   color: #085041;
   background: #E1F5EE;
 }
+.status_waiting           { color: #085041; background: #E1F5EE; }
+.status_dropoff_scheduled { color: #185FA5; background: #E6F1FB; }
+.status_pending           { color: #633806; background: #FAEEDA; }
+.status_completed         { color: #3B6D11; background: #EAF3DE; }
+.status_cancelled         { color: #791F1F; background: #FCEBEB; }
 
-.status_waiting             { color: #085041; background: #E1F5EE; }
-.status_dropoff_scheduled   { color: #185FA5; background: #E6F1FB; }
-.status_pending             { color: #633806; background: #FAEEDA; }
-.status_completed           { color: #3B6D11; background: #EAF3DE; }
-.status_cancelled           { color: #791F1F; background: #FCEBEB; }
-
-/* ── Summary divider ──────────────────────────────────────────── */
 .summaryDivider {
   border: none;
   border-top: 0.5px solid #f3f4f6;
   margin: 12px 0;
 }
 
-/* ── Transaction detail grid ──────────────────────────────────── */
+/* ── Transaction grid (simplified — no price/payment) ─────────── */
 .txnGrid {
-  display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .txnCell {
@@ -149,11 +298,6 @@
   flex-direction: column;
   gap: 2px;
   padding: 2px 0;
-}
-
-.txnCell + .txnCell {
-  padding-left: 14px;
-  border-left: 0.5px solid #f3f4f6;
 }
 
 .txnLabel {
@@ -171,65 +315,6 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
-
-.txnValueBlue  { color: #185FA5; }
-.txnValueGreen { color: #0F6E56; }
-.txnValueAmber { color: #854F0B; }
-
-/* ── Payment banner ───────────────────────────────────────────── */
-.paymentBanner {
-  display: flex;
-  gap: 12px;
-  align-items: flex-start;
-  border-radius: 12px;
-  padding: 14px 16px;
-  margin-bottom: 28px;
-}
-
-.banner_online  { background: #E1F5EE; border: 0.5px solid #9FE1CB; }
-.banner_cod     { background: #FAEEDA; border: 0.5px solid #FAC775; }
-.banner_partial { background: #E6F1FB; border: 0.5px solid #B5D4F4; }
-.banner_unknown { background: #F1EFE8; border: 0.5px solid #D3D1C7; }
-
-.bannerIcon {
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-.banner_online  .bannerIcon { background: #9FE1CB; color: #085041; }
-.banner_cod     .bannerIcon { background: #FAC775; color: #633806; }
-.banner_partial .bannerIcon { background: #B5D4F4; color: #0C447C; }
-.banner_unknown .bannerIcon { background: #D3D1C7; color: #444441; }
-
-.bannerBody {
-  flex: 1;
-  min-width: 0;
-}
-
-.bannerHeadline {
-  font-size: 13px;
-  font-weight: 600;
-  margin: 0 0 3px 0;
-  line-height: 1.3;
-}
-.banner_online  .bannerHeadline { color: #085041; }
-.banner_cod     .bannerHeadline { color: #633806; }
-.banner_partial .bannerHeadline { color: #0C447C; }
-.banner_unknown .bannerHeadline { color: #2C2C2A; }
-
-.bannerDetail {
-  font-size: 12px;
-  line-height: 1.5;
-  margin: 0;
-}
-.banner_online  .bannerDetail { color: #0F6E56; }
-.banner_cod     .bannerDetail { color: #854F0B; }
-.banner_partial .bannerDetail { color: #185FA5; }
-.banner_unknown .bannerDetail { color: #5F5E5A; }
 
 /* ── Form ─────────────────────────────────────────────────────── */
 .form {
@@ -289,6 +374,9 @@
   padding: 11px 14px;
   font-size: 13px;
   color: #791F1F;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 /* ── Actions ──────────────────────────────────────────────────── */
@@ -311,11 +399,7 @@
   font-family: inherit;
   transition: background 0.15s, border-color 0.15s;
 }
-
-.cancelBtn:hover {
-  background: #f9fafb;
-  border-color: #9ca3af;
-}
+.cancelBtn:hover { background: #f9fafb; border-color: #9ca3af; }
 
 .submitBtn {
   flex: 2;
@@ -334,17 +418,8 @@
   gap: 7px;
   transition: background 0.15s, transform 0.12s;
 }
-
-.submitBtn:hover:not(:disabled) {
-  background: #0C447C;
-  transform: translateY(-1px);
-}
-
-.submitBtn:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-  transform: none;
-}
+.submitBtn:hover:not(:disabled) { background: #0C447C; transform: translateY(-1px); }
+.submitBtn:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
 
 /* ── Spinner ──────────────────────────────────────────────────── */
 .spinner {
@@ -356,17 +431,11 @@
   animation: spin 0.7s linear infinite;
   display: inline-block;
 }
+@keyframes spin { to { transform: rotate(360deg); } }
 
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
-
-/* ── Skeleton loading ─────────────────────────────────────────── */
-.skeletonBlock {
-  display: block;
-  border-radius: 8px;
-  width: 100%;
-}
+/* ── Skeleton ─────────────────────────────────────────────────── */
+.skeletonBlock { display: block; border-radius: 8px; width: 100%; }
+.skeletonHeader { margin-bottom: 24px; }
 
 @keyframes shimmer {
   0%   { background-position: 200% 0; }
@@ -394,52 +463,73 @@
   font-size: 14px;
 }
 
-/* ── Responsive ───────────────────────────────────────────────── */
-@media (max-width: 600px) {
-  .page { padding: 20px 14px 48px; }
-  .heading { font-size: 19px; }
-
-  /* Stack action buttons */
-  .actions { flex-direction: column; }
-  .submitBtn, .cancelBtn { flex: unset; width: 100%; }
-
-  /* Transaction detail: 2-col on small, last cell full-width */
-  .txnGrid { grid-template-columns: 1fr 1fr; }
-  .txnCell:last-child {
-    grid-column: 1 / -1;
-    border-left: none;
-    padding-left: 0;
-    border-top: 0.5px solid #f3f4f6;
-    padding-top: 8px;
-    margin-top: 6px;
-  }
-
-  /* Slot grid: 2 columns fixed on small screens */
-  .slotGrid { grid-template-columns: repeat(2, 1fr); }
-
-  /* Banner: tighten padding */
-  .paymentBanner { padding: 12px 13px; gap: 10px; }
-  .bannerIcon { width: 28px; height: 28px; flex-shrink: 0; }
-
-  /* Summary card top: keep image, allow title to wrap */
-  .summaryTitle { white-space: normal; }
-  .summaryPriceRow { flex-wrap: wrap; gap: 6px; }
+/* ── Deadline card ────────────────────────────────────────────── */
+.deadlineCard {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  background: #fffbeb;
+  border-left: 4px solid #f59e0b;
+  border-radius: 12px;
+  padding: 14px 16px;
+  margin-bottom: 16px;
 }
 
-@media (max-width: 360px) {
-  /* Very small phones: single-column slots */
-  .slotGrid { grid-template-columns: 1fr 1fr; gap: 5px; }
-  .slotPill { padding: 8px 10px; }
-  .txnGrid { grid-template-columns: 1fr; }
-  .txnCell + .txnCell { border-left: none; padding-left: 0; border-top: 0.5px solid #f3f4f6; padding-top: 6px; margin-top: 4px; }
+.deadlineIcon { flex-shrink: 0; color: #f59e0b; margin-top: 2px; }
+
+.deadlineContent {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1;
 }
 
-/* ── Slot hint ────────────────────────────────────────────────── */
-.slotHint {
-  font-size: 13px;
-  color: #9ca3af;
-  margin: 4px 0 0;
-  font-style: italic;
+.deadlineLabel {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #b45309;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.deadlineValue { font-size: 0.85rem; color: #78350f; }
+.deadlineValue strong { color: #d97706; }
+
+.deadlineDate {
+  font-size: 0.75rem;
+  color: #92400e;
+  background: #fef3c7;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 20px;
+  align-self: flex-start;
+}
+.deadlineDate strong { font-weight: 600; color: #b45309; }
+
+/* ── Date helpers ─────────────────────────────────────────────── */
+.dateHelper {
+  font-size: 0.7rem;
+  color: #6b7280;
+  margin-top: 6px;
+  margin-bottom: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.dateWarning {
+  font-size: 0.7rem;
+  color: #dc2626;
+  margin-top: 6px;
+  margin-bottom: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 
 /* ── Selected badge ───────────────────────────────────────────── */
@@ -462,7 +552,29 @@
   margin-top: 4px;
 }
 
-/* ── Slot pill base ───────────────────────────────────────────── */
+.slotHint {
+  font-size: 0.75rem;
+  color: #6b7280;
+  margin-top: 8px;
+  margin-bottom: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.noSlots {
+  font-size: 0.75rem;
+  color: #ef4444;
+  background: #fef2f2;
+  padding: 10px 12px;
+  border-radius: 8px;
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* ── Slot pill ────────────────────────────────────────────────── */
 .slotPill {
   display: flex;
   flex-direction: column;
@@ -485,7 +597,6 @@
   transform: translateY(-1px);
 }
 
-/* Selected — subtle blue highlight, not a solid fill */
 .slotSelected {
   border: 1.5px solid #378ADD;
   background: #E6F1FB;
@@ -493,7 +604,6 @@
 .slotSelected .slotTime  { color: #185FA5; }
 .slotSelected .slotCount { color: #378ADD; }
 
-/* Full / disabled */
 .slotFull {
   border-color: #f3f4f6;
   background: #f9fafb;
@@ -503,7 +613,6 @@
 .slotFull .slotTime  { color: #9ca3af; }
 .slotFull .slotCount { color: #d1d5db; }
 
-/* Text inside pill */
 .slotTime {
   font-size: 13px;
   font-weight: 600;
@@ -518,7 +627,6 @@
   line-height: 1;
 }
 
-/* Shimmer skeleton for slots while loading */
 .slotShimmer {
   height: 50px;
   border-radius: 9px;
@@ -529,108 +637,22 @@
   border: none;
 }
 
-/* ── Deadline Card - integrated, not floating ─────────────────── */
-.deadlineCard {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  background: #fffbeb;
-  border-left: 4px solid #f59e0b;
-  border-radius: 12px;
-  padding: 14px 16px;
-  margin-bottom: 20px;
+/* ── Responsive ───────────────────────────────────────────────── */
+@media (max-width: 600px) {
+  .page { padding: 20px 14px 48px; }
+  .heading { font-size: 19px; }
+  .actions { flex-direction: column; }
+  .submitBtn, .cancelBtn { flex: unset; width: 100%; }
+  .slotGrid { grid-template-columns: repeat(2, 1fr); }
+
+  /* Trade exchange card on mobile — stack vertically */
+  .tradeExchangeBody { flex-direction: column; align-items: center; gap: 12px; }
+  .tradeExchangeArrow { transform: rotate(90deg); padding: 4px 0; }
+  .tradeExchangeImgWrap { width: 70px; height: 70px; }
+  .tradePartiesRow { flex-direction: column; }
 }
 
-.deadlineIcon {
-  flex-shrink: 0;
-  color: #f59e0b;
-  margin-top: 2px;
-}
-
-.deadlineContent {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  flex: 1;
-}
-
-.deadlineLabel {
-  font-size: 0.7rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  color: #b45309;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.deadlineValue {
-  font-size: 0.85rem;
-  color: #78350f;
-}
-
-.deadlineValue strong {
-  color: #d97706;
-}
-
-.deadlineDate {
-  font-size: 0.75rem;
-  color: #92400e;
-  background: #fef3c7;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 4px 10px;
-  border-radius: 20px;
-  align-self: flex-start;
-}
-
-.deadlineDate strong {
-  font-weight: 600;
-  color: #b45309;
-}
-
-/* ── Date helper text - subtle, under the date picker ─────────── */
-.dateHelper {
-  font-size: 0.7rem;
-  color: #6b7280;
-  margin-top: 6px;
-  margin-bottom: 0;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.dateWarning {
-  font-size: 0.7rem;
-  color: #dc2626;
-  margin-top: 6px;
-  margin-bottom: 0;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-/* ── Slot hint with icon ──────────────────────────────────────── */
-.slotHint {
-  font-size: 0.75rem;
-  color: #6b7280;
-  margin-top: 8px;
-  margin-bottom: 0;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.noSlots {
-  font-size: 0.75rem;
-  color: #ef4444;
-  background: #fef2f2;
-  padding: 10px 12px;
-  border-radius: 8px;
-  margin-top: 8px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
+@media (max-width: 360px) {
+  .slotGrid { grid-template-columns: 1fr 1fr; gap: 5px; }
+  .slotPill { padding: 8px 10px; }
 }
