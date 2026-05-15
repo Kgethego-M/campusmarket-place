@@ -50,6 +50,16 @@ const NOTIFICATION_CONFIG = {
     // Rating
     rate_seller:             { icon: 'fa-star',            color: '#f59e0b', label: 'Rate seller'       },
     rate_buyer:              { icon: 'fa-star',            color: '#f59e0b', label: 'Rate buyer'        },
+    // Overdue
+    overdue_dropoff_buyer:   { icon: 'fa-triangle-exclamation', color: '#dc2626', label: 'Overdue Drop-off' },
+    overdue_dropoff_seller:  { icon: 'fa-triangle-exclamation', color: '#dc2626', label: 'Overdue Drop-off' },
+    overdue_collection_buyer: { icon: 'fa-triangle-exclamation', color: '#dc2626', label: 'Overdue Collection' },
+    overdue_collection_seller: { icon: 'fa-triangle-exclamation', color: '#dc2626', label: 'Overdue Collection' },
+    // Cancelled
+    cancelled_dropoff_buyer: { icon: 'fa-ban',            color: '#dc2626', label: 'Transaction Cancelled' },
+    cancelled_dropoff_seller: { icon: 'fa-ban',            color: '#dc2626', label: 'Transaction Cancelled' },
+    cancelled_collection_buyer: { icon: 'fa-ban',         color: '#dc2626', label: 'Transaction Cancelled' },
+    cancelled_collection_seller: { icon: 'fa-ban',        color: '#dc2626', label: 'Transaction Cancelled' },
 };
 
 const getConfig = (type) => NOTIFICATION_CONFIG[type] || { icon: 'fa-bell', color: '#94a3b8', label: 'Notification' };
@@ -75,13 +85,38 @@ const buildMessage = (n) => {
         case 'buyer_dropoff_booked':      return `The buyer has booked their trade drop-off for ${title}.`;
         case 'item_received_at_facility': return `${title} has been received at the trade facility.`;
         case 'item_at_facility':          return `${title} is at the facility. Book your collection slot.`;
-        case 'item_ready_for_collection': return `${title} is ready for collection at the trade facility.`;
+        case 'item_ready_for_collection': return `${title} is ready for collection at the trade facility. Show your receipt in the My Purchases section to staff when collecting.`;
         case 'collection_booked':         return `Your collection slot for ${title} is confirmed.`;
         case 'item_collected':            return `${title} has been collected. Transaction complete.`;
         case 'transaction_complete':      return `Your sale of ${title} is complete.`;
         case 'rate_seller':               return `How was ${n.reviewedUserName || 'the seller'} as a seller for ${title}?`;
         case 'rate_buyer':                return `How was ${n.reviewedUserName || 'the buyer'} as a buyer for ${title}?`;
-        default:                          return 'You have a new notification.';
+        
+        // Overdue notifications
+        case 'overdue_dropoff_buyer':
+            return `The seller has not yet dropped off ${title} at the trade facility. We have sent them a reminder. You will be notified once it arrives.`;
+        case 'overdue_dropoff_seller':
+            return `Your drop-off for ${title} is overdue. You have 24 hours to drop off the item at the trade facility. If the item is not dropped off within 24 hours, this transaction will be automatically cancelled.`;
+        case 'overdue_collection_buyer':
+            return `Your collection of ${title} is overdue. You have 24 hours to collect your item from the trade facility — please come in as soon as possible. If the item is not collected within 24 hours, this transaction will be automatically cancelled and the item returned to the seller.`;
+        case 'overdue_collection_seller':
+            return `The buyer has not yet collected ${title}. They have been notified and given 24 hours to collect. If they do not collect within 24 hours, the transaction will be cancelled and you will be asked to come collect your item.`;
+        
+        // Cancelled notifications
+        case 'cancelled_dropoff_seller':
+            return `Your transaction for ${title} has been cancelled due to a missed drop-off.`;
+        case 'cancelled_dropoff_buyer':
+            const wasOnline = n.paymentType === 'online' || n.paymentType === 'full_online';
+            return wasOnline
+                ? `Your transaction for ${title} was cancelled — the seller did not drop off in time. You will be refunded within 24 hours.`
+                : `Your transaction for ${title} was cancelled — the seller did not drop off in time. No payment was collected.`;
+        case 'cancelled_collection_buyer':
+            return `Your transaction for ${title} was cancelled due to non-collection.`;
+        case 'cancelled_collection_seller':
+            return `The buyer did not collect ${title} — the transaction has been cancelled. Please come to the trade facility to collect your item back.`;
+        
+        default:
+            return 'You have a new notification.';
     }
 };
 
@@ -92,12 +127,14 @@ const BUYER_DEST_TYPES = new Set([
     'offer_accepted', 'seller_dropoff_booked',
     'item_at_facility', 'item_ready_for_collection',
     'item_collected', 'transaction_complete',
+    'overdue_dropoff_buyer', 'overdue_collection_buyer',
 ]);
 // Types that go to Trade Facility
 const FACILITY_DEST_TYPES = new Set([
     'buyer_paid', 'dropoff_booked', 'trade_waiting',
     'item_received_at_facility', 'collection_booked',
     'buyer_dropoff_booked',
+    'overdue_dropoff_seller', 'overdue_collection_seller',
 ]);
 // Types that go to book-dropoff page
 const BOOK_DROPOFF_TYPES = new Set(['trade_dropoff_required']);
@@ -112,6 +149,16 @@ async function resolveDestination(n, currentUser) {
     
     // Special case: offer_declined should go back to view-listing
     if (n.type === 'offer_declined') return '/view-listing';
+    
+    // Overdue notifications for buyers go to My Purchases
+    if (n.type === 'overdue_dropoff_buyer' || n.type === 'overdue_collection_buyer') {
+        return '/my-purchases';
+    }
+    
+    // Overdue notifications for sellers go to Trade Facility
+    if (n.type === 'overdue_dropoff_seller' || n.type === 'overdue_collection_seller') {
+        return '/trade-facility';
+    }
 
     if (BUYER_DEST_TYPES.has(n.type)) return '/my-purchases';
     if (FACILITY_DEST_TYPES.has(n.type)) return '/trade-facility';
@@ -456,6 +503,14 @@ export default function Navbar() {
         rate_seller:               12,
         rate_buyer:                12,
         offer_declined:            13,
+        overdue_dropoff_buyer:     14,
+        overdue_dropoff_seller:    14,
+        overdue_collection_buyer:  15,
+        overdue_collection_seller: 15,
+        cancelled_dropoff_buyer:   16,
+        cancelled_dropoff_seller:  16,
+        cancelled_collection_buyer: 17,
+        cancelled_collection_seller: 17,
     };
 
     const sortedNotifications = [...allNotifications].sort((a, b) => {
