@@ -109,6 +109,9 @@ async function resolveDestination(n, currentUser) {
     // Use type-based routing
     if (BOOK_DROPOFF_TYPES.has(n.type) && n.transactionId)
         return `/book-dropoff/${n.transactionId}`;
+    
+    // Special case: offer_declined should go back to view-listing
+    if (n.type === 'offer_declined') return '/view-listing';
 
     if (BUYER_DEST_TYPES.has(n.type)) return '/my-purchases';
     if (FACILITY_DEST_TYPES.has(n.type)) return '/trade-facility';
@@ -452,6 +455,7 @@ export default function Navbar() {
         transaction_complete:      11,
         rate_seller:               12,
         rate_buyer:                12,
+        offer_declined:            13,
     };
 
     const sortedNotifications = [...allNotifications].sort((a, b) => {

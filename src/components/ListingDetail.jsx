@@ -453,27 +453,22 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
       }
     }
     
-    // Trade item validation
+    // Trade item validation - only item name is required, others are optional with warnings
     if (purchaseType === 'trade') {
       if (!tradeItemName) {
         setAlertMessage('Please describe what you want to trade');
         setShowPriceAlert(true);
         return;
       }
+      // Only show warnings for category, condition, and photo - don't block submission
       if (!tradeItemCategory) {
-        setAlertMessage('Please select a category for your trade item');
-        setShowPriceAlert(true);
-        return;
+        showToast('Tip: Adding a category helps the seller understand your offer', 'warn');
       }
       if (!tradeItemCondition) {
-        setAlertMessage('Please select a condition for your trade item');
-        setShowPriceAlert(true);
-        return;
+        showToast('Tip: Selecting a condition helps the seller evaluate your offer', 'warn');
       }
       if (!tradeImageFile && !tradeImagePreview) {
-        setAlertMessage('Please upload a photo of your trade item');
-        setShowPriceAlert(true);
-        return;
+        showToast('Tip: Adding a photo helps the seller verify your item', 'warn');
       }
     }
 
@@ -891,7 +886,7 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
                     </span>
                   </div>
 
-                  {/* Item name */}
+                  {/* Item name - Required */}
                   <label style={modalStyles.label}>
                     Item Name <span style={{ color: '#dc2626' }}>*</span>
                   </label>
@@ -903,7 +898,7 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
                     style={modalStyles.input}
                   />
 
-                  {/* Category */}
+                  {/* Category - Optional but recommended */}
                   <label style={modalStyles.label}>
                     Category <span style={{ color: '#dc2626' }}>*</span>
                   </label>
@@ -916,7 +911,7 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
                     {TRADE_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
                   </select>
 
-                  {/* Condition */}
+                  {/* Condition - Optional but recommended */}
                   <label style={modalStyles.label}>
                     Condition <span style={{ color: '#dc2626' }}>*</span>
                   </label>
@@ -945,7 +940,7 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
                     ))}
                   </div>
 
-                  {/* Description */}
+                  {/* Description - Optional */}
                   <label style={modalStyles.label}>
                     Description{' '}
                     <span style={{ color: '#6b7280', fontWeight: '400' }}>(optional)</span>
@@ -957,10 +952,10 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
                     style={{ ...modalStyles.textarea, marginBottom: 14 }}
                   />
 
-                  {/* Image upload */}
+                  {/* Image upload - Optional but recommended */}
                   <label style={modalStyles.label}>
                     Photo of your item <span style={{ color: '#dc2626' }}>*</span>
-                    <span style={{ color: '#6b7280', fontWeight: '400', marginLeft: 4 }}>(for verification)</span>
+                    <span style={{ color: '#6b7280', fontWeight: '400', marginLeft: 4 }}>(recommended for verification)</span>
                   </label>
 
                   {tradeImagePreview ? (
@@ -1018,7 +1013,7 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
                         <path d="M21 15l-5-5L5 21"/>
                       </svg>
                       <span style={{ fontSize: '0.82rem', color: '#6b7280', textAlign: 'center', fontFamily: 'Segoe UI, system-ui, sans-serif' }}>
-                        Click to upload or drag & drop<br/>
+                        Click to upload or drag & drop (recommended)<br/>
                         <span style={{ fontSize: '0.75rem', color: '#9ca3af' }}>JPG, PNG or WEBP · max 5 MB</span>
                       </span>
                       <input
