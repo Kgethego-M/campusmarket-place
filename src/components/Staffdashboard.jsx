@@ -46,7 +46,6 @@ async function notifyBothParties(txn, stage) {
             message:       `"${title}" has been dropped off at the trade facility. You have up to 7 days to collect it. Show your receipt to staff when collecting.`,
         });
     } else if (stage === "ready_to_collect") {
-        // Item has passed inspection and staff released it — buyer can now come collect
         await sendNotification(txn.buyerId, {
             type:          "item_ready_for_collection",
             listingId:     txn.listingId || null,
@@ -74,10 +73,6 @@ async function notifyBothParties(txn, stage) {
 
 // ─── Overdue notification helpers ────────────────────────────────────────────
 
-/**
- * Fired when the BUYER failed to collect within the collection period.
- * Gives buyer 24 hrs to collect before cancellation.
- */
 async function notifyOverdueCollection(txn) {
     if (!txn.buyerId || !txn.sellerId) return;
     const title = txn.listingTitle || txn.item;
@@ -102,10 +97,6 @@ async function notifyOverdueCollection(txn) {
     });
 }
 
-/**
- * Fired when the SELLER failed to drop off within the drop-off period.
- * Gives seller 24 hrs to drop off before cancellation.
- */
 async function notifyOverdueDropOff(txn) {
     if (!txn.buyerId || !txn.sellerId) return;
     const title = txn.listingTitle || txn.item;
@@ -130,11 +121,6 @@ async function notifyOverdueDropOff(txn) {
     });
 }
 
-/**
- * Fired when a drop-off overdue transaction is cancelled after 24 hrs.
- * - Seller: directed to trade facility to decide on their listing.
- * - Buyer: notified of cancellation + refund if online payment was made.
- */
 async function notifyCancelledDropOff(txn) {
     if (!txn.buyerId || !txn.sellerId) return;
     const title = txn.listingTitle || txn.item;
@@ -164,9 +150,6 @@ async function notifyCancelledDropOff(txn) {
     });
 }
 
-/**
- * Fired when a collection overdue transaction is cancelled after 24 hrs.
- */
 async function notifyCancelledCollection(txn) {
     if (!txn.buyerId || !txn.sellerId) return;
     const title = txn.listingTitle || txn.item;
@@ -220,7 +203,6 @@ const PAYMENT_CONFIG = {
 };
 
 function getPaymentConfig(txn) {
-    // Trade transactions have no monetary payment
     if ((txn.type || "").toLowerCase() === "trade") return PAYMENT_CONFIG.trade;
     const method = (txn.paymentType || txn.paymentMethod || "").toLowerCase();
     if (method === "full_online" || method === "online" || method === "fully_online" || method === "fully online") return PAYMENT_CONFIG.full_online;
@@ -229,14 +211,12 @@ function getPaymentConfig(txn) {
     return PAYMENT_CONFIG.unknown;
 }
 
-// Matches MyPurchases receipt format: receiptRef field, receiptId, or RCP-{last 8 of id}
 function getReceiptRef(txn) {
     return txn.receiptRef || txn.receiptId || `RCP-${(txn.id || "").slice(-8).toUpperCase()}`;
 }
 
 // ─── Date/Time helpers ────────────────────────────────────────────────────────
 
-/** Parses the START time from a slot string like "09:00 - 10:00". */
 function parseSlotStart(timeSlot) {
     if (!timeSlot) return null;
     const match = timeSlot.match(/(\d{1,2}):(\d{2})/);
@@ -244,7 +224,6 @@ function parseSlotStart(timeSlot) {
     return { hour: parseInt(match[1], 10), minute: parseInt(match[2], 10) };
 }
 
-/** Parses the END time from a slot string like "09:00 - 10:00". Falls back to start if only one time. */
 function parseSlotEnd(timeSlot) {
     if (!timeSlot) return null;
     const matches = [...timeSlot.matchAll(/(\d{1,2}):(\d{2})/g)];
@@ -253,7 +232,6 @@ function parseSlotEnd(timeSlot) {
     return null;
 }
 
-// Unlock buttons from slot START time (e.g. 09:00 for a 09:00 - 10:00 slot)
 function isSlotOpen(dateStr, timeSlot) {
     if (!dateStr) return false;
     const slotStart = parseSlotStart(timeSlot);
@@ -262,7 +240,6 @@ function isSlotOpen(dateStr, timeSlot) {
     return new Date() >= deadline;
 }
 
-// Overdue check: slot END time + 1 minute (e.g. 10:01 for a 09:00 - 10:00 slot)
 function isBookingTimeReached(dateStr, timeSlot) {
     if (!dateStr) return false;
     const slotEnd = parseSlotEnd(timeSlot);
@@ -271,14 +248,12 @@ function isBookingTimeReached(dateStr, timeSlot) {
     return new Date() >= deadline;
 }
 
-// ─── Overdue helpers (shared by Card and Detail Panel) ───────────────────────
-// Drop-off overdue: slot END + 1 min has passed and item not yet received
 function isDropOffOverdue(txn) {
     if (txn.status !== "pending" || !txn.dropOffBooked) return false;
     if (!txn.dropOffDate) return false;
     return isBookingTimeReached(txn.dropOffDate, txn.dropOffTimeSlot || txn.timeSlot);
 }
-// Collection overdue: matches the "Collect By" date shown in the detail panel
+
 function isCollectionOverdue(txn) {
     if (txn.status !== "awaiting_collection") return false;
     let deadlineMs = null;
@@ -342,7 +317,6 @@ function TransactionDetailPanel({ txn, onClose, onConfirmDropOff, onConfirmColle
 
     const allChecked = txn.checklist.every(c => c.done);
 
-    // ── Payment method helpers ────────────────────────────────
     const paymentConfig    = getPaymentConfig(txn);
     const isTrade          = (txn.type || "").toLowerCase() === "trade";
     const paymentMethod    = (txn.paymentMethod || txn.paymentType || "cash").toLowerCase();
@@ -360,7 +334,6 @@ function TransactionDetailPanel({ txn, onClose, onConfirmDropOff, onConfirmColle
 
     const hasShortfall = !isTrade && !isFullyOnline && (isFullyCash || isPartial);
 
-    // Online payment is always auto-confirmed; cash/partial confirmed by staff at collection
     const [cashConfirmed, setCashConfirmed] = useState(
         isFullyOnline || txn.paymentStatus === "Fully Paid"
     );
@@ -370,7 +343,6 @@ function TransactionDetailPanel({ txn, onClose, onConfirmDropOff, onConfirmColle
     const [dropOffLoading,    setDropOffLoading]    = useState(false);
     const [collectionLoading, setCollectionLoading] = useState(false);
 
-    // Staff confirms cash at collection only — payment never blocks the drop-off or release steps
     const canConfirmCash = !isFullyOnline && hasShortfall && !cashConfirmed;
     const canRelease     = allChecked;
 
@@ -379,14 +351,10 @@ function TransactionDetailPanel({ txn, onClose, onConfirmDropOff, onConfirmColle
     const showConfirmDropOff   = txn.status === "pending" && txn.dropOffBooked;
     const showConfirmCollection = txn.status === "awaiting_collection";
 
-    // For trade collections: check if the person coming to collect has dropped off their own item.
-    // _collectionRole: "buyer"   → buyer collects seller's item; buyer must have dropped off (buyerDropOffConfirmed)
-    // _collectionRole: "seller"  → seller collects buyer's trade item; seller must have dropped off (sellerDropOffConfirmed)
-    const collectionRole = txn._collectionRole; // "buyer" | "seller" | undefined
+    const collectionRole = txn._collectionRole;
     const tradeCollectionBlocked = isTrade && showConfirmCollection && (
         collectionRole === "buyer"  ? !txn.buyerDropOffConfirmed  :
         collectionRole === "seller" ? !txn.sellerDropOffConfirmed :
-        // no role set (detail opened from non-expanded card) — block if either side hasn't dropped off
         !txn.buyerDropOffConfirmed || !txn.sellerDropOffConfirmed
     );
 
@@ -433,9 +401,7 @@ function TransactionDetailPanel({ txn, onClose, onConfirmDropOff, onConfirmColle
                 <div className={`${styles.detailHeader} ${isOverdue ? styles.detailHeaderOverdue : styles[`detailHeader_${meta.cls}`]}`}>
                     <div className={styles.detailHeaderLeft}>
                         {isTrade && txn.tradeItem ? (
-                            /* ── Trade: two-item layout ── */
                             <div style={{ display: "flex", flexDirection: "column", gap: 8, flex: 1, minWidth: 0 }}>
-                                {/* Seller's item */}
                                 <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                                     <div className={styles.detailThumb} style={{ flexShrink: 0 }}>
                                         {txn.itemImage
@@ -450,12 +416,10 @@ function TransactionDetailPanel({ txn, onClose, onConfirmDropOff, onConfirmColle
                                         <h2 className={styles.detailTitle} style={{ margin: 0, fontSize: "1rem" }}>{txn.item}</h2>
                                     </div>
                                 </div>
-                                {/* Swap arrow */}
                                 <div style={{ display: "flex", alignItems: "center", gap: 6, paddingLeft: 4 }}>
                                     <i className="fa-solid fa-arrows-rotate" style={{ color: "#7c3aed", fontSize: "0.85rem" }} />
                                     <span style={{ fontSize: "0.72rem", color: "#94a3b8", fontWeight: 600 }}>Trade exchange</span>
                                 </div>
-                                {/* Buyer's trade item */}
                                 <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                                     <div className={styles.detailThumb} style={{ flexShrink: 0 }}>
                                         {txn.tradeItem.imageUrl
@@ -473,7 +437,6 @@ function TransactionDetailPanel({ txn, onClose, onConfirmDropOff, onConfirmColle
                                         )}
                                     </div>
                                 </div>
-                                {/* Badges row */}
                                 <div className={styles.detailHeaderBadges} style={{ marginTop: 2 }}>
                                     <span className={`${styles.statusBadge} ${isOverdue ? styles.status_overdue : styles[`status_${meta.cls}`]}`}>
                                         <i className={`fa-solid ${isOverdue ? "fa-circle-exclamation" : meta.icon}`} />
@@ -495,7 +458,6 @@ function TransactionDetailPanel({ txn, onClose, onConfirmDropOff, onConfirmColle
                                 </div>
                             </div>
                         ) : (
-                            /* ── Non-trade: original single-item layout ── */
                             <>
                                 <div className={styles.detailThumb}>
                                     {txn.itemImage
@@ -661,7 +623,6 @@ function TransactionDetailPanel({ txn, onClose, onConfirmDropOff, onConfirmColle
                                                     {txn.tradeItem.category  && <div style={{ fontSize: "0.78rem", color: "#64748b" }}>{txn.tradeItem.category}</div>}
                                                 </div>
                                             </div>
-                                            {/* Buyer's drop-off slot for their trade item */}
                                             {txn.buyerDropOffDate && (
                                                 <div style={{ marginTop: 8, fontSize: "0.83rem", color: "#475569", display: "flex", alignItems: "center", gap: 6 }}>
                                                     <i className="fa-solid fa-calendar-check" style={{ color: "#7c3aed" }} />
@@ -740,15 +701,12 @@ function TransactionDetailPanel({ txn, onClose, onConfirmDropOff, onConfirmColle
                                 <span className={styles.detailInfoLabel}>Collect By</span>
                                 <span className={styles.detailInfoValue}>
                                     {(() => {
-                                        // Best source: explicit deadline field
                                         if (txn.collectionDeadline) {
                                             return new Date(txn.collectionDeadline).toLocaleDateString("en-ZA", { day: "numeric", month: "short", year: "numeric" });
                                         }
-                                        // Second: droppedOffAt timestamp + 7 days
                                         if (txn.droppedOffAt) {
                                             return new Date(new Date(txn.droppedOffAt).getTime() + 7 * 24 * 60 * 60 * 1000).toLocaleDateString("en-ZA", { day: "numeric", month: "short", year: "numeric" });
                                         }
-                                        // Fallback: dropOffDate (string "YYYY-MM-DD") + 7 days — always available once booked
                                         if (txn.dropOffDate) {
                                             return new Date(new Date(txn.dropOffDate + "T00:00:00").getTime() + 7 * 24 * 60 * 60 * 1000).toLocaleDateString("en-ZA", { day: "numeric", month: "short", year: "numeric" });
                                         }
@@ -904,7 +862,6 @@ function TransactionDetailPanel({ txn, onClose, onConfirmDropOff, onConfirmColle
 
                     {showConfirmCollection && (
                         <>
-                            {/* ── Trade: warn if collector hasn't dropped off their item yet ── */}
                             {isTrade && tradeCollectionBlocked && (
                                 <div style={{
                                     display: "flex", alignItems: "flex-start", gap: 10,
@@ -932,7 +889,6 @@ function TransactionDetailPanel({ txn, onClose, onConfirmDropOff, onConfirmColle
                                     </div>
                                 </div>
                             )}
-                            {/* ── Trade: both sides dropped off — ready to release ── */}
                             {isTrade && !tradeCollectionBlocked && (
                                 <div style={{
                                     display: "flex", alignItems: "center", gap: 10,
@@ -949,14 +905,12 @@ function TransactionDetailPanel({ txn, onClose, onConfirmDropOff, onConfirmColle
                                     </div>
                                 </div>
                             )}
-                            {/* ── Collection checklist ── */}
                             <div style={{ marginBottom: 12, background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 10, overflow: "hidden" }}>
                                 <div style={{ padding: "8px 14px", background: "#f1f5f9", borderBottom: "1px solid #e2e8f0", fontSize: "0.72rem", fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.05em" }}>
                                     <i className="fa-solid fa-clipboard-check" style={{ marginRight: 6 }} />
                                     Collection Checklist
                                 </div>
 
-                                {/* Step 1 — Receipt verification */}
                                 <div style={{ padding: "10px 14px", borderBottom: "1px solid #f1f5f9", display: "flex", alignItems: "center", gap: 10 }}>
                                     <i className="fa-solid fa-circle-check" style={{ color: "#10b981", fontSize: "1rem", flexShrink: 0 }} />
                                     <div style={{ flex: 1 }}>
@@ -971,7 +925,6 @@ function TransactionDetailPanel({ txn, onClose, onConfirmDropOff, onConfirmColle
                                     </div>
                                 </div>
 
-                                {/* Step 2 — Confirm payment (cash/partial only) */}
                                 {!isFullyOnline && hasShortfall && (
                                     <div style={{ padding: "10px 14px", borderBottom: "1px solid #f1f5f9", display: "flex", alignItems: "center", gap: 10 }}>
                                         <i className={`fa-solid ${cashConfirmed ? "fa-circle-check" : "fa-circle"}`} style={{ color: cashConfirmed ? "#10b981" : "#cbd5e1", fontSize: "1rem", flexShrink: 0 }} />
@@ -1000,7 +953,6 @@ function TransactionDetailPanel({ txn, onClose, onConfirmDropOff, onConfirmColle
                                     </div>
                                 )}
 
-                                {/* Online payment confirmation row */}
                                 {isFullyOnline && (
                                     <div style={{ padding: "10px 14px", display: "flex", alignItems: "center", gap: 10 }}>
                                         <i className="fa-solid fa-circle-check" style={{ color: "#10b981", fontSize: "1rem", flexShrink: 0 }} />
@@ -1012,7 +964,6 @@ function TransactionDetailPanel({ txn, onClose, onConfirmDropOff, onConfirmColle
                                 )}
                             </div>
 
-                            {/* Collection Complete button */}
                             <button
                                 className={styles.confirmCollectionBtn}
                                 onClick={handleCollection}
@@ -1042,10 +993,7 @@ function TransactionCard({ txn, onConfirmDropOff, onConfirmCollection, onRelease
     const paymentConfig = getPaymentConfig(txn);
     const receiptRef    = getReceiptRef(txn);
 
-    // For synthetic buyer trade-item cards, restore the original txn for the detail panel
-    // but preserve the _dropOffRole so the panel knows which side to confirm
     const isBuyerTradeCard = txn._dropOffRole === "buyer";
-    // For collection trade cards, restore original txn fields for the detail panel
     const isTradeCollectionCard = !!txn._collectionRole;
     const panelTxn = isBuyerTradeCard ? {
         ...txn,
@@ -1053,7 +1001,6 @@ function TransactionCard({ txn, onConfirmDropOff, onConfirmCollection, onRelease
         itemImage: txn._originalItemImage,
         seller:    txn._originalSeller,
         buyer:     txn._originalBuyer,
-        // keep _dropOffRole so the detail panel passes the right role to handleConfirmDropOff
     } : isTradeCollectionCard ? {
         ...txn,
         item:      txn._originalItem ?? txn.item,
@@ -1096,7 +1043,6 @@ function TransactionCard({ txn, onConfirmDropOff, onConfirmCollection, onRelease
                 onKeyDown={e => e.key === "Enter" && setPanelOpen(true)}
                 title="Click to view details"
             >
-                {/* Buyer trade-item indicator strip */}
                 {isBuyerTradeCard && (
                     <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "5px 14px 0", marginBottom: -2 }}>
                         <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: "0.72rem", fontWeight: 700, color: "#7c3aed", background: "#ede9fe", border: "1px solid #c4b5fd", borderRadius: 6, padding: "2px 8px" }}>
@@ -1108,7 +1054,6 @@ function TransactionCard({ txn, onConfirmDropOff, onConfirmCollection, onRelease
                         </span>
                     </div>
                 )}
-                {/* Trade collection indicator strips — trade transactions only */}
                 {isTradeCollectionCard && (txn.type || "").toLowerCase() === "trade" && txn._collectionRole === "seller" && (
                     <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "5px 14px 0", marginBottom: -2 }}>
                         <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: "0.72rem", fontWeight: 700, color: "#7c3aed", background: "#ede9fe", border: "1px solid #c4b5fd", borderRadius: 6, padding: "2px 8px" }}>
@@ -1183,7 +1128,6 @@ function TransactionCard({ txn, onConfirmDropOff, onConfirmCollection, onRelease
                             <span className={styles.txnParty}>{txn.buyer}</span>
                         </div>
 
-                        {/* ─── FIXED PAYMENT STATUS DISPLAY ─── */}
                         <div className={styles.txnMeta}>
                             {txn.type === "Purchase" ? (
                                 <span className={styles.txnTag}>
@@ -1201,7 +1145,6 @@ function TransactionCard({ txn, onConfirmDropOff, onConfirmCollection, onRelease
                             ) : (
                                 <span className={styles.txnTag}>Trade · {txn.tradeFor || (txn.tradeItem?.name) || "—"}</span>
                             )}
-                            {/* Receipt badge — always visible for collection & completed */}
                             {(txn.status === "awaiting_collection" || txn.status === "completed") && (
                                 <span style={{
                                     display: "inline-flex", alignItems: "center", gap: 4,
@@ -1217,7 +1160,6 @@ function TransactionCard({ txn, onConfirmDropOff, onConfirmCollection, onRelease
                         </div>
                     </div>
 
-                    {/* Right column: overdue status + chevron */}
                     <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 5, flexShrink: 0 }}>
                         {isOverdue && (
                             <>
@@ -1266,13 +1208,60 @@ function TransactionCard({ txn, onConfirmDropOff, onConfirmCollection, onRelease
 }
 
 // ─── Time Slots View ──────────────────────────────────────────────────────────
-function TimeSlotsView({ transactions }) {
+function TimeSlotsView({ transactions, facilityConfig }) {
+    // Generate dynamic time slots based on facility config
+    const generateDynamicTimeSlots = () => {
+        const slots = [];
+        const [openHour, openMinute] = facilityConfig.openTime.split(':').map(Number);
+        const [closeHour, closeMinute] = facilityConfig.closeTime.split(':').map(Number);
+        
+        const startMinutes = openHour * 60 + openMinute;
+        const endMinutes = closeHour * 60 + closeMinute;
+        const slotDuration = 60 / facilityConfig.slotsPerHour; // minutes per slot
+        
+        for (let time = startMinutes; time < endMinutes; time += slotDuration) {
+            const startHour = Math.floor(time / 60);
+            const startMin = Math.floor(time % 60);
+            const endTime = time + slotDuration;
+            const endHour = Math.floor(endTime / 60);
+            const endMin = Math.floor(endTime % 60);
+            
+            const startStr = `${startHour.toString().padStart(2, '0')}:${startMin.toString().padStart(2, '0')}`;
+            const endStr = `${endHour.toString().padStart(2, '0')}:${endMin.toString().padStart(2, '0')}`;
+            slots.push(`${startStr} – ${endStr}`);
+        }
+        
+        return slots;
+    };
+
+    const dynamicSlots = generateDynamicTimeSlots();
+    
+    // Group transactions by time slot
     const slots = {};
-    transactions.forEach(t => {
-        if (!slots[t.timeSlot]) slots[t.timeSlot] = [];
-        slots[t.timeSlot].push(t);
+    dynamicSlots.forEach(slot => {
+        slots[slot] = [];
     });
+    
+    transactions.forEach(t => {
+        if (t.timeSlot && slots[t.timeSlot]) {
+            slots[t.timeSlot].push(t);
+        } else if (t.timeSlot) {
+            // Handle slots that might not be in the current config (e.g., from previous config)
+            if (!slots[t.timeSlot]) slots[t.timeSlot] = [];
+            slots[t.timeSlot].push(t);
+        }
+    });
+    
     const sorted = Object.entries(slots).sort(([a], [b]) => a.localeCompare(b));
+
+    if (dynamicSlots.length === 0) {
+        return (
+            <div className={styles.emptyState}>
+                <i className="fa-solid fa-clock" />
+                <p>No time slots configured. Please ask an admin to set up facility hours.</p>
+            </div>
+        );
+    }
 
     return (
         <div className={styles.slotsGrid}>
@@ -1283,25 +1272,32 @@ function TimeSlotsView({ transactions }) {
                         <span className={styles.slotTime}>{slot}</span>
                         <span className={styles.slotCount}>{txns.length} item{txns.length > 1 ? "s" : ""}</span>
                     </div>
-                    {txns.map(t => {
-                        const meta = STATUS_META[t.status] || STATUS_META.pending;
-                        const paymentConfig = getPaymentConfig(t);
-                        return (
-                            <div key={t.id} className={styles.slotItem}>
-                                <div className={styles.slotItemLeft}>
-                                    <span className={styles.slotItemTitle}>{t.item}</span>
-                                    <span className={styles.slotItemParties}>{t.seller} → {t.buyer}</span>
-                                    <span className={styles.paymentBadgeSmall} style={{ background: paymentConfig.bg, color: paymentConfig.color, fontSize: "9px", padding: "1px 6px" }}>
-                                        <i className={`fa-solid ${paymentConfig.icon}`} />
-                                        {paymentConfig.label}
+                    {txns.length === 0 ? (
+                        <div className={styles.slotEmpty}>
+                            <i className="fa-regular fa-calendar" />
+                            <span>No bookings</span>
+                        </div>
+                    ) : (
+                        txns.map(t => {
+                            const meta = STATUS_META[t.status] || STATUS_META.pending;
+                            const paymentConfig = getPaymentConfig(t);
+                            return (
+                                <div key={t.id} className={styles.slotItem}>
+                                    <div className={styles.slotItemLeft}>
+                                        <span className={styles.slotItemTitle}>{t.item}</span>
+                                        <span className={styles.slotItemParties}>{t.seller} → {t.buyer}</span>
+                                        <span className={styles.paymentBadgeSmall} style={{ background: paymentConfig.bg, color: paymentConfig.color, fontSize: "9px", padding: "1px 6px" }}>
+                                            <i className={`fa-solid ${paymentConfig.icon}`} />
+                                            {paymentConfig.label}
+                                        </span>
+                                    </div>
+                                    <span className={`${styles.statusBadge} ${styles[`status_${meta.cls}`]}`}>
+                                        {meta.label}
                                     </span>
                                 </div>
-                                <span className={`${styles.statusBadge} ${styles[`status_${meta.cls}`]}`}>
-                                    {meta.label}
-                                </span>
-                            </div>
-                        );
-                    })}
+                            );
+                        })
+                    )}
                 </div>
             ))}
         </div>
@@ -1399,8 +1395,36 @@ export default function StaffDashboard() {
     const [authReady, setAuthReady]       = useState(false);
     const [loadingTxns, setLoadingTxns]   = useState(true);
     const [lastFetched, setLastFetched]   = useState(null);
+    const [facilityConfig, setFacilityConfig] = useState({
+        openTime: "09:00",
+        closeTime: "16:00",
+        slotsPerHour: 1,
+    });
+    const [configLoading, setConfigLoading] = useState(true);
     const sellerCacheRef  = useRef({});
     const listingCacheRef = useRef({});
+
+    // Fetch facility config on mount
+    useEffect(() => {
+        async function loadFacilityConfig() {
+            try {
+                const snap = await getDoc(doc(db, "facilityConfig", "default"));
+                if (snap.exists()) {
+                    const data = snap.data();
+                    setFacilityConfig({
+                        openTime: data.openTime ?? "09:00",
+                        closeTime: data.closeTime ?? "16:00",
+                        slotsPerHour: data.slotsPerHour ?? 1,
+                    });
+                }
+            } catch (err) {
+                console.error("Failed to load facility config:", err);
+            } finally {
+                setConfigLoading(false);
+            }
+        }
+        loadFacilityConfig();
+    }, []);
 
     useEffect(() => {
         const unsub = onAuthStateChanged(auth, async (user) => {
@@ -1442,7 +1466,6 @@ export default function StaffDashboard() {
             try {
                 const base = snapshot.docs.map(d => ({ _ref: d.id, _data: d.data() }));
 
-                // Only fetch IDs not already cached — reduces Firestore reads significantly
                 const allSellerIds  = [...new Set(base.map(b => b._data.sellerId).filter(Boolean))];
                 const allListingIds = [...new Set(base.map(b => b._data.listingId).filter(Boolean))];
                 const newSellerIds  = allSellerIds.filter(id => !sellerCacheRef.current[id]);
@@ -1487,8 +1510,6 @@ export default function StaffDashboard() {
                     paymentStatus: data.paymentStatus || (data.cashShortfall > 0 ? "Partially Paid" : "Fully Paid"),
                     paymentMethod: data.paymentMethod || data.paymentType || "cash",
                     paymentType:   data.paymentType || data.paymentMethod || "unknown",
-                    // tradeItemDetails is the structured object { name, imageUrl, category, condition }
-                    // tradeItem may be a legacy plain string — fall back to it if needed
                     tradeItem: (typeof data.tradeItemDetails === "object" && data.tradeItemDetails !== null)
                         ? data.tradeItemDetails
                         : (typeof data.tradeItem === "object" && data.tradeItem !== null)
@@ -1601,8 +1622,6 @@ export default function StaffDashboard() {
                 paymentStatus: data.paymentStatus || (data.cashShortfall > 0 ? "Partially Paid" : "Fully Paid"),
                 paymentMethod: data.paymentMethod || data.paymentType || "cash",
                 paymentType:   data.paymentType || data.paymentMethod || "unknown",
-                // tradeItemDetails is the structured object { name, imageUrl, category, condition }
-                // tradeItem may be a legacy plain string — fall back to it if needed
                 tradeItem: (typeof data.tradeItemDetails === "object" && data.tradeItemDetails !== null)
                     ? data.tradeItemDetails
                     : (typeof data.tradeItem === "object" && data.tradeItem !== null)
@@ -1631,8 +1650,8 @@ export default function StaffDashboard() {
                 collectionTimeSlot: data.collectionTimeSlot || null,
                 receiptId:         data.receiptId || null,
                 overdueAlertSentAt: data.overdueAlertSentAt || null,
-                    droppedOffAt: data.droppedOffAt?.toDate ? data.droppedOffAt.toDate().toISOString() : data.droppedOffAt || null,
-                    collectionDeadline: data.collectionDeadline?.toDate ? data.collectionDeadline.toDate().toISOString() : data.collectionDeadline || null,
+                droppedOffAt: data.droppedOffAt?.toDate ? data.droppedOffAt.toDate().toISOString() : data.droppedOffAt || null,
+                collectionDeadline: data.collectionDeadline?.toDate ? data.collectionDeadline.toDate().toISOString() : data.collectionDeadline || null,
                 onlineAmountPaid: data.onlineAmount ?? data.onlineAmountPaid ?? data.depositAmount ?? 0,
                 sellerDropOffConfirmed: data.sellerDropOffConfirmed || false,
                 buyerDropOffConfirmed:  data.buyerDropOffConfirmed  || false,
@@ -1663,7 +1682,6 @@ export default function StaffDashboard() {
                 overdueAlertSentAt: serverTimestamp(),
                 overdueAlertType:   type,
             });
-            // Actually send the notifications — this was the missing piece
             if (type === "drop_off") {
                 await notifyOverdueDropOff(txn);
             } else {
@@ -1674,13 +1692,8 @@ export default function StaffDashboard() {
         }
     };
 
-    /**
-     * Called by staff after 24 hrs have passed. Cancels the transaction,
-     * marks the listing as overdue_cancelled, and notifies both parties.
-     */
     const handleCancelOverdue = async (txn, overdueType) => {
         try {
-            // 1. Cancel the transaction
             await updateDoc(doc(db, "transactions", txn.id), {
                 status:            "overdue_cancelled",
                 cancelledAt:       serverTimestamp(),
@@ -1688,25 +1701,22 @@ export default function StaffDashboard() {
                 cancelledByStaff:  true,
             });
 
-            // 2. Mark the listing as cancelled so seller's profile moves it to history
             if (txn.listingId) {
                 await updateDoc(doc(db, "listings", txn.listingId), {
                     status:              "cancelled",
                     cancelReason:        overdueType === "drop_off" ? "seller_no_dropoff" : "buyer_no_collection",
                     cancelledAt:         serverTimestamp(),
                     cancelledByStaff:    true,
-                    pendingSellerAction: true,  // seller must relist or delete
+                    pendingSellerAction: true,
                 });
             }
 
-            // 3. Send cancellation notifications to both parties
             if (overdueType === "drop_off") {
                 await notifyCancelledDropOff(txn);
             } else {
                 await notifyCancelledCollection(txn);
             }
 
-            // 4. Update local state
             setTransactions(prev =>
                 prev.map(t => t.id === txn.id ? { ...t, status: "overdue_cancelled" } : t)
             );
@@ -1715,9 +1725,6 @@ export default function StaffDashboard() {
         }
     };
 
-
-
-    // ─── Auto-send overdue alerts (staff still handles cancellation) ─────────
     useEffect(() => {
         if (transactions.length === 0) return;
         async function autoAlert() {
@@ -1738,13 +1745,10 @@ export default function StaffDashboard() {
         autoAlert();
         const interval = setInterval(autoAlert, 60_000);
         return () => clearInterval(interval);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [transactions]);
 
-    // ─── Countdown helper: "cancels in X h Y m" ──────────────────────────────
     function getCancelCountdown(txn) {
-        // TESTING: 2 min after alert sent. PROD: change to 24 * 60 * 60 * 1000
-        const CANCEL_DELAY_MS = 2 * 60 * 1000;
+        const CANCEL_DELAY_MS = 24 * 60 * 60 * 1000;
         if (!txn.overdueAlertSentAt) return null;
         const alertMs  = new Date(txn.overdueAlertSentAt).getTime();
         const cancelAt = alertMs + CANCEL_DELAY_MS;
@@ -1810,12 +1814,10 @@ export default function StaffDashboard() {
         const confirmingBuyer  = role === "buyer";
         const confirmingSeller = !confirmingBuyer;
 
-        // After this confirmation, are both sides done?
         const sellerNowDone = confirmingSeller || txn.sellerDropOffConfirmed;
         const buyerNowDone  = confirmingBuyer  || txn.buyerDropOffConfirmed || !isTrade;
         const bothDone      = sellerNowDone && buyerNowDone;
 
-        // Optimistically update local state
         setTransactions(prev =>
             prev.map(t => {
                 if (t.id !== id) return t;
@@ -1838,12 +1840,11 @@ export default function StaffDashboard() {
                 sellerDropOffConfirmed:   true,
                 sellerDropOffConfirmedAt: serverTimestamp(),
                 sellerDropOffConfirmedBy: auth.currentUser?.uid || null,
-                dropOffConfirmed:         true,   // legacy field for compatibility
+                dropOffConfirmed:         true,
                 dropOffConfirmedAt:       serverTimestamp(),
                 droppedOffAt:             serverTimestamp(),
             };
 
-            // Only flip the overall status once both parties have dropped off
             if (bothDone) {
                 firestoreUpdate.status         = "awaiting_collection";
                 firestoreUpdate.releasedAt     = serverTimestamp();
@@ -1852,9 +1853,7 @@ export default function StaffDashboard() {
 
             await updateDoc(doc(db, "transactions", id), firestoreUpdate);
 
-            // Notify the appropriate party that their item was received
             if (confirmingSeller) await notifyBothParties(txn, "drop_off");
-            // Only notify buyer it's ready to collect once both items are in
             if (bothDone) await notifyBothParties(txn, "ready_to_collect");
 
         } catch (err) {
@@ -1868,7 +1867,6 @@ export default function StaffDashboard() {
 
         const isTrade = (txn.type || "").toLowerCase() === "trade";
 
-        // For trades, track each side independently
         if (isTrade && collectionRole) {
             const confirmingBuyer  = collectionRole === "buyer";
             const confirmingSeller = collectionRole === "seller";
@@ -1877,7 +1875,6 @@ export default function StaffDashboard() {
             const sellerNowCollected = confirmingSeller || !!txn.sellerCollectionConfirmed;
             const bothCollected      = buyerNowCollected && sellerNowCollected;
 
-            // Optimistically update local state
             setTransactions(prev =>
                 prev.map(t => {
                     if (t.id !== id) return t;
@@ -1917,7 +1914,6 @@ export default function StaffDashboard() {
             return;
         }
 
-        // Non-trade: confirm immediately as before
         setTransactions(prev =>
             prev.map(t => {
                 if (t.id !== id) return t;
@@ -1961,7 +1957,6 @@ export default function StaffDashboard() {
                 releasedAt:      serverTimestamp(),
                 releasedByStaff: true,
             });
-            // Notify buyer: item has passed inspection and is ready to collect
             if (txn) await notifyBothParties(txn, "ready_to_collect");
         } catch (err) {
             console.error("Failed to update release status:", err);
@@ -2037,11 +2032,9 @@ export default function StaffDashboard() {
             const isOverdueAny = isOvDrop || isOvColl;
 
             if (activeTab === "drop_offs") {
-                // Pending drop-offs that are NOT yet overdue
                 return matchSearch && matchCampus && t.status === "pending" && !isOvDrop;
             }
             if (activeTab === "collections") {
-                // Items awaiting collection that are NOT yet overdue
                 const matchColl = !collectionSearch ||
                     t.item.toLowerCase().includes(collectionSearch.toLowerCase())     ||
                     t.seller.toLowerCase().includes(collectionSearch.toLowerCase())   ||
@@ -2061,14 +2054,12 @@ export default function StaffDashboard() {
         })
         .sort((a, b) => {
             if (activeTab === "drop_offs") {
-                // Sort by drop-off date ascending, no date goes to bottom
                 const dateA = a.dropOffDate || "9999-99-99";
                 const dateB = b.dropOffDate || "9999-99-99";
                 if (dateA !== dateB) return dateA.localeCompare(dateB);
                 return timeSlotToMinutes(a.dropOffTimeSlot || a.timeSlot) - timeSlotToMinutes(b.dropOffTimeSlot || b.timeSlot);
             }
             if (activeTab === "collections") {
-                // Sort by date released (most recent first)
                 return b.date - a.date;
             }
             if (activeTab === "all" || activeTab === "time_slots") {
@@ -2080,40 +2071,29 @@ export default function StaffDashboard() {
             return b.date - a.date;
         });
 
-    // For the drop_offs tab, trade transactions generate TWO cards:
-    // one for the seller dropping off their item, one for the buyer dropping off their trade item.
     function expandForDropOffs(txnList) {
         const result = [];
         for (const t of txnList) {
-            // Seller card — only show if seller hasn't dropped off yet
             if (!t.sellerDropOffConfirmed) {
                 result.push({ ...t, _dropOffRole: "seller" });
             }
-            // Buyer card — only show if buyer hasn't dropped off yet
             if ((t.type || "").toLowerCase() === "trade" && t.tradeItem && !t.buyerDropOffConfirmed) {
                 result.push({
                     ...t,
                     _dropOffRole: "buyer",
-                    // Show the buyer's item
                     item:      t.tradeItem.name || t.tradeItem.title || "Trade Item",
                     itemImage: t.tradeItem.imageUrl || null,
-                    // Use the buyer's booked slot if available
                     dropOffDate:     t.buyerDropOffDate     || t.dropOffDate,
                     dropOffTimeSlot: t.buyerDropOffTimeSlot || t.dropOffTimeSlot,
-                    // timeSlot is what the card's time badge renders — must match buyer's slot
                     timeSlot:        t.buyerDropOffTimeSlot || t.dropOffTimeSlot || "TBD",
                     dropOffBooked:   !!(t.buyerDropOffDate || t.dropOffBooked),
-                    // Swap names so card reads: buyer dropping off → seller receiving
                     seller: t.buyer,
                     buyer:  t.seller,
-                    // Own checklist based on buyer's drop-off state — use persisted buyerChecklist if available
                     checklist: t.buyerChecklist || [
                         { label: "Confirmed Drop-off", done: t.buyerDropOffConfirmed },
                         { label: "Inspected Item",     done: t.buyerDropOffConfirmed },
                     ],
-                    // Keep status as pending (buyer hasn't dropped off yet)
                     status: "pending",
-                    // Stash originals for the detail panel
                     _originalItem:      t.item,
                     _originalItemImage: t.itemImage,
                     _originalSeller:    t.seller,
@@ -2124,42 +2104,32 @@ export default function StaffDashboard() {
         return result;
     }
 
-    // For the collections tab, trade transactions generate TWO cards:
-    // one for the seller collecting the buyer's trade item,
-    // one for the buyer collecting the seller's item.
-    // Once a side has collected, their card is hidden.
     function expandForCollections(txnList) {
         const result = [];
         for (const t of txnList) {
             const isTrade = (t.type || "").toLowerCase() === "trade";
             if (!isTrade) {
-                // Normal purchase — single card, buyer collects
                 result.push({ ...t, _collectionRole: "buyer" });
                 continue;
             }
-            // Trade: seller collects buyer's trade item — only show if seller hasn't collected yet
             if (!t.sellerCollectionConfirmed) {
                 result.push({
                     ...t,
                     _collectionRole: "seller",
-                    // Show the buyer's trade item as what the seller is collecting
                     item:      t.tradeItem?.name || t.tradeItem?.title || "Trade Item",
                     itemImage: t.tradeItem?.imageUrl || null,
-                    // Swap names: "seller" here is the one collecting (original seller)
-                    seller: t.buyer,   // person dropping off = buyer
-                    buyer:  t.seller,  // person collecting = seller
+                    seller: t.buyer,
+                    buyer:  t.seller,
                     _originalItem:      t.item,
                     _originalItemImage: t.itemImage,
                     _originalSeller:    t.seller,
                     _originalBuyer:     t.buyer,
                 });
             }
-            // Trade: buyer collects seller's item — only show if buyer hasn't collected yet
             if (!t.buyerCollectionConfirmed) {
                 result.push({
                     ...t,
                     _collectionRole: "buyer",
-                    // Shows the seller's item (the original item)
                     _originalItem:      t.item,
                     _originalItemImage: t.itemImage,
                     _originalSeller:    t.seller,
@@ -2283,7 +2253,6 @@ export default function StaffDashboard() {
                     ))}
                 </div>
 
-                {/* Collections search bar */}
                 {activeTab === "collections" && (
                     <div className={styles.controlRow} style={{ marginTop: 0 }}>
                         <div className={styles.searchWrap}>
@@ -2309,7 +2278,6 @@ export default function StaffDashboard() {
                     </div>
                 )}
 
-                {/* ── Overdue Tab ── */}
                 {activeTab === "overdue" ? (() => {
                     const overdueDropOffs  = transactions.filter(t => isDropOffOverdue(t)    && t.status !== "overdue_cancelled");
                     const overdueCollects  = transactions.filter(t => isCollectionOverdue(t) && t.status !== "overdue_cancelled");
@@ -2346,7 +2314,6 @@ export default function StaffDashboard() {
 
                     return (
                         <div>
-                            {/* Sub-tab bar */}
                             <div style={{ display: "flex", gap: 8, margin: "12px 0 0" }}>
                                 {[
                                     { key: "drop_offs",   label: "Overdue Drop-offs",   count: overdueDropOffs.length  },
@@ -2381,14 +2348,12 @@ export default function StaffDashboard() {
                                 </div>
                             ) : (
                                 <>
-                                    {/* Bulk action toolbar */}
                                     <div style={{
                                         display: "flex", alignItems: "center", gap: 10,
                                         margin: "12px 0 8px", padding: "10px 14px",
                                         background: "#fff", border: "1px solid #e2e8f0",
                                         borderRadius: 10,
                                     }}>
-                                        {/* Select-all checkbox */}
                                         <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", userSelect: "none", fontWeight: 600, fontSize: "0.85rem", color: "#374151" }}>
                                             <input
                                                 type="checkbox"
@@ -2405,7 +2370,6 @@ export default function StaffDashboard() {
                                                 <span style={{ color: "#cbd5e1", fontSize: "1.1rem" }}>|</span>
                                                 <span style={{ fontSize: "0.82rem", color: "#64748b" }}>{selectedTxns.length} selected</span>
 
-                                                {/* Send Alerts button — only for un-alerted */}
                                                 {!allAlerted && (
                                                     <button
                                                         onClick={() => handleBulkAlert(selectedTxns.filter(t => !t.overdueAlertSentAt))}
@@ -2422,7 +2386,6 @@ export default function StaffDashboard() {
                                                     </button>
                                                 )}
 
-                                                {/* Cancel button — only shown after alert sent on all selected */}
                                                 {allAlerted && (
                                                     <button
                                                         onClick={() => {
@@ -2443,7 +2406,6 @@ export default function StaffDashboard() {
                                                     </button>
                                                 )}
 
-                                                {/* Mixed state — some alerted, some not */}
                                                 {!allAlerted && !noneAlerted && (
                                                     <button
                                                         onClick={() => {
@@ -2467,7 +2429,6 @@ export default function StaffDashboard() {
                                         )}
                                     </div>
 
-                                    {/* Overdue transaction rows */}
                                     <div className={styles.txnList}>
                                         {subList.map(txn => {
                                             const alertSent   = !!txn.overdueAlertSentAt;
@@ -2487,7 +2448,6 @@ export default function StaffDashboard() {
                                                         transition: "background 0.15s",
                                                     }}
                                                 >
-                                                    {/* Checkbox */}
                                                     <input
                                                         type="checkbox"
                                                         checked={isSelected}
@@ -2495,7 +2455,6 @@ export default function StaffDashboard() {
                                                         style={{ width: 16, height: 16, accentColor: "#dc2626", cursor: "pointer", flexShrink: 0 }}
                                                     />
 
-                                                    {/* Thumbnail */}
                                                     <div style={{ width: 44, height: 44, borderRadius: 8, overflow: "hidden", flexShrink: 0, background: "#f1f5f9", display: "flex", alignItems: "center", justifyContent: "center" }}>
                                                         {txn.itemImage
                                                             ? <img src={txn.itemImage} alt={txn.item} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
@@ -2503,7 +2462,6 @@ export default function StaffDashboard() {
                                                         }
                                                     </div>
 
-                                                    {/* Info */}
                                                     <div style={{ flex: 1, minWidth: 0 }}>
                                                         <p style={{ margin: 0, fontWeight: 700, fontSize: "0.88rem", color: "#1e293b", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                                                             {txn.item}
@@ -2519,7 +2477,6 @@ export default function StaffDashboard() {
                                                         )}
                                                     </div>
 
-                                                    {/* Status chips */}
                                                     <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 5, flexShrink: 0 }}>
                                                         <span style={{ padding: "2px 8px", background: payConfig.bg, color: payConfig.color, borderRadius: 99, fontSize: "0.72rem", fontWeight: 700 }}>
                                                             <i className={`fa-solid ${payConfig.icon}`} style={{ marginRight: 3 }} />{payConfig.label}
@@ -2542,7 +2499,6 @@ export default function StaffDashboard() {
                                                         )}
                                                     </div>
 
-                                                    {/* Individual action buttons */}
                                                     <div style={{ display: "flex", flexDirection: "column", gap: 5, flexShrink: 0 }}>
                                                         {!alertSent && (
                                                             <button
@@ -2575,7 +2531,7 @@ export default function StaffDashboard() {
                         </div>
                     );
                 })() : activeTab === "time_slots" ? (
-                    <TimeSlotsView transactions={visibleTxns} />
+                    <TimeSlotsView transactions={visibleTxns} facilityConfig={facilityConfig} />
                 ) : displayTxns.length === 0 ? (
                     <div className={styles.emptyState}>
                         <i className="fa-solid fa-box-open" />

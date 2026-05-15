@@ -1566,3 +1566,17 @@
     display: block;
     margin-bottom: 2px;
 }
+
+/* Add to Staffdashboard.module.css */
+.slotEmpty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 20px;
+  color: #94a3b8;
+  font-size: 0.8rem;
+  background: #f8fafc;
+  border-radius: 8px;
+  margin-top: 8px;
+}
