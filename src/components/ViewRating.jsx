@@ -1,5 +1,6 @@
+// src/components/ViewRating.jsx
 import React, { useState, useEffect, useRef } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useSearchParams } from 'react-router-dom';
 import { db } from '../firebase.js';
 import { auth } from '../firebase.js';
 import ReportModal from './ReportModal.jsx';
@@ -138,6 +139,8 @@ function BackButton({ onClick }) {
 
 export default function ViewSellerRatings({ userId: propUserId, onBack }) {
   const { userId: paramUserId } = useParams();
+  const [searchParams]          = useSearchParams();
+  const isAdminPreview          = searchParams.get('preview') === 'true';
   const userId = propUserId || paramUserId;
 
   const [activeTab, setActiveTab]               = useState('seller');
@@ -150,7 +153,7 @@ export default function ViewSellerRatings({ userId: propUserId, onBack }) {
   const [error, setError]                       = useState(null);
   const [reviewDrawerOpen, setReviewDrawerOpen] = useState(false);
   const [listingDrawerOpen, setListingDrawerOpen] = useState(false);
-  const [reportReview, setReportReview]         = useState(null); // review being reported
+  const [reportReview, setReportReview]         = useState(null);
 
   useEffect(() => {
     if (!userId) { setError('No user ID provided.'); setLoading(false); return; }
@@ -211,7 +214,6 @@ export default function ViewSellerRatings({ userId: propUserId, onBack }) {
       snap.docs.map(async (reviewDoc) => {
         const r = { id: reviewDoc.id, ...reviewDoc.data() };
 
-        // Get reviewer's name from users collection using reviewerUserId
         if (r.reviewerUserId) {
           try {
             const userSnap = await getDoc(doc(db, 'users', r.reviewerUserId));
@@ -230,7 +232,6 @@ export default function ViewSellerRatings({ userId: propUserId, onBack }) {
           r.reviewerName = r.reviewerName || 'Anonymous';
         }
 
-        // Listing details
         if (r.listingId) {
           try {
             const listingSnap = await getDoc(doc(db, 'listings', r.listingId));
@@ -276,7 +277,10 @@ export default function ViewSellerRatings({ userId: propUserId, onBack }) {
     setTimeout(() => { setActiveTab(tab); setTabTransitioning(false); }, 220);
   };
 
-  const handleBack = () => { if (onBack) onBack(); else window.history.back(); };
+  const handleBack = () => { 
+    if (onBack) onBack(); 
+    else window.history.back(); 
+  };
 
   if (loading) return (
     <div className={styles.loaderWrap}>
@@ -297,18 +301,17 @@ export default function ViewSellerRatings({ userId: propUserId, onBack }) {
   const previewListings = listings.slice(0, PREVIEW_LISTINGS);
   const hasMoreListings = listings.length > PREVIEW_LISTINGS;
   
-  // FIXED: Show total reviews count, not transaction count
   const activeCount = totalReviews;
   const activeLabel = activeTab === 'seller' ? 'reviews as seller' : 'reviews as buyer';
 
   const currentUid = auth.currentUser?.uid;
-  // Owner of this profile page can report reviews left on them
-  const isOwnProfile = currentUid === userId;
+  const canReportReview = (review) => !!currentUid && currentUid !== review.reviewerUserId;
   const handleReportReview = (review) => setReportReview(review);
 
   return (
     <>
-      <NavBar />
+      {/* Only show NavBar if NOT in admin preview mode */}
+      {!isAdminPreview && <NavBar />}
 
       {/* Report review modal */}
       <ReportModal
@@ -318,9 +321,39 @@ export default function ViewSellerRatings({ userId: propUserId, onBack }) {
         reportedId={reportReview?.id || ''}
         reportedName={`Review by ${reportReview?.reviewerName || 'user'} on "${reportReview?.listingTitle || 'listing'}"`}
       />
+      
       <div className={styles.page}>
         <div className={styles.bgAccent} />
-        <div className={styles.backRow}><BackButton onClick={handleBack} /></div>
+        
+        {/* Admin preview banner */}
+        {isAdminPreview && (
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 10,
+            padding: '10px 14px', backgroundColor: '#a9cff3',
+            border: '1px solid hsl(226, 51%, 62%)', borderRadius: 10,
+            marginBottom: '20px',
+            fontSize: '0.82rem', fontWeight: 600, color: '#0e3892',
+            fontFamily: 'Segoe UI, system-ui, sans-serif',
+          }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+              <circle cx="12" cy="12" r="3"/>
+            </svg>
+            Admin preview
+            <button
+              onClick={handleBack}  // ← Change this from navigate(-1) to handleBack
+              style={{ marginLeft: 'auto', background: 'none', border: '1px solid hsl(226, 51%, 62%)', borderRadius: 6, padding: '3px 10px', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.78rem', fontWeight: 700, color: '#0e3892' }}
+            >
+              ← Back to reports
+            </button>
+          </div>
+        )}
+        
+        {!isAdminPreview && (
+          <div className={styles.backRow}>
+            <BackButton onClick={handleBack} />
+          </div>
+        )}
 
         <div className={styles.profileCard}>
           <div className={styles.avatarWrap}>
@@ -424,7 +457,7 @@ export default function ViewSellerRatings({ userId: propUserId, onBack }) {
               <>
                 <div className={styles.transactionsList}>
                   {previewReviews.map((review, i) => (
-                    <ReviewCard key={review.id} review={review} animate delay={i * 60} onReport={isOwnProfile ? handleReportReview : null} />
+                    <ReviewCard key={review.id} review={review} animate delay={i * 60} onReport={canReportReview(review) ? handleReportReview : null} />
                   ))}
                 </div>
                 {hasMore && (
@@ -477,7 +510,7 @@ export default function ViewSellerRatings({ userId: propUserId, onBack }) {
 
       <Drawer open={reviewDrawerOpen} onClose={() => setReviewDrawerOpen(false)} title={`All ${activeTab} reviews (${totalReviews})`}>
         <div className={styles.drawerReviewList}>
-          {reviews.map((review, i) => <ReviewCard key={review.id} review={review} animate delay={i * 40} onReport={isOwnProfile ? handleReportReview : null} />)}
+          {reviews.map((review, i) => <ReviewCard key={review.id} review={review} animate delay={i * 40} onReport={canReportReview(review) ? handleReportReview : null} />)}
         </div>
       </Drawer>
 

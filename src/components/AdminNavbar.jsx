@@ -115,7 +115,7 @@ export default function AdminNavbar({ activePage, adminUser, unreadReports: unre
                   <span className={styles.ddRole}>Administrator</span>
                 </div>
                 <div className={styles.ddDivider} />
-                <button className={styles.ddItem} onClick={() => { navigate("/profile"); setDropdownOpen(false); }}>
+                <button className={styles.ddItem} onClick={() => { navigate("/admin/profile"); setDropdownOpen(false); }}>
                   <i className="fas fa-user" /> My Profile
                 </button>
                 <div className={styles.ddDivider} />

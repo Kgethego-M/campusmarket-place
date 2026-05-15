@@ -1,9 +1,10 @@
+// src/pages/ReviewForm.jsx
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { auth, db } from '../firebase';
 import { doc, getDoc } from 'firebase/firestore';
 import { submitReview } from '../utils/review.utils';
-import styles from "../pages/ReviewForm.module.css";
+import styles from "./ReviewForm.module.css";
 
 const LABELS = ['', 'Poor', 'Fair', 'Good', 'Very Good', 'Excellent'];
 
@@ -12,7 +13,6 @@ const ReviewForm = () => {
   const navigate = useNavigate();
 
   const [rating, setRating] = useState(0);
-  const [hovered, setHovered] = useState(0);
   const [comment, setComment] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
@@ -76,6 +76,11 @@ const ReviewForm = () => {
     }
   };
 
+  // Handle star click - just set the rating directly
+  const handleStarClick = (starValue) => {
+    setRating(starValue);
+  };
+
   if (submitted) {
     return (
       <div className={styles.page}>
@@ -128,18 +133,16 @@ const ReviewForm = () => {
             {[1, 2, 3, 4, 5].map((star) => (
               <button
                 key={star}
-                className={`${styles.star} ${star <= (hovered || rating) ? styles.starFilled : ''}`}
-                onMouseEnter={() => setHovered(star)}
-                onMouseLeave={() => setHovered(0)}
-                onClick={() => setRating(star)}
+                className={`${styles.star} ${star <= rating ? styles.starFilled : ''}`}
+                onClick={() => handleStarClick(star)}
                 aria-label={`${star} star`}
               >
                 ★
               </button>
             ))}
           </div>
-          {(hovered || rating) > 0 && (
-            <p className={styles.ratingLabel}>{LABELS[hovered || rating]}</p>
+          {rating > 0 && (
+            <p className={styles.ratingLabel}>{LABELS[rating]}</p>
           )}
         </div>
 

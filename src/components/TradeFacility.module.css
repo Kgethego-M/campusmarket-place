@@ -96,6 +96,27 @@
   opacity: 0.85;
 }
 
+/* ── Section divider ──────────────────────────────────────────── */
+.sectionDivider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 6px 0 2px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #7c3aed;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.sectionDivider::before,
+.sectionDivider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: #e9d5ff;
+}
+
 /* ── Card list ────────────────────────────────────────────────── */
 .list {
   display: flex;
@@ -127,6 +148,157 @@
 @keyframes cardIn {
   from { opacity: 0; transform: translateY(8px); }
   to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Buyer Drop-off Card (purple, in seller tab) ──────────────── */
+.buyerDropOffCard {
+  background: #faf5ff;
+  border: 1px solid #e9d5ff;
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow: 0 1px 4px rgba(124, 58, 237, 0.07);
+  opacity: 0;
+  animation: cardIn 0.35s ease forwards;
+  transition: box-shadow 0.18s, border-color 0.18s, transform 0.18s;
+}
+
+.buyerDropOffCard:hover {
+  box-shadow: 0 4px 16px rgba(124, 58, 237, 0.12);
+  border-color: #c4b5fd;
+  transform: translateY(-2px);
+}
+
+.buyerDropOffHeader {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 14px;
+  background: #ede9fe;
+  border-bottom: 1px solid #e9d5ff;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #5b21b6;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.buyerDropOffBooked {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  background: #d1fae5;
+  color: #065f46;
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.buyerDropOffBody {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 14px 16px;
+}
+
+.buyerDropOffItemWrap {
+  width: 68px;
+  height: 68px;
+  border-radius: 10px;
+  overflow: hidden;
+  flex-shrink: 0;
+  border: 1.5px solid #e9d5ff;
+  background: #f3e8ff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.buyerDropOffImg {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.buyerDropOffImgPlaceholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #f3e8ff, #ede9fe);
+}
+
+.buyerDropOffInfo {
+  flex: 1;
+  min-width: 0;
+}
+
+.buyerDropOffItemName {
+  margin: 0;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #3b0764;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.buyerDropOffChip {
+  display: inline-block;
+  font-size: 0.62rem;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+
+.buyerDropOffScheduled {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 8px;
+  background: #d1fae5;
+  color: #065f46;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 999px;
+}
+
+.buyerDropOffPending {
+  margin: 6px 0 0;
+  font-size: 0.72rem;
+  color: #7c3aed;
+  background: #ede9fe;
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 999px;
+}
+
+.buyerDropOffBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 8px;
+  padding: 6px 14px;
+  background: #7c3aed;
+  color: #fff;
+  border: none;
+  border-radius: 7px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.15s, transform 0.12s;
+}
+
+.buyerDropOffBtn:hover {
+  background: #6d28d9;
+  transform: translateY(-1px);
 }
 
 /* ── Image ────────────────────────────────────────────────────── */
@@ -205,15 +377,6 @@
   font-size: 13px;
   font-weight: 700;
   color: #6AA6DA;
-}
-
-.metaType {
-  font-size: 12px;
-  font-weight: 600;
-  color: #9ca3af;
-  background: #f3f4f6;
-  padding: 2px 8px;
-  border-radius: 4px;
 }
 
 .dropOffDate {
@@ -589,7 +752,6 @@
     font-size: 12px;
   }
 
-  /* Tracker card */
   .trackerCard { padding: 14px; }
   .trackerTop  { gap: 10px; }
 
@@ -603,4 +765,7 @@
 
   .pipelineDot  { width: 20px; height: 20px; }
   .pipelineLeft { width: 20px; }
+
+  .buyerDropOffBody { flex-direction: column; }
+  .buyerDropOffItemWrap { width: 56px; height: 56px; }
 }

@@ -8,13 +8,12 @@ import {
 import NavBarTemp from './NavBarTemp';
 import styles from './ViewCart.module.css';
 
-const NAV_LINKS = [
-  { label: 'Browse',       path: '/view-listing',  icon: 'fa-store' },
-  { label: 'Trade',        path: '/trade-facility', icon: 'fa-arrows-rotate' },
-  { label: 'Messages',     path: '/chat',           icon: 'fa-comment' },
-  { label: 'My Purchases', path: '/my-purchases',   icon: 'fa-bag-shopping' },
-  { label: 'Cart',         path: '/cart',           icon: 'fa-cart-shopping' },
-];
+// The navbar links array here is not used because NavBarTemp handles navigation.
+// We keep it only for reference, but we won't use it.
+// const NAV_LINKS = [ ... ]; // removed
+// The navbar links array here is not used because NavBarTemp handles navigation.
+// We keep it only for reference, but we won't use it.
+// const NAV_LINKS = [ ... ]; // removed
 
 export default function ViewCart() {
   const navigate = useNavigate();
@@ -42,7 +41,8 @@ export default function ViewCart() {
     return () => unsub();
   }, [navigate]);
 
-  // ── Real-time cart listener ────────────────────────────────────────────────
+  // ── Real-time favourites listener ──────────────────────────────────────────
+  // ── Real-time favourites listener ──────────────────────────────────────────
   useEffect(() => {
     if (!currentUser) return;
 
@@ -61,7 +61,8 @@ export default function ViewCart() {
     return () => unsub();
   }, [currentUser]);
 
-  // ── Enrich cart IDs with listing data ─────────────────────────────────────
+  // ── Enrich favourite IDs with listing data ─────────────────────────────────
+  // ── Enrich favourite IDs with listing data ─────────────────────────────────
   useEffect(() => {
     if (!snapshotReceived) return;
     if (cartIds.length === 0) {
@@ -99,7 +100,8 @@ export default function ViewCart() {
     enrich();
   }, [cartIds, snapshotReceived]);
 
-  // ── Remove from cart ───────────────────────────────────────────────────────
+  // ── Remove from favourites ─────────────────────────────────────────────────
+  // ── Remove from favourites ─────────────────────────────────────────────────
   const handleRemove = async (listingId) => {
     if (!currentUser || removing) return;
     setRemoving(listingId);
@@ -107,23 +109,27 @@ export default function ViewCart() {
       await updateDoc(doc(db, 'carts', currentUser.uid), {
         items: arrayRemove(listingId),
       });
-      showToast('Removed from cart');
+      showToast('Removed from favourites');
     } catch (err) {
-      console.error('Remove from cart error:', err);
+      console.error('Remove from favourites error:', err);
+      console.error('Remove from favourites error:', err);
       showToast('Failed to remove item', 'error');
     } finally {
       setRemoving(null);
     }
   };
 
-  // ── Clear all ──────────────────────────────────────────────────────────────
+  // ── Clear all favourites ───────────────────────────────────────────────────
+  // ── Clear all favourites ───────────────────────────────────────────────────
   const handleClearAll = async () => {
     if (!currentUser || cartItems.length === 0) return;
     try {
       await updateDoc(doc(db, 'carts', currentUser.uid), { items: [] });
-      showToast('Cart cleared');
+      showToast('Favourites cleared');
+      showToast('Favourites cleared');
     } catch {
-      showToast('Failed to clear cart', 'error');
+      showToast('Failed to clear favourites', 'error');
+      showToast('Failed to clear favourites', 'error');
     }
   };
 
@@ -136,7 +142,6 @@ export default function ViewCart() {
           <div className={styles.container}>
             <div className={styles.header}>
               <div className={styles.headerLeft}>
-                <h1 className={styles.pageTitle}>My Cart</h1>
               </div>
             </div>
             <div className={styles.grid}>
@@ -181,7 +186,7 @@ export default function ViewCart() {
                 <i className="fas fa-arrow-left" /> Back
               </button>
               <div>
-                <h1 className={styles.pageTitle}>My Cart</h1>
+                <h1 className={styles.pageTitle}>My Favorites</h1>
                 <p className={styles.pageSub}>
                   {cartItems.length === 0
                     ? 'No items saved'
@@ -201,10 +206,10 @@ export default function ViewCart() {
           {cartItems.length === 0 ? (
             <div className={styles.emptyState}>
               <div className={styles.emptyIcon}>
-                <i className="fas fa-shopping-cart" />
+                <i className="fas fa-heart-broken" />
               </div>
-              <p className={styles.emptyTitle}>Your cart is empty</p>
-              <p className={styles.emptySub}>Browse listings and add items you like to your cart.</p>
+              <p className={styles.emptyTitle}>Your favorites list is empty</p>
+              <p className={styles.emptySub}>Browse listings and click the heart icon to save items.</p>
               <button className={styles.browseBtn} onClick={() => navigate('/view-listing')}>
                 <i className="fas fa-search" /> Browse listings
               </button>

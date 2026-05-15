@@ -1,4 +1,3 @@
-
 /* ── Page ── */
 .page {
   display: flex;
@@ -367,7 +366,7 @@
   flex-direction: column;
   background-color: #FBFBF8;
   background-image: radial-gradient(circle at 20% 80%, rgba(219,227,233,0.4) 0%, transparent 50%);
-  overflow: hidden; /* crucial — keeps input bar visible */
+  overflow: hidden;
   position: relative;
 }
 
@@ -412,6 +411,7 @@
   flex-shrink: 0;
   z-index: 5;
   position: relative;
+  min-height: 60px;
 }
 
 .chatBackBtn {
@@ -440,10 +440,12 @@
   border: none;
   cursor: pointer;
   flex: 1;
+  min-width: 0;
   text-align: left;
   padding: 4px 6px;
   border-radius: 8px;
   transition: background 0.15s;
+  overflow: hidden;
 }
 
 .headerProfile:hover { background: #f1f5f9; }
@@ -452,22 +454,28 @@
   display: flex;
   flex-direction: column;
   gap: 1px;
+  min-width: 0;
+  flex: 1;
 }
 
 .headerName {
   font-size: 0.92rem;
   font-weight: 700;
   color: #1a1a2e;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: block;
 }
 
 .headerSub {
   font-size: 0.72rem;
   color: #9ca3af;
   font-weight: 400;
-  max-width: 220px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  display: block;
 }
 
 /* ── Messages scroll area ── */
@@ -509,7 +517,6 @@
   border-radius: 16px;
   padding: 8px 12px;
   box-shadow: 0 1px 2px rgba(0,0,0,0.08);
-  /* Key: flex layout so text and time sit on the same line when possible */
   display: inline-flex;
   flex-wrap: wrap;
   align-items: flex-end;
@@ -527,7 +534,7 @@
   border-bottom-left-radius: 4px;
 }
 
-/* Bubble text — takes available space */
+/* Bubble text */
 .bubbleText {
   font-size: 0.875rem;
   color: #111827;
@@ -537,7 +544,7 @@
   min-width: 0;
 }
 
-/* Timestamp — always stays in bottom-right corner of bubble */
+/* Timestamp */
 .msgTime {
   font-size: 0.65rem;
   color: #94a3b8;
@@ -551,14 +558,19 @@
 .bubbleMe .msgTime   { color: #6a9a6a; }
 .bubbleThem .msgTime { color: #9ca3af; }
 
-/* Media in bubbles */
+/* ── Image bubbles — fixed uniform size ── */
 .bubbleImg {
-  max-width: 220px;
-  width: 100%;
+  width: 200px;
+  height: 200px;
+  object-fit: cover;
   border-radius: 10px;
   display: block;
   cursor: pointer;
+  transition: opacity 0.15s;
+  flex-shrink: 0;
 }
+
+.bubbleImg:hover { opacity: 0.88; }
 
 .bubbleVideo {
   max-width: 220px;
@@ -568,7 +580,7 @@
 }
 
 /* ════════════════════════════════════════════
-   INPUT BAR — always pinned to bottom
+   INPUT BAR
 ════════════════════════════════════════════ */
 .inputBar {
   display: flex;
@@ -577,7 +589,7 @@
   padding: 12px 16px;
   border-top: 1px solid #e2e8f0;
   background: #ffffff;
-  flex-shrink: 0;        /* never shrinks — always visible */
+  flex-shrink: 0;
   position: relative;
   z-index: 5;
 }
@@ -643,41 +655,8 @@
 .sendBtn:disabled { opacity: 0.35; cursor: not-allowed; transform: none; }
 
 /* ════════════════════════════════════════════
-   RESPONSIVE
+   3-DOT MENU
 ════════════════════════════════════════════ */
-@media (max-width: 720px) {
-  .sidebar {
-    width: 100%;
-    min-width: 100%;
-    position: absolute;
-    top: 0;
-    left: 0;
-    height: 100%;
-  }
-
-  .sidebarMobileHidden {
-    transform: translateX(-100%);
-    pointer-events: none;
-  }
-
-  .chatPanel {
-    width: 100%;
-    position: absolute;
-    top: 0;
-    left: 0;
-    height: 100%;
-  }
-
-  .chatPanelMobileHidden { display: none; }
-
-  .chatBackBtn { display: flex !important; }
-
-  .bubble { max-width: 80%; }
-}
-
-/* ── ADD THESE TO THE BOTTOM OF YOUR Chat.module.css ── */
-
-/* 3-dot vertical menu button */
 .chatMenuWrap {
   position: relative;
   margin-left: auto;
@@ -745,3 +724,124 @@
 
 .chatDropdownDanger { color: #dc2626; }
 .chatDropdownDanger:hover { background: #fef2f2; }
+
+/* ════════════════════════════════════════════
+   LIGHTBOX
+════════════════════════════════════════════ */
+.lightboxOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.88);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: dropFade 0.15s ease;
+  cursor: zoom-out;
+}
+
+.lightboxImg {
+  max-width: 90vw;
+  max-height: 88vh;
+  border-radius: 10px;
+  object-fit: contain;
+  box-shadow: 0 8px 40px rgba(0,0,0,0.5);
+  cursor: default;
+}
+
+.lightboxClose {
+  position: absolute;
+  top: 16px;
+  right: 20px;
+  background: rgba(255,255,255,0.15);
+  border: none;
+  color: #fff;
+  font-size: 1.2rem;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s;
+}
+.lightboxClose:hover { background: rgba(255,255,255,0.28); }
+
+/* ════════════════════════════════════════════
+   RESPONSIVE — MOBILE (≤ 720px)
+════════════════════════════════════════════ */
+@media (max-width: 720px) {
+  .sidebar {
+    width: 100%;
+    min-width: 100%;
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 100%;
+  }
+
+  .sidebarMobileHidden {
+    transform: translateX(-100%);
+    pointer-events: none;
+  }
+
+  .chatPanel {
+    width: 100%;
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 100%;
+  }
+
+  .chatPanelMobileHidden { display: none; }
+
+  /* Back button always visible on mobile */
+  .chatBackBtn { display: flex !important; }
+
+  /* Header stays fully visible on small screens */
+  .chatHeader {
+    padding: 8px 10px;
+    gap: 6px;
+    min-height: 56px;
+  }
+
+  .headerProfile {
+    gap: 7px;
+  }
+
+  .headerName {
+    font-size: 0.85rem;
+    max-width: calc(100vw - 140px);
+  }
+
+  .headerSub {
+    font-size: 0.68rem;
+    max-width: calc(100vw - 140px);
+  }
+
+  /* Slightly smaller images on mobile but still uniform */
+  .bubbleImg {
+    width: 160px;
+    height: 160px;
+  }
+
+  .bubble { max-width: 80%; }
+
+  /* Input bar tighter on mobile */
+  .inputBar {
+    padding: 8px 10px;
+    gap: 7px;
+  }
+
+  .textInput {
+    height: 38px;
+    font-size: 0.84rem;
+  }
+
+  /* Lightbox full screen on mobile */
+  .lightboxImg {
+    max-width: 96vw;
+    max-height: 80vh;
+  }
+}

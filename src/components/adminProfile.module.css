@@ -1,0 +1,1488 @@
+.profileContainer {
+    width: 100%;
+    margin: 0 auto;
+    padding: 2rem;
+    background-color: #f5f7fa;
+    min-height: 100vh;
+}
+
+/* Loading State */
+.loadingContainer {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    background-color: #f5f7fa;
+}
+
+.loader {
+    text-align: center;
+}
+
+.loader i {
+    font-size: 3rem;
+    color: #6AA6DA;
+    margin-bottom: 1rem;
+}
+
+.loader p {
+    color: #6b7280;
+    font-size: 1rem;
+}
+
+/* Header */
+.header {
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+}
+
+.backButton {
+    background: none;
+    border: none;
+    font-size: 1rem;
+    color: #4b5563;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 1rem;
+    border-radius: 8px;
+    transition: all 0.2s;
+}
+
+.backButton:hover {
+    background-color: #e5e7eb;
+}
+
+.header h1 {
+    margin: 0;
+    font-size: 1.8rem;
+    color: #1f2937;
+}
+
+/* Profile Card */
+.profileCard {
+    background: white;
+    border-radius: 16px;
+    padding: 2rem;
+    margin-bottom: 2rem;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2rem;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.profileLeft {
+    display: flex;
+    gap: 2rem;
+}
+
+.profilePictureSection {
+    flex-shrink: 0;
+}
+
+.profilePictureWrapper {
+    position: relative;
+    width: 150px;
+    height: 150px;
+}
+
+.profilePicture {
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 3px solid #6AA6DA;
+}
+
+.editPhotoButton {
+    position: absolute;
+    bottom: 0;
+    right: 0;
+    background: #6AA6DA;
+    color: white;
+    border: none;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+}
+
+.editPhotoButton:hover {
+    background: #6AA6DA;
+    transform: scale(1.05);
+}
+
+.userInfo {
+    flex: 1;
+}
+
+.userInfo h2 {
+    margin: 0 0 0.5rem 0;
+    color: #1f2937;
+    font-size: 1.5rem;
+}
+
+.email {
+    color: #41444b;
+    margin-bottom: 0.75rem;
+}
+
+.bio {
+    color: #4b5563;
+    line-height: 1.5;
+    margin-bottom: 1rem;
+}
+
+.memberSince {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: #9ca3af;
+    font-size: 0.875rem;
+}
+
+/* Edit Form */
+.editForm {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.formGroup {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.formGroup label {
+    font-weight: 500;
+    color: #2d3138;
+    font-size: 0.875rem;
+}
+
+.formGroup input,
+.formGroup textarea {
+    padding: 0.625rem;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    font-size: 0.875rem;
+    transition: all 0.2s;
+    font-family: inherit;
+}
+
+.formGroup input:focus,
+.formGroup textarea:focus {
+    outline: none;
+    border-color: #6AA6DA;
+    box-shadow: 0 0 0 3px rgb(0, 0, 0);
+}
+
+.disabledInput {
+    background-color: #f3f4f6;
+    cursor: not-allowed;
+    opacity: 0.7;
+    color: #2d3138;
+}
+
+/* Stats Section */
+.statsSection {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+    padding-left: 2rem;
+    border-left: 1px solid #e5e7eb;
+}
+
+.rating {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.ratingStars {
+    color: #fbbf24;
+    font-size: 1.1rem;
+}
+
+.ratingValue {
+    font-weight: bold;
+    font-size: 1.2rem;
+    color: #1f2937;
+}
+
+.totalRatings {
+    color: #6b7280;
+    font-size: 0.875rem;
+}
+
+.statsGrid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1rem;
+}
+
+.statItem {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 1rem;
+    background-color: #f9fafb;
+    border-radius: 12px;
+}
+
+.statItem i {
+    font-size: 1.5rem;
+    color: #6AA6DA;
+}
+
+.statInfo {
+    display: flex;
+    flex-direction: column;
+}
+
+.statValue {
+    font-size: 1.5rem;
+    font-weight: bold;
+    color: #1f2937;
+}
+
+.statLabel {
+    font-size: 0.75rem;
+    color: #6b7280;
+}
+
+.saveButton,
+.cancelButton {
+    padding: 0.75rem;
+    border: none;
+    border-radius: 8px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+}
+
+.editButton {
+    background-color: #6AA6DA;
+    color: white;
+    padding: 0.75rem;
+    border: none;
+    border-radius: 20px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+}
+
+.editButton:hover {
+    background-color: #76afe1;
+    transform: translateY(-1px);
+}
+
+.editActions {
+    display: flex;
+    gap: 1rem;
+}
+
+.saveButton {
+    background-color: #E1E5AC;
+    color: white;
+    flex: 1;
+}
+
+.saveButton:hover {
+    background-color: #e1e696;
+}
+
+.cancelButton {
+    background-color: #DBE3E9;
+    color: white;
+    flex: 1;
+}
+
+.cancelButton:hover {
+    background-color: #dc2626;
+}
+
+/* Tabs Section */
+.tabsSection {
+    background: white;
+    border-radius: 16px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    overflow: hidden;
+}
+
+.tabs {
+    display: flex;
+    border-bottom: 1px solid #e5e7eb;
+    background-color: #f9fafb;
+}
+
+.tab {
+    flex: 1;
+    padding: 1rem;
+    background: none;
+    border: none;
+    font-size: 1rem;
+    font-weight: 500;
+    color: #6b7280;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+}
+
+.tab:hover {
+    color: #6AA6DA;
+    background-color: #f3f4f6;
+}
+
+.activeTab {
+    color: #6AA6DA;
+    border-bottom: 2px solid #6AA6DA;
+    background-color: white;
+}
+
+.tabContent {
+    padding: 2rem;
+}
+
+/* History Styles */
+.historyList {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 10px 0;
+}
+
+.historyItem {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    padding: 12px;
+    background: #fff;
+    border-radius: 10px;
+    border: 1px solid #eee;
+}
+
+.historyThumbnail {
+    width: 60px;
+    height: 60px;
+    border-radius: 8px;
+    overflow: hidden;
+    background: #f5f5f5;
+    flex-shrink: 0;
+}
+
+.offerImage {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.historyItem:hover {
+    transform: translateX(4px);
+    background-color: #f3f4f6;
+}
+
+.historyIcon {
+    width: 48px;
+    height: 48px;
+    background-color: #e0e7ff;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #6AA6DA;
+    font-size: 1.25rem;
+}
+
+.historyDetails {
+    flex: 1;
+}
+
+.historyDetails h4 {
+    margin: 0 0 4px 0;
+    font-size: 1rem;
+    color: #333;
+}
+.historyMeta {
+    font-size: 0.85rem;
+    color: #777;
+    display: flex;
+    gap: 8px;
+}
+
+.historyMeta i {
+    margin-right: 0.25rem;
+}
+
+.historyStatus {
+    padding: 0.25rem 0.75rem;
+    border-radius: 20px;
+    font-size: 0.75rem;
+    font-weight: 500;
+}
+
+.historyStatus.completed {
+    background-color: #d1fae5;
+    color: #065f46;
+}
+
+/* Listings Styles */
+.listingsGrid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 1.5rem;
+}
+
+.listingCard {
+    background-color: #f9fafb;
+    border-radius: 12px;
+    padding: 1.25rem;
+    position: relative;
+    transition: all 0.2s;
+}
+
+.listingCard:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+
+.listingStatus {
+    position: absolute;
+    top: 1rem;
+    right: 1rem;
+}
+
+.statusBadge {
+    padding: 0.25rem 0.75rem;
+    border-radius: 20px;
+    font-size: 0.75rem;
+    font-weight: 500;
+}
+
+.statusBadge.active {
+    background-color: #dbeafe;
+    color: #6AA6DA;
+}
+
+.statusBadge.sold {
+    background-color: #fee2e2;
+    color: #991b1b;
+}
+
+.listingInfo h4 {
+    margin: 0 0 0.5rem 0;
+    color: #1f2937;
+    font-size: 1.1rem;
+    padding-right: 4rem;
+}
+
+.listingPrice {
+    font-size: 1.25rem;
+    font-weight: bold;
+    color: #6AA6DA;
+    margin: 0.5rem 0;
+}
+
+.listingStats {
+    display: flex;
+    gap: 1rem;
+    font-size: 0.75rem;
+    color: #6b7280;
+    margin-top: 0.75rem;
+}
+
+.listingStats i {
+    margin-right: 0.25rem;
+}
+
+.emptyState {
+    text-align: center;
+    padding: 3rem;
+    color: #6b7280;
+}
+
+.emptyState i {
+    font-size: 3rem;
+    margin-bottom: 1rem;
+    color: #9ca3af;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .profileContainer {
+        padding: 1rem;
+    }
+
+    .profileCard {
+        grid-template-columns: 1fr;
+        gap: 1.5rem;
+    }
+
+    .statsSection {
+        padding-left: 0;
+        border-left: none;
+        border-top: 1px solid #e5e7eb;
+        padding-top: 1.5rem;
+    }
+
+    .profileLeft {
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+    }
+
+    .userInfo {
+        text-align: center;
+    }
+
+    .statsGrid {
+        grid-template-columns: repeat(3, 1fr);
+    }
+
+    .listingsGrid {
+        grid-template-columns: 1fr;
+    }
+
+    .historyMeta {
+        flex-direction: column;
+        gap: 0.25rem;
+    }
+}
+
+/* Listing Image */
+.listingImage {
+    width: 100%;
+    height: 160px;
+    background-color: #f3f4f6;
+    border-radius: 8px;
+    overflow: hidden;
+    margin-bottom: 1rem;
+}
+
+.listingImage img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.noImage {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #9ca3af;
+    font-size: 0.875rem;
+}
+
+/* Listing Actions */
+.listingActions {
+    display: flex;
+    gap: 0.75rem;
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px solid #e5e7eb;
+}
+
+.editListingButton,
+.deleteListingButton,
+.createListingButton {
+    flex: 1;
+    padding: 0.5rem;
+    border: none;
+    border-radius: 6px;
+    font-size: 0.875rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+}
+
+.editListingButton {
+    background-color: #6AA6DA;
+    color: white;
+}
+
+.editListingButton:hover {
+    background-color: #5a96ca;
+}
+
+.deleteListingButton {
+    background-color: #ef4444;
+    color: white;
+}
+
+.deleteListingButton:hover {
+    background-color: #dc2626;
+}
+
+.createListingButton {
+    background-color: #6AA6DA;
+    color: white;
+    margin-top: 1rem;
+    padding: 0.75rem 1.5rem;
+    display: inline-flex;
+    width: auto;
+}
+
+.createListingButton:hover {
+    background-color: #5a96ca;
+}
+
+/* Edit Listing Form */
+.editListingForm {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.editInput,
+.editTextarea {
+    padding: 0.625rem;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    font-size: 0.875rem;
+    font-family: inherit;
+}
+
+.editInput:focus,
+.editTextarea:focus {
+    outline: none;
+    border-color: #6AA6DA;
+    box-shadow: 0 0 0 3px rgba(106, 166, 218, 0.1);
+}
+
+.listingCondition {
+    font-size: 0.875rem;
+    color: #6b7280;
+    margin: 0.5rem 0;
+}
+
+.listingCondition i {
+    margin-right: 0.25rem;
+    color: #6AA6DA;
+}
+
+/* Listing Card Wrapper */
+.listingCardWrapper {
+    position: relative;
+    background: white;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.listingCardWrapper:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+
+/* Listing Actions - Purple Delete Button */
+.listingActions {
+    display: flex;
+    gap: 0.75rem;
+    padding: 1rem;
+    border-top: 1px solid #e5e7eb;
+    background-color: #f9fafb;
+}
+
+.editListingButton,
+.deleteListingButton,
+.createListingButton {
+    flex: 1;
+    padding: 0.625rem;
+    border: none;
+    border-radius: 8px;
+    font-size: 0.875rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+}
+
+.editListingButton {
+    background-color: #6AA6DA;
+    color: white;
+}
+
+.editListingButton:hover {
+    background-color: #5a96ca;
+    transform: translateY(-1px);
+}
+
+.deleteListingButton {
+    background-color: #9b59b6; /* Nice purple color */
+    color: white;
+}
+
+.deleteListingButton:hover {
+    background-color: #8e44ad;
+    transform: translateY(-1px);
+}
+
+.createListingButton {
+    background-color: #6AA6DA;
+    color: white;
+    margin-top: 1rem;
+    padding: 0.75rem 1.5rem;
+    display: inline-flex;
+    width: auto;
+}
+
+.createListingButton:hover {
+    background-color: #5a96ca;
+    transform: translateY(-1px);
+}
+
+/* Edit Listing Form */
+.editListingForm {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    padding: 1rem;
+}
+
+.editInput,
+.editTextarea {
+    padding: 0.625rem;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    font-size: 0.875rem;
+    font-family: inherit;
+}
+
+.editInput:focus,
+.editTextarea:focus {
+    outline: none;
+    border-color: #6AA6DA;
+    box-shadow: 0 0 0 3px rgba(106, 166, 218, 0.1);
+}
+
+/* Listings Grid */
+.listingsGrid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 1.5rem;
+}
+
+/* Empty State */
+.emptyState {
+    text-align: center;
+    padding: 3rem;
+    color: #6b7280;
+}
+
+.emptyState i {
+    font-size: 3rem;
+    margin-bottom: 1rem;
+    color: #9ca3af;
+}
+
+/* Edit Actions */
+.editActions {
+    display: flex;
+    gap: 1rem;
+    margin-top: 0.5rem;
+}
+
+.saveButton {
+    background-color: #E1E5AC;
+    color: #333;
+    flex: 1;
+    padding: 0.625rem;
+    border: none;
+    border-radius: 8px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.saveButton:hover {
+    background-color: #d4d89e;
+}
+
+.cancelButton {
+    background-color: #e5e7eb;
+    color: #333;
+    flex: 1;
+    padding: 0.625rem;
+    border: none;
+    border-radius: 8px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.cancelButton:hover {
+    background-color: #d1d5db;
+}
+
+.offerWrapper {
+    transition: background-color 0.3s ease;
+}
+
+.highlightedOffer {
+    animation: highlightPulse 0.5s ease-in-out 3;
+    background-color: rgba(225, 229, 28, 0.2);
+    border-radius: 8px;
+}
+
+@keyframes highlightPulse {
+    0% {
+        background-color: rgba(225, 229, 28, 0);
+    }
+    50% {
+        background-color: rgba(225, 229, 28, 0.4);
+    }
+    100% {
+        background-color: rgba(225, 229, 28, 0);
+    }
+}
+/* ── Compact Listings Grid (like ViewRating) ─────────────────── */
+.listingsGridCompact {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 14px;
+  animation: fadeIn 0.3s ease;
+}
+
+.listingCardCompact {
+  animation: cardSlideIn 0.35s ease both;
+}
+
+@keyframes cardSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* ── Responsive adjustments for compact grid ─────────────────── */
+@media (max-width: 600px) {
+  .listingsGridCompact {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+  }
+}
+
+@media (max-width: 400px) {
+  .listingsGridCompact {
+    grid-template-columns: 1fr;
+  }
+}
+.offersList {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  animation: fadeIn 0.3s ease;
+}
+/* Sold — red/orange for seller side */
+ 
+.completed {
+  background: #d1fae5;
+  color: #065f46;
+}
+ 
+.pending {
+  background: #fef9c3;
+  color: #854d0e;
+}
+ 
+/* ── Accepted listing — sale in progress ── */
+.listingCardAccepted {
+  position: relative;
+  opacity: 0.88;
+}
+ 
+.acceptedBanner {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 8px;
+  padding: 7px 12px;
+  background: rgba(234, 179, 8, 0.12);
+  border: 1px solid rgba(234, 179, 8, 0.35);
+  border-radius: 8px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #92400e;
+}
+ /* ── ADD THESE TO THE BOTTOM OF Profile.module.css ── */
+
+.historyMeta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.historyMetaChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.78rem;
+  color: #6b7280;
+  background: #f3f4f6;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-weight: 500;
+}
+
+.historyMetaChip i {
+  font-size: 0.7rem;
+  color: #9ca3af;
+}
+
+.historyMetaPrice {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #6AA6DA;
+}
+
+.historyBadge {
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.historyBadgeBought {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.historyBadgeSold {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.historyIconBuyer {
+  background-color: #dbeafe !important;
+  color: #2563eb !important;
+}
+
+.historyIconSeller {
+  background-color: #dcfce7 !important;
+  color: #16a34a !important;
+}
+
+.historyItemTitle {
+  margin: 0 0 6px 0;
+  font-size: 0.95rem;
+  color: #1f2937;
+  font-weight: 600;
+}
+
+/* Offers grid */
+.offersGrid {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  animation: fadeIn 0.25s ease;
+}
+
+.offerCard {
+  background: #fff;
+  border-radius: 12px;
+  border: 1px solid #e8eaed;
+  overflow: hidden;
+  opacity: 0;
+  animation: cardSlideIn 0.35s ease forwards;
+  transition: box-shadow 0.18s ease, transform 0.18s ease;
+}
+
+.offerCard:hover {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+  transform: translateY(-2px);
+}
+/* ── ADD THIS TO THE BOTTOM OF Profile.module.css ── */
+
+.viewRatingsLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  background: none;
+  border: none;
+  color: #6AA6DA;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0.2rem 0.5rem;
+  border-radius: 6px;
+  transition: background 0.15s, color 0.15s;
+  font-family: inherit;
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+.viewRatingsLink:hover {
+  background: #e8f4fc;
+  color: #4094d4;
+}
+
+.viewRatingsLink i {
+  font-size: 0.65rem;
+}
+/* ── History card — new design ── */
+.historyItem {
+  display: flex;
+  align-items: stretch;
+  background: white;
+  border-radius: 12px;
+  border: 1px solid #e8eaed;
+  overflow: hidden;
+  transition: box-shadow 0.18s, transform 0.18s;
+}
+
+.historyItem:hover {
+  box-shadow: 0 4px 16px rgba(0,0,0,0.08);
+  transform: translateY(-1px);
+}
+
+.historyImg {
+  width: 88px;
+  min-width: 88px;
+  background: #f8fafc;
+  overflow: hidden;
+  flex-shrink: 0;
+  position: relative;
+}
+
+.historyImg img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.historyImgPlaceholder {
+  width: 100%;
+  height: 100%;
+  min-height: 88px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #cbd5e1;
+  font-size: 1.25rem;
+}
+
+.historyTypeDot {
+  position: absolute;
+  top: 7px;
+  left: 7px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+}
+
+.historyTypeDotSold  { background: #dcfce7; color: #15803d; }
+.historyTypeDotBought { background: #dbeafe; color: #1d4ed8; }
+.historyTypeDotTrade  { background: #ede9fe; color: #6d28d9; }
+
+.historyDetails {
+  flex: 1;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 5px;
+  min-width: 0;
+}
+
+.historyItemTitle {
+  margin: 0;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #1f2937;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.historyMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  align-items: center;
+}
+
+.historyMetaChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.72rem;
+  color: #64748b;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 99px;
+  padding: 2px 8px;
+}
+
+.historyMetaChip i { font-size: 0.65rem; }
+
+.historyMetaPrice {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #6AA6DA;
+}
+
+.historyBadgeWrap {
+  padding: 12px 14px 12px 0;
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.historyBadge {
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 99px;
+  white-space: nowrap;
+}
+
+.historyBadgeSold   { background: #dcfce7; color: #15803d; }
+.historyBadgeBought { background: #dbeafe; color: #1d4ed8; }
+.historyBadgeTrade  { background: #ede9fe; color: #6d28d9; }
+/* =====================================================
+   MOBILE RESPONSIVE — Profile.module.css
+   ===================================================== */
+
+/* ── profileContainer padding shrinks on small screens ── */
+@media (max-width: 768px) {
+  .profileContainer {
+    padding: 1rem;
+  }
+
+  .header h1 {
+    font-size: 1.3rem;
+  }
+
+  /* profileCard: side-by-side → stacked */
+  .profileCard {
+    grid-template-columns: 1fr;
+    gap: 1.25rem;
+    padding: 1.25rem;
+  }
+
+  /* profileLeft: picture + info stacks vertically */
+  .profileLeft {
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 1rem;
+  }
+
+  .profilePictureWrapper {
+    width: 110px;
+    height: 110px;
+  }
+
+  .userInfo h2 {
+    font-size: 1.2rem;
+  }
+
+  /* statsSection: remove left border, add top border */
+  .statsSection {
+    padding-left: 0;
+    border-left: none;
+    border-top: 1px solid #e5e7eb;
+    padding-top: 1.25rem;
+  }
+
+  /* statsGrid: 3 cols → 3 cols but smaller, or wrap */
+  .statsGrid {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.6rem;
+  }
+
+  .statItem {
+    padding: 0.6rem;
+    gap: 0.5rem;
+  }
+
+  .statItem i {
+    font-size: 1.1rem;
+  }
+
+  .statValue {
+    font-size: 1.1rem;
+  }
+
+  /* rating row wraps nicely */
+  .rating {
+    flex-wrap: wrap;
+    gap: 0.4rem;
+  }
+
+  /* editActions buttons stack */
+  .editActions {
+    flex-direction: column;
+  }
+
+  /* tabs: smaller text, shrink padding */
+  .tab {
+    font-size: 0.8rem;
+    padding: 0.75rem 0.5rem;
+    gap: 0.3rem;
+  }
+
+  .tabContent {
+    padding: 1rem;
+  }
+}
+
+/* ── Phone (≤ 480px) ── */
+@media (max-width: 480px) {
+  .profileContainer {
+    padding: 0.75rem;
+  }
+
+  .profileCard {
+    padding: 1rem;
+  }
+
+  .profilePictureWrapper {
+    width: 90px;
+    height: 90px;
+  }
+
+  /* statsGrid: 3 cols → 1 row of 3 tiny cards */
+  .statsGrid {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.5rem;
+  }
+
+  .statItem {
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    padding: 0.5rem 0.25rem;
+    gap: 0.25rem;
+  }
+
+  .statItem i { font-size: 1rem; }
+  .statValue  { font-size: 1rem; }
+  .statLabel  { font-size: 0.65rem; }
+
+  /* tabs: icon only, hide text via font-size trick isn't reliable —
+     instead allow horizontal scroll if all 3 don't fit */
+  .tabs {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .tab {
+    font-size: 0.75rem;
+    padding: 0.65rem 0.6rem;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  .tabContent {
+    padding: 0.75rem;
+  }
+
+  /* history item: tighter */
+  .historyImg {
+    width: 68px;
+    min-width: 68px;
+  }
+
+  .historyImgPlaceholder {
+    min-height: 68px;
+  }
+
+  .historyDetails {
+    padding: 10px 10px 10px 10px;
+  }
+
+  .historyItemTitle {
+    font-size: 0.82rem;
+  }
+
+  /* Listings compact grid: 2 col → 1 col on very small */
+  .listingsGridCompact {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+  }
+}
+
+@media (max-width: 360px) {
+  .listingsGridCompact {
+    grid-template-columns: 1fr;
+  }
+
+  .statsGrid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+/* ── Admin Profile Styles ── */
+.nameRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 0.5rem;
+}
+
+.nameRow h2 {
+  margin: 0;
+  color: #1f2937;
+  font-size: 1.5rem;
+}
+
+.adminBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: #eff6ff;
+  color: #2563eb;
+  border: 1px solid #bfdbfe;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 99px;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.adminBadge i { font-size: 0.65rem; }
+
+.adminRoleBanner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: linear-gradient(135deg, #eff6ff 0%, #f0fdf4 100%);
+  border: 1px solid #bfdbfe;
+  border-radius: 12px;
+}
+
+.adminRoleBanner > i {
+  font-size: 1.4rem;
+  color: #2563eb;
+  flex-shrink: 0;
+}
+
+.adminRoleTitle {
+  display: block;
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.adminRoleSub {
+  display: block;
+  font-size: 0.72rem;
+  color: #64748b;
+  margin-top: 2px;
+}
+
+.adminStatsGrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+
+.adminStatCard {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  transition: box-shadow 0.15s;
+}
+
+.adminStatCard:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.07); }
+
+.adminStatIcon {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.9rem;
+  flex-shrink: 0;
+}
+
+.adminStatInfo {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.adminStatValue {
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: #1f2937;
+  line-height: 1;
+}
+
+.adminStatLabel {
+  font-size: 0.68rem;
+  color: #6b7280;
+  font-weight: 500;
+  margin-top: 3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@media (max-width: 768px) {
+  .adminStatsGrid { grid-template-columns: repeat(2, 1fr); }
+}
+
+@media (max-width: 480px) {
+  .adminStatsGrid { grid-template-columns: repeat(2, 1fr); gap: 8px; }
+  .adminStatCard  { padding: 10px; }
+  .adminStatValue { font-size: 1.1rem; }
+}

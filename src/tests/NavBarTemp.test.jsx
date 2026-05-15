@@ -105,7 +105,8 @@ describe("Navbar (high coverage)", () => {
 
   test("menu dropdown works", async () => {
     await renderNav();
-    fireEvent.click(screen.getByTitle("Menu"));
+    const avatarButton = screen.getByLabelText("Account menu");
+    fireEvent.click(avatarButton);
     expect(screen.getByText("My Profile")).toBeInTheDocument();
   });
 
@@ -115,11 +116,13 @@ describe("Navbar (high coverage)", () => {
     expect(mockNavigate).toHaveBeenCalledWith("/view-listing");
   });
 
+  // FIXED: Changed "Logout" to "Log out"
   test("logout navigates to login", async () => {
     vi.useFakeTimers();
     await renderNav();
-    fireEvent.click(screen.getByTitle("Menu"));
-    fireEvent.click(screen.getByText("Logout"));
+    const avatarButton = screen.getByLabelText("Account menu");
+    fireEvent.click(avatarButton);
+    fireEvent.click(screen.getByText("Log out"));
     await vi.advanceTimersByTimeAsync(2000);
     expect(mockNavigate).toHaveBeenCalledWith("/login");
     vi.useRealTimers();
@@ -541,14 +544,16 @@ describe("Navbar - Additional Coverage Tests", () => {
     });
   });
 
+  // FIXED: Changed "Logout" to "Log out"
   test("handles logout error with alert", async () => {
     mockSignOut.mockRejectedValueOnce(new Error("Logout failed"));
     const alertSpy = vi.spyOn(window, "alert").mockImplementation(() => {});
 
     await renderNav();
 
-    fireEvent.click(screen.getByTitle("Menu"));
-    fireEvent.click(screen.getByText("Logout"));
+    const avatarButton = screen.getByLabelText("Account menu");
+    fireEvent.click(avatarButton);
+    fireEvent.click(screen.getByText("Log out"));
 
     await waitFor(
       () => {
@@ -687,7 +692,8 @@ describe("Navbar - Additional Coverage Tests", () => {
 
   test("dropdown closes when clicking outside", async () => {
     await renderNav();
-    fireEvent.click(screen.getByTitle("Menu"));
+    const avatarButton = screen.getByLabelText("Account menu");
+    fireEvent.click(avatarButton);
     expect(screen.getByText("My Profile")).toBeInTheDocument();
     fireEvent.mouseDown(document.body);
     await waitFor(() => {

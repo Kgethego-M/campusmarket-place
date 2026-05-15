@@ -25,21 +25,21 @@
 
 ### Tebogo
 
-**Work done:** To be updated.
-**Work to be done:** To be updated.
-**Blockers:** To be updated.
+**Work done:**  No new progress over Thursday and Friday.
+**Work to be done:** Implemented the "Promote" button for Adbanner and Premium add.
+**Blockers:** None.
 
 ### Mmaphefo
 
-**Work done:** To be updated.
-**Work to be done:** To be updated.
-**Blockers:** To be updated.
+**Work done:** Continued working on US11 (Staff Confirm Item Receipt and Release). Focused on implementing and improving confirm drop-off and confirm collection flow. Tested locally and worked on fixing issues in transaction status updates.
+**Work to be done:** Continue fixing US11 logic, improve transaction status updates and notifications, and look out for bugs during testing.
+**Blockers:** None.
 
 ### Nontokozo
 
-**Work done:** To be updated.
-**Work to be done:** To be updated.
-**Blockers:** To be updated.
+**Work done:** I fixed the layout that was already there on admin, created a new profile for admin, fixed a few reporting items
+**Work to be done:** Will be working on chats and finalize everything with reports
+**Blockers:** None.
 
 ### Victor
 
