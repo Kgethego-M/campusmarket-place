@@ -1030,8 +1030,12 @@ function TransactionCard({ txn, onConfirmDropOff, onConfirmCollection, onRelease
             : (txn.cashShortfall ?? totalPrice);
 
     const hasShortfall = shortfall > 0;
-    const isPaid       = isFullyOnline || txn.paymentStatus === "Fully Paid" || shortfall === 0;
-
+    // For cash/COD transactions, only show paid when cash has been collected
+const isCashPayment = paymentMethod === "cash" || paymentMethod === "cod" || paymentMethod === "fully_cash";
+const isPaid = isFullyOnline || 
+              (txn.paymentStatus === "Fully Paid") || 
+              (isCashPayment && txn.cashCollected === true) ||
+              (!isCashPayment && shortfall === 0);
     return (
         <>
             <div
@@ -1128,35 +1132,47 @@ function TransactionCard({ txn, onConfirmDropOff, onConfirmCollection, onRelease
                         </div>
 
                         <div className={styles.txnMeta}>
-                            {txn.type === "Purchase" ? (
-                                <span className={styles.txnTag}>
-                                    Purchase · R{totalPrice?.toLocaleString()}
-                                    {isFullyOnline ? (
-                                        <span className={styles.paidChip}><i className="fa-solid fa-wifi" /> Online</span>
-                                    ) : isPaid ? (
-                                        <span className={styles.paidChip}><i className="fa-solid fa-circle-check" /> Paid</span>
-                                    ) : isPartialCard ? (
-                                        <span className={styles.shortfallChip}><i className="fa-solid fa-coins" /> R{shortfall.toLocaleString()} cash due</span>
-                                    ) : (
-                                        <span className={styles.shortfallChip}><i className="fa-solid fa-triangle-exclamation" /> Cash owed: R{shortfall.toLocaleString()}</span>
-                                    )}
-                                </span>
-                            ) : (
-                                <span className={styles.txnTag}>Trade · {txn.tradeFor || (txn.tradeItem?.name) || "—"}</span>
-                            )}
-                            {(txn.status === "awaiting_collection" || txn.status === "completed") && (
-                                <span style={{
-                                    display: "inline-flex", alignItems: "center", gap: 4,
-                                    fontFamily: "monospace", fontWeight: 700, fontSize: "0.78rem",
-                                    letterSpacing: "0.06em", background: "#faf5ff",
-                                    border: "1.5px dashed #a78bfa", borderRadius: 6,
-                                    padding: "1px 8px", color: "#1e293b", marginLeft: 4,
-                                }}>
-                                    <i className="fa-solid fa-receipt" style={{ color: "#7c3aed", fontSize: "0.72rem" }} />
-                                    {receiptRef}
-                                </span>
-                            )}
-                        </div>
+    {txn.type === "Purchase" ? (
+        <span className={styles.txnTag}>
+            Purchase · R{totalPrice?.toLocaleString()}
+            {(() => {
+                const isCashPayment = paymentMethod === "cash" || paymentMethod === "cod" || paymentMethod === "fully_cash";
+                const isCashCollected = txn.cashCollected === true || txn.paymentStatus === "Fully Paid";
+                
+                if (isFullyOnline) {
+                    return <span className={styles.paidChip}><i className="fa-solid fa-wifi" /> Online</span>;
+                }
+                if (isCashPayment && isCashCollected) {
+                    return <span className={styles.paidChip}><i className="fa-solid fa-circle-check" /> Cash Collected</span>;
+                }
+                if (isCashPayment && !isCashCollected) {
+                    return <span className={styles.shortfallChip}><i className="fa-solid fa-coins" /> R{shortfall.toLocaleString()} cash due at pickup</span>;
+                }
+                if (isPaid) {
+                    return <span className={styles.paidChip}><i className="fa-solid fa-circle-check" /> Paid</span>;
+                }
+                if (isPartialCard) {
+                    return <span className={styles.shortfallChip}><i className="fa-solid fa-coins" /> R{shortfall.toLocaleString()} cash due</span>;
+                }
+                return <span className={styles.shortfallChip}><i className="fa-solid fa-triangle-exclamation" /> Payment pending</span>;
+            })()}
+        </span>
+    ) : (
+        <span className={styles.txnTag}>Trade · {txn.tradeFor || (txn.tradeItem?.name) || "—"}</span>
+    )}
+    {(txn.status === "awaiting_collection" || txn.status === "completed") && (
+        <span style={{
+            display: "inline-flex", alignItems: "center", gap: 4,
+            fontFamily: "monospace", fontWeight: 700, fontSize: "0.78rem",
+            letterSpacing: "0.06em", background: "#faf5ff",
+            border: "1.5px dashed #a78bfa", borderRadius: 6,
+            padding: "1px 8px", color: "#1e293b", marginLeft: 4,
+        }}>
+            <i className="fa-solid fa-receipt" style={{ color: "#7c3aed", fontSize: "0.72rem" }} />
+            {receiptRef}
+        </span>
+    )}
+</div>
                     </div>
 
                     <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 5, flexShrink: 0 }}>
