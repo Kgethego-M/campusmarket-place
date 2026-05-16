@@ -246,12 +246,21 @@ function BuyerTrackerCard({ txn, idx }) {
 }
 
 function getSellerStatusBadge(txn) {
-  const s = txn.dropOffStatus;
-  if (s === "inspection_pass")       return { label: "Inspection passed", color: "#166534", bg: "#dcfce7" };
-  if (s === "inspection_fail")       return { label: "Inspection failed",  color: "#791F1F", bg: "#FCEBEB" };
-  if (s === "dropped_off")           return { label: "Item dropped off",   color: "#166534", bg: "#dcfce7" };
-  if (s === "scheduled")             return { label: "Drop-off scheduled", color: "#92400e", bg: "#fef3c7" };
-  return                                    { label: "Awaiting drop-off",  color: "#1e40af", bg: "#dbeafe" };
+    const s = txn.dropOffStatus;
+    const paymentMethod = (txn.paymentMethod || txn.paymentType || "").toLowerCase();
+    const isCashOnly = paymentMethod === "cash" || paymentMethod === "cod" || paymentMethod === "fully_cash";
+    
+    if (s === "inspection_pass")       return { label: "Inspection passed", color: "#166534", bg: "#dcfce7" };
+    if (s === "inspection_fail")       return { label: "Inspection failed",  color: "#791F1F", bg: "#FCEBEB" };
+    if (s === "dropped_off")           return { label: "Item dropped off",   color: "#166534", bg: "#dcfce7" };
+    if (s === "scheduled")             return { label: "Drop-off scheduled", color: "#92400e", bg: "#fef3c7" };
+    
+    // Show awaiting payment status for online/partial payments that haven't been paid
+    if (!isCashOnly && !txn.paymentConfirmed && txn.status === "accepted") {
+        return { label: "Awaiting payment", color: "#92400e", bg: "#fef3c7" };
+    }
+    
+    return { label: "Awaiting drop-off",  color: "#1e40af", bg: "#dbeafe" };
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────────
@@ -366,11 +375,22 @@ export default function TradeFacility() {
     if (!txn.isSeller) return false;
     if (!["waiting", "accepted"].includes(txn.status)) return false;
     if (txn.bookingId) return false;
-    // For sale or "either" transactions, require buyer to have confirmed payment
+    
     const isTrade = txn.type === 'trade';
-    if (!isTrade && !txn.paymentConfirmed) return false;
-    return true;
-  };
+    
+    // For trade transactions - seller can always book drop-off when accepted
+    if (isTrade) return true;
+    
+    // For sale transactions
+    const paymentMethod = (txn.paymentMethod || txn.paymentType || "").toLowerCase();
+    const isCashOnly = paymentMethod === "cash" || paymentMethod === "cod" || paymentMethod === "fully_cash";
+    
+    // Cash only - seller can book immediately since buyer committed when making offer
+    if (isCashOnly) return txn.paymentConfirmed === true;
+    
+    // Online or partial payment - require buyer to have completed online payment
+    return txn.paymentConfirmed === true;
+};
 
   const hasDropOffBooked = (txn) =>
     txn.isSeller && (txn.dropOffStatus === "scheduled" || !!txn.bookingId);

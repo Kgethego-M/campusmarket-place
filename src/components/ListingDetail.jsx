@@ -523,6 +523,8 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
       tradeItemDetails: tradeItemPayload,
       terms:         terms || null,
       createdAt:     new Date().toISOString(),
+      // For cash/COD, payment is confirmed immediately when buyer creates offer
+      paymentConfirmed: (paymentType === 'cash' || paymentType === 'cod') ? true : false,
     };
 
     try {
