@@ -2,7 +2,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { ListingDetailView as ListingDetail } from '../components/ListingDetail';
-import { getDocs, addDoc } from 'firebase/firestore';
+import { getDocs, addDoc, collection, query, where, doc, getDoc, setDoc, updateDoc, arrayUnion, arrayRemove, serverTimestamp } from 'firebase/firestore';
 import { createTransaction } from '../services/transactionService';
 import { notifySellerOfOffer } from '../services/notificationService';
 
@@ -17,20 +17,25 @@ vi.mock('../firebase', () => ({
   getUserType: vi.fn(),
 }));
 
-vi.mock('firebase/firestore', () => ({
-  collection: vi.fn(),
-  query: vi.fn(),
-  where: vi.fn(),
-  getDocs: vi.fn(),
-  addDoc: vi.fn(() => Promise.resolve({ id: 'new-chat-id' })),
-  serverTimestamp: vi.fn(),
-  doc: vi.fn(),
-  getDoc: vi.fn(),
-  setDoc: vi.fn(),
-  updateDoc: vi.fn(),
-  arrayUnion: vi.fn(),
-  arrayRemove: vi.fn(),
-}));
+// Mock the entire firebase/firestore module with proper implementations
+vi.mock('firebase/firestore', async () => {
+  const actual = await vi.importActual('firebase/firestore');
+  return {
+    ...actual,
+    collection: vi.fn(),
+    query: vi.fn(),
+    where: vi.fn(),
+    getDocs: vi.fn(),
+    addDoc: vi.fn(() => Promise.resolve({ id: 'new-chat-id' })),
+    serverTimestamp: vi.fn(() => new Date()),
+    doc: vi.fn(),
+    getDoc: vi.fn(),
+    setDoc: vi.fn(),
+    updateDoc: vi.fn(),
+    arrayUnion: vi.fn(),
+    arrayRemove: vi.fn(),
+  };
+});
 
 vi.mock('../services/transactionService', () => ({
   createTransaction: vi.fn(() => Promise.resolve('mock-transaction-id')),
@@ -70,6 +75,7 @@ const saleListing = {
   title: 'Calculus Textbook',
   price: 150,
   type: 'For Sale',
+  listingType: 'For Sale',
   sellerId: 'seller-uid',
   sellerName: 'Test Seller',
   description: 'A great textbook',
@@ -79,8 +85,8 @@ const saleListing = {
   photos: ['photo1.jpg', 'photo2.jpg'],
 };
 
-const tradeListing  = { ...saleListing, id: 'listing-124', type: 'For Trade',         title: 'Scientific Calculator', price: 80  };
-const eitherListing = { ...saleListing, id: 'listing-125', type: 'For Sale or Trade', title: 'Physics Textbook',      price: 200 };
+const tradeListing  = { ...saleListing, id: 'listing-124', type: 'For Trade', listingType: 'For Trade', title: 'Scientific Calculator', price: 80  };
+const eitherListing = { ...saleListing, id: 'listing-125', type: 'For Sale or Trade', listingType: 'For Sale or Trade', title: 'Physics Textbook',      price: 200 };
 const noPhotoListing = { ...saleListing, photos: [] };
 
 const pendingTransaction = {
@@ -93,7 +99,13 @@ const pendingTransaction = {
 
 // ─── Hooks ────────────────────────────────────────────────────────────────────
 
-beforeEach(() => vi.clearAllMocks());
+beforeEach(() => {
+  vi.clearAllMocks();
+  
+  // Default mock implementations
+  getDocs.mockResolvedValue({ docs: [] });
+  addDoc.mockResolvedValue({ id: 'new-chat-id' });
+});
 
 // ─── Action buttons ───────────────────────────────────────────────────────────
 
@@ -140,7 +152,7 @@ describe('ListingDetail - action buttons', () => {
   it('Test No.8 - calls createTransaction and notifySellerOfOffer when purchase is confirmed', async () => {
     render(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} />);
     fireEvent.click(screen.getByRole('button', { name: /buy now/i }));
-    fireEvent.click(screen.getByRole('button', { name: /confirm/i }));
+    fireEvent.click(screen.getByRole('button', { name: /confirm & send offer/i }));
     await waitFor(() => {
       expect(createTransaction).toHaveBeenCalledTimes(1);
       expect(createTransaction).toHaveBeenCalledWith(
@@ -200,8 +212,8 @@ describe('ListingDetail - purchase modal', () => {
     render(<ListingDetail listing={eitherListing} currentUser={mockBuyer} navigate={mockNavigate} />);
     fireEvent.click(screen.getByRole('button', { name: /buy now \/ make trade offer/i }));
     fireEvent.click(screen.getByRole('button', { name: /cash purchase/i }));
-    expect(screen.getByRole('spinbutton', { name: /agreed price/i })).toBeInTheDocument();
-    expect(screen.getByRole('combobox', { name: /payment method/i })).toBeInTheDocument();
+    expect(screen.getByLabelText(/agreed price/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/payment method/i)).toBeInTheDocument();
   });
 
   it("Test No.18 - shows trade fields after choosing Trade Item on a 'For Sale or Trade' listing", () => {
@@ -339,18 +351,29 @@ describe('ListingDetailView - message seller', () => {
   });
 
   it('finds existing chat and navigates when Message Seller clicked', async () => {
-    getDocs.mockResolvedValueOnce({
-      docs: [{ id: 'existing-chat', data: () => ({ participants: ['buyer-uid', 'seller-uid'] }) }],
-    });
+    // Mock getDocs to return an existing chat
+    const mockChatDoc = {
+      id: 'existing-chat',
+      data: () => ({ participants: ['buyer-uid', 'seller-uid'] })
+    };
+    getDocs.mockResolvedValueOnce({ docs: [mockChatDoc] });
+    
     render(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} />);
     fireEvent.click(screen.getByText('Message Seller'));
-    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/chat?open=existing-chat'));
+    
+    await waitFor(() => {
+      expect(mockNavigate).toHaveBeenCalledWith('/chat?open=existing-chat');
+    });
   });
 
   it('creates new chat when no existing chat found', async () => {
+    // Mock getDocs to return empty array (no existing chat)
     getDocs.mockResolvedValueOnce({ docs: [] });
+    addDoc.mockResolvedValueOnce({ id: 'new-chat-id' });
+    
     render(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} />);
     fireEvent.click(screen.getByText('Message Seller'));
+    
     await waitFor(() => {
       expect(addDoc).toHaveBeenCalled();
       expect(mockNavigate).toHaveBeenCalledWith('/chat?open=new-chat-id');
@@ -358,9 +381,12 @@ describe('ListingDetailView - message seller', () => {
   });
 
   it('shows Opening chat text while loading', async () => {
+    // Make getDocs return a promise that never resolves to simulate loading
     getDocs.mockImplementationOnce(() => new Promise(() => {}));
+    
     render(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} />);
     fireEvent.click(screen.getByText('Message Seller'));
+    
     expect(screen.getByText('Opening chat…')).toBeInTheDocument();
   });
 });
@@ -372,7 +398,11 @@ describe('ListingDetailView - trade transaction', () => {
     render(<ListingDetail listing={tradeListing} currentUser={mockBuyer} navigate={mockNavigate} />);
     fireEvent.click(screen.getByRole('button', { name: /make trade offer/i }));
     fireEvent.change(screen.getByPlaceholderText(/describe your trade item/i), { target: { value: 'My old laptop' } });
-    fireEvent.click(screen.getByRole('button', { name: /confirm/i }));
+    // Select category to avoid warning
+    const categorySelect = screen.getByLabelText(/category/i);
+    fireEvent.change(categorySelect, { target: { value: 'Electronics' } });
+    fireEvent.click(screen.getByRole('button', { name: /confirm & send offer/i }));
+    
     await waitFor(() =>
       expect(createTransaction).toHaveBeenCalledWith(
         expect.objectContaining({ type: 'trade', tradeItem: 'My old laptop' })
@@ -383,15 +413,13 @@ describe('ListingDetailView - trade transaction', () => {
   it('shows alert modal when trade item is empty', async () => {
     render(<ListingDetail listing={tradeListing} currentUser={mockBuyer} navigate={mockNavigate} />);
     fireEvent.click(screen.getByRole('button', { name: /make trade offer/i }));
-    fireEvent.click(screen.getByRole('button', { name: /confirm/i }));
+    fireEvent.click(screen.getByRole('button', { name: /confirm & send offer/i }));
     
-    // Wait for the AlertModal to appear
     await waitFor(() => {
       expect(screen.getByTestId('alert-modal')).toBeInTheDocument();
       expect(screen.getByTestId('alert-message')).toHaveTextContent('Please describe what you want to trade');
     });
     
-    // Close the modal
     fireEvent.click(screen.getByTestId('alert-close-btn'));
     await waitFor(() => {
       expect(screen.queryByTestId('alert-modal')).not.toBeInTheDocument();
@@ -405,16 +433,17 @@ describe('ListingDetailView - partial payment', () => {
   it('shows partial amount input when Partial Online selected', () => {
     render(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} />);
     fireEvent.click(screen.getByRole('button', { name: /buy now/i }));
-    fireEvent.change(screen.getByRole('combobox', { name: /payment method/i }), { target: { value: 'partial' } });
+    fireEvent.change(screen.getByLabelText(/payment method/i), { target: { value: 'partial' } });
     expect(screen.getByPlaceholderText(/enter online payment amount/i)).toBeInTheDocument();
   });
 
   it('calls createTransaction with partialAmount when partial payment used', async () => {
     render(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} />);
     fireEvent.click(screen.getByRole('button', { name: /buy now/i }));
-    fireEvent.change(screen.getByRole('combobox', { name: /payment method/i }), { target: { value: 'partial' } });
+    fireEvent.change(screen.getByLabelText(/payment method/i), { target: { value: 'partial' } });
     fireEvent.change(screen.getByPlaceholderText(/enter online payment amount/i), { target: { value: '75' } });
-    fireEvent.click(screen.getByRole('button', { name: /confirm/i }));
+    fireEvent.click(screen.getByRole('button', { name: /confirm & send offer/i }));
+    
     await waitFor(() =>
       expect(createTransaction).toHaveBeenCalledWith(
         expect.objectContaining({ paymentType: 'partial', partialAmount: 75 })
@@ -429,7 +458,8 @@ describe('ListingDetailView - offer sent', () => {
   it('shows pending banner after offer is successfully sent', async () => {
     render(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} />);
     fireEvent.click(screen.getByRole('button', { name: /buy now/i }));
-    fireEvent.click(screen.getByRole('button', { name: /confirm/i }));
+    fireEvent.click(screen.getByRole('button', { name: /confirm & send offer/i }));
+    
     await waitFor(() =>
       expect(screen.getByTestId('pending-offer-banner')).toBeInTheDocument()
     );
@@ -439,9 +469,8 @@ describe('ListingDetailView - offer sent', () => {
     createTransaction.mockRejectedValueOnce(new Error('Network error'));
     render(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} />);
     fireEvent.click(screen.getByRole('button', { name: /buy now/i }));
-    fireEvent.click(screen.getByRole('button', { name: /confirm/i }));
+    fireEvent.click(screen.getByRole('button', { name: /confirm & send offer/i }));
     
-    // Wait for the toast error message
     await waitFor(() => {
       expect(screen.getByText('Failed to create offer. Please try again.')).toBeInTheDocument();
     });
@@ -461,7 +490,8 @@ describe('ListingDetailView - terms field', () => {
     render(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} />);
     fireEvent.click(screen.getByRole('button', { name: /buy now/i }));
     fireEvent.change(screen.getByPlaceholderText(/seller agreed to include charger/i), { target: { value: 'Include charger' } });
-    fireEvent.click(screen.getByRole('button', { name: /confirm/i }));
+    fireEvent.click(screen.getByRole('button', { name: /confirm & send offer/i }));
+    
     await waitFor(() =>
       expect(createTransaction).toHaveBeenCalledWith(
         expect.objectContaining({ terms: 'Include charger' })
@@ -483,7 +513,7 @@ describe('ListingDetailView - edge cases', () => {
   it('line 157 — shows alert modal when no purchase type selected and confirm clicked', async () => {
     render(<ListingDetail listing={eitherListing} currentUser={mockBuyer} navigate={mockNavigate} />);
     fireEvent.click(screen.getByRole('button', { name: /buy now \/ make trade offer/i }));
-    fireEvent.click(screen.getByRole('button', { name: /confirm/i }));
+    fireEvent.click(screen.getByRole('button', { name: /confirm & send offer/i }));
     
     await waitFor(() => {
       expect(screen.getByTestId('alert-modal')).toBeInTheDocument();
@@ -497,7 +527,7 @@ describe('ListingDetailView - edge cases', () => {
   });
 
   it('line 332 — renders nothing for unrecognised listing type', () => {
-    const unknownListing = { ...saleListing, type: 'Unknown Type' };
+    const unknownListing = { ...saleListing, type: 'Unknown Type', listingType: 'Unknown Type' };
     render(<ListingDetail listing={unknownListing} currentUser={mockBuyer} navigate={mockNavigate} />);
     expect(screen.queryByRole('button', { name: /buy now/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /make trade offer/i })).not.toBeInTheDocument();
