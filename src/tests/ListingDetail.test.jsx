@@ -1,6 +1,6 @@
 // src/tests/ListingDetail.test.jsx
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { ListingDetailView as ListingDetail } from '../components/ListingDetail';
 import { getDocs, addDoc, collection, query, where, doc, getDoc, setDoc, updateDoc, arrayUnion, arrayRemove, serverTimestamp } from 'firebase/firestore';
 import { createTransaction } from '../services/transactionService';
@@ -86,7 +86,7 @@ const saleListing = {
 };
 
 const tradeListing  = { ...saleListing, id: 'listing-124', type: 'For Trade', listingType: 'For Trade', title: 'Scientific Calculator', price: 80  };
-const eitherListing = { ...saleListing, id: 'listing-125', type: 'For Sale or Trade', listingType: 'For Sale or Trade', title: 'Physics Textbook',      price: 200 };
+const eitherListing = { ...saleListing, id: 'listing-125', type: 'For Sale or Trade', listingType: 'For Sale or Trade', title: 'Physics Textbook', price: 200 };
 const noPhotoListing = { ...saleListing, photos: [] };
 
 const pendingTransaction = {
@@ -105,30 +105,40 @@ beforeEach(() => {
   // Default mock implementations
   getDocs.mockResolvedValue({ docs: [] });
   addDoc.mockResolvedValue({ id: 'new-chat-id' });
+  createTransaction.mockResolvedValue('mock-transaction-id');
+  notifySellerOfOffer.mockResolvedValue('mock-notification-id');
 });
 
 // ─── Action buttons ───────────────────────────────────────────────────────────
 
 describe('ListingDetail - action buttons', () => {
-  it('Test No.1 - shows Buy Now button when listing type is For Sale', () => {
-    render(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} />);
+  it('Test No.1 - shows Buy Now button when listing type is For Sale', async () => {
+    await act(async () => {
+      render(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} />);
+    });
     expect(screen.getByRole('button', { name: /buy now/i })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /make trade offer/i })).not.toBeInTheDocument();
   });
 
-  it('Test No.2 - shows Make Trade Offer button when listing type is For Trade', () => {
-    render(<ListingDetail listing={tradeListing} currentUser={mockBuyer} navigate={mockNavigate} />);
+  it('Test No.2 - shows Make Trade Offer button when listing type is For Trade', async () => {
+    await act(async () => {
+      render(<ListingDetail listing={tradeListing} currentUser={mockBuyer} navigate={mockNavigate} />);
+    });
     expect(screen.getByRole('button', { name: /make trade offer/i })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /buy now/i })).not.toBeInTheDocument();
   });
 
-  it('Test No.3 - shows combined Buy Now / Make Trade Offer button when listing type is For Sale or Trade', () => {
-    render(<ListingDetail listing={eitherListing} currentUser={mockBuyer} navigate={mockNavigate} />);
+  it('Test No.3 - shows combined Buy Now / Make Trade Offer button when listing type is For Sale or Trade', async () => {
+    await act(async () => {
+      render(<ListingDetail listing={eitherListing} currentUser={mockBuyer} navigate={mockNavigate} />);
+    });
     expect(screen.getByRole('button', { name: /buy now \/ make trade offer/i })).toBeInTheDocument();
   });
 
-  it('Test No.4 - shows pending offer banner instead of buy button when buyer already has an active offer', () => {
-    render(<ListingDetail listing={saleListing} currentUser={mockBuyer} existingTransaction={pendingTransaction} navigate={mockNavigate} />);
+  it('Test No.4 - shows pending offer banner instead of buy button when buyer already has an active offer', async () => {
+    await act(async () => {
+      render(<ListingDetail listing={saleListing} currentUser={mockBuyer} existingTransaction={pendingTransaction} navigate={mockNavigate} />);
+    });
     expect(screen.queryByRole('button', { name: /buy now/i })).not.toBeInTheDocument();
     const banner = screen.getByTestId('pending-offer-banner');
     expect(banner).toBeInTheDocument();
@@ -136,23 +146,36 @@ describe('ListingDetail - action buttons', () => {
     expect(banner).toHaveTextContent(/waiting for the seller to approve/i);
   });
 
-  it('Test No.4b - pending banner does not appear when there is no existing transaction', () => {
-    render(<ListingDetail listing={saleListing} currentUser={mockBuyer} existingTransaction={null} navigate={mockNavigate} />);
+  it('Test No.4b - pending banner does not appear when there is no existing transaction', async () => {
+    await act(async () => {
+      render(<ListingDetail listing={saleListing} currentUser={mockBuyer} existingTransaction={null} navigate={mockNavigate} />);
+    });
     expect(screen.queryByTestId('pending-offer-banner')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: /buy now/i })).toBeInTheDocument();
   });
 
-  it('Test No.4c - pending banner does not appear when an existing transaction is declined', () => {
+  it('Test No.4c - pending banner does not appear when an existing transaction is declined', async () => {
     const declinedTransaction = { ...pendingTransaction, status: 'declined' };
-    render(<ListingDetail listing={saleListing} currentUser={mockBuyer} existingTransaction={declinedTransaction} navigate={mockNavigate} />);
+    await act(async () => {
+      render(<ListingDetail listing={saleListing} currentUser={mockBuyer} existingTransaction={declinedTransaction} navigate={mockNavigate} />);
+    });
     expect(screen.queryByTestId('pending-offer-banner')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: /buy now/i })).toBeInTheDocument();
   });
 
   it('Test No.8 - calls createTransaction and notifySellerOfOffer when purchase is confirmed', async () => {
-    render(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} />);
-    fireEvent.click(screen.getByRole('button', { name: /buy now/i }));
-    fireEvent.click(screen.getByRole('button', { name: /confirm & send offer/i }));
+    await act(async () => {
+      render(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} />);
+    });
+    
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /buy now/i }));
+    });
+    
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /confirm & send offer/i }));
+    });
+    
     await waitFor(() => {
       expect(createTransaction).toHaveBeenCalledTimes(1);
       expect(createTransaction).toHaveBeenCalledWith(
@@ -170,15 +193,19 @@ describe('ListingDetail - action buttons', () => {
     });
   });
 
-  it('Test No.12 - does not show action buttons when the current user is the seller', () => {
-    render(<ListingDetail listing={saleListing} currentUser={mockSeller} navigate={mockNavigate} />);
+  it('Test No.12 - does not show action buttons when the current user is the seller', async () => {
+    await act(async () => {
+      render(<ListingDetail listing={saleListing} currentUser={mockSeller} navigate={mockNavigate} />);
+    });
     expect(screen.queryByRole('button', { name: /buy now/i })).not.toBeInTheDocument();
     expect(screen.queryByTestId('pending-offer-banner')).not.toBeInTheDocument();
     expect(screen.getByText(/this is your listing/i)).toBeInTheDocument();
   });
 
-  it('Test No.13 - does not show action buttons when no user is logged in', () => {
-    render(<ListingDetail listing={saleListing} currentUser={null} navigate={mockNavigate} />);
+  it('Test No.13 - does not show action buttons when no user is logged in', async () => {
+    await act(async () => {
+      render(<ListingDetail listing={saleListing} currentUser={null} navigate={mockNavigate} />);
+    });
     expect(screen.queryByRole('button', { name: /buy now/i })).not.toBeInTheDocument();
     expect(screen.queryByTestId('pending-offer-banner')).not.toBeInTheDocument();
   });
@@ -187,39 +214,71 @@ describe('ListingDetail - action buttons', () => {
 // ─── Purchase modal ───────────────────────────────────────────────────────────
 
 describe('ListingDetail - purchase modal', () => {
-  it('Test No.14 - opens the modal when Buy Now button is clicked', () => {
-    render(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} />);
-    fireEvent.click(screen.getByRole('button', { name: /buy now/i }));
+  it('Test No.14 - opens the modal when Buy Now button is clicked', async () => {
+    await act(async () => {
+      render(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} />);
+    });
+    
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /buy now/i }));
+    });
+    
     expect(screen.getByText(/initiate purchase/i)).toBeInTheDocument();
   });
 
-  it('Test No.15 - closes the modal when the × button is clicked', () => {
-    render(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} />);
-    fireEvent.click(screen.getByRole('button', { name: /buy now/i }));
+  it('Test No.15 - closes the modal when the × button is clicked', async () => {
+    await act(async () => {
+      render(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} />);
+    });
+    
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /buy now/i }));
+    });
     expect(screen.getByText(/initiate purchase/i)).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: /close modal/i }));
+    
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /close modal/i }));
+    });
     expect(screen.queryByText(/initiate purchase/i)).not.toBeInTheDocument();
   });
 
-  it("Test No.16 - shows type selector for 'For Sale or Trade' listings before a type is chosen", () => {
-    render(<ListingDetail listing={eitherListing} currentUser={mockBuyer} navigate={mockNavigate} />);
-    fireEvent.click(screen.getByRole('button', { name: /buy now \/ make trade offer/i }));
+  it("Test No.16 - shows type selector for 'For Sale or Trade' listings before a type is chosen", async () => {
+    await act(async () => {
+      render(<ListingDetail listing={eitherListing} currentUser={mockBuyer} navigate={mockNavigate} />);
+    });
+    
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /buy now \/ make trade offer/i }));
+    });
+    
     expect(screen.getByRole('button', { name: /cash purchase/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /trade item/i })).toBeInTheDocument();
   });
 
-  it("Test No.17 - shows sale fields after choosing Cash Purchase on a 'For Sale or Trade' listing", () => {
-    render(<ListingDetail listing={eitherListing} currentUser={mockBuyer} navigate={mockNavigate} />);
-    fireEvent.click(screen.getByRole('button', { name: /buy now \/ make trade offer/i }));
-    fireEvent.click(screen.getByRole('button', { name: /cash purchase/i }));
+  it("Test No.17 - shows sale fields after choosing Cash Purchase on a 'For Sale or Trade' listing", async () => {
+    await act(async () => {
+      render(<ListingDetail listing={eitherListing} currentUser={mockBuyer} navigate={mockNavigate} />);
+    });
+    
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /buy now \/ make trade offer/i }));
+      fireEvent.click(screen.getByRole('button', { name: /cash purchase/i }));
+    });
+    
     expect(screen.getByLabelText(/agreed price/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/payment method/i)).toBeInTheDocument();
   });
 
-  it("Test No.18 - shows trade fields after choosing Trade Item on a 'For Sale or Trade' listing", () => {
-    render(<ListingDetail listing={eitherListing} currentUser={mockBuyer} navigate={mockNavigate} />);
-    fireEvent.click(screen.getByRole('button', { name: /buy now \/ make trade offer/i }));
-    fireEvent.click(screen.getByRole('button', { name: /trade item/i }));
+  it("Test No.18 - shows trade fields after choosing Trade Item on a 'For Sale or Trade' listing", async () => {
+    await act(async () => {
+      render(<ListingDetail listing={eitherListing} currentUser={mockBuyer} navigate={mockNavigate} />);
+    });
+    
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /buy now \/ make trade offer/i }));
+      fireEvent.click(screen.getByRole('button', { name: /trade item/i }));
+    });
+    
     expect(screen.getByPlaceholderText(/describe your trade item/i)).toBeInTheDocument();
   });
 });
@@ -227,16 +286,20 @@ describe('ListingDetail - purchase modal', () => {
 // ─── Owner banner ─────────────────────────────────────────────────────────────
 
 describe('ListingDetail - owner banner', () => {
-  it('Test No.19 - shows the owner banner when the seller views their own listing', () => {
-    render(<ListingDetail listing={saleListing} currentUser={mockSeller} navigate={mockNavigate} />);
+  it('Test No.19 - shows the owner banner when the seller views their own listing', async () => {
+    await act(async () => {
+      render(<ListingDetail listing={saleListing} currentUser={mockSeller} navigate={mockNavigate} />);
+    });
     const banner = screen.getByTestId('owner-listing-banner');
     expect(banner).toBeInTheDocument();
     expect(banner).toHaveTextContent(/this is your listing/i);
     expect(banner).toHaveTextContent(/edit it from your profile/i);
   });
 
-  it('Test No.20 - does not show the owner banner when a buyer views the listing', () => {
-    render(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} />);
+  it('Test No.20 - does not show the owner banner when a buyer views the listing', async () => {
+    await act(async () => {
+      render(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} />);
+    });
     expect(screen.queryByTestId('owner-listing-banner')).not.toBeInTheDocument();
   });
 });
@@ -244,25 +307,35 @@ describe('ListingDetail - owner banner', () => {
 // ─── Images ───────────────────────────────────────────────────────────────────
 
 describe('ListingDetailView - images', () => {
-  it('renders main image when photos exist', () => {
-    render(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} />);
+  it('renders main image when photos exist', async () => {
+    await act(async () => {
+      render(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} />);
+    });
     expect(screen.getByAltText('Calculus Textbook')).toBeInTheDocument();
   });
 
-  it('renders no image placeholder when photos is empty', () => {
-    render(<ListingDetail listing={noPhotoListing} currentUser={mockBuyer} navigate={mockNavigate} />);
+  it('renders no image placeholder when photos is empty', async () => {
+    await act(async () => {
+      render(<ListingDetail listing={noPhotoListing} currentUser={mockBuyer} navigate={mockNavigate} />);
+    });
     expect(screen.getByText('No Image Available')).toBeInTheDocument();
   });
 
-  it('renders thumbnail row when multiple photos exist', () => {
-    render(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} />);
+  it('renders thumbnail row when multiple photos exist', async () => {
+    await act(async () => {
+      render(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} />);
+    });
     expect(screen.getAllByAltText(/thumb-/)).toHaveLength(2);
   });
 
-  it('switches main image when thumbnail is clicked', () => {
-    render(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} />);
+  it('switches main image when thumbnail is clicked', async () => {
+    await act(async () => {
+      render(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} />);
+    });
     const thumbs = screen.getAllByAltText(/thumb-/);
-    fireEvent.click(thumbs[1]);
+    await act(async () => {
+      fireEvent.click(thumbs[1]);
+    });
     expect(thumbs[1]).toHaveStyle('border: 2px solid #6AA6DA');
   });
 });
@@ -270,41 +343,55 @@ describe('ListingDetailView - images', () => {
 // ─── Listing details ──────────────────────────────────────────────────────────
 
 describe('ListingDetailView - listing details', () => {
-  it('renders title and price', () => {
-    render(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} />);
+  it('renders title and price', async () => {
+    await act(async () => {
+      render(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} />);
+    });
     expect(screen.getByText('Calculus Textbook')).toBeInTheDocument();
     expect(screen.getByText('R 150')).toBeInTheDocument();
   });
 
-  it('renders description when present', () => {
-    render(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} />);
+  it('renders description when present', async () => {
+    await act(async () => {
+      render(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} />);
+    });
     expect(screen.getByText('A great textbook')).toBeInTheDocument();
   });
 
-  it('renders specification when present', () => {
-    render(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} />);
+  it('renders specification when present', async () => {
+    await act(async () => {
+      render(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} />);
+    });
     expect(screen.getByText('3rd Edition')).toBeInTheDocument();
   });
 
-  it('renders condition and category badges', () => {
-    render(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} />);
+  it('renders condition and category badges', async () => {
+    await act(async () => {
+      render(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} />);
+    });
     expect(screen.getByText('Good')).toBeInTheDocument();
     expect(screen.getByText('Textbooks')).toBeInTheDocument();
   });
 
-  it('renders seller name on seller card', () => {
-    render(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} />);
+  it('renders seller name on seller card', async () => {
+    await act(async () => {
+      render(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} />);
+    });
     expect(screen.getByText('Test Seller')).toBeInTheDocument();
   });
 
-  it('renders seller initial when no avatar', () => {
-    render(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} />);
+  it('renders seller initial when no avatar', async () => {
+    await act(async () => {
+      render(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} />);
+    });
     expect(screen.getByText('T')).toBeInTheDocument();
   });
 
-  it('renders seller avatar image when provided', () => {
+  it('renders seller avatar image when provided', async () => {
     const listingWithAvatar = { ...saleListing, sellerAvatar: 'avatar.jpg' };
-    render(<ListingDetail listing={listingWithAvatar} currentUser={mockBuyer} navigate={mockNavigate} />);
+    await act(async () => {
+      render(<ListingDetail listing={listingWithAvatar} currentUser={mockBuyer} navigate={mockNavigate} />);
+    });
     expect(screen.getByAltText('Test Seller')).toBeInTheDocument();
   });
 });
@@ -312,22 +399,34 @@ describe('ListingDetailView - listing details', () => {
 // ─── Seller card navigation ───────────────────────────────────────────────────
 
 describe('ListingDetailView - seller card navigation', () => {
-  it('navigates to seller profile when buyer clicks seller card', () => {
-    render(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} />);
-    fireEvent.click(screen.getByTitle('View seller profile'));
+  it('navigates to seller profile when buyer clicks seller card', async () => {
+    await act(async () => {
+      render(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} />);
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByTitle('View seller profile'));
+    });
     expect(mockNavigate).toHaveBeenCalledWith('/profile/seller-uid');
   });
 
-  it('navigates to own profile when seller clicks seller card', () => {
-    render(<ListingDetail listing={saleListing} currentUser={mockSeller} navigate={mockNavigate} />);
-    fireEvent.click(screen.getByTitle('Go to your profile'));
+  it('navigates to own profile when seller clicks seller card', async () => {
+    await act(async () => {
+      render(<ListingDetail listing={saleListing} currentUser={mockSeller} navigate={mockNavigate} />);
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByTitle('Go to your profile'));
+    });
     expect(mockNavigate).toHaveBeenCalledWith('/profile');
   });
 
-  it('navigates via Enter key on seller card', () => {
-    render(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} />);
+  it('navigates via Enter key on seller card', async () => {
+    await act(async () => {
+      render(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} />);
+    });
     const card = screen.getByTitle('View seller profile');
-    fireEvent.keyDown(card, { key: 'Enter' });
+    await act(async () => {
+      fireEvent.keyDown(card, { key: 'Enter' });
+    });
     expect(mockNavigate).toHaveBeenCalledWith('/profile/seller-uid');
   });
 });
@@ -335,18 +434,24 @@ describe('ListingDetailView - seller card navigation', () => {
 // ─── Message seller ───────────────────────────────────────────────────────────
 
 describe('ListingDetailView - message seller', () => {
-  it('renders Message Seller button for buyer', () => {
-    render(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} />);
+  it('renders Message Seller button for buyer', async () => {
+    await act(async () => {
+      render(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} />);
+    });
     expect(screen.getByText('Message Seller')).toBeInTheDocument();
   });
 
-  it('does not render Message Seller button for seller', () => {
-    render(<ListingDetail listing={saleListing} currentUser={mockSeller} navigate={mockNavigate} />);
+  it('does not render Message Seller button for seller', async () => {
+    await act(async () => {
+      render(<ListingDetail listing={saleListing} currentUser={mockSeller} navigate={mockNavigate} />);
+    });
     expect(screen.queryByText('Message Seller')).not.toBeInTheDocument();
   });
 
-  it('does not render Message Seller button when not logged in', () => {
-    render(<ListingDetail listing={saleListing} currentUser={null} navigate={mockNavigate} />);
+  it('does not render Message Seller button when not logged in', async () => {
+    await act(async () => {
+      render(<ListingDetail listing={saleListing} currentUser={null} navigate={mockNavigate} />);
+    });
     expect(screen.queryByText('Message Seller')).not.toBeInTheDocument();
   });
 
@@ -358,12 +463,18 @@ describe('ListingDetailView - message seller', () => {
     };
     getDocs.mockResolvedValueOnce({ docs: [mockChatDoc] });
     
-    render(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} />);
-    fireEvent.click(screen.getByText('Message Seller'));
+    await act(async () => {
+      render(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} />);
+    });
     
+    await act(async () => {
+      fireEvent.click(screen.getByText('Message Seller'));
+    });
+    
+    // Wait for the async operation to complete
     await waitFor(() => {
       expect(mockNavigate).toHaveBeenCalledWith('/chat?open=existing-chat');
-    });
+    }, { timeout: 2000 });
   });
 
   it('creates new chat when no existing chat found', async () => {
@@ -371,8 +482,13 @@ describe('ListingDetailView - message seller', () => {
     getDocs.mockResolvedValueOnce({ docs: [] });
     addDoc.mockResolvedValueOnce({ id: 'new-chat-id' });
     
-    render(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} />);
-    fireEvent.click(screen.getByText('Message Seller'));
+    await act(async () => {
+      render(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} />);
+    });
+    
+    await act(async () => {
+      fireEvent.click(screen.getByText('Message Seller'));
+    });
     
     await waitFor(() => {
       expect(addDoc).toHaveBeenCalled();
@@ -384,8 +500,13 @@ describe('ListingDetailView - message seller', () => {
     // Make getDocs return a promise that never resolves to simulate loading
     getDocs.mockImplementationOnce(() => new Promise(() => {}));
     
-    render(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} />);
-    fireEvent.click(screen.getByText('Message Seller'));
+    await act(async () => {
+      render(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} />);
+    });
+    
+    await act(async () => {
+      fireEvent.click(screen.getByText('Message Seller'));
+    });
     
     expect(screen.getByText('Opening chat…')).toBeInTheDocument();
   });
@@ -395,32 +516,66 @@ describe('ListingDetailView - message seller', () => {
 
 describe('ListingDetailView - trade transaction', () => {
   it('calls createTransaction with trade type when trade offer confirmed', async () => {
-    render(<ListingDetail listing={tradeListing} currentUser={mockBuyer} navigate={mockNavigate} />);
-    fireEvent.click(screen.getByRole('button', { name: /make trade offer/i }));
-    fireEvent.change(screen.getByPlaceholderText(/describe your trade item/i), { target: { value: 'My old laptop' } });
+    await act(async () => {
+      render(<ListingDetail listing={tradeListing} currentUser={mockBuyer} navigate={mockNavigate} />);
+    });
+    
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /make trade offer/i }));
+    });
+    
+    await act(async () => {
+      fireEvent.change(screen.getByPlaceholderText(/describe your trade item/i), { target: { value: 'My old laptop' } });
+    });
+    
     // Select category to avoid warning
     const categorySelect = screen.getByLabelText(/category/i);
-    fireEvent.change(categorySelect, { target: { value: 'Electronics' } });
-    fireEvent.click(screen.getByRole('button', { name: /confirm & send offer/i }));
+    await act(async () => {
+      fireEvent.change(categorySelect, { target: { value: 'Electronics' } });
+    });
     
-    await waitFor(() =>
+    // Find and click a condition button
+    const conditionButton = screen.getByRole('button', { name: /good/i });
+    await act(async () => {
+      fireEvent.click(conditionButton);
+    });
+    
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /confirm & send offer/i }));
+    });
+    
+    await waitFor(() => {
       expect(createTransaction).toHaveBeenCalledWith(
-        expect.objectContaining({ type: 'trade', tradeItem: 'My old laptop' })
-      )
-    );
+        expect.objectContaining({ 
+          type: 'trade', 
+          tradeItem: 'My old laptop' 
+        })
+      );
+    });
   });
 
   it('shows alert modal when trade item is empty', async () => {
-    render(<ListingDetail listing={tradeListing} currentUser={mockBuyer} navigate={mockNavigate} />);
-    fireEvent.click(screen.getByRole('button', { name: /make trade offer/i }));
-    fireEvent.click(screen.getByRole('button', { name: /confirm & send offer/i }));
+    await act(async () => {
+      render(<ListingDetail listing={tradeListing} currentUser={mockBuyer} navigate={mockNavigate} />);
+    });
+    
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /make trade offer/i }));
+    });
+    
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /confirm & send offer/i }));
+    });
     
     await waitFor(() => {
       expect(screen.getByTestId('alert-modal')).toBeInTheDocument();
       expect(screen.getByTestId('alert-message')).toHaveTextContent('Please describe what you want to trade');
     });
     
-    fireEvent.click(screen.getByTestId('alert-close-btn'));
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('alert-close-btn'));
+    });
+    
     await waitFor(() => {
       expect(screen.queryByTestId('alert-modal')).not.toBeInTheDocument();
     });
@@ -430,19 +585,39 @@ describe('ListingDetailView - trade transaction', () => {
 // ─── Partial payment ──────────────────────────────────────────────────────────
 
 describe('ListingDetailView - partial payment', () => {
-  it('shows partial amount input when Partial Online selected', () => {
-    render(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} />);
-    fireEvent.click(screen.getByRole('button', { name: /buy now/i }));
-    fireEvent.change(screen.getByLabelText(/payment method/i), { target: { value: 'partial' } });
+  it('shows partial amount input when Partial Online selected', async () => {
+    await act(async () => {
+      render(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} />);
+    });
+    
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /buy now/i }));
+    });
+    
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText(/payment method/i), { target: { value: 'partial' } });
+    });
+    
     expect(screen.getByPlaceholderText(/enter online payment amount/i)).toBeInTheDocument();
   });
 
   it('calls createTransaction with partialAmount when partial payment used', async () => {
-    render(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} />);
-    fireEvent.click(screen.getByRole('button', { name: /buy now/i }));
-    fireEvent.change(screen.getByLabelText(/payment method/i), { target: { value: 'partial' } });
-    fireEvent.change(screen.getByPlaceholderText(/enter online payment amount/i), { target: { value: '75' } });
-    fireEvent.click(screen.getByRole('button', { name: /confirm & send offer/i }));
+    await act(async () => {
+      render(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} />);
+    });
+    
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /buy now/i }));
+    });
+    
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText(/payment method/i), { target: { value: 'partial' } });
+      fireEvent.change(screen.getByPlaceholderText(/enter online payment amount/i), { target: { value: '75' } });
+    });
+    
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /confirm & send offer/i }));
+    });
     
     await waitFor(() =>
       expect(createTransaction).toHaveBeenCalledWith(
@@ -456,9 +631,17 @@ describe('ListingDetailView - partial payment', () => {
 
 describe('ListingDetailView - offer sent', () => {
   it('shows pending banner after offer is successfully sent', async () => {
-    render(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} />);
-    fireEvent.click(screen.getByRole('button', { name: /buy now/i }));
-    fireEvent.click(screen.getByRole('button', { name: /confirm & send offer/i }));
+    await act(async () => {
+      render(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} />);
+    });
+    
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /buy now/i }));
+    });
+    
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /confirm & send offer/i }));
+    });
     
     await waitFor(() =>
       expect(screen.getByTestId('pending-offer-banner')).toBeInTheDocument()
@@ -467,9 +650,18 @@ describe('ListingDetailView - offer sent', () => {
 
   it('shows error toast when createTransaction fails', async () => {
     createTransaction.mockRejectedValueOnce(new Error('Network error'));
-    render(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} />);
-    fireEvent.click(screen.getByRole('button', { name: /buy now/i }));
-    fireEvent.click(screen.getByRole('button', { name: /confirm & send offer/i }));
+    
+    await act(async () => {
+      render(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} />);
+    });
+    
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /buy now/i }));
+    });
+    
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /confirm & send offer/i }));
+    });
     
     await waitFor(() => {
       expect(screen.getByText('Failed to create offer. Please try again.')).toBeInTheDocument();
@@ -480,17 +672,34 @@ describe('ListingDetailView - offer sent', () => {
 // ─── Terms field ──────────────────────────────────────────────────────────────
 
 describe('ListingDetailView - terms field', () => {
-  it('renders terms textarea in modal', () => {
-    render(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} />);
-    fireEvent.click(screen.getByRole('button', { name: /buy now/i }));
+  it('renders terms textarea in modal', async () => {
+    await act(async () => {
+      render(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} />);
+    });
+    
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /buy now/i }));
+    });
+    
     expect(screen.getByPlaceholderText(/seller agreed to include charger/i)).toBeInTheDocument();
   });
 
   it('passes terms value to createTransaction', async () => {
-    render(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} />);
-    fireEvent.click(screen.getByRole('button', { name: /buy now/i }));
-    fireEvent.change(screen.getByPlaceholderText(/seller agreed to include charger/i), { target: { value: 'Include charger' } });
-    fireEvent.click(screen.getByRole('button', { name: /confirm & send offer/i }));
+    await act(async () => {
+      render(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} />);
+    });
+    
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /buy now/i }));
+    });
+    
+    await act(async () => {
+      fireEvent.change(screen.getByPlaceholderText(/seller agreed to include charger/i), { target: { value: 'Include charger' } });
+    });
+    
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /confirm & send offer/i }));
+    });
     
     await waitFor(() =>
       expect(createTransaction).toHaveBeenCalledWith(
@@ -503,32 +712,47 @@ describe('ListingDetailView - terms field', () => {
 // ─── Final coverage gaps ──────────────────────────────────────────────────────
 
 describe('ListingDetailView - edge cases', () => {
-  it('line 79 — does not show Message Seller button when buyer is the seller', () => {
+  it('line 79 — does not show Message Seller button when buyer is the seller', async () => {
     const selfListing = { ...saleListing, sellerId: 'buyer-uid' };
-    render(<ListingDetail listing={selfListing} currentUser={mockBuyer} navigate={mockNavigate} />);
+    await act(async () => {
+      render(<ListingDetail listing={selfListing} currentUser={mockBuyer} navigate={mockNavigate} />);
+    });
     expect(screen.queryByText('Message Seller')).not.toBeInTheDocument();
     expect(screen.getByTestId('owner-listing-banner')).toBeInTheDocument();
   });
 
   it('line 157 — shows alert modal when no purchase type selected and confirm clicked', async () => {
-    render(<ListingDetail listing={eitherListing} currentUser={mockBuyer} navigate={mockNavigate} />);
-    fireEvent.click(screen.getByRole('button', { name: /buy now \/ make trade offer/i }));
-    fireEvent.click(screen.getByRole('button', { name: /confirm & send offer/i }));
+    await act(async () => {
+      render(<ListingDetail listing={eitherListing} currentUser={mockBuyer} navigate={mockNavigate} />);
+    });
+    
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /buy now \/ make trade offer/i }));
+    });
+    
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /confirm & send offer/i }));
+    });
     
     await waitFor(() => {
       expect(screen.getByTestId('alert-modal')).toBeInTheDocument();
       expect(screen.getByTestId('alert-message')).toHaveTextContent('Please select a transaction type');
     });
     
-    fireEvent.click(screen.getByTestId('alert-close-btn'));
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('alert-close-btn'));
+    });
+    
     await waitFor(() => {
       expect(screen.queryByTestId('alert-modal')).not.toBeInTheDocument();
     });
   });
 
-  it('line 332 — renders nothing for unrecognised listing type', () => {
+  it('line 332 — renders nothing for unrecognised listing type', async () => {
     const unknownListing = { ...saleListing, type: 'Unknown Type', listingType: 'Unknown Type' };
-    render(<ListingDetail listing={unknownListing} currentUser={mockBuyer} navigate={mockNavigate} />);
+    await act(async () => {
+      render(<ListingDetail listing={unknownListing} currentUser={mockBuyer} navigate={mockNavigate} />);
+    });
     expect(screen.queryByRole('button', { name: /buy now/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /make trade offer/i })).not.toBeInTheDocument();
     expect(screen.queryByTestId('pending-offer-banner')).not.toBeInTheDocument();
