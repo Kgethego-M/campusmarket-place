@@ -21,7 +21,7 @@
 .imageWrapper {
     position: relative;
     width: 100%;
-    height: 180px;        /* fixed height instead of aspect-ratio */
+    height: 150px;          /* reduced from 180px for better mobile fit */
     background-color: #f0f2f5;
     overflow: hidden;
 }
@@ -92,25 +92,28 @@
 
 /* ── Body ── */
 .body {
-    padding: 12px 12px 0 12px;
+    padding: 10px 10px 0 10px;
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: 3px;
     flex: 1;
 }
 
 .title {
-    font-size: 0.9rem;
+    font-size: 0.85rem;
     font-weight: 600;
     color: #1a1a1a;
     margin: 0;
-    white-space: nowrap;
+    /* Allow wrapping to 2 lines so full title is readable */
     overflow: hidden;
-    text-overflow: ellipsis;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    line-height: 1.3;
 }
 
 .price {
-    font-size: 0.875rem;
+    font-size: 0.82rem;
     font-weight: 700;
     color: #3d87c8;
     margin: 0;
@@ -120,25 +123,25 @@
 .actionRow {
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 12px;
-    margin-top: 8px;
+    gap: 6px;
+    padding: 10px;
+    margin-top: 6px;
     border-top: 1px solid #e8eaed;
 }
 
 .editButton,
 .deleteButton {
     flex: 1;
-    padding: 8px 0;
+    padding: 7px 0;
     border-radius: 6px;
-    font-size: 0.78rem;
+    font-size: 0.75rem;
     font-weight: 600;
     cursor: pointer;
     transition: all 0.18s ease;
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 6px;
+    gap: 5px;
 }
 
 .editButton {
@@ -152,7 +155,6 @@
     transform: translateY(-1px);
 }
 
-/* ── Delete button — outlined red (matches Clear All in cart) ── */
 .deleteButton {
     background: none;
     border: 1.5px solid #fca5a5;
@@ -463,33 +465,64 @@
 }
 
 /* ── Compact mode ── */
-.compact .body {
-    padding: 10px 10px 0 10px;
+.compact .imageWrapper {
+    height: 110px;   /* tighter image in compact grid */
 }
 
-.compact .title { font-size: 0.8rem; }
-.compact .price { font-size: 0.75rem; }
+.compact .body {
+    padding: 7px 8px 0 8px;
+    gap: 2px;
+}
+
+.compact .title {
+    font-size: 0.75rem;
+    -webkit-line-clamp: 2;
+}
+
+.compact .price {
+    font-size: 0.72rem;
+}
 
 .compact .actionRow {
-    padding: 8px 10px;
+    padding: 7px 8px;
+    gap: 5px;
+    margin-top: 4px;
 }
 
 .compact .editButton,
 .compact .deleteButton {
     padding: 6px 0;
-    font-size: 0.7rem;
+    font-size: 0.68rem;
+    gap: 3px;
+    border-radius: 5px;
 }
 
-@media (max-width: 600px) {
-  /* Listings — match desktop 2-col layout */
-  .listingsGrid {
-    grid-template-columns: repeat(2, 1fr);
-    gap: 10px;
-    padding-left: 5px;
-    align-items: stretch;
-  }
+/* On very narrow cards show icons only */
+@media (max-width: 400px) {
+    .compact .editButton i ~ *,
+    .compact .deleteButton i ~ * {
+        display: none;
+    }
 
-  .listingCardWrap {
-    height: 100%;
-  }
+    .compact .editButton,
+    .compact .deleteButton {
+        padding: 7px 0;
+    }
+
+    .compact .imageWrapper {
+        height: 95px;
+    }
+}
+
+/* ── Standalone listings grid (not inside Profile compact) ── */
+@media (max-width: 600px) {
+    .imageWrapper {
+        height: 130px;
+    }
+}
+
+@media (max-width: 400px) {
+    .imageWrapper {
+        height: 110px;
+    }
 }

@@ -2,9 +2,11 @@
 .page {
   display: flex;
   height: calc(100vh - 64px);
+  height: calc(100dvh - 64px);
   background: #efeae2;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   overflow: hidden;
+  position: relative;
 }
 
 /* ════════════════════════════════════════════
@@ -423,7 +425,7 @@
   color: #6AA6DA;
   font-size: 0.9rem;
   cursor: pointer;
-  display: none;
+  display: none;            /* hidden on desktop, shown on mobile */
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
@@ -558,7 +560,7 @@
 .bubbleMe .msgTime   { color: #6a9a6a; }
 .bubbleThem .msgTime { color: #9ca3af; }
 
-/* ── Image bubbles — fixed uniform size ── */
+/* ── Image bubbles ── */
 .bubbleImg {
   width: 200px;
   height: 200px;
@@ -625,6 +627,7 @@
   background: #f8fafc;
   outline: none;
   transition: border-color 0.15s, background 0.15s;
+  min-width: 0;         /* prevent flex overflow */
 }
 
 .textInput:focus {
@@ -659,7 +662,6 @@
 ════════════════════════════════════════════ */
 .chatMenuWrap {
   position: relative;
-  margin-left: auto;
   flex-shrink: 0;
 }
 
@@ -772,63 +774,93 @@
    RESPONSIVE — MOBILE (≤ 720px)
 ════════════════════════════════════════════ */
 @media (max-width: 720px) {
+  .page {
+    /* stack sidebar and chat as full-screen layers */
+    display: block;
+    position: relative;
+    /* subtract top navbar (64px) + bottom nav bar (60px) */
+    height: calc(100vh - 64px - 60px);
+    height: calc(100dvh - 64px - 60px);
+    overflow: hidden;
+  }
+
+  /* ── Sidebar: full screen, slides in/out ── */
   .sidebar {
     width: 100%;
     min-width: 100%;
+    height: 100%;
     position: absolute;
     top: 0;
     left: 0;
-    height: 100%;
+    transform: translateX(0);
+    transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+    z-index: 10;
   }
 
+  /* When a chat is open, slide sidebar off to the left */
   .sidebarMobileHidden {
     transform: translateX(-100%);
     pointer-events: none;
   }
 
+  /* ── Chat panel: full screen, slides in from the right ── */
   .chatPanel {
     width: 100%;
+    height: 100%;
     position: absolute;
     top: 0;
     left: 0;
-    height: 100%;
+    transform: translateX(100%);   /* off-screen right by default */
+    transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+    z-index: 10;
+    display: flex;                 /* always mounted so msgs can load */
+    flex-direction: column;
   }
 
-  .chatPanelMobileHidden { display: none; }
+  /* When a chat IS open, slide panel in */
+  .chatPanel:not(.chatPanelMobileHidden) {
+    transform: translateX(0);
+  }
+
+  /* Keep it rendered but off-screen when hidden */
+  .chatPanelMobileHidden {
+    transform: translateX(100%);
+    pointer-events: none;
+  }
 
   /* Back button always visible on mobile */
-  .chatBackBtn { display: flex !important; }
+  .chatBackBtn {
+    display: flex !important;
+  }
 
-  /* Header stays fully visible on small screens */
+  /* Header */
   .chatHeader {
     padding: 8px 10px;
     gap: 6px;
     min-height: 56px;
   }
 
-  .headerProfile {
-    gap: 7px;
-  }
+  .headerProfile { gap: 7px; }
 
   .headerName {
     font-size: 0.85rem;
-    max-width: calc(100vw - 140px);
+    max-width: calc(100vw - 130px);
   }
 
   .headerSub {
     font-size: 0.68rem;
-    max-width: calc(100vw - 140px);
+    max-width: calc(100vw - 130px);
   }
 
-  /* Slightly smaller images on mobile but still uniform */
+  /* Bubbles */
+  .bubble { max-width: 80%; }
+
   .bubbleImg {
     width: 160px;
     height: 160px;
   }
 
-  .bubble { max-width: 80%; }
-
-  /* Input bar tighter on mobile */
+  /* Input bar */
   .inputBar {
     padding: 8px 10px;
     gap: 7px;
@@ -839,7 +871,7 @@
     font-size: 0.84rem;
   }
 
-  /* Lightbox full screen on mobile */
+  /* Lightbox */
   .lightboxImg {
     max-width: 96vw;
     max-height: 80vh;

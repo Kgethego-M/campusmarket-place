@@ -55,19 +55,19 @@ export default function Chat() {
   const [lightboxSrc, setLightboxSrc]     = useState(null);
 
   // 3-dot menu
-  const [menuOpen, setMenuOpen]         = useState(false);
-  const menuRef                         = useRef(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef                 = useRef(null);
 
   // Report modal
-  const [reportOpen, setReportOpen]     = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
 
-  const fileInputRef   = useRef(null);
-  const messagesEndRef = useRef(null);
+  const fileInputRef    = useRef(null);
+  const messagesEndRef  = useRef(null);
   const resolvedUidsRef = useRef(new Set());
 
-  const activeConv   = conversations.find((c) => c.id === activeId);
-  const mediaItems   = messages.filter((m) => m.type === "image" || m.type === "video");
-  const otherUidActive = activeConv
+  const activeConv        = conversations.find((c) => c.id === activeId);
+  const mediaItems        = messages.filter((m) => m.type === "image" || m.type === "video");
+  const otherUidActive    = activeConv
     ? (activeConv.participants || []).find((p) => p !== me?.uid)
     : null;
   const otherProfileActive = otherUidActive
@@ -94,11 +94,9 @@ export default function Chat() {
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
-  // Close lightbox on Escape key
+  // Close lightbox on Escape
   useEffect(() => {
-    const handler = (e) => {
-      if (e.key === "Escape") setLightboxSrc(null);
-    };
+    const handler = (e) => { if (e.key === "Escape") setLightboxSrc(null); };
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
   }, []);
@@ -114,10 +112,7 @@ export default function Chat() {
         const name =
           `${d.firstName || ""} ${d.lastName || ""}`.trim() ||
           d.displayName || d.name || d.email || uid;
-        setUserProfiles((prev) => ({
-          ...prev,
-          [uid]: { name, photoURL: d.photoURL || null },
-        }));
+        setUserProfiles((prev) => ({ ...prev, [uid]: { name, photoURL: d.photoURL || null } }));
       }
     } catch {}
   }
@@ -143,7 +138,10 @@ export default function Chat() {
   // Subscribe to messages
   useEffect(() => {
     if (!activeId) return;
-    const q = query(collection(db, "chats", activeId, "messages"), orderBy("timestamp", "asc"));
+    const q = query(
+      collection(db, "chats", activeId, "messages"),
+      orderBy("timestamp", "asc")
+    );
     const unsub = onSnapshot(q, (snap) => {
       setMessages(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
     });
@@ -226,7 +224,6 @@ export default function Chat() {
     setMenuOpen(false);
     if (otherUidActive) navigate(`/profile/${otherUidActive}`);
   }
-
   function handleReportUser() {
     setMenuOpen(false);
     setReportOpen(true);
@@ -353,6 +350,8 @@ export default function Chat() {
 
         {/* ═══ CHAT PANEL ═══ */}
         <main className={`${styles.chatPanel} ${!activeId ? styles.chatPanelMobileHidden : ""}`}>
+
+          {/* Empty state — only shown on desktop when no chat is open */}
           {!activeId && (
             <div className={styles.noChat}>
               <i className="fa-solid fa-comments" />
@@ -365,18 +364,15 @@ export default function Chat() {
             const otherProfile = getOtherProfile(activeConv);
             return (
               <>
-                {/* ── Header with name + 3-dot menu ── */}
+                {/* ── Header ── */}
                 <header className={styles.chatHeader}>
-                  <button className={styles.chatBackBtn} onClick={goBackToList}>
+                  <button className={styles.chatBackBtn} onClick={goBackToList} aria-label="Back">
                     <i className="fa-solid fa-arrow-left" />
                   </button>
 
-                  {/* Clickable profile area */}
                   <button
                     className={styles.headerProfile}
-                    onClick={() => {
-                      if (otherUidActive) navigate(`/profile/${otherUidActive}`);
-                    }}
+                    onClick={() => { if (otherUidActive) navigate(`/profile/${otherUidActive}`); }}
                   >
                     <Avatar name={otherProfile.name} photoURL={otherProfile.photoURL} size={38} />
                     <div className={styles.headerMeta}>
@@ -387,23 +383,18 @@ export default function Chat() {
                     </div>
                   </button>
 
-                  {/* 3-dot vertical menu */}
+                  {/* 3-dot menu */}
                   <div className={styles.chatMenuWrap} ref={menuRef}>
                     <button
                       className={styles.chatMenuBtn}
                       onClick={() => setMenuOpen(v => !v)}
                       aria-label="More options"
-                      title="More options"
                     >
                       <span className={styles.dotMenu}>⋮</span>
                     </button>
-
                     {menuOpen && (
                       <div className={styles.chatDropdown}>
-                        <button
-                          className={styles.chatDropdownItem}
-                          onClick={handleViewProfile}
-                        >
+                        <button className={styles.chatDropdownItem} onClick={handleViewProfile}>
                           <i className="fas fa-user" style={{ width: 16 }} />
                           View Profile
                         </button>
@@ -419,7 +410,7 @@ export default function Chat() {
                   </div>
                 </header>
 
-                {/* Messages */}
+                {/* ── Messages ── */}
                 <div className={styles.messagesWrap}>
                   <div className={styles.messages}>
                     {messages.map((msg) => {
@@ -457,7 +448,7 @@ export default function Chat() {
                   </div>
                 </div>
 
-                {/* Input bar */}
+                {/* ── Input bar ── */}
                 <div className={styles.inputBar}>
                   <input
                     type="file"
@@ -492,7 +483,7 @@ export default function Chat() {
                   </button>
                 </div>
 
-                {/* Lightbox */}
+                {/* ── Lightbox ── */}
                 {lightboxSrc && (
                   <div className={styles.lightboxOverlay} onClick={() => setLightboxSrc(null)}>
                     <img

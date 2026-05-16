@@ -359,10 +359,16 @@ export default function TradeFacility() {
       ]);
 
       const ORDER = { waiting: 0, accepted: 1, awaiting_collection: 2, completed: 3 };
-      enrichedSeller.sort((a, b) => (ORDER[a.status] ?? 9) - (ORDER[b.status] ?? 9));
+
+      // Hide transactions where the seller has already confirmed drop-off
+      const filteredSeller = enrichedSeller.filter(
+        (txn) => !txn.dropOffConfirmed && !txn.sellerDropOffConfirmed
+      );
+
+      filteredSeller.sort((a, b) => (ORDER[a.status] ?? 9) - (ORDER[b.status] ?? 9));
       enrichedBuyer.sort((a, b)  => (ORDER[a.status] ?? 9) - (ORDER[b.status] ?? 9));
 
-      setSellerTransactions(enrichedSeller);
+      setSellerTransactions(filteredSeller);
       setBuyerTransactions(enrichedBuyer);
     } catch (err) {
       console.error("Error fetching transactions:", err);
