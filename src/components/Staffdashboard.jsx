@@ -324,23 +324,49 @@ function TransactionDetailPanel({ txn, onClose, onConfirmDropOff, onConfirmColle
     const isPartial        = !isTrade && (paymentMethod === "partial" || paymentMethod === "partial_online" || paymentMethod === "split" || paymentMethod === "partially online" || paymentMethod === "partially_online");
 
     const totalPrice       = txn.price ?? 0;
-    const onlineAmountPaid = txn.onlineAmountPaid ?? 0;
-    const shortfall        = isTrade || isFullyOnline
-        ? 0
-        : isPartial
-            ? Math.max(0, totalPrice - onlineAmountPaid)
-            : (txn.cashShortfall > 0 ? txn.cashShortfall : totalPrice);
+const onlineAmountPaid = txn.onlineAmountPaid ?? 0;
 
-    const hasShortfall = !isTrade && !isFullyOnline && (isFullyCash || isPartial);
+// Calculate shortfall correctly for all payment types
+const shortfall = (() => {
+    // Trade transactions have no cash payment
+    if (isTrade) return 0;
+    // Fully online - no cash to collect
+    if (isFullyOnline) return 0;
+    // Partial payment - remaining cash after online payment
+    if (isPartial) return Math.max(0, totalPrice - onlineAmountPaid);
+    // Full cash / COD - use cashShortfall if set, otherwise total price
+    if (isFullyCash) {
+        // If cash already collected, shortfall is 0
+        if (txn.cashCollected === true) return 0;
+        // Use cashShortfall from transaction or fall back to total price
+        return (txn.cashShortfall !== undefined && txn.cashShortfall !== null && txn.cashShortfall > 0) 
+            ? txn.cashShortfall 
+            : totalPrice;
+    }
+    // Default fallback
+    return txn.cashShortfall > 0 ? txn.cashShortfall : totalPrice;
+})();
 
-    const [cashConfirmed, setCashConfirmed] = useState(
-        isFullyOnline || txn.paymentStatus === "Fully Paid"
-    );
-    const [saving,        setSaving]        = useState(false);
-    const [alertSending,  setAlertSending]  = useState(false);
-    const [alertSent,     setAlertSent]     = useState(!!txn.overdueAlertSentAt);
-    const [dropOffLoading,    setDropOffLoading]    = useState(false);
-    const [collectionLoading, setCollectionLoading] = useState(false);
+const hasShortfall = !isTrade && !isFullyOnline && (isFullyCash || isPartial);
+
+// Check if cash has been collected (for cash/partial transactions)
+const isCashCollected = txn.cashCollected === true || txn.paymentStatus === "Fully Paid";
+
+// For cash/COD transactions, only show paid when cash has been collected
+const isPaid = isFullyOnline || 
+              (txn.paymentStatus === "Fully Paid") || 
+              (isFullyCash && isCashCollected) ||
+              (isPartial && isCashCollected) ||
+              (!isFullyCash && !isPartial && shortfall === 0);
+
+const [cashConfirmed, setCashConfirmed] = useState(
+    isFullyOnline || isCashCollected
+);
+const [saving,        setSaving]        = useState(false);
+const [alertSending,  setAlertSending]  = useState(false);
+const [alertSent,     setAlertSent]     = useState(!!txn.overdueAlertSentAt);
+const [dropOffLoading,    setDropOffLoading]    = useState(false);
+const [collectionLoading, setCollectionLoading] = useState(false);
 
     const canConfirmCash = !isFullyOnline && hasShortfall && !cashConfirmed;
     const canRelease     = allChecked;
@@ -1136,23 +1162,26 @@ const isPaid = isFullyOnline ||
         <span className={styles.txnTag}>
             Purchase · R{totalPrice?.toLocaleString()}
             {(() => {
-                const isCashPayment = paymentMethod === "cash" || paymentMethod === "cod" || paymentMethod === "fully_cash";
+                const isCashPaymentLocal = paymentMethod === "cash" || paymentMethod === "cod" || paymentMethod === "fully_cash";
                 const isCashCollected = txn.cashCollected === true || txn.paymentStatus === "Fully Paid";
                 
                 if (isFullyOnline) {
                     return <span className={styles.paidChip}><i className="fa-solid fa-wifi" /> Online</span>;
                 }
-                if (isCashPayment && isCashCollected) {
+                if (isCashPaymentLocal && isCashCollected) {
                     return <span className={styles.paidChip}><i className="fa-solid fa-circle-check" /> Cash Collected</span>;
                 }
-                if (isCashPayment && !isCashCollected) {
+                if (isCashPaymentLocal && !isCashCollected && shortfall > 0) {
                     return <span className={styles.shortfallChip}><i className="fa-solid fa-coins" /> R{shortfall.toLocaleString()} cash due at pickup</span>;
                 }
                 if (isPaid) {
                     return <span className={styles.paidChip}><i className="fa-solid fa-circle-check" /> Paid</span>;
                 }
-                if (isPartialCard) {
+                if (isPartialCard && shortfall > 0) {
                     return <span className={styles.shortfallChip}><i className="fa-solid fa-coins" /> R{shortfall.toLocaleString()} cash due</span>;
+                }
+                if (shortfall > 0) {
+                    return <span className={styles.shortfallChip}><i className="fa-solid fa-coins" /> R{shortfall.toLocaleString()} payment pending</span>;
                 }
                 return <span className={styles.shortfallChip}><i className="fa-solid fa-triangle-exclamation" /> Payment pending</span>;
             })()}
