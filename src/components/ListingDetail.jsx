@@ -867,7 +867,6 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
               onClick={handleMessageSeller}
               disabled={chatLoading}
               data-testid="message-seller-btn"
-              aria-label={chatLoading ? 'Opening chat…' : 'Message Seller'}
             >
               {chatLoading
                 ? <><IconLoader /><span data-testid="chat-loading-text">Opening chat…</span></>
@@ -990,11 +989,22 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
                   <label htmlFor="agreed-price" style={modalStyles.label}>
                     Agreed Price (R) <span style={{ color: '#dc2626' }}>* (Minimum R10)</span>
                   </label>
-                  <input id="agreed-price" type="number" value={agreedPrice}
-                    onChange={(e) => setAgreedPrice(e.target.value)} style={modalStyles.input}/>
+                  <input 
+                    id="agreed-price" 
+                    aria-label="Agreed price"
+                    type="number" 
+                    value={agreedPrice}
+                    onChange={(e) => setAgreedPrice(e.target.value)} 
+                    style={modalStyles.input}
+                  />
                   <label htmlFor="payment-method" style={modalStyles.label}>Payment Method</label>
-                  <select id="payment-method" value={paymentType}
-                    onChange={(e) => setPaymentType(e.target.value)} style={modalStyles.input}>
+                  <select 
+                    id="payment-method" 
+                    aria-label="Payment method"
+                    value={paymentType}
+                    onChange={(e) => setPaymentType(e.target.value)} 
+                    style={modalStyles.input}
+                  >
                     <option value="full_online">Fully Online</option>
                     <option value="partial">Partial Online / Partial Cash</option>
                     <option value="cash">Full Cash on Delivery</option>
@@ -1006,6 +1016,7 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
                       </label>
                       <input
                         id="partial-amount"
+                        aria-label="Online payment amount"
                         type="number"
                         placeholder="Enter online payment amount"
                         value={partialAmount}
@@ -1039,8 +1050,11 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
                     </span>
                   </div>
 
-                  <label style={modalStyles.label}>Item Name <span style={{ color: '#dc2626' }}>*</span></label>
+                  <label htmlFor="trade-item-name" style={modalStyles.label}>Item Name <span style={{ color: '#dc2626' }}>*</span></label>
                   <input
+                    id="trade-item-name"
+                    name="tradeItemName"
+                    aria-label="Trade item name"
                     type="text"
                     placeholder="Describe your trade item (e.g. Sony WH-1000XM4 Headphones)"
                     value={tradeItemName}
@@ -1048,8 +1062,11 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
                     style={modalStyles.input}
                   />
 
-                  <label style={modalStyles.label}>Category <span style={{ color: '#dc2626' }}>*</span></label>
+                  <label htmlFor="trade-category" style={modalStyles.label}>Category <span style={{ color: '#dc2626' }}>*</span></label>
                   <select
+                    id="trade-category"
+                    name="tradeCategory"
+                    aria-label="Category"
                     value={tradeItemCategory}
                     onChange={(e) => setTradeItemCategory(e.target.value)}
                     style={{ ...modalStyles.input, color: tradeItemCategory ? '#1a1a1a' : '#9ca3af' }}
@@ -1064,6 +1081,7 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
                       <button
                         key={label}
                         type="button"
+                        aria-label={`Condition ${label}`}
                         onClick={() => setTradeItemCondition(label)}
                         style={{
                           padding: '8px 4px', borderRadius: 8,
@@ -1081,11 +1099,14 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
                     ))}
                   </div>
 
-                  <label style={modalStyles.label}>
+                  <label htmlFor="trade-description" style={modalStyles.label}>
                     Description{' '}
                     <span style={{ color: '#6b7280', fontWeight: '400' }}>(optional)</span>
                   </label>
                   <textarea
+                    id="trade-description"
+                    name="tradeDescription"
+                    aria-label="Trade item description"
                     placeholder="Brand, model, age, included accessories, any defects…"
                     value={tradeItemDesc}
                     onChange={(e) => setTradeItemDesc(e.target.value)}
@@ -1106,6 +1127,7 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
                       />
                       <button
                         type="button"
+                        aria-label="Remove image"
                         onClick={() => {
                           if (tradeImagePreview) URL.revokeObjectURL(tradeImagePreview);
                           setTradeImageFile(null);
@@ -1117,7 +1139,6 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
                           width: 28, height: 28, borderRadius: '50%', cursor: 'pointer',
                           fontSize: '0.85rem', display: 'flex', alignItems: 'center', justifyContent: 'center',
                         }}
-                        aria-label="Remove image"
                       >✕</button>
                       <p style={{ fontSize: '0.72rem', color: '#16a34a', margin: '6px 0 0', fontFamily: 'Segoe UI, system-ui, sans-serif' }}>
                         ✓ Photo ready
@@ -1174,8 +1195,10 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
 
               {/* ── Optional terms ── */}
               <div style={modalStyles.section}>
-                <label style={modalStyles.label}>Changes to terms (optional)</label>
+                <label htmlFor="terms" style={modalStyles.label}>Changes to terms (optional)</label>
                 <textarea
+                  id="terms"
+                  aria-label="Terms"
                   placeholder="E.g. Seller agreed to include charger..."
                   value={terms}
                   onChange={(e) => setTerms(e.target.value)}
@@ -1325,7 +1348,6 @@ const styles = {
   ownerBanner:         { display: 'flex', alignItems: 'center', gap: '12px', padding: '16px', backgroundColor: '#e8f4fd', border: '1px solid #90caf9', borderRadius: '10px', fontFamily: 'Segoe UI, system-ui, sans-serif' },
   ownerBannerTitle:    { margin: '0 0 4px', fontWeight: '700', fontSize: '0.95rem', color: '#0d47a1' },
   ownerBannerSubtitle: { margin: '0', fontSize: '0.85rem', color: '#1565c0' },
-  // Green pill shown when listing is already promoted
   promotedBadge: {
     display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
     padding: '12px 16px', marginTop: '8px',
