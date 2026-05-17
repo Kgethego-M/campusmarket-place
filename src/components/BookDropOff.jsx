@@ -394,22 +394,42 @@ export default function BookDropOff() {
 
         const listingTitle = listing?.title ?? "your item";
 
-        // Use notification service
-        await notifyDropOffBooked({
-          transactionId: transaction.id,
-          sellerId:      transaction.sellerId,
-          buyerId:       transaction.buyerId,
-          listingId:     transaction.listingId,
-          listingTitle:  listingTitle,
-          role:          'seller',
-          date:          selectedDate,
-          timeSlot:      selectedTimeSlot,
-          tradeItemName: transaction.type === 'trade' 
-            ? (typeof transaction.tradeItem === 'object' 
-                ? transaction.tradeItem?.name 
-                : transaction.tradeItem)
-            : null,
-        });
+        // Notify seller: their drop-off slot is confirmed, with item name
+        try {
+          await addDoc(collection(db, "notifications"), {
+            userId:        transaction.sellerId,
+            type:          "dropoff_booked",
+            transactionId: transaction.id,
+            listingId:     transaction.listingId,
+            listingTitle,
+            title:         "Drop-off slot booked",
+            message:       `Your drop-off for "${listingTitle}" is confirmed for ${selectedDate} at ${selectedTimeSlot}.`,
+            linkTo:        "/trade-facility",
+            read:          false,
+            createdAt:     serverTimestamp(),
+          });
+        } catch (_) {}
+
+        // For trade: prompt buyer to book their own drop-off slot if they haven't yet
+        if (transaction.type === 'trade' && !latestData.buyerBookingId) {
+          const tradeItemName = typeof transaction.tradeItem === 'object'
+            ? transaction.tradeItem?.name
+            : (transaction.tradeItem || 'your trade item');
+          try {
+            await addDoc(collection(db, "notifications"), {
+              userId:        transaction.buyerId,
+              type:          "trade_dropoff_required",
+              transactionId: transaction.id,
+              listingId:     transaction.listingId,
+              listingTitle,
+              title:         "Book your trade drop-off",
+              message:       `The seller has booked their drop-off for "${listingTitle}". Now book your slot to drop off "${tradeItemName}".`,
+              linkTo:        `/book-dropoff/${transaction.id}`,
+              read:          false,
+              createdAt:     serverTimestamp(),
+            });
+          } catch (_) {}
+        }
       }
 
       // ── BUYER PATH ─────────────────────────────────────────────────────────

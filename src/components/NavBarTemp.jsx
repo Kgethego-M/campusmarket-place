@@ -85,59 +85,60 @@ const COLOR_MAP = {
 const notificationIcon  = (type) => ICON_MAP[type]  || 'fa-bell';
 const notificationColor = (type) => COLOR_MAP[type] || '#94a3b8';
 
-// ── Human-readable message ────────────────────────────────────────────────────
+/**
+ * Resolves the best deep-link URL for a notification and navigates to it.
+ *
+ * MyPurchases  supports: ?filter=<status>&open=<transactionId>
+ * TradeFacility supports: ?tab=<seller|buyer>&highlight=<transactionId>
+ */
+async function resolveAndNavigate(notification, currentUser, navigate) {
+    const transactionId =
+        notification.transactionId  ||
+        notification.transaction_id ||
+        notification.txnId          ||
+        notification.txId           ||
+        null;
 
-const notificationMessage = (n) => {
-    // Prefer the pre-built message stored on the document itself
-    if (n.message) return n.message;
+    // If we have a transactionId, verify the role from Firestore and use it
+    if (transactionId && currentUser) {
+        try {
+            const txSnap = await getDoc(doc(db, 'transactions', transactionId));
+            if (txSnap.exists()) {
+                const isSeller = txSnap.data().sellerId === currentUser.uid;
+                const status   = txSnap.data().status;
 
-    const title = n.listingTitle ? `"${n.listingTitle}"` : 'your item';
-    const price = n.agreedPrice  ? ` · R${Number(n.agreedPrice).toLocaleString('en-ZA')}` : '';
-    const buyer = n.buyerName    || 'A student';
+                // Map transaction status → MyPurchases filter
+                const STATUS_TO_FILTER = {
+                    accepted:            'accepted',
+                    pending_payment:     'accepted',
+                    waiting:             'waiting',
+                    awaiting_collection: 'awaiting_collection',
+                };
+                const filter = STATUS_TO_FILTER[status] || 'all';
 
-    switch (n.type) {
-        case 'buyer_paid':                  return `${buyer} has paid for ${title}. Book a drop-off slot now.`;
-        case 'new_offer':                   return `${buyer} made an offer on ${title}${price}`;
-        case 'offer_accepted':              return `Your offer on ${title} was accepted! Tap to complete payment.${price}`;
-        case 'trade_waiting':               return `Your trade offer on ${title} was accepted — book your drop-off slot.`;
-        case 'offer_declined':              return `Your offer on ${title} was declined.`;
-        case 'item_received_at_facility':   return `${title} has been received at the trade facility.`;
-        case 'item_at_facility':            return `${title} has been dropped off. Show your receipt to staff when collecting.`;
-        case 'item_ready_for_collection':   return `${title} is ready for collection at the trade facility.`;
-        case 'item_collected':              return `${title} has been collected. Transaction complete!`;
-        case 'transaction_complete':        return `Your sale of ${title} is complete${price}.`;
-        case 'dropoff_booked':              return `Drop-off slot booked for ${title}.`;
-        case 'buyer_dropoff_booked':        return `Trade drop-off confirmed for ${title}.`;
-        case 'seller_dropoff_booked':       return `Seller has scheduled drop-off for ${title}.`;
-        case 'trade_dropoff_required':      return `Book your trade drop-off slot for ${title}.`;
-        case 'overdue_collection_buyer':    return `Your collection of ${title} is overdue. Come to the trade facility as soon as possible.`;
-        case 'overdue_collection_seller':   return `The buyer has not yet collected ${title}. They have been notified.`;
-        case 'overdue_dropoff_seller':      return `Your drop-off for ${title} is overdue. Please bring your item to the facility.`;
-        case 'overdue_dropoff_buyer':       return `The seller has not yet dropped off ${title}. They have been notified.`;
-        case 'cancelled_dropoff_seller':    return `Your transaction for ${title} has been cancelled — missed drop-off.`;
-        case 'cancelled_dropoff_buyer':     return `Your transaction for ${title} was cancelled — the seller did not drop off in time.`;
-        case 'cancelled_collection_seller': return `The buyer did not collect ${title} — please collect your item from the facility.`;
-        case 'cancelled_collection_buyer':  return `Your transaction for ${title} was cancelled due to non-collection.`;
-        case 'rate_seller':                 return `Rate your experience with ${n.reviewedUserName || 'the seller'} for ${title}`;
-        case 'rate_buyer':                  return `Rate your buyer ${n.reviewedUserName || ''}${n.listingTitle ? ` — ${title}` : ''}`;
-        default:                            return 'Notification';
+                if (isSeller) {
+                    // Seller → Trade Facility, highlight the transaction card
+                    navigate(`/trade-facility?tab=seller&highlight=${transactionId}`);
+                } else {
+                    // Buyer → My Purchases
+                    navigate('/my-purchases');
+                }
+                return;
+            }
+        } catch (err) {
+            console.error('NavBar: resolveAndNavigate error', err);
+        }
     }
-};
 
-// ── Rate-notification persistence check ──────────────────────────────────────
-// A rate_* notification should stay visible until the user has submitted a review.
-
-async function _hasSubmittedReview(reviewerUid, reviewedUserId, listingId) {
-    try {
-        const snap = await getDocs(query(
-            collection(db, 'reviews'),
-            where('reviewerUserId', '==', reviewerUid),
-            where('reviewedUserId', '==', reviewedUserId),
-            where('listingId',      '==', listingId),
-        ));
-        return !snap.empty;
-    } catch {
-        return false;
+    // Fallback: use notification type to determine destination
+    const isBuyerNotification = BUYER_TYPES.includes(notification.type);
+    if (isBuyerNotification) {
+        navigate('/my-purchases');
+    } else {
+        const dest = transactionId
+            ? `/trade-facility?tab=seller&highlight=${transactionId}`
+            : '/trade-facility';
+        navigate(dest);
     }
 }
 
@@ -172,17 +173,53 @@ export default function Navbar() {
 
     const handleNotificationClick = async (n) => {
         setNotificationsOpen(false);
-        await markAsRead(n.id);
 
-        if (n.redirectPath) {
-            navigate(n.redirectPath);
+        if (n.source === 'offer') {
+            await markOfferAsRead(n.id);
+
+            if (n.type === 'new_offer') {
+                // Deep-link to the Offers tab on the profile page, highlighting the specific offer
+                const highlight = n.transactionId || n.listingId || '';
+                navigate(`/profile?tab=offers&highlight=${highlight}`);
+
+            } else if (n.type === 'offer_accepted_seller') {
+                // Seller accepted an offer — go straight to their card in Trade Facility
+                const highlight = n.transactionId || '';
+                navigate(`/trade-facility?tab=seller${highlight ? `&highlight=${highlight}` : ''}`);
+
+            } else if (n.type === 'offer_accepted') {
+                // Cash offers → show the purchase card; online/partial → Stripe payment page
+                const pm = (n.paymentMethod || '').toLowerCase();
+                const isCashNotif = pm === 'cash' || pm === 'cod' || pm === 'fully_cash';
+                if (isCashNotif && n.transactionId) {
+                    navigate(`/my-purchases?open=${n.transactionId}`);
+                } else {
+                    navigate(`/payment/${n.transactionId}`);
+                }
+
+            } else if (n.type === 'offer_declined') {
+                // Nothing specific to open — browse listings
+                navigate('/view-listing');
+
+            } else {
+                // All other types (buyer_paid, item_at_facility, overdue, cancelled, etc.)
+                await resolveAndNavigate(n, currentUser, navigate);
+            }
+
+        } else if (n.source === 'rating') {
+            // Save to localStorage so the test (and any session-level tracking) can confirm
+            // the click was registered — but we do NOT remove it from state here.
+            // The notification stays in the bell until the user actually submits a review.
+            markRatingAsRead(n.id);
+            navigate(
+                `/review/${n.listingId}` +
+                `?reviewedUserId=${n.reviewedUserId}` +
+                `&name=${encodeURIComponent(n.reviewedUserName)}` +
+                `&role=${n.role}` +
+                `&purchaseId=${n.purchaseId}`
+            );
         }
-        // If redirectPath is null (e.g. offer_declined, overdue_*), just dismiss — no navigation.
     };
-
-    // ── Mark all read ─────────────────────────────────────────────────────────
-    // Skip rate_* notifications — those stay until a review is submitted,
-    // so "mark all read" only clears transactional ones.
 
     const handleMarkAllRead = async () => {
         const transactional = notifications.filter(
@@ -191,8 +228,117 @@ export default function Navbar() {
         try {
             await Promise.all(transactional.map(n => markAsRead(n.id)));
         } catch (err) {
-            console.error('handleMarkAllRead failed:', err);
+            console.error('Failed to mark all as read:', err);
         }
+    };
+
+    const notificationIcon = (type) => {
+        if (type === 'offer_accepted_seller')                       return 'fa-calendar-plus';
+        if (type === 'buyer_paid')                           return 'fa-money-bill-wave';
+        if (type === 'new_offer')                            return 'fa-shopping-cart';
+        if (type === 'offer_accepted')                       return 'fa-circle-check';
+        if (type === 'trade_waiting')                        return 'fa-clock';
+        if (type === 'offer_declined')                       return 'fa-circle-xmark';
+        if (type === 'rate_seller' || type === 'rate_buyer') return 'fa-star';
+        if (type === 'item_received_at_facility')            return 'fa-box-archive';
+        if (type === 'item_at_facility')                     return 'fa-warehouse';
+        if (type === 'item_ready_for_collection')            return 'fa-person-walking';
+        if (type === 'item_collected')                       return 'fa-handshake';
+        if (type === 'transaction_complete')                 return 'fa-circle-check';
+        if (type === 'collection_booked')                    return 'fa-calendar-check';
+        if (type === 'dropoff_booked')                       return 'fa-calendar-check';
+        if (type === 'overdue_collection_buyer')             return 'fa-triangle-exclamation';
+        if (type === 'overdue_collection_seller')            return 'fa-triangle-exclamation';
+        if (type === 'overdue_dropoff_seller')               return 'fa-triangle-exclamation';
+        if (type === 'overdue_dropoff_buyer')                return 'fa-clock';
+        if (type === 'cancelled_dropoff_seller')             return 'fa-ban';
+        if (type === 'cancelled_dropoff_buyer')              return 'fa-ban';
+        if (type === 'cancelled_collection_seller')          return 'fa-ban';
+        if (type === 'cancelled_collection_buyer')           return 'fa-ban';
+        return 'fa-bell';
+    };
+
+    const notificationIconColor = (type) => {
+        if (type === 'offer_accepted_seller')                       return '#16a34a';
+        if (type === 'buyer_paid')                           return '#16a34a';
+        if (type === 'new_offer')                            return '#3b82f6';
+        if (type === 'offer_accepted')                       return '#22c55e';
+        if (type === 'trade_waiting')                        return '#f59e0b';
+        if (type === 'offer_declined')                       return '#ef4444';
+        if (type === 'rate_seller' || type === 'rate_buyer') return '#f59e0b';
+        if (type === 'item_received_at_facility')            return '#f59e0b';
+        if (type === 'item_at_facility')                     return '#6AA6DA';
+        if (type === 'item_ready_for_collection')            return '#8b5cf6';
+        if (type === 'item_collected')                       return '#22c55e';
+        if (type === 'transaction_complete')                 return '#22c55e';
+        if (type === 'collection_booked')                    return '#6d28d9';
+        if (type === 'dropoff_booked')                       return '#92400e';
+        if (type === 'overdue_collection_buyer')             return '#dc2626';
+        if (type === 'overdue_collection_seller')            return '#dc2626';
+        if (type === 'overdue_dropoff_seller')               return '#dc2626';
+        if (type === 'overdue_dropoff_buyer')                return '#f59e0b';
+        if (type === 'cancelled_dropoff_seller')             return '#dc2626';
+        if (type === 'cancelled_dropoff_buyer')              return '#dc2626';
+        if (type === 'cancelled_collection_seller')          return '#dc2626';
+        if (type === 'cancelled_collection_buyer')           return '#dc2626';
+        return '#94a3b8';
+    };
+
+    const notificationMessage = (n) => {
+        const title = n.listingTitle ? `"${n.listingTitle}"` : (n.itemTitle ? `"${n.itemTitle}"` : (n.message ? null : 'your item'));
+        const price = n.listingPrice ? ` · R${Number(n.listingPrice).toLocaleString('en-ZA')}` : '';
+        const buyer = n.buyerName || 'A student';
+        const isTrade = n.isTrade === true;
+        if (n.type === 'buyer_paid')                return `${buyer} has paid for ${title || 'your item'}. Book a drop-off slot now.`;
+        if (n.type === 'new_offer') {
+            const itemLabel = title || '"your item"';
+            if (isTrade) return `${buyer} made a trade offer on ${itemLabel}`;
+            return `${buyer} made an offer on ${itemLabel}${price}`;
+        }
+        if (n.type === 'offer_accepted') {
+            if (isTrade) return `Your trade offer on ${title || 'your item'} was accepted — head to the trade facility to book a drop-off slot.`;
+            const pm = (n.paymentMethod || '').toLowerCase();
+            const isCashNotif = pm === 'cash' || pm === 'cod' || pm === 'fully_cash';
+            const isPartialNotif = pm === 'partial';
+            if (isCashNotif) {
+                const amt = n.agreedPrice ? ` — R${Number(n.agreedPrice).toLocaleString('en-ZA')} in cash` : '';
+                return `Your offer on ${title || 'your item'} was accepted! You committed to paying${amt} in cash at collection.`;
+            }
+            if (isPartialNotif && n.partialAmount) {
+                return `Your offer on ${title || 'your item'} was accepted! Pay R${Number(n.partialAmount).toLocaleString('en-ZA')} online now — the rest in cash at collection.`;
+            }
+            return `Your offer on ${title || 'your item'} was accepted! Head to payment.${price}`;
+        }
+        if (n.type === 'offer_accepted_seller')     return `You accepted an offer on ${title || 'your item'}. Book a drop-off for it in Trade Facility.`;
+        if (n.type === 'trade_waiting')             return `Your trade offer on ${title || 'your item'} was accepted — head to the trade facility to book a drop-off slot.`;
+        if (n.type === 'offer_declined') {
+            if (isTrade) return `Your trade offer on ${title || 'your item'} was declined.`;
+            return `Your offer on ${title || 'your item'} was declined.`;
+        }
+        if (n.type === 'item_received_at_facility') return `${title} has been received at the trade facility.`;
+        if (n.type === 'item_at_facility')          return `${title} has been dropped off and is ready to collect from the trade facility. Show your receipt to staff when collecting.`;
+        if (n.type === 'item_ready_for_collection') return `${title} is ready for collection at the trade facility.`;
+        if (n.type === 'item_collected')            return `${title} has been collected. Transaction complete!`;
+        if (n.type === 'transaction_complete') {
+            if (isTrade) return `Your trade of ${title} is complete.`;
+            return `Your sale of ${title} is complete${price}.`;
+        }
+        if (n.type === 'collection_booked')         return n.message || `Collection slot booked for ${title}.`;
+        if (n.type === 'dropoff_booked') {
+            if (isTrade) return n.message || `Your trade offer on ${title || 'your item'} was accepted — book your drop-off slot now.`;
+            return n.message || `Drop-off slot booked for ${title}.`;
+        }
+        if (n.type === 'overdue_collection_buyer')  return `Your collection of ${title} is overdue. Please come to the trade facility as soon as possible to collect your item.`;
+        if (n.type === 'overdue_collection_seller') return `The buyer has not yet collected ${title}. They have been notified and given 24 hours to collect.`;
+        if (n.type === 'overdue_dropoff_seller')    return `Your drop-off for ${title} is overdue. Please bring your item to the trade facility as soon as possible.`;
+        if (n.type === 'overdue_dropoff_buyer')     return `The seller has not yet dropped off ${title}. They have been notified and given 24 hours to drop off.`;
+        if (n.type === 'cancelled_dropoff_seller')   return `Your transaction for ${title} has been cancelled due to a missed drop-off.`;
+        if (n.type === 'cancelled_dropoff_buyer')    return `Your transaction for ${title} was cancelled — the seller did not drop off in time.`;
+        if (n.type === 'cancelled_collection_seller') return `The buyer did not collect ${title} — the transaction has been cancelled. Please come to the trade facility to collect your item.`;
+        if (n.type === 'cancelled_collection_buyer') return `Your transaction for ${title} was cancelled due to non-collection.`;
+        if (n.type === 'rate_seller') return `How was ${n.reviewedUserName} as a seller${n.listingTitle ? ` for "${n.listingTitle}"${price}` : ''}`;
+        if (n.type === 'rate_buyer')  return `How was ${n.reviewedUserName} as a buyer${n.listingTitle ? ` — "${n.listingTitle}"${price}` : ''}`;
+        return n.message || 'Notification';
     };
 
     // ── Auth + profile ────────────────────────────────────────────────────────
@@ -296,27 +442,93 @@ export default function Navbar() {
             // For rate_* with persistUntilReviewed, check if review already exists
             const filtered = await Promise.all(
                 raw.map(async (n) => {
-                    if (
-                        n.persistUntilReviewed &&
-                        (n.type === 'rate_seller' || n.type === 'rate_buyer') &&
-                        n.reviewedUserId && n.listingId
-                    ) {
-                        const reviewed = await _hasSubmittedReview(
-                            currentUser.uid, n.reviewedUserId, n.listingId
-                        );
-                        if (reviewed) {
-                            // Review submitted — silently mark as read and hide
-                            markAsRead(n.id);
-                            return null;
-                        }
-                    }
-                    return n;
+                    const details = await fetchListingDetails(n.listingId);
+                    return { ...n, listingTitle: n.listingTitle || details.title || null, listingPrice: n.agreedPrice || details.price || null };
                 })
             );
+            const sorted = enriched.sort((a, b) => {
+                const ta = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : new Date(a.createdAt || 0).getTime();
+                const tb = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : new Date(b.createdAt || 0).getTime();
+                return tb - ta;
+            });
 
-            const visible = filtered
-                .filter(Boolean)
-                .sort((a, b) => {
+            // Deduplicate: for overdue/recurring notification types, keep only the
+            // most-recent notification per (type + transactionId) pair so that
+            // automated re-sends don't show multiple identical items in the bell.
+            const DEDUP_TYPES = new Set([
+                'overdue_collection_buyer',
+                'overdue_collection_seller',
+                'overdue_dropoff_seller',
+                'overdue_dropoff_buyer',
+                'cancelled_dropoff_seller',
+                'cancelled_dropoff_buyer',
+                'cancelled_collection_seller',
+                'cancelled_collection_buyer',
+            ]);
+            const seen = new Set();
+            const deduped = sorted.filter((n) => {
+                if (!DEDUP_TYPES.has(n.type)) return true;
+                const key = `${n.type}::${n.transactionId || n.transaction_id || n.txnId || ''}`;
+                if (seen.has(key)) return false;
+                seen.add(key);
+                return true;
+            });
+
+            setOfferNotifications(deduped);
+        });
+        return () => unsub();
+    }, [currentUser]);
+
+    // ── Rating notifications ──────────────────────────────────────────────────
+
+    useEffect(() => {
+        if (!currentUser) return;
+        const fetchRatingNotifications = async () => {
+            try {
+                const [buyerSnap, sellerSnap] = await Promise.all([
+                    getDocs(query(collection(db, 'transactions'), where('buyerId',  '==', currentUser.uid), where('status', '==', 'completed'))),
+                    getDocs(query(collection(db, 'transactions'), where('sellerId', '==', currentUser.uid), where('status', '==', 'completed'))),
+                ]);
+                const results = [];
+
+                for (const d of buyerSnap.docs) {
+                    const data = d.data();
+                    const listingId = data.listingId || data.ListingId || data.listing_id || null;
+                    if (!listingId) continue;
+                    let sellerName = 'Seller', listingTitle = data.listingTitle || '', listingPrice = null;
+                    try {
+                        const [userSnap, listingSnap] = await Promise.all([getDoc(doc(db, 'users', data.sellerId)), getDoc(doc(db, 'listings', listingId))]);
+                        if (userSnap.exists())    { const ud = userSnap.data();    sellerName   = `${ud.firstName || ''} ${ud.lastName || ''}`.trim() || sellerName; }
+                        if (listingSnap.exists()) { const ld = listingSnap.data(); listingTitle = listingTitle || ld.title || ld.Title || ''; listingPrice = ld.price || ld.Price || null; }
+                    } catch (_) {}
+                    results.push({ id: `buyer-${d.id}`, source: 'rating', type: 'rate_seller', title: `How was ${sellerName} as a seller`, message: `Your purchase is complete — how was the transaction?`, listingId, listingTitle, listingPrice, purchaseId: d.id, reviewedUserId: data.sellerId, reviewedUserName: sellerName, role: 'seller', createdAt: data.updatedAt || data.createdAt });
+                }
+
+                for (const d of sellerSnap.docs) {
+                    const data = d.data();
+                    const listingId = data.listingId || data.ListingId || data.listing_id || null;
+                    if (!listingId) continue;
+                    let buyerName = 'Buyer', listingTitle = data.listingTitle || '', listingPrice = null;
+                    try {
+                        const [userSnap, listingSnap] = await Promise.all([getDoc(doc(db, 'users', data.buyerId)), getDoc(doc(db, 'listings', listingId))]);
+                        if (userSnap.exists())    { const ud = userSnap.data();    buyerName    = `${ud.firstName || ''} ${ud.lastName || ''}`.trim() || buyerName; }
+                        if (listingSnap.exists()) { const ld = listingSnap.data(); listingTitle = listingTitle || ld.title || ld.Title || ''; listingPrice = ld.price || ld.Price || null; }
+                    } catch (_) {}
+                    results.push({ id: `seller-${d.id}`, source: 'rating', type: 'rate_buyer', title: `How was ${buyerName} as a buyer`, message: `Your listing was purchased — how was the buyer?`, listingId, listingTitle, listingPrice, purchaseId: d.id, reviewedUserId: data.buyerId, reviewedUserName: buyerName, role: 'buyer', createdAt: data.updatedAt || data.createdAt });
+                }
+
+                // Show all rating notifications that don't yet have a submitted review
+                const unread = results;
+                const reviewChecks = await Promise.all(
+                    unread.map(async (n) => {
+                        try {
+                            const snap = await getDocs(query(collection(db, 'reviews'), where('reviewerUserId', '==', currentUser.uid), where('listingId', '==', n.listingId), where('reviewedUserId', '==', n.reviewedUserId)));
+                            return snap.empty ? n : null;
+                        } catch (_) { return n; }
+                    })
+                );
+                const filtered = reviewChecks.filter(Boolean);
+                filtered.sort((a, b) => {
                     const ta = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : new Date(a.createdAt || 0).getTime();
                     const tb = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : new Date(b.createdAt || 0).getTime();
                     return tb - ta;
@@ -530,8 +742,6 @@ export default function Navbar() {
             )}
         </>
     );
-}
-
 // ── Notification row sub-component ────────────────────────────────────────────
 
 function NotificationRow({ n, onClick }) {

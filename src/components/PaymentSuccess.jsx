@@ -1,7 +1,8 @@
 import { useEffect, useState, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { doc, onSnapshot } from 'firebase/firestore';
-import { db } from '../firebase';
+import { onAuthStateChanged } from 'firebase/auth';
+import { auth, db } from '../firebase';
 import NavBar from './NavBarTemp';
 import styles from './Payment.module.css';
 
@@ -12,10 +13,10 @@ export default function PaymentSuccess() {
   const txId      = searchParams.get('tx');
   const sessionId = searchParams.get('session_id');
 
-  const [confirmed, setConfirmed]   = useState(false);
-  const [message, setMessage]       = useState('Verifying your payment...');
-  const [txStatus, setTxStatus]     = useState('');
-  const [cashAmount, setCashAmount] = useState(0);
+  const [confirmed, setConfirmed]     = useState(false);
+  const [message, setMessage]         = useState('Verifying your payment...');
+  const [txStatus, setTxStatus]       = useState('');
+  const [cashAmount, setCashAmount]   = useState(0);
   const [verifyError, setVerifyError] = useState('');
 
   // Prevent calling verify-session more than once
@@ -40,8 +41,6 @@ export default function PaymentSuccess() {
         if (!res.ok) {
           const err = await res.json().catch(() => ({}));
           console.error('[PaymentSuccess] verify-session failed:', err);
-          // Don't block the UI — Firestore listener below will still catch
-          // if the webhook fired separately
           setVerifyError('Could not auto-confirm. Check My Purchases in a moment.');
           return;
         }
@@ -50,8 +49,7 @@ export default function PaymentSuccess() {
         if (!data.paid) {
           setVerifyError('Payment not confirmed by Stripe. Please contact support.');
         }
-        // If paid, the Firestore listener below will pick up the update
-        // and set confirmed = true automatically
+        // If paid, the Firestore listener below will pick up the Firestore update automatically
 
       } catch (e) {
         console.error('[PaymentSuccess] verify-session error:', e);
@@ -62,10 +60,9 @@ export default function PaymentSuccess() {
     verify();
   }, [sessionId, txId]);
 
-  // ── Step 2: Listen to Firestore for the status update ────────────────────────
+  // ── Step 2: Wait for auth, then listen to Firestore ──────────────────────────
   useEffect(() => {
     if (!txId) {
-      // No txId but session_id exists — Stripe payment happened, just no tx ref
       if (sessionId) {
         setConfirmed(true);
         setMessage('Payment successful. Your transaction will update shortly in My Purchases.');
@@ -76,47 +73,85 @@ export default function PaymentSuccess() {
       return;
     }
 
-    const unsub = onSnapshot(doc(db, 'transactions', txId), (snap) => {
-      if (!snap.exists()) {
+    let snapshotUnsub = () => {};
+
+    // ✅ Wait for Firebase Auth before attaching the snapshot listener.
+    // Without this, the listener fires unauthenticated and Firestore
+    // returns permission-denied, which surfaces as "Transaction not found".
+    const authUnsub = onAuthStateChanged(auth, (user) => {
+      // Clean up any previous snapshot listener before attaching a new one
+      snapshotUnsub();
+
+      if (!user) {
+        // User not logged in — if we have a sessionId, show optimistic success
+        // rather than blocking on a login that may be in progress
         if (sessionId) {
           setConfirmed(true);
-          setMessage('Payment successful. Your transaction will update shortly.');
-        } else {
-          setMessage('Transaction not found.');
+          setMessage('Payment successful. Your transaction will update shortly in My Purchases.');
         }
         return;
       }
 
-      const tx = snap.data();
-      setTxStatus(tx.status || '');
-      setCashAmount(Number(tx.cashAmount || 0));
+      // User is authenticated — safe to listen to Firestore
+      snapshotUnsub = onSnapshot(
+        doc(db, 'transactions', txId),
+        (snap) => {
+          if (!snap.exists()) {
+            // Doc genuinely missing (rare) — show optimistic message if Stripe confirmed
+            if (sessionId) {
+              setConfirmed(true);
+              setMessage('Payment successful. Your transaction will update shortly.');
+            } else {
+              setMessage('Transaction not found.');
+            }
+            return;
+          }
 
-      // Fully confirmed — webhook or verify-session updated Firestore
-      if (tx.paymentProvider === 'stripe' && tx.paymentStatus === 'paid') {
-        setConfirmed(true);
-        setMessage(
-          Number(tx.cashAmount || 0) > 0
-            ? `Payment received! R ${Number(tx.cashAmount).toLocaleString('en-ZA')} cash is still due at drop-off.`
-            : 'Payment received! Your transaction is now waiting for collection.'
-        );
-        return;
-      }
+          const tx = snap.data();
+          setTxStatus(tx.status || '');
+          setCashAmount(Number(tx.cashAmount || 0));
 
-      if (tx.status === 'waiting') {
-        setConfirmed(true);
-        setMessage('Payment received! Your transaction is now waiting for collection.');
-        return;
-      }
+          // Stripe payment fully confirmed in Firestore
+          if (tx.paymentProvider === 'stripe' && tx.paymentStatus === 'paid') {
+            setConfirmed(true);
+            setMessage(
+              Number(tx.cashAmount || 0) > 0
+                ? `Payment received! R ${Number(tx.cashAmount).toLocaleString('en-ZA')} cash is still due at drop-off.`
+                : 'Payment received! Your transaction is now waiting for collection.'
+            );
+            return;
+          }
 
-      // Stripe redirected here so payment definitely happened — show optimistic success
-      // while Firestore catches up
-      if (sessionId) {
-        setConfirmed(true);
-        setMessage('Payment successful. Your transaction will update shortly in My Purchases.');
-      }
+          if (tx.status === 'waiting') {
+            setConfirmed(true);
+            setMessage('Payment received! Your transaction is now waiting for collection.');
+            return;
+          }
+
+          // Stripe redirected here so payment definitely happened —
+          // show optimistic success while Firestore catches up
+          if (sessionId) {
+            setConfirmed(true);
+            setMessage('Payment successful. Your transaction will update shortly in My Purchases.');
+          }
+        },
+        (error) => {
+          // Firestore listener error — log it and show optimistic message
+          console.error('[PaymentSuccess] Firestore snapshot error:', error);
+          if (sessionId) {
+            setConfirmed(true);
+            setMessage('Payment successful. Your transaction will update shortly in My Purchases.');
+          } else {
+            setVerifyError('Could not load transaction. Please check My Purchases.');
+          }
+        }
+      );
     });
 
-    return () => unsub();
+    return () => {
+      authUnsub();
+      snapshotUnsub();
+    };
   }, [txId, sessionId]);
 
   return (
@@ -170,8 +205,10 @@ export default function PaymentSuccess() {
                 <i className="fas fa-circle-info" />
                 <div>
                   <p className={styles.cashReminderTitle}>Transaction status</p>
-                  <p className={styles.cashReminderAmt}
-                     style={{ fontSize: '0.85rem', fontWeight: 600 }}>
+                  <p
+                    className={styles.cashReminderAmt}
+                    style={{ fontSize: '0.85rem', fontWeight: 600 }}
+                  >
                     {txStatus.replaceAll('_', ' ')}
                   </p>
                 </div>
