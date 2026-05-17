@@ -4,13 +4,290 @@ import { auth, db } from "../firebase";
 import { signOut, onAuthStateChanged } from "firebase/auth";
 import {
   collection, query, orderBy, onSnapshot,
-  writeBatch, doc, getDoc, getDocs, updateDoc, deleteDoc,
+  writeBatch, doc, getDoc, getDocs, updateDoc, deleteDoc, arrayUnion,
 } from "firebase/firestore";
 import styles from "./ReportsPage.module.css";
 import ConfirmModal from "./ConfirmModal";
 import ReportCard from "./ReportCard";
 import useExportReport from "../hooks/useExportReport";
 import AdminNavbar from "./AdminNavbar";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Proof Photo Lightbox
+// ─────────────────────────────────────────────────────────────────────────────
+function ProofLightbox({ photos, startIndex = 0, onClose }) {
+  const [idx, setIdx] = React.useState(startIndex);
+  React.useEffect(() => {
+    const handler = (e) => {
+      if (e.key === 'Escape') onClose();
+      if (e.key === 'ArrowRight') setIdx(i => Math.min(i + 1, photos.length - 1));
+      if (e.key === 'ArrowLeft')  setIdx(i => Math.max(i - 1, 0));
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [onClose, photos.length]);
+
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: 'fixed', inset: 0, zIndex: 99999,
+        background: 'rgba(0,0,0,0.88)', backdropFilter: 'blur(6px)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        padding: 16,
+      }}
+    >
+      <div onClick={e => e.stopPropagation()} style={{ position: 'relative', maxWidth: 780, width: '100%' }}>
+        {/* Close */}
+        <button
+          onClick={onClose}
+          style={{
+            position: 'absolute', top: -40, right: 0,
+            background: 'none', border: 'none', color: '#fff',
+            fontSize: '1.5rem', cursor: 'pointer', lineHeight: 1,
+          }}
+        >&times;</button>
+
+        {/* Main image */}
+        <img
+          src={photos[idx]}
+          alt={`Proof ${idx + 1}`}
+          style={{
+            width: '100%', maxHeight: '75vh', objectFit: 'contain',
+            borderRadius: 12, display: 'block',
+          }}
+        />
+
+        {/* Counter */}
+        <div style={{ textAlign: 'center', color: '#cbd5e1', fontSize: '0.82rem', marginTop: 10, fontFamily: 'inherit' }}>
+          {idx + 1} / {photos.length}
+        </div>
+
+        {/* Nav arrows */}
+        {photos.length > 1 && (
+          <>
+            <button
+              onClick={() => setIdx(i => Math.max(i - 1, 0))}
+              disabled={idx === 0}
+              style={{
+                position: 'absolute', top: '50%', left: -48, transform: 'translateY(-50%)',
+                background: 'rgba(255,255,255,0.12)', border: 'none', borderRadius: '50%',
+                width: 38, height: 38, color: '#fff', fontSize: '1.1rem', cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                opacity: idx === 0 ? 0.3 : 1,
+              }}
+            >‹</button>
+            <button
+              onClick={() => setIdx(i => Math.min(i + 1, photos.length - 1))}
+              disabled={idx === photos.length - 1}
+              style={{
+                position: 'absolute', top: '50%', right: -48, transform: 'translateY(-50%)',
+                background: 'rgba(255,255,255,0.12)', border: 'none', borderRadius: '50%',
+                width: 38, height: 38, color: '#fff', fontSize: '1.1rem', cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                opacity: idx === photos.length - 1 ? 0.3 : 1,
+              }}
+            >›</button>
+          </>
+        )}
+
+        {/* Thumbnails */}
+        {photos.length > 1 && (
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginTop: 12, flexWrap: 'wrap' }}>
+            {photos.map((src, i) => (
+              <button
+                key={i}
+                onClick={() => setIdx(i)}
+                style={{
+                  width: 52, height: 52, borderRadius: 7, overflow: 'hidden',
+                  border: i === idx ? '2.5px solid #6AA6DA' : '2px solid rgba(255,255,255,0.2)',
+                  padding: 0, cursor: 'pointer', background: 'none', flexShrink: 0,
+                  transition: 'border-color 0.15s',
+                }}
+              >
+                <img src={src} alt={`thumb ${i + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Warn User Modal
+// ─────────────────────────────────────────────────────────────────────────────
+function WarnModal({ open, reportedName, onConfirm, onCancel }) {
+  const [reason, setReason] = React.useState('');
+  const [error, setError]   = React.useState('');
+
+  React.useEffect(() => {
+    if (!open) { setReason(''); setError(''); }
+  }, [open]);
+
+  if (!open) return null;
+
+  const handleConfirm = () => {
+    if (!reason.trim()) { setError('Please provide a reason for the warning.'); return; }
+    onConfirm(reason.trim());
+  };
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 99998,
+      background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(3px)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
+    }}>
+      <div style={{
+        background: '#fff', borderRadius: 14, width: '100%', maxWidth: 420,
+        boxShadow: '0 20px 60px rgba(0,0,0,0.18)', overflow: 'hidden',
+      }}>
+        <div style={{ padding: '18px 20px 14px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div style={{ width: 38, height: 38, borderRadius: 9, background: '#fffbeb', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <i className="fas fa-exclamation-triangle" style={{ color: '#d97706', fontSize: '1rem' }} />
+          </div>
+          <div>
+            <p style={{ margin: 0, fontWeight: 700, fontSize: '0.95rem', color: '#0f172a' }}>Warn User</p>
+            {reportedName && <p style={{ margin: 0, fontSize: '0.78rem', color: '#64748b' }}>{reportedName}</p>}
+          </div>
+        </div>
+        <div style={{ padding: '16px 20px 12px' }}>
+          <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: '#374151', marginBottom: 6 }}>
+            Warning reason <span style={{ color: '#dc2626' }}>(required)</span>
+          </label>
+          <textarea
+            value={reason}
+            onChange={e => { setReason(e.target.value); if (error) setError(''); }}
+            placeholder="Describe the reason for this warning — this will be visible on the user's profile…"
+            rows={3}
+            maxLength={400}
+            style={{
+              width: '100%', padding: '10px 12px', border: `1.5px solid ${error ? '#dc2626' : '#e2e8f0'}`,
+              borderRadius: 8, fontSize: '0.82rem', color: '#374151', resize: 'vertical',
+              outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box',
+            }}
+          />
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 }}>
+            {error
+              ? <span style={{ fontSize: '0.78rem', color: '#dc2626' }}>{error}</span>
+              : <span />
+            }
+            <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>{reason.length}/400</span>
+          </div>
+          <p style={{ margin: '8px 0 0', fontSize: '0.75rem', color: '#94a3b8' }}>
+            <i className="fas fa-info-circle" style={{ marginRight: 4 }} />
+            This warning and its reason will appear on the user's profile page.
+          </p>
+        </div>
+        <div style={{ padding: '12px 20px 16px', borderTop: '1px solid #f1f5f9', display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+          <button onClick={onCancel} style={{ padding: '8px 16px', borderRadius: 8, border: '1.5px solid #e2e8f0', background: '#fff', color: '#374151', fontSize: '0.85rem', fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>
+            Cancel
+          </button>
+          <button onClick={handleConfirm} style={{ padding: '8px 18px', borderRadius: 8, border: 'none', background: '#d97706', color: '#fff', fontSize: '0.85rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
+            <i className="fas fa-exclamation-triangle" style={{ marginRight: 6 }} />Issue Warning
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Reported Users Summary Table
+// ─────────────────────────────────────────────────────────────────────────────
+function ReportedUsersSummary({ reports, onViewProfile }) {
+  // Build per-user aggregation
+  const userMap = {};
+  reports.forEach(r => {
+    if (!r.reportedId) return;
+    if (!userMap[r.reportedId]) {
+      userMap[r.reportedId] = {
+        id: r.reportedId,
+        name: r.reportedName || r.reportedId,
+        reportType: r.reportType,
+        total: 0, pending: 0, dismissed: 0, resolved: 0,
+        listingReports: 0, reviewReports: 0, userReports: 0,
+        reasons: {},
+      };
+    }
+    const u = userMap[r.reportedId];
+    u.total++;
+    if (r.status === 'pending')  u.pending++;
+    if (r.resolution === 'dismiss') u.dismissed++;
+    if (r.status === 'resolved' && r.resolution !== 'dismiss') u.resolved++;
+    if (r.reportType === 'listing') u.listingReports++;
+    if (r.reportType === 'review')  u.reviewReports++;
+    if (r.reportType === 'user')    u.userReports++;
+    if (r.reason) u.reasons[r.reason] = (u.reasons[r.reason] || 0) + 1;
+  });
+
+  // Only include user-type reports in the summary
+  const users = Object.values(userMap)
+    .filter(u => u.userReports > 0)
+    .sort((a, b) => b.total - a.total);
+
+  if (users.length === 0) return null;
+
+  return (
+    <div style={{ marginTop: 32 }}>
+      <h3 style={{ margin: '0 0 14px', fontSize: '1rem', fontWeight: 700, color: '#1a1a1a', display: 'flex', alignItems: 'center', gap: 10 }}>
+        <i className="fas fa-users" style={{ color: '#6AA6DA', fontSize: '0.9rem' }} />
+        Reported Users Summary
+      </h3>
+      <div style={{ overflowX: 'auto', borderRadius: 12, border: '1px solid #e8eaed' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem', background: '#fff' }}>
+          <thead>
+            <tr style={{ background: '#f8fafc', borderBottom: '2px solid #e8eaed' }}>
+              {['User', 'Total Reports', 'Pending', 'Dismissed', 'Resolved', 'Top Reason', 'Profile'].map(h => (
+                <th key={h} style={{ padding: '10px 14px', textAlign: 'left', fontWeight: 700, color: '#475569', fontSize: '0.73rem', textTransform: 'uppercase', letterSpacing: '0.05em', whiteSpace: 'nowrap' }}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {users.map((u, i) => {
+              const topReason = Object.entries(u.reasons).sort((a, b) => b[1] - a[1])[0]?.[0] || '—';
+              return (
+                <tr key={u.id} style={{ borderBottom: i < users.length - 1 ? '1px solid #f1f5f9' : 'none', transition: 'background 0.12s' }}
+                  onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'}
+                  onMouseLeave={e => e.currentTarget.style.background = ''}
+                >
+                  <td style={{ padding: '10px 14px', fontWeight: 600, color: '#0f172a' }}>
+                    <button
+                      onClick={() => onViewProfile(u.id)}
+                      style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.82rem', fontWeight: 600, color: '#2563eb', textDecoration: 'underline dotted', textUnderlineOffset: 3 }}
+                    >
+                      {u.name}
+                    </button>
+                  </td>
+                  <td style={{ padding: '10px 14px' }}>
+                    <span style={{ background: u.total >= 3 ? '#fef2f2' : '#f1f5f9', color: u.total >= 3 ? '#dc2626' : '#374151', padding: '2px 8px', borderRadius: 20, fontWeight: 700 }}>{u.total}</span>
+                  </td>
+                  <td style={{ padding: '10px 14px' }}>
+                    {u.pending > 0 ? <span style={{ background: '#fef3c7', color: '#d97706', padding: '2px 8px', borderRadius: 20, fontWeight: 600 }}>{u.pending}</span> : <span style={{ color: '#94a3b8' }}>0</span>}
+                  </td>
+                  <td style={{ padding: '10px 14px', color: '#64748b' }}>{u.dismissed || 0}</td>
+                  <td style={{ padding: '10px 14px' }}>
+                    {u.resolved > 0 ? <span style={{ background: '#f0fdf4', color: '#16a34a', padding: '2px 8px', borderRadius: 20, fontWeight: 600 }}>{u.resolved}</span> : <span style={{ color: '#94a3b8' }}>0</span>}
+                  </td>
+                  <td style={{ padding: '10px 14px', color: '#64748b', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{topReason}</td>
+                  <td style={{ padding: '10px 14px' }}>
+                    <button
+                      onClick={() => onViewProfile(u.id)}
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: '#eff6ff', border: 'none', borderRadius: 7, padding: '5px 10px', color: '#2563eb', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}
+                    >
+                      <i className="fas fa-eye" style={{ fontSize: '0.7rem' }} /> View
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Toast
@@ -52,9 +329,15 @@ export default function ReportsPage() {
   const [reportSearch, setReportSearch]   = useState("");
   const [confirm, setConfirm]             = useState({ open: false, title: "", message: "", onConfirm: null, variant: "danger" });
   const [toast, setToast]                 = useState(null);
+  const [lightbox, setLightbox]           = useState(null); // { photos: [], startIndex: 0 }
+  const [warnModal, setWarnModal]         = useState(null); // { reportedId, reportedName }
   const [allUsers, setAllUsers]           = useState([]);
   const [listings, setListings]           = useState([]);
   const [reviewsCache, setReviewsCache]   = useState({});  // reportedId → review data
+  const [showAllPending, setShowAllPending]   = useState(false);
+  const [showAllResolved, setShowAllResolved] = useState(false);
+
+  const PREVIEW_LIMIT = 3;
 
   const showToast  = (message, type = "success") => setToast({ message, type });
   const hideToast  = () => setToast(null);
@@ -65,9 +348,9 @@ export default function ReportsPage() {
 
   // ── Helpers ───────────────────────────────────────────────────────────────
   const reportTypeIcon = (type) => {
-    if (type === "listing") return "🛍️";
-    if (type === "review")  return "⭐";
-    return "👤";
+    if (type === "listing") return <i className="fas fa-store"     style={{ fontSize: "1rem", color: "#6AA6DA" }} />;
+    if (type === "review")  return <i className="fas fa-star"      style={{ fontSize: "1rem", color: "#f59e0b" }} />;
+    return                         <i className="fas fa-user"      style={{ fontSize: "1rem", color: "#94a3b8" }} />;
   };
 
   const isNavigable = (reportType) => reportType === "listing" || reportType === "user" || reportType === "review";
@@ -92,6 +375,12 @@ export default function ReportsPage() {
   const filteredReports = reports.filter(r =>
     (r.reportedName || "").toLowerCase().includes(reportSearch.toLowerCase())
   );
+
+  // Reset expanded state whenever search changes
+  useEffect(() => {
+    setShowAllPending(false);
+    setShowAllResolved(false);
+  }, [reportSearch]);
 
   const reportsExportData = filteredReports.map(r => ({
     Type:         r.reportType || "",
@@ -266,6 +555,27 @@ export default function ReportsPage() {
     }
   };
 
+  // ── Warn user ─────────────────────────────────────────────────────────────
+  const handleWarnUser = async (reportedId, reportedName, reason) => {
+    const currentUser = auth.currentUser;
+    if (!currentUser) return;
+    try {
+      await updateDoc(doc(db, "users", reportedId), {
+        warnings: arrayUnion({
+          reason,
+          warnedBy:     currentUser.uid,
+          warnedByName: adminUser.name,
+          warnedAt:     new Date(),
+        }),
+      });
+      setWarnModal(null);
+      showToast(`Warning issued to ${reportedName}.`, "success");
+    } catch (err) {
+      console.error(err);
+      showToast("Failed to issue warning.", "error");
+    }
+  };
+
   // ── Logout ────────────────────────────────────────────────────────────────
   const handleLogout = async () => {
     setIsLoggingOut(true);
@@ -310,6 +620,13 @@ export default function ReportsPage() {
         onCancel={closeConfirm}
       />
       {toast && <Toast message={toast.message} type={toast.type} onDismiss={hideToast} />}
+      {lightbox && <ProofLightbox photos={lightbox.photos} startIndex={lightbox.startIndex} onClose={() => setLightbox(null)} />}
+      <WarnModal
+        open={!!warnModal}
+        reportedName={warnModal?.reportedName}
+        onConfirm={(reason) => handleWarnUser(warnModal.reportedId, warnModal.reportedName, reason)}
+        onCancel={() => setWarnModal(null)}
+      />
 
       <AdminNavbar activePage="reports" adminUser={adminUser} unreadReports={unreadReports} />
 
@@ -377,7 +694,10 @@ export default function ReportsPage() {
               </div>
             ) : (
               <div className={styles.modList}>
-                {filteredReports.filter(r => r.status === "pending").map(r => {
+                {(showAllPending
+                  ? filteredReports.filter(r => r.status === "pending")
+                  : filteredReports.filter(r => r.status === "pending").slice(0, PREVIEW_LIMIT)
+                ).map(r => {
                   const review = r.reportType === "review" ? reviewsCache[r.reportedId] : null;
                   return (
                     <div key={r.id} className={styles.modRow}>
@@ -436,6 +756,33 @@ export default function ReportsPage() {
                           Reported by {r.reporterName} ·{" "}
                           {r.createdAt?.toDate ? r.createdAt.toDate().toLocaleDateString() : "Recently"}
                         </span>
+
+                        {/* ── Proof photos strip (user reports) ── */}
+                        {r.reportType === "user" && r.proofUrls?.length > 0 && (
+                          <div style={{ marginTop: 8, display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
+                            <span style={{ fontSize: "0.7rem", fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.05em", marginRight: 2 }}>
+                              <i className="fas fa-camera" style={{ marginRight: 4, color: "#6AA6DA" }} />
+                              Proof ({r.proofUrls.length})
+                            </span>
+                            {r.proofUrls.map((url, photoIdx) => (
+                              <button
+                                key={photoIdx}
+                                onClick={() => setLightbox({ photos: r.proofUrls, startIndex: photoIdx })}
+                                style={{
+                                  width: 52, height: 52, borderRadius: 7, overflow: "hidden",
+                                  border: "1.5px solid #e2e8f0", padding: 0, cursor: "pointer",
+                                  background: "none", flexShrink: 0,
+                                  transition: "transform 0.15s, border-color 0.15s",
+                                }}
+                                onMouseEnter={e => { e.currentTarget.style.transform = "scale(1.07)"; e.currentTarget.style.borderColor = "#6AA6DA"; }}
+                                onMouseLeave={e => { e.currentTarget.style.transform = "scale(1)"; e.currentTarget.style.borderColor = "#e2e8f0"; }}
+                                title="Click to view full size"
+                              >
+                                <img src={url} alt={`proof ${photoIdx + 1}`} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+                              </button>
+                            ))}
+                          </div>
+                        )}
                       </div>
 
                       <div className={styles.reportActions}>
@@ -445,6 +792,21 @@ export default function ReportsPage() {
                         {r.reportType === "user" && (
                           <button className={styles.btnSuspend} onClick={() => handleResolveReport(r, "suspend_user")}>
                             Suspend User
+                          </button>
+                        )}
+                        {r.reportType === "user" && (
+                          <button
+                            onClick={() => setWarnModal({ reportedId: r.reportedId, reportedName: r.reportedName })}
+                            style={{
+                              padding: '6px 14px', borderRadius: 7, border: 'none',
+                              background: '#fffbeb', color: '#d97706',
+                              fontSize: '0.78rem', fontWeight: 600, cursor: 'pointer',
+                              fontFamily: 'inherit', transition: 'all 0.15s',
+                            }}
+                            onMouseEnter={e => e.currentTarget.style.background = '#fef3c7'}
+                            onMouseLeave={e => e.currentTarget.style.background = '#fffbeb'}
+                          >
+                            <i className="fas fa-exclamation-triangle" style={{ marginRight: 5 }} />Warn User
                           </button>
                         )}
                         {r.reportType === "listing" && (
@@ -463,13 +825,30 @@ export default function ReportsPage() {
                 })}
               </div>
             )}
-
-            {/* ── Resolved Reports ── */}
+            {filteredReports.filter(r => r.status === "pending").length > PREVIEW_LIMIT && (
+              <button
+                onClick={() => setShowAllPending(p => !p)}
+                style={{
+                  marginTop: 10, background: "none", border: "none", padding: "6px 0",
+                  cursor: "pointer", fontSize: "0.82rem", fontWeight: 600,
+                  color: "#2563eb", fontFamily: "inherit",
+                  textDecoration: "underline dotted", textUnderlineOffset: 3,
+                  display: "flex", alignItems: "center", gap: 5,
+                }}
+              >
+                {showAllPending
+                  ? "View less"
+                  : `View more (${filteredReports.filter(r => r.status === "pending").length - PREVIEW_LIMIT} more)`}
+              </button>
+            )}
             {resolvedReports.length > 0 && (
               <>
                 <h3 className={styles.cardTitle} style={{ marginTop: 24 }}>Resolved Reports</h3>
                 <div className={styles.modList}>
-                  {filteredReports.filter(r => r.status !== "pending").map(r => {
+                  {(showAllResolved
+                    ? filteredReports.filter(r => r.status !== "pending")
+                    : filteredReports.filter(r => r.status !== "pending").slice(0, PREVIEW_LIMIT)
+                  ).map(r => {
                     const review = r.reportType === "review" ? reviewsCache[r.reportedId] : null;
                     return (
                       <div key={r.id} className={`${styles.modRow} ${styles.resolvedRow}`}>
@@ -524,14 +903,59 @@ export default function ReportsPage() {
                                 : ""}
                             </span>
                           )}
+
+                          {/* ── Proof photos (resolved user reports) ── */}
+                          {r.reportType === "user" && r.proofUrls?.length > 0 && (
+                            <div style={{ marginTop: 8, display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
+                              <span style={{ fontSize: "0.7rem", fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.05em", marginRight: 2 }}>
+                                <i className="fas fa-camera" style={{ marginRight: 4 }} />
+                                Proof ({r.proofUrls.length})
+                              </span>
+                              {r.proofUrls.map((url, photoIdx) => (
+                                <button
+                                  key={photoIdx}
+                                  onClick={() => setLightbox({ photos: r.proofUrls, startIndex: photoIdx })}
+                                  style={{
+                                    width: 44, height: 44, borderRadius: 6, overflow: "hidden",
+                                    border: "1.5px solid #e2e8f0", padding: 0, cursor: "pointer",
+                                    background: "none", flexShrink: 0, opacity: 0.75,
+                                  }}
+                                  title="Click to view"
+                                >
+                                  <img src={url} alt={`proof ${photoIdx + 1}`} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+                                </button>
+                              ))}
+                            </div>
+                          )}
                         </div>
                         <span className={styles.resolvedBadge}>✓ {r.resolution || "resolved"}</span>
                       </div>
                     );
                   })}
                 </div>
+                {filteredReports.filter(r => r.status !== "pending").length > PREVIEW_LIMIT && (
+                  <button
+                    onClick={() => setShowAllResolved(p => !p)}
+                    style={{
+                      marginTop: 10, background: "none", border: "none", padding: "6px 0",
+                      cursor: "pointer", fontSize: "0.82rem", fontWeight: 600,
+                      color: "#2563eb", fontFamily: "inherit",
+                      textDecoration: "underline dotted", textUnderlineOffset: 3,
+                      display: "flex", alignItems: "center", gap: 5,
+                    }}
+                  >
+                    {showAllResolved
+                      ? "View less"
+                      : `View more (${filteredReports.filter(r => r.status !== "pending").length - PREVIEW_LIMIT} more)`}
+                  </button>
+                )}
               </>
             )}
+
+            <ReportedUsersSummary
+              reports={reports}
+              onViewProfile={(uid) => navigate(`/profile/${uid}?preview=true`)}
+            />
 
           </ReportCard>
         </div>

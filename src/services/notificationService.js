@@ -2,13 +2,14 @@
 import { collection, addDoc, doc, updateDoc, getDocs, query, where } from 'firebase/firestore';
 import { db } from '../firebase';
 
-export const notifySellerOfOffer = async ({ transactionId, sellerId, buyerId, buyerName }) => {
+export const notifySellerOfOffer = async ({ transactionId, sellerId, buyerId, buyerName, listingTitle }) => {
   const docRef = await addDoc(collection(db, 'notifications'), {
     type: 'new_offer',
     userId: sellerId,
     transactionId,
     buyerId,
     buyerName: buyerName || 'Student',
+    listingTitle: listingTitle || 'an item',
     read: false,
     createdAt: new Date(),
   });

@@ -168,9 +168,20 @@ export default function Navbar() {
                 const highlight = n.transactionId || n.listingId || '';
                 navigate(`/profile?tab=offers&highlight=${highlight}`);
 
+            } else if (n.type === 'offer_accepted_seller') {
+                // Seller accepted an offer — go straight to their card in Trade Facility
+                const highlight = n.transactionId || '';
+                navigate(`/trade-facility?tab=seller${highlight ? `&highlight=${highlight}` : ''}`);
+
             } else if (n.type === 'offer_accepted') {
-                // Go straight to payment for this transaction
-                navigate(`/payment/${n.transactionId}`);
+                // Cash offers → show the purchase card; online/partial → Stripe payment page
+                const pm = (n.paymentMethod || '').toLowerCase();
+                const isCashNotif = pm === 'cash' || pm === 'cod' || pm === 'fully_cash';
+                if (isCashNotif && n.transactionId) {
+                    navigate(`/my-purchases?open=${n.transactionId}`);
+                } else {
+                    navigate(`/payment/${n.transactionId}`);
+                }
 
             } else if (n.type === 'offer_declined') {
                 // Nothing specific to open — browse listings
@@ -212,6 +223,7 @@ export default function Navbar() {
     };
 
     const notificationIcon = (type) => {
+        if (type === 'offer_accepted_seller')                       return 'fa-calendar-plus';
         if (type === 'buyer_paid')                           return 'fa-money-bill-wave';
         if (type === 'new_offer')                            return 'fa-shopping-cart';
         if (type === 'offer_accepted')                       return 'fa-circle-check';
@@ -237,6 +249,7 @@ export default function Navbar() {
     };
 
     const notificationIconColor = (type) => {
+        if (type === 'offer_accepted_seller')                       return '#16a34a';
         if (type === 'buyer_paid')                           return '#16a34a';
         if (type === 'new_offer')                            return '#3b82f6';
         if (type === 'offer_accepted')                       return '#22c55e';
@@ -265,18 +278,46 @@ export default function Navbar() {
         const title = n.listingTitle ? `"${n.listingTitle}"` : (n.itemTitle ? `"${n.itemTitle}"` : (n.message ? null : 'your item'));
         const price = n.listingPrice ? ` · R${Number(n.listingPrice).toLocaleString('en-ZA')}` : '';
         const buyer = n.buyerName || 'A student';
+        const isTrade = n.isTrade === true;
         if (n.type === 'buyer_paid')                return `${buyer} has paid for ${title || 'your item'}. Book a drop-off slot now.`;
-        if (n.type === 'new_offer')                 return title ? `${buyer} made an offer on ${title}${price}` : (n.message || `${buyer} made you an offer${price}`);
-        if (n.type === 'offer_accepted')            return `Your offer on ${title || 'your item'} was accepted! Head to payment.${price}`;
+        if (n.type === 'new_offer') {
+            const itemLabel = title || '"your item"';
+            if (isTrade) return `${buyer} made a trade offer on ${itemLabel}`;
+            return `${buyer} made an offer on ${itemLabel}${price}`;
+        }
+        if (n.type === 'offer_accepted') {
+            if (isTrade) return `Your trade offer on ${title || 'your item'} was accepted — head to the trade facility to book a drop-off slot.`;
+            const pm = (n.paymentMethod || '').toLowerCase();
+            const isCashNotif = pm === 'cash' || pm === 'cod' || pm === 'fully_cash';
+            const isPartialNotif = pm === 'partial';
+            if (isCashNotif) {
+                const amt = n.agreedPrice ? ` — R${Number(n.agreedPrice).toLocaleString('en-ZA')} in cash` : '';
+                return `Your offer on ${title || 'your item'} was accepted! You committed to paying${amt} in cash at collection.`;
+            }
+            if (isPartialNotif && n.partialAmount) {
+                return `Your offer on ${title || 'your item'} was accepted! Pay R${Number(n.partialAmount).toLocaleString('en-ZA')} online now — the rest in cash at collection.`;
+            }
+            return `Your offer on ${title || 'your item'} was accepted! Head to payment.${price}`;
+        }
+        if (n.type === 'offer_accepted_seller')     return `You accepted an offer on ${title || 'your item'}. Book a drop-off for it in Trade Facility.`;
         if (n.type === 'trade_waiting')             return `Your trade offer on ${title || 'your item'} was accepted — head to the trade facility to book a drop-off slot.`;
-        if (n.type === 'offer_declined')            return `Your offer on ${title || 'your item'} was declined.`;
-        if (n.type === 'item_received_at_facility') return `${title} has been received at the trade facility.${price}`;
+        if (n.type === 'offer_declined') {
+            if (isTrade) return `Your trade offer on ${title || 'your item'} was declined.`;
+            return `Your offer on ${title || 'your item'} was declined.`;
+        }
+        if (n.type === 'item_received_at_facility') return `${title} has been received at the trade facility.`;
         if (n.type === 'item_at_facility')          return `${title} has been dropped off and is ready to collect from the trade facility. Show your receipt to staff when collecting.`;
-        if (n.type === 'item_ready_for_collection') return `${title} is ready for collection at the trade facility.${price}`;
-        if (n.type === 'item_collected')            return `${title} has been collected. Transaction complete!${price}`;
-        if (n.type === 'transaction_complete')      return `Your sale of ${title} is complete${price}.`;
+        if (n.type === 'item_ready_for_collection') return `${title} is ready for collection at the trade facility.`;
+        if (n.type === 'item_collected')            return `${title} has been collected. Transaction complete!`;
+        if (n.type === 'transaction_complete') {
+            if (isTrade) return `Your trade of ${title} is complete.`;
+            return `Your sale of ${title} is complete${price}.`;
+        }
         if (n.type === 'collection_booked')         return n.message || `Collection slot booked for ${title}.`;
-        if (n.type === 'dropoff_booked')            return n.message || `Drop-off slot booked for ${title}.`;
+        if (n.type === 'dropoff_booked') {
+            if (isTrade) return n.message || `Your trade offer on ${title || 'your item'} was accepted — book your drop-off slot now.`;
+            return n.message || `Drop-off slot booked for ${title}.`;
+        }
         if (n.type === 'overdue_collection_buyer')  return `Your collection of ${title} is overdue. Please come to the trade facility as soon as possible to collect your item.`;
         if (n.type === 'overdue_collection_seller') return `The buyer has not yet collected ${title}. They have been notified and given 24 hours to collect.`;
         if (n.type === 'overdue_dropoff_seller')    return `Your drop-off for ${title} is overdue. Please bring your item to the trade facility as soon as possible.`;
@@ -381,7 +422,30 @@ export default function Navbar() {
                 const tb = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : new Date(b.createdAt || 0).getTime();
                 return tb - ta;
             });
-            setOfferNotifications(sorted);
+
+            // Deduplicate: for overdue/recurring notification types, keep only the
+            // most-recent notification per (type + transactionId) pair so that
+            // automated re-sends don't show multiple identical items in the bell.
+            const DEDUP_TYPES = new Set([
+                'overdue_collection_buyer',
+                'overdue_collection_seller',
+                'overdue_dropoff_seller',
+                'overdue_dropoff_buyer',
+                'cancelled_dropoff_seller',
+                'cancelled_dropoff_buyer',
+                'cancelled_collection_seller',
+                'cancelled_collection_buyer',
+            ]);
+            const seen = new Set();
+            const deduped = sorted.filter((n) => {
+                if (!DEDUP_TYPES.has(n.type)) return true;
+                const key = `${n.type}::${n.transactionId || n.transaction_id || n.txnId || ''}`;
+                if (seen.has(key)) return false;
+                seen.add(key);
+                return true;
+            });
+
+            setOfferNotifications(deduped);
         });
         return () => unsub();
     }, [currentUser]);

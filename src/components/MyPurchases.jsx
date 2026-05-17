@@ -632,14 +632,35 @@ export default function MyPurchases() {
                       )}
 
                       {(tx.status === 'accepted' || tx.status === 'pending_payment') && (
-                        <div
-                          className={styles.statusMsg}
-                          style={{ borderColor: '#3b82f6', background: '#eff6ff', cursor: 'pointer' }}
-                          onClick={(e) => { e.stopPropagation(); navigate(`/payment/${tx.id}`); }}
-                        >
-                          <i className="fas fa-credit-card" style={{ color: '#3b82f6' }} />
-                          <span>Your offer was accepted. Click here to complete payment via Stripe.</span>
-                        </div>
+                        isCashTx ? (
+                          /* Cash — no Stripe flow; just inform and let them view the card */
+                          <div className={styles.statusMsg} style={{ borderColor: '#f59e0b', background: '#fffbeb' }}>
+                            <i className="fas fa-money-bill-wave" style={{ color: '#d97706' }} />
+                            <span>
+                              Your offer was accepted.{' '}
+                              <strong style={{ color: '#92400e' }}>
+                                You committed to paying R {total.toLocaleString('en-ZA')} in cash
+                              </strong>{' '}
+                              — bring this amount when collecting your item from the trade facility.
+                            </span>
+                          </div>
+                        ) : (
+                          /* Online or partial — navigate to Stripe payment page */
+                          <div
+                            className={styles.statusMsg}
+                            style={{ borderColor: '#3b82f6', background: '#eff6ff', cursor: 'pointer' }}
+                            onClick={(e) => { e.stopPropagation(); navigate(`/payment/${tx.id}`); }}
+                          >
+                            <i className="fas fa-credit-card" style={{ color: '#3b82f6' }} />
+                            <span>
+                              Your offer was accepted.{' '}
+                              {isPartialTx
+                                ? <>Complete the online portion of <strong style={{ color: '#1d4ed8' }}>R {Number(tx.partialAmount ?? tx.onlineAmount ?? 0).toLocaleString('en-ZA')}</strong> via Stripe, then bring <strong style={{ color: '#92400e' }}>R {cashDue.toLocaleString('en-ZA')}</strong> cash at collection.</>
+                                : 'Click here to complete payment via Stripe.'
+                              }
+                            </span>
+                          </div>
+                        )
                       )}
 
                       {tx.status === 'waiting' && !isTrade && (

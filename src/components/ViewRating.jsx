@@ -1,12 +1,12 @@
 // src/components/ViewRating.jsx
 import React, { useState, useEffect, useRef } from 'react';
-import { useParams, useSearchParams } from 'react-router-dom';
+import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import { db } from '../firebase.js';
 import { auth } from '../firebase.js';
 import ReportModal from './ReportModal.jsx';
 import {
   doc, getDoc, collection, query,
-  where, getDocs, orderBy,
+  where, getDocs, orderBy, updateDoc, arrayUnion,
 } from 'firebase/firestore';
 import styles from './ViewRating.module.css';
 import {
@@ -18,7 +18,8 @@ import NavBar from './NavBarTemp.jsx';
 import ListingCard from './ListingCard.jsx';
 
 const PREVIEW_REVIEWS  = 3;
-const PREVIEW_LISTINGS = 7;
+const PREVIEW_LISTINGS = 3;
+const PREVIEW_REPORTS  = 3;
 
 function Drawer({ open, onClose, title, children }) {
   const overlayRef = useRef(null);
@@ -140,6 +141,7 @@ function BackButton({ onClick }) {
 export default function ViewSellerRatings({ userId: propUserId, onBack }) {
   const { userId: paramUserId } = useParams();
   const [searchParams]          = useSearchParams();
+  const navigate                = useNavigate();
   const isAdminPreview          = searchParams.get('preview') === 'true';
   const userId = propUserId || paramUserId;
 
@@ -151,14 +153,84 @@ export default function ViewSellerRatings({ userId: propUserId, onBack }) {
   const [listings, setListings]                 = useState([]);
   const [loading, setLoading]                   = useState(true);
   const [error, setError]                       = useState(null);
-  const [reviewDrawerOpen, setReviewDrawerOpen] = useState(false);
-  const [listingDrawerOpen, setListingDrawerOpen] = useState(false);
   const [reportReview, setReportReview]         = useState(null);
+  const [reportUserOpen, setReportUserOpen]     = useState(false);
+  const [userReports, setUserReports]           = useState([]);
+  const [suspending, setSuspending]             = useState(false);
+  const [showAllReviews, setShowAllReviews]         = useState(false);
+  const [showAllListings, setShowAllListings]       = useState(false);
+  const [showAllPending, setShowAllPending]         = useState(false);
+  const [showAllResolved, setShowAllResolved]       = useState(false);
 
   useEffect(() => {
     if (!userId) { setError('No user ID provided.'); setLoading(false); return; }
     fetchAll(userId);
+    if (isAdminPreview) fetchUserReports(userId);
   }, [userId]);
+
+  async function fetchUserReports(uid) {
+    try {
+      // 1. Reports filed directly against the user (reportType === 'user' or 'review')
+      const userSnap = await getDocs(
+        query(collection(db, 'reports'), where('reportedId', '==', uid))
+      );
+      const userReportDocs = userSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+      // 2. Reports filed against listings owned by this user
+      //    reportedId on a listing report is the listing ID, not the user ID
+      const listingsSnap = await getDocs(
+        query(collection(db, 'listings'), where('sellerUID', '==', uid))
+      );
+      const listingIds = listingsSnap.docs.map(d => d.id);
+
+      let listingReportDocs = [];
+      if (listingIds.length > 0) {
+        // Firestore 'in' supports up to 30 items; chunk if needed
+        const chunks = [];
+        for (let i = 0; i < listingIds.length; i += 30)
+          chunks.push(listingIds.slice(i, i + 30));
+
+        const chunkSnaps = await Promise.all(
+          chunks.map(chunk =>
+            getDocs(query(collection(db, 'reports'), where('reportedId', 'in', chunk)))
+          )
+        );
+        chunkSnaps.forEach(snap =>
+          snap.docs.forEach(d => listingReportDocs.push({ id: d.id, ...d.data() }))
+        );
+      }
+
+      // Merge, deduplicate by report id
+      const seen = new Set();
+      const all = [...userReportDocs, ...listingReportDocs].filter(r => {
+        if (seen.has(r.id)) return false;
+        seen.add(r.id);
+        return true;
+      });
+
+      setUserReports(all);
+    } catch (err) { console.error('fetchUserReports:', err); }
+  }
+
+  async function handleSuspendUser() {
+    if (!window.confirm(`Suspend ${profileData?.name}? This will block their access.`)) return;
+    setSuspending(true);
+    try {
+      const adminUser = auth.currentUser;
+      await updateDoc(doc(db, 'users', userId), {
+        suspended:       true,
+        suspendedBy:     adminUser?.uid || null,
+        suspendedAt:     new Date(),
+        suspendedByName: adminUser?.displayName || adminUser?.email || 'Admin',
+      });
+      alert(`${profileData?.name} has been suspended.`);
+    } catch (err) {
+      console.error(err);
+      alert('Failed to suspend user.');
+    } finally {
+      setSuspending(false);
+    }
+  }
 
   async function fetchAll(uid) {
     setLoading(true);
@@ -186,6 +258,8 @@ export default function ViewSellerRatings({ userId: propUserId, onBack }) {
       totalTrades:    d.totalTrades || 0,
       totalPurchases: d.totalPurchases || 0,
       bio:            d.bio || '',
+      warnings:       d.warnings || [],
+      suspended:      d.suspended || false,
     });
   }
 
@@ -274,6 +348,7 @@ export default function ViewSellerRatings({ userId: propUserId, onBack }) {
   const handleTabSwitch = (tab) => {
     if (tab === activeTab || tabTransitioning) return;
     setTabTransitioning(true);
+    setShowAllReviews(false);
     setTimeout(() => { setActiveTab(tab); setTabTransitioning(false); }, 220);
   };
 
@@ -292,14 +367,20 @@ export default function ViewSellerRatings({ userId: propUserId, onBack }) {
   if (!profileData) return <div className={styles.error}>No profile data found</div>;
 
   const reviews        = activeTab === 'seller' ? sellerReviews : buyerReviews;
-  const previewReviews = reviews.slice(0, PREVIEW_REVIEWS);
+  const previewReviews = showAllReviews ? reviews : reviews.slice(0, PREVIEW_REVIEWS);
   const hasMore        = reviews.length > PREVIEW_REVIEWS;
   const totalReviews   = reviews.length;
   const averageRating  = calculateAverageRating(reviews);
   const ratingDist     = getRatingDistribution(reviews);
   const hasReviews     = totalReviews > 0;
-  const previewListings = listings.slice(0, PREVIEW_LISTINGS);
+  const previewListings = showAllListings ? listings : listings.slice(0, PREVIEW_LISTINGS);
   const hasMoreListings = listings.length > PREVIEW_LISTINGS;
+  
+  const pendingReports         = userReports.filter(r => r.status === 'pending');
+  const resolvedReports        = userReports.filter(r => r.status !== 'pending');
+  const listingReportCount     = userReports.filter(r => r.reportType === 'listing').length;
+  const previewPending         = showAllPending  ? pendingReports  : pendingReports.slice(0, PREVIEW_REPORTS);
+  const previewResolved        = showAllResolved ? resolvedReports : resolvedReports.slice(0, PREVIEW_REPORTS);
   
   const activeCount = totalReviews;
   const activeLabel = activeTab === 'seller' ? 'reviews as seller' : 'reviews as buyer';
@@ -320,6 +401,15 @@ export default function ViewSellerRatings({ userId: propUserId, onBack }) {
         reportType="review"
         reportedId={reportReview?.id || ''}
         reportedName={`Review by ${reportReview?.reviewerName || 'user'} on "${reportReview?.listingTitle || 'listing'}"`}
+      />
+
+      {/* Report user modal */}
+      <ReportModal
+        open={reportUserOpen}
+        onClose={() => setReportUserOpen(false)}
+        reportType="user"
+        reportedId={userId || ''}
+        reportedName={profileData?.name || ''}
       />
       
       <div className={styles.page}>
@@ -367,9 +457,40 @@ export default function ViewSellerRatings({ userId: propUserId, onBack }) {
           </div>
 
           <div className={styles.profileInfo}>
-            <div className={styles.profileTopRow}>
-              <h2 className={styles.userName}>{profileData.name}</h2>
-              <span className={styles.activeDot} title="Active user" />
+            <div className={styles.profileTopRow} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <h2 className={styles.userName}>{profileData.name}</h2>
+                <span className={styles.activeDot} title="Active user" />
+              </div>
+              {!isAdminPreview && currentUid && currentUid !== userId && (
+                <button
+                  onClick={() => setReportUserOpen(true)}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 5,
+                    background: 'none',
+                    border: '1.5px solid #fca5a5',
+                    borderRadius: 8,
+                    padding: '5px 11px',
+                    color: '#dc2626',
+                    fontSize: '0.75rem',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    fontFamily: 'inherit',
+                    flexShrink: 0,
+                    transition: 'background 0.15s',
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.background = '#fef2f2'; }}
+                  onMouseLeave={e => { e.currentTarget.style.background = 'none'; }}
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/>
+                    <line x1="4" y1="22" x2="4" y2="15"/>
+                  </svg>
+                  Report user
+                </button>
+              )}
             </div>
 
             <div className={styles.profileMeta}>
@@ -440,6 +561,214 @@ export default function ViewSellerRatings({ userId: propUserId, onBack }) {
             </div>
           )}
 
+          {/* ── Admin-only: report history — ABOVE seller reviews ── */}
+          {isAdminPreview && userReports.length > 0 && (
+            <div style={{ marginBottom: 24, background: '#fff', borderRadius: 14, border: '1px solid #e8eaed', overflow: 'hidden' }}>
+              <div style={{ padding: '14px 18px 10px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', gap: 8 }}>
+                <i className="fas fa-flag" style={{ color: '#dc2626', fontSize: '0.85rem' }} />
+                <span style={{ fontWeight: 700, fontSize: '0.95rem', color: '#1a1a1a' }}>Report History</span>
+                <span style={{ marginLeft: 'auto', fontSize: '0.72rem', fontWeight: 700, background: '#fef2f2', color: '#dc2626', padding: '2px 8px', borderRadius: 20 }}>
+                  {userReports.length} total
+                </span>
+              </div>
+
+              {/* Summary stats — now includes Listings Reported */}
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 0, borderBottom: '1px solid #f1f5f9' }}>
+                {[
+                  { label: 'Pending',           value: pendingReports.length,                                                                    color: '#d97706', bg: '#fffbeb' },
+                  { label: 'Resolved',          value: resolvedReports.filter(r => r.resolution !== 'dismiss').length,                          color: '#16a34a', bg: '#f0fdf4' },
+                  { label: 'Dismissed',         value: userReports.filter(r => r.resolution === 'dismiss').length,                              color: '#64748b', bg: '#f8fafc' },
+                  { label: 'Warnings',          value: (profileData.warnings || []).length,                                                      color: '#d97706', bg: '#fffbeb' },
+                  { label: 'Listings Reported', value: listingReportCount,                                                                       color: '#dc2626', bg: '#fef2f2' },
+                ].map(({ label, value, color, bg }) => (
+                  <div key={label} style={{ flex: '1 1 80px', padding: '12px 16px', borderRight: '1px solid #f1f5f9', background: bg }}>
+                    <div style={{ fontSize: '1.4rem', fontWeight: 800, color, lineHeight: 1 }}>{value}</div>
+                    <div style={{ fontSize: '0.7rem', fontWeight: 600, color: '#64748b', marginTop: 2, textTransform: 'uppercase', letterSpacing: '0.04em' }}>{label}</div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Pending report rows — max 3 */}
+              {pendingReports.length > 0 && (
+                <>
+                  <div style={{ padding: '10px 18px 4px', fontSize: '0.75rem', fontWeight: 700, color: '#d97706', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    Pending ({pendingReports.length})
+                  </div>
+                  <div style={{ maxHeight: 240, overflowY: 'auto' }}>
+                    {previewPending.map((r, i) => (
+                      <div key={r.id} style={{
+                        display: 'flex', alignItems: 'flex-start', gap: 12, padding: '11px 18px',
+                        borderBottom: i < previewPending.length - 1 ? '1px solid #f8fafc' : 'none',
+                        fontSize: '0.8rem',
+                      }}>
+                        <span style={{ flexShrink: 0, marginTop: 2, width: 8, height: 8, borderRadius: '50%', background: '#f59e0b', display: 'inline-block' }} />
+                        <div style={{ flex: 1 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 2 }}>
+                            <span style={{
+                              fontSize: '0.65rem', fontWeight: 700, padding: '1px 7px', borderRadius: 20,
+                              textTransform: 'uppercase', letterSpacing: '0.05em',
+                              background: r.reportType === 'listing' ? '#eff6ff' : r.reportType === 'review' ? '#fef3c7' : '#f1f5f9',
+                              color:      r.reportType === 'listing' ? '#2563eb' : r.reportType === 'review' ? '#d97706'  : '#475569',
+                            }}>
+                              {r.reportType || 'user'}
+                            </span>
+                            {r.reportType === 'listing' && r.reportedName && (
+                              <span
+                                onClick={() => navigate(`/listing/${r.reportedId}?preview=true`)}
+                                style={{
+                                  fontWeight: 600, color: '#2563eb',
+                                  cursor: 'pointer',
+                                  textDecoration: 'underline dotted',
+                                  textUnderlineOffset: 3,
+                                }}
+                              >
+                                {r.reportedName}
+                              </span>
+                            )}
+                          </div>
+                          <span style={{ fontWeight: 500, color: '#475569' }}>{r.reason}</span>
+                          {r.details && <span style={{ color: '#64748b', marginLeft: 6 }}>— {r.details}</span>}
+                          <div style={{ fontSize: '0.72rem', color: '#94a3b8', marginTop: 2 }}>
+                            Reported by {r.reporterName} · {r.createdAt?.toDate ? r.createdAt.toDate().toLocaleDateString('en-ZA') : 'Recently'}
+                          </div>
+                        </div>
+                        <span style={{ flexShrink: 0, fontSize: '0.68rem', fontWeight: 700, padding: '2px 8px', borderRadius: 20, background: '#fef3c7', color: '#d97706', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Pending</span>
+                      </div>
+                    ))}
+                  </div>
+                  {pendingReports.length > PREVIEW_REPORTS && (
+                    <div style={{ padding: '8px 18px 10px' }}>
+                      <button onClick={() => setShowAllPending(p => !p)} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: '0.78rem', fontWeight: 600, color: '#2563eb', fontFamily: 'inherit', textDecoration: 'underline dotted', textUnderlineOffset: 3 }}>
+                        {showAllPending ? 'View less' : `View more (${pendingReports.length - PREVIEW_REPORTS} more)`}
+                      </button>
+                    </div>
+                  )}
+                </>
+              )}
+
+              {/* Resolved report rows — max 3 */}
+              {resolvedReports.length > 0 && (
+                <>
+                  <div style={{ padding: '10px 18px 4px', fontSize: '0.75rem', fontWeight: 700, color: '#16a34a', textTransform: 'uppercase', letterSpacing: '0.05em', borderTop: pendingReports.length > 0 ? '1px solid #f1f5f9' : 'none' }}>
+                    Resolved ({resolvedReports.length})
+                  </div>
+                  <div>
+                    {previewResolved.map((r, i) => (
+                      <div key={r.id} style={{
+                        display: 'flex', alignItems: 'flex-start', gap: 12, padding: '11px 18px',
+                        borderBottom: i < previewResolved.length - 1 ? '1px solid #f8fafc' : 'none',
+                        fontSize: '0.8rem',
+                      }}>
+                        <span style={{ flexShrink: 0, marginTop: 2, width: 8, height: 8, borderRadius: '50%', background: r.resolution === 'dismiss' ? '#94a3b8' : '#16a34a', display: 'inline-block' }} />
+                        <div style={{ flex: 1 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 2 }}>
+                            <span style={{
+                              fontSize: '0.65rem', fontWeight: 700, padding: '1px 7px', borderRadius: 20,
+                              textTransform: 'uppercase', letterSpacing: '0.05em',
+                              background: r.reportType === 'listing' ? '#eff6ff' : r.reportType === 'review' ? '#fef3c7' : '#f1f5f9',
+                              color:      r.reportType === 'listing' ? '#2563eb' : r.reportType === 'review' ? '#d97706'  : '#475569',
+                            }}>
+                              {r.reportType || 'user'}
+                            </span>
+                            {r.reportType === 'listing' && r.reportedName && (
+                              <span
+                                onClick={() => navigate(`/listing/${r.reportedId}?preview=true`)}
+                                style={{
+                                  fontWeight: 600, color: '#2563eb',
+                                  cursor: 'pointer',
+                                  textDecoration: 'underline dotted',
+                                  textUnderlineOffset: 3,
+                                }}
+                              >
+                                {r.reportedName}
+                              </span>
+                            )}
+                          </div>
+                          <span style={{ fontWeight: 500, color: '#475569' }}>{r.reason}</span>
+                          {r.details && <span style={{ color: '#64748b', marginLeft: 6 }}>— {r.details}</span>}
+                          <div style={{ fontSize: '0.72rem', color: '#94a3b8', marginTop: 2 }}>
+                            Reported by {r.reporterName} · {r.createdAt?.toDate ? r.createdAt.toDate().toLocaleDateString('en-ZA') : 'Recently'}
+                          </div>
+                        </div>
+                        <span style={{ flexShrink: 0, fontSize: '0.68rem', fontWeight: 700, padding: '2px 8px', borderRadius: 20, background: r.resolution === 'dismiss' ? '#f1f5f9' : '#f0fdf4', color: r.resolution === 'dismiss' ? '#64748b' : '#16a34a', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                          {r.resolution === 'dismiss' ? 'Dismissed' : 'Resolved'}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                  {resolvedReports.length > PREVIEW_REPORTS && (
+                    <div style={{ padding: '8px 18px 10px' }}>
+                      <button onClick={() => setShowAllResolved(p => !p)} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: '0.78rem', fontWeight: 600, color: '#2563eb', fontFamily: 'inherit', textDecoration: 'underline dotted', textUnderlineOffset: 3 }}>
+                        {showAllResolved ? 'View less' : `View more (${resolvedReports.length - PREVIEW_REPORTS} more)`}
+                      </button>
+                    </div>
+                  )}
+                </>
+              )}
+
+              {/* Suspend button */}
+              <div style={{ padding: '14px 18px', borderTop: '1px solid #f1f5f9', display: 'flex', justifyContent: 'flex-end' }}>
+                {profileData.suspended ? (
+                  <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#dc2626', display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <i className="fas fa-ban" /> Account is suspended
+                  </span>
+                ) : (
+                  <button
+                    onClick={handleSuspendUser}
+                    disabled={suspending}
+                    style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 8,
+                      padding: '9px 20px', borderRadius: 9, border: 'none',
+                      background: suspending ? '#fca5a5' : '#dc2626', color: '#fff',
+                      fontSize: '0.85rem', fontWeight: 700, cursor: suspending ? 'not-allowed' : 'pointer',
+                      fontFamily: 'inherit', transition: 'background 0.15s',
+                    }}
+                    onMouseEnter={e => { if (!suspending) e.currentTarget.style.background = '#b91c1c'; }}
+                    onMouseLeave={e => { if (!suspending) e.currentTarget.style.background = '#dc2626'; }}
+                  >
+                    <i className="fas fa-ban" />
+                    {suspending ? 'Suspending…' : 'Suspend Account'}
+                  </button>
+                )}
+              </div>
+
+              {/* ── Account Warning — admin-only, shown after report table ── */}
+              {profileData.warnings && profileData.warnings.length > 0 && (
+                <div style={{
+                  margin: '0 18px 16px',
+                  padding: '14px 18px',
+                  background: '#fffbeb',
+                  border: '1.5px solid #fcd34d',
+                  borderRadius: 12,
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: 12,
+                }}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#d97706" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, marginTop: 2 }}>
+                    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                    <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+                  </svg>
+                  <div>
+                    <p style={{ margin: '0 0 4px', fontWeight: 700, fontSize: '0.88rem', color: '#92400e' }}>
+                      Account Warning{profileData.warnings.length > 1 ? `s (${profileData.warnings.length})` : ''}
+                    </p>
+                    {profileData.warnings.map((w, i) => (
+                      <p key={i} style={{ margin: '2px 0', fontSize: '0.81rem', color: '#78350f' }}>
+                        {profileData.warnings.length > 1 ? `${i + 1}. ` : ''}{w.reason}
+                        {w.warnedAt && (
+                          <span style={{ color: '#a16207', marginLeft: 6, fontSize: '0.74rem' }}>
+                            · {new Date(w.warnedAt?.toDate ? w.warnedAt.toDate() : w.warnedAt).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric' })}
+                          </span>
+                        )}
+                      </p>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── Seller / Buyer Reviews — max 3 with View all link ── */}
           <div className={styles.transactionsSection}>
             <div className={styles.sectionTitleRow}>
               <h3 className={styles.sectionHeader}>{activeTab === 'seller' ? 'Seller reviews' : 'Buyer reviews'}</h3>
@@ -461,17 +790,18 @@ export default function ViewSellerRatings({ userId: propUserId, onBack }) {
                   ))}
                 </div>
                 {hasMore && (
-                  <button className={styles.seeMoreBtn} onClick={() => setReviewDrawerOpen(true)}>
+                  <button className={styles.seeMoreBtn} onClick={() => setShowAllReviews(p => !p)}>
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
                       <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/>
                     </svg>
-                    See all {totalReviews} reviews
+                    {showAllReviews ? 'View less' : `View more (${totalReviews - PREVIEW_REVIEWS} more)`}
                   </button>
                 )}
               </>
             )}
           </div>
 
+          {/* ── Active Listings — max 3 with View all link ── */}
           <div className={styles.listingsSection}>
             <div className={styles.sectionTitleRow}>
               <h3 className={styles.sectionHeader}>Active listings</h3>
@@ -495,11 +825,11 @@ export default function ViewSellerRatings({ userId: propUserId, onBack }) {
                   ))}
                 </div>
                 {hasMoreListings && (
-                  <button className={styles.seeMoreBtn} onClick={() => setListingDrawerOpen(true)}>
+                  <button className={styles.seeMoreBtn} onClick={() => setShowAllListings(p => !p)}>
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
                       <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/>
                     </svg>
-                    See all {listings.length} listings
+                    {showAllListings ? 'View less' : `View more (${listings.length - PREVIEW_LISTINGS} more)`}
                   </button>
                 )}
               </>
@@ -508,21 +838,6 @@ export default function ViewSellerRatings({ userId: propUserId, onBack }) {
         </div>
       </div>
 
-      <Drawer open={reviewDrawerOpen} onClose={() => setReviewDrawerOpen(false)} title={`All ${activeTab} reviews (${totalReviews})`}>
-        <div className={styles.drawerReviewList}>
-          {reviews.map((review, i) => <ReviewCard key={review.id} review={review} animate delay={i * 40} onReport={canReportReview(review) ? handleReportReview : null} />)}
-        </div>
-      </Drawer>
-
-      <Drawer open={listingDrawerOpen} onClose={() => setListingDrawerOpen(false)} title={`All active listings (${listings.length})`}>
-        <div className={styles.drawerListingsGrid}>
-          {listings.map((listing, i) => (
-            <div key={listing.id} className={styles.listingCardWrap} style={{ animationDelay: `${i * 50}ms` }}>
-              <ListingCard listing={listing} visible />
-            </div>
-          ))}
-        </div>
-      </Drawer>
     </>
   );
 }

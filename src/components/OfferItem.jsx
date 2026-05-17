@@ -4,7 +4,7 @@ import {
   doc, getDoc, updateDoc, deleteDoc,
   collection, query, where, getDocs, addDoc, serverTimestamp,
 } from 'firebase/firestore';
-import { db } from '../firebase';
+import { auth, db } from '../firebase';
 import styles from './OfferItem.module.css';
 
 const shimmerStyle = {
@@ -145,24 +145,13 @@ export default function OfferItem({ offer }) {
       );
       console.log('Step 4 done ✓');
 
+      // ── Step 5: notify the buyer ──────────────────────────────
       if (isTrade) {
-        // ── Trade: notify buyer their trade offer was accepted + book drop-off
         console.log('Step 5 (trade): notifying buyer', offer.buyerId, '→ trade_waiting');
         await addDoc(collection(db, 'notifications'), {
           userId:        offer.buyerId,
           type:          'trade_waiting',
-          transactionId: offer.id,
-          listingId:     offer.listingId,
-          read:          false,
-          createdAt:     serverTimestamp(),
-          redirectUrl:   `/trade-facility`,
-        });
-
-        // ── Trade: notify seller to book a drop-off slot
-        console.log('Step 6 (trade): notifying seller', offer.sellerId, '→ book_dropoff');
-        await addDoc(collection(db, 'notifications'), {
-          userId:        offer.sellerId,
-          type:          'dropoff_booked',
+          isTrade:       true,
           transactionId: offer.id,
           listingId:     offer.listingId,
           read:          false,
@@ -170,30 +159,41 @@ export default function OfferItem({ offer }) {
           redirectUrl:   `/trade-facility`,
         });
       } else {
-        // ── Sale: notify buyer their offer was accepted
         console.log('Step 5 (sale): notifying accepted buyer', offer.buyerId, '→ offer_accepted');
         await addDoc(collection(db, 'notifications'), {
           userId:        offer.buyerId,
           type:          'offer_accepted',
+          isTrade:       false,
+          paymentMethod: offer.paymentMethod || offer.paymentType || null,
+          agreedPrice:   offer.agreedPrice   ?? null,
+          partialAmount: offer.partialAmount  ?? null,
           transactionId: offer.id,
           listingId:     offer.listingId,
           read:          false,
           createdAt:     serverTimestamp(),
-          redirectUrl:   `/payment/${offer.id}`,
-        });
-
-        // ── Sale: notify seller the buyer has committed and they can book drop-off
-        console.log('Step 6 (sale): notifying seller', offer.sellerId, '→ book_dropoff');
-        await addDoc(collection(db, 'notifications'), {
-          userId:        offer.sellerId,
-          type:          'dropoff_booked',
-          transactionId: offer.id,
-          listingId:     offer.listingId,
-          read:          false,
-          createdAt:     serverTimestamp(),
-          redirectUrl:   `/trade-facility`,
+          redirectUrl:   isCashOnly ? `/my-purchases?open=${offer.id}` : `/payment/${offer.id}`,
         });
       }
+      console.log('Step 5 done ✓');
+
+      // ── Step 6: notify the seller to book their drop-off ─────
+      const sellerId    = offer.sellerId || auth.currentUser?.uid;
+      const listingTitle = listing?.title || 'your item';
+
+      console.log('Step 6: notifying seller', sellerId, '→ offer_accepted_seller');
+      await addDoc(collection(db, 'notifications'), {
+        userId:        sellerId,
+        type:          'offer_accepted_seller',
+        transactionId: offer.id,
+        listingId:     offer.listingId,
+        listingTitle,
+        read:          false,
+        createdAt:     serverTimestamp(),
+        // Opens Trade Facility on the seller tab, scrolled to & highlighted this transaction
+        redirectUrl:   `/trade-facility?tab=seller&highlight=${offer.id}`,
+      });
+      console.log('Step 6 done ✓');
+
       console.log('All steps done ✓');
 
       setDone(true);
