@@ -433,6 +433,9 @@ export default function TradeFacility() {
 
   const buyerTradeTxns = buyerTransactions.filter(t => t.type === 'trade');
 
+  // Buyer transactions excluding completed ones (for the Track Pick-up tab)
+  const activeBuyerTransactions = buyerTransactions.filter(txn => txn.status !== "completed");
+
   if (loading) {
     return (
       <>
@@ -480,10 +483,10 @@ export default function TradeFacility() {
     );
   }
 
-  const currentTransactions = activeTab === "seller" ? sellerTransactions : buyerTransactions;
+  const currentTransactions = activeTab === "seller" ? sellerTransactions : activeBuyerTransactions;
   const totalCount = activeTab === "seller"
     ? sellerTransactions.length + buyerTradeTxns.length
-    : buyerTransactions.length;
+    : activeBuyerTransactions.length;
 
   return (
     <>
@@ -521,9 +524,9 @@ export default function TradeFacility() {
             onClick={() => setActiveTab("buyer")}
           >
             Track Pick-up
-            {buyerTransactions.length > 0 && (
+            {activeBuyerTransactions.length > 0 && (
               <span className={`${styles.toggleCount} ${activeTab === "buyer" ? styles.toggleCountActive : ""}`}>
-                {buyerTransactions.length}
+                {activeBuyerTransactions.length}
               </span>
             )}
           </button>
@@ -546,7 +549,7 @@ export default function TradeFacility() {
               Browse listings
             </button>
           </div>
-        ) : activeTab === "buyer" && buyerTransactions.length === 0 ? (
+        ) : activeTab === "buyer" && activeBuyerTransactions.length === 0 ? (
           <div className={styles.empty}>
             <div className={styles.emptyIcon}>
               <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
@@ -806,8 +809,8 @@ export default function TradeFacility() {
               </>
             )}
 
-            {/* Buyer tab — tracker cards only */}
-            {activeTab === "buyer" && buyerTransactions.map((txn, idx) => (
+            {/* Buyer tab — tracker cards only, completed transactions excluded */}
+            {activeTab === "buyer" && activeBuyerTransactions.map((txn, idx) => (
               <BuyerTrackerCard
                 key={txn.id}
                 txn={txn}

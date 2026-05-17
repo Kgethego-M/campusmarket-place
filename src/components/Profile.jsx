@@ -27,11 +27,9 @@ const READONLY_STATUSES = new Set(['accepted']);
 const ACTIVE_TX_STATUSES = ['completed', 'accepted', 'sold', 'traded'];
 
 // ── Trade item detail card (shown in Offers tab) ──
-// REMOVED: description and specifications
 function TradeItemCard({ tradeItem }) {
   if (!tradeItem) return null;
 
-  // Support both legacy string and new structured object
   if (typeof tradeItem === 'string') {
     return (
       <div className={styles.tradeItemCard}>
@@ -87,7 +85,6 @@ function TradeItemCard({ tradeItem }) {
               </span>
             )}
           </div>
-          {/* REMOVED: description and specifications */}
         </div>
       </div>
     </div>
@@ -123,7 +120,7 @@ function Profile() {
   const [profileData, setProfileData] = useState({
     firstName: '', lastName: '', email: '', bio: '',
     photoURL: '', memberSince: '',
-    totalSales: 0, totalTrades: 0, rating: 0, totalRatings: 0,
+    totalSales: 0, totalTrades: 0, totalBought: 0, rating: 0, totalRatings: 0,
   });
   const [editFormData, setEditFormData] = useState({ firstName: '', lastName: '', bio: '' });
   const [history, setHistory]   = useState([]);
@@ -157,7 +154,6 @@ function Profile() {
           return {
             id: d.id,
             ...data,
-            // Prefer structured object (has imageUrl) over legacy string
             tradeItem: data.tradeItemDetails ?? data.tradeItem ?? null,
           };
         }))
@@ -175,18 +171,26 @@ function Profile() {
       const d = docSnap.data();
       setHistory(d.history || []);
 
-      const [, , reviewSnap, allUserListingsSnap, completedTxAsSellerSnap] = await Promise.all([
-        fetchUserListings(user.uid),
-        fetchUserPurchases(user.uid),
+      // ── Fetch all stats from transactions directly ──────────────────────
+      const COMPLETED_STATUSES = ['completed', 'sold', 'traded'];
+
+      const [reviewSnap, completedAsSellerSnap, completedAsBuyerSnap] = await Promise.all([
         getDocs(query(collection(db, 'reviews'), where('reviewedUserId', '==', user.uid))),
-        getDocs(query(collection(db, 'listings'), where('sellerUID', '==', user.uid))),
+        // All completed transactions where user is seller
         getDocs(query(
           collection(db, 'transactions'),
           where('sellerId', '==', user.uid),
-          where('status', 'in', ['completed', 'accepted', 'traded', 'sold'])
+          where('status', 'in', COMPLETED_STATUSES),
+        )),
+        // All completed transactions where user is buyer
+        getDocs(query(
+          collection(db, 'transactions'),
+          where('buyerId', '==', user.uid),
+          where('status', 'in', COMPLETED_STATUSES),
         )),
       ]);
 
+      // ── Ratings ──────────────────────────────────────────────────────────
       let liveRating = 0;
       let liveTotalRatings = 0;
       if (!reviewSnap.empty) {
@@ -199,35 +203,28 @@ function Profile() {
           : 0;
       }
 
-      const SOLD_STATUSES = new Set(['sold', 'completed', 'traded']);
-      const soldListings = allUserListingsSnap.docs.filter(doc => {
-        const status = doc.data().status?.toLowerCase?.() ?? '';
-        return SOLD_STATUSES.has(status);
-      });
-
-      const liveTotalSales = soldListings.filter(doc => {
-        const lt = doc.data().listingType?.toLowerCase?.() ?? '';
-        return lt !== 'trade';
+      // ── Sales: completed seller transactions that are NOT trades ─────────
+      const liveTotalSales = completedAsSellerSnap.docs.filter(txDoc => {
+        const type = (txDoc.data().type ?? '').toLowerCase();
+        return type !== 'trade';
       }).length;
 
-      const tradedFromListings = soldListings.filter(doc => {
-        const lt = doc.data().listingType?.toLowerCase?.() ?? '';
-        return lt === 'trade' || doc.data().status?.toLowerCase?.() === 'traded';
+      // ── Trades: completed seller transactions that ARE trades ────────────
+      const liveTotalTrades = completedAsSellerSnap.docs.filter(txDoc => {
+        const type = (txDoc.data().type ?? '').toLowerCase();
+        return type === 'trade';
       }).length;
 
-      const tradedFromTransactions = completedTxAsSellerSnap.docs.filter(doc => {
-        const type = doc.data().type?.toLowerCase?.() ?? '';
-        const lt   = doc.data().listingType?.toLowerCase?.() ?? '';
-        return type === 'trade' || lt === 'trade';
-      }).length;
+      // ── Bought: completed transactions where user is the buyer ───────────
+      const liveTotalBought = completedAsBuyerSnap.docs.length;
 
-      const liveTotalTrades = Math.max(tradedFromListings, tradedFromTransactions);
-
+      // ── Persist any changed values back to Firestore ─────────────────────
       const updates = {};
       if (liveRating       !== safeNumber(d.rating))       updates.rating       = liveRating;
       if (liveTotalRatings !== safeNumber(d.totalRatings)) updates.totalRatings = liveTotalRatings;
       if (liveTotalSales   !== safeNumber(d.totalSales))   updates.totalSales   = liveTotalSales;
       if (liveTotalTrades  !== safeNumber(d.totalTrades))  updates.totalTrades  = liveTotalTrades;
+      if (liveTotalBought  !== safeNumber(d.totalBought))  updates.totalBought  = liveTotalBought;
 
       if (Object.keys(updates).length > 0) {
         updateDoc(doc(db, 'users', user.uid), updates).catch(() => {});
@@ -242,10 +239,15 @@ function Profile() {
           : 'Unknown',
         totalSales:   liveTotalSales,
         totalTrades:  liveTotalTrades,
+        totalBought:  liveTotalBought,
         rating:       liveRating,
         totalRatings: liveTotalRatings,
       });
       setEditFormData({ firstName: d.firstName || '', lastName: d.lastName || '', bio: d.bio || '' });
+
+      // Kick off listing + purchase fetches (for History tab)
+      fetchUserListings(user.uid);
+      fetchUserPurchases(user.uid);
     } catch (err) {
       console.error('fetchUserData error:', err);
     } finally {
@@ -387,7 +389,6 @@ function Profile() {
           const rawDate = p.completedAt || p.updatedAt || p.createdAt;
           const date    = rawDate?.toDate ? rawDate.toDate() : rawDate ? new Date(rawDate) : new Date();
 
-          // Prefer structured tradeItemDetails (has imageUrl); fall back to legacy string
           const tradeItem = p.tradeItemDetails ?? p.tradeItem ?? null;
           const historyType = isTrade ? 'trade' : side === 'buyer' ? 'purchase' : 'sale';
 
@@ -507,9 +508,9 @@ function Profile() {
 
   if (showRatings) return <ProfileRating onClose={() => setShowRatings(false)} />;
 
-  const totalSales        = safeNumber(profileData.totalSales);
-  const totalTrades       = safeNumber(profileData.totalTrades);
-  const totalTransactions = totalSales + totalTrades;
+  const totalSales   = safeNumber(profileData.totalSales);
+  const totalTrades  = safeNumber(profileData.totalTrades);
+  const totalBought  = safeNumber(profileData.totalBought);
 
   const activeListings   = listings.filter(l => !HISTORY_STATUSES.has(l.status?.toLowerCase?.()) && !READONLY_STATUSES.has(l.status?.toLowerCase?.()));
   const acceptedListings = listings.filter(l => READONLY_STATUSES.has(l.status?.toLowerCase?.()));
@@ -537,13 +538,11 @@ function Profile() {
               <div className={styles.editForm}>
                 <div className={styles.formGroup}><label>First Name</label><input type="text" name="firstName" value={editFormData.firstName} disabled className={styles.disabledInput} /></div>
                 <div className={styles.formGroup}><label>Surname</label><input type="text" name="lastName" value={editFormData.lastName} disabled className={styles.disabledInput} /></div>
-                {/* REMOVED: Email field */}
                 <div className={styles.formGroup}><label>Bio</label><textarea name="bio" value={editFormData.bio} onChange={handleInputChange} placeholder="Tell us about yourself..." rows="3" /></div>
               </div>
             ) : (
               <>
                 <h2>{profileData.firstName} {profileData.lastName}</h2>
-                {/* REMOVED: Email display */}
                 <p className={styles.bio}>{profileData.bio || 'No bio yet. Click edit to add one!'}</p>
                 <div className={styles.memberSince}><i className="fas fa-calendar-alt" /><span>Member since {profileData.memberSince}</span></div>
               </>
@@ -561,9 +560,27 @@ function Profile() {
             </button>
           </div>
           <div className={styles.statsGrid}>
-            <div className={styles.statItem}><i className="fas fa-tag" /><div className={styles.statInfo}><span className={styles.statValue}>{totalSales}</span><span className={styles.statLabel}>Sales</span></div></div>
-            <div className={styles.statItem}><i className="fas fa-exchange-alt" /><div className={styles.statInfo}><span className={styles.statValue}>{totalTrades}</span><span className={styles.statLabel}>Trades</span></div></div>
-            <div className={styles.statItem}><i className="fas fa-chart-line" /><div className={styles.statInfo}><span className={styles.statValue}>{totalTransactions}</span><span className={styles.statLabel}>Total</span></div></div>
+            <div className={styles.statItem}>
+              <i className="fas fa-tag" />
+              <div className={styles.statInfo}>
+                <span className={styles.statValue}>{totalSales}</span>
+                <span className={styles.statLabel}>Sales</span>
+              </div>
+            </div>
+            <div className={styles.statItem}>
+              <i className="fas fa-exchange-alt" />
+              <div className={styles.statInfo}>
+                <span className={styles.statValue}>{totalTrades}</span>
+                <span className={styles.statLabel}>Trades</span>
+              </div>
+            </div>
+            <div className={styles.statItem}>
+              <i className="fas fa-shopping-bag" />
+              <div className={styles.statInfo}>
+                <span className={styles.statValue}>{totalBought}</span>
+                <span className={styles.statLabel}>Bought</span>
+              </div>
+            </div>
           </div>
           {isEditing ? (
             <div className={styles.editActions}>

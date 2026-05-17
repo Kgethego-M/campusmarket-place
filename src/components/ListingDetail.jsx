@@ -25,7 +25,7 @@ import {
 import { auth, db } from '../firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import { createTransaction } from '../services/transactionService';
-import { notifySellerOfOffer } from '../services/notificationService';
+import { notifySellerOfOffer, deleteNewOfferNotification } from '../services/notificationService';
 import NavBarTemp from './NavBarTemp';
 import ReportModal from './ReportModal';
 import PromoteListingModal from './PromoteListingModal';
@@ -216,7 +216,7 @@ const IconClock = () => (
 );
 
 const IconLoader = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, animation: 'spin 1s linear infinite' }}>
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" style={{ flexShrink: 0, animation: 'spin 1s linear infinite' }}>
     <line x1="12" y1="2"   x2="12" y2="6"/>
     <line x1="12" y1="18"  x2="12" y2="22"/>
     <line x1="4.93" y1="4.93"   x2="7.76"  y2="7.76"/>
@@ -438,6 +438,8 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
     setCancelLoading(true);
     try {
       await deleteDoc(doc(db, 'transactions', txId));
+      // Delete the seller's new_offer notification for this transaction
+      await deleteNewOfferNotification(txId);
       setCancelConfirming(false);
       showToast('Offer withdrawn successfully');
       navigate(0);
@@ -583,11 +585,14 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
 
     try {
       const transactionId = await createTransaction(transactionData);
+      // Use notification service (already imported)
       await notifySellerOfOffer({
         transactionId, sellerId,
         buyerId:      currentUser.uid,
         buyerName:    currentUser.displayName || 'Student',
+        listingId:    listing.id,
         listingTitle: listing.title,
+        agreedPrice:  Number(agreedPrice),
       });
       closeModal();
       setCreatedTransactionId(transactionId);

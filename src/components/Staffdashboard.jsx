@@ -8,173 +8,15 @@ import {
 } from "firebase/firestore";
 import styles from "./Staffdashboard.module.css";
 import { recordCashCollected } from "../services/revenueService";
-
-
-// ─── Firestore helpers ────────────────────────────────────────────────────────
-
-async function sendNotification(userId, payload) {
-    try {
-        await addDoc(collection(db, "notifications"), {
-            userId,
-            read: false,
-            createdAt: serverTimestamp(),
-            ...payload,
-        });
-    } catch (err) {
-        console.error("sendNotification failed:", err);
-    }
-}
-
-async function notifyBothParties(txn, stage) {
-    if (!txn.buyerId || !txn.sellerId) return;
-
-    const title = txn.listingTitle || txn.item;
-
-    if (stage === "drop_off") {
-        await sendNotification(txn.sellerId, {
-            type:          "item_received_at_facility",
-            listingId:     txn.listingId || null,
-            transactionId: txn.id,
-            listingTitle:  title,
-            message:       `Your item "${title}" has been received at the trade facility.`,
-        });
-        await sendNotification(txn.buyerId, {
-            type:          "item_at_facility",
-            listingId:     txn.listingId || null,
-            transactionId: txn.id,
-            listingTitle:  title,
-            message:       `"${title}" has been dropped off at the trade facility. You have up to 7 days to collect it. Show your receipt to staff when collecting.`,
-        });
-    } else if (stage === "ready_to_collect") {
-        await sendNotification(txn.buyerId, {
-            type:          "item_ready_for_collection",
-            listingId:     txn.listingId || null,
-            transactionId: txn.id,
-            listingTitle:  title,
-            message:       `"${title}" is ready for collection at the trade facility. Show your receipt in the My Purchases section to staff when collecting.`,
-        });
-    } else {
-        await sendNotification(txn.buyerId, {
-            type:          "item_collected",
-            listingId:     txn.listingId || null,
-            transactionId: txn.id,
-            listingTitle:  title,
-            message:       `"${title}" has been collected. Your transaction is complete!`,
-        });
-        await sendNotification(txn.sellerId, {
-            type:          "transaction_complete",
-            listingId:     txn.listingId || null,
-            transactionId: txn.id,
-            listingTitle:  title,
-            message:       `"${title}" has been collected by the buyer. Your transaction is complete!`,
-        });
-    }
-}
-
-// ─── Overdue notification helpers ────────────────────────────────────────────
-
-async function notifyOverdueCollection(txn) {
-    if (!txn.buyerId || !txn.sellerId) return;
-    const title = txn.listingTitle || txn.item;
-
-    const buyerMsg  = `Your collection of "${title}" is overdue. You have 24 hours to collect your item from the trade facility — please come in as soon as possible. If the item is not collected within 24 hours, this transaction will be automatically cancelled and the item returned to the seller.`;
-    const sellerMsg = `The buyer has not yet collected "${title}". They have been notified and given 24 hours to collect. If they do not collect within 24 hours, the transaction will be cancelled and you will be asked to come collect your item.`;
-
-    await sendNotification(txn.buyerId, {
-        type:          "overdue_collection_buyer",
-        listingId:     txn.listingId || null,
-        transactionId: txn.id,
-        listingTitle:  title,
-        message:       buyerMsg,
-    });
-
-    await sendNotification(txn.sellerId, {
-        type:          "overdue_collection_seller",
-        listingId:     txn.listingId || null,
-        transactionId: txn.id,
-        listingTitle:  title,
-        message:       sellerMsg,
-    });
-}
-
-async function notifyOverdueDropOff(txn) {
-    if (!txn.buyerId || !txn.sellerId) return;
-    const title = txn.listingTitle || txn.item;
-
-    const sellerMsg = `Your drop-off for "${title}" is overdue. You have 24 hours to drop off the item at the trade facility. If the item is not dropped off within 24 hours, this transaction will be automatically cancelled.`;
-    const buyerMsg  = `The seller has not yet dropped off "${title}" at the trade facility. They have been notified and given 24 hours to drop off. If they do not drop off within 24 hours, this transaction will be cancelled.`;
-
-    await sendNotification(txn.sellerId, {
-        type:          "overdue_dropoff_seller",
-        listingId:     txn.listingId || null,
-        transactionId: txn.id,
-        listingTitle:  title,
-        message:       sellerMsg,
-    });
-
-    await sendNotification(txn.buyerId, {
-        type:          "overdue_dropoff_buyer",
-        listingId:     txn.listingId || null,
-        transactionId: txn.id,
-        listingTitle:  title,
-        message:       buyerMsg,
-    });
-}
-
-async function notifyCancelledDropOff(txn) {
-    if (!txn.buyerId || !txn.sellerId) return;
-    const title = txn.listingTitle || txn.item;
-    const wasOnline = ["online", "full_online", "fully_online", "fully online", "partial", "partial_online"].includes(
-        (txn.paymentType || txn.paymentMethod || "").toLowerCase()
-    );
-
-    const sellerMsg = `Your transaction for "${title}" has been cancelled due to a missed drop-off.`;
-    const buyerMsg  = wasOnline
-        ? `Your transaction for "${title}" was cancelled — the seller did not drop off in time. You will be refunded within 24 hours.`
-        : `Your transaction for "${title}" was cancelled — the seller did not drop off in time. No payment was collected.`;
-
-    await sendNotification(txn.sellerId, {
-        type:          "cancelled_dropoff_seller",
-        listingId:     txn.listingId || null,
-        transactionId: txn.id,
-        listingTitle:  title,
-        message:       sellerMsg,
-    });
-
-    await sendNotification(txn.buyerId, {
-        type:          "cancelled_dropoff_buyer",
-        listingId:     txn.listingId || null,
-        transactionId: txn.id,
-        listingTitle:  title,
-        message:       buyerMsg,
-    });
-}
-
-async function notifyCancelledCollection(txn) {
-    if (!txn.buyerId || !txn.sellerId) return;
-    const title = txn.listingTitle || txn.item;
-
-    const buyerMsg  = `Your transaction for "${title}" was cancelled due to non-collection.`;
-    const sellerMsg = `The buyer did not collect "${title}" — the transaction has been cancelled. Please come to the trade facility to collect your item back.`;
-
-    await sendNotification(txn.buyerId, {
-        type:          "cancelled_collection_buyer",
-        listingId:     txn.listingId || null,
-        transactionId: txn.id,
-        listingTitle:  title,
-        message:       buyerMsg,
-    });
-
-    await sendNotification(txn.sellerId, {
-        type:          "cancelled_collection_seller",
-        listingId:     txn.listingId || null,
-        transactionId: txn.id,
-        listingTitle:  title,
-        message:       sellerMsg,
-    });
-}
-
-
+import {
+    notifyDropOffConfirmed,
+    notifyItemReadyForCollection,
+    notifyTransactionComplete,
+    notifyOverdueDropOff,
+    notifyOverdueCollection,
+    notifyCancelledDropOff,
+    notifyCancelledCollection,
+} from '../services/notificationService';
 
 const TABS = [
     { key: "drop_offs",   label: "Drop Offs",         icon: "fa-truck-arrow-right"  },
@@ -204,7 +46,7 @@ const PAYMENT_CONFIG = {
 
 function getPaymentConfig(txn) {
     if ((txn.type || "").toLowerCase() === "trade") return PAYMENT_CONFIG.trade;
-    const method = (txn.paymentType || txn.paymentMethod || "").toLowerCase();
+    const method = (txn.paymentMethod || txn.paymentType || "").toLowerCase();
     if (method === "full_online" || method === "online" || method === "fully_online" || method === "fully online") return PAYMENT_CONFIG.full_online;
     if (method === "partial" || method === "partial_online" || method === "partially_online" || method === "partially online") return PAYMENT_CONFIG.partial;
     if (method === "cash" || method === "cod" || method === "in_person" || method === "in person") return PAYMENT_CONFIG.cash;
@@ -338,9 +180,6 @@ function TransactionDetailPanel({ txn, onClose, onConfirmDropOff, onConfirmColle
 
     const isAtCollection = txn.status === "awaiting_collection";
 
-    // ── FIX: cashConfirmed is now based on the dedicated cashCollectedAtCollection
-    // field, NOT paymentStatus. This ensures the button only disappears after staff
-    // physically confirms receiving cash at collection — not from any earlier Firestore write.
     const [cashConfirmed, setCashConfirmed] = useState(
         isFullyOnline || txn.cashCollectedAtCollection === true
     );
@@ -352,7 +191,6 @@ function TransactionDetailPanel({ txn, onClose, onConfirmDropOff, onConfirmColle
     const [collectionLoading, setCollectionLoading] = useState(false);
 
     const canConfirmCash = !isFullyOnline && hasShortfall && !cashConfirmed && isAtCollection;
-    const canRelease     = allChecked;
 
     const waitingForDropOff    = txn.status === "pending" && !txn.dropOffBooked;
     const showConfirmDropOff   = txn.status === "pending" && txn.dropOffBooked;
@@ -379,8 +217,6 @@ function TransactionDetailPanel({ txn, onClose, onConfirmDropOff, onConfirmColle
         return () => { document.body.style.overflow = ""; };
     }, []);
 
-    // ── FIX: handleConfirmCash now writes cashCollectedAtCollection: true
-    // as the source of truth, so a page reload correctly reflects cash was collected.
     async function handleConfirmCash() {
         setCashConfirmed(true);
         setSaving(true);
@@ -418,7 +254,6 @@ function TransactionDetailPanel({ txn, onClose, onConfirmDropOff, onConfirmColle
     return (
         <div className={styles.detailOverlay} onClick={onClose}>
             <div className={styles.detailPanel} onClick={e => e.stopPropagation()}>
-
                 <div className={`${styles.detailHeader} ${isOverdue ? styles.detailHeaderOverdue : styles[`detailHeader_${meta.cls}`]}`}>
                     <div className={styles.detailHeaderLeft}>
                         {isTrade && txn.tradeItem ? (
@@ -517,7 +352,6 @@ function TransactionDetailPanel({ txn, onClose, onConfirmDropOff, onConfirmColle
                 </div>
 
                 <div className={styles.detailBody}>
-
                     <div className={styles.paymentInstructionBanner} style={{ background: paymentConfig.bg, borderLeftColor: paymentConfig.color }}>
                         <i className={`fa-solid ${paymentConfig.icon}`} style={{ color: paymentConfig.color }} />
                         <div>
@@ -788,58 +622,6 @@ function TransactionDetailPanel({ txn, onClose, onConfirmDropOff, onConfirmColle
                         </div>
                     )}
 
-                    {/* ── Payment info banners ── */}
-                    {isFullyOnline && txn.type === "Purchase" && (
-                        <div className={styles.cashConfirmedBanner}>
-                            <i className="fa-solid fa-circle-check" />
-                            <span>Full payment of <strong>R{totalPrice.toLocaleString()}</strong> confirmed online — no cash required.</span>
-                        </div>
-                    )}
-
-                    {isFullyCash && !cashConfirmed && !isAtCollection && (
-                        <div className={styles.cashConfirmedBanner}>
-                            <i className="fa-solid fa-circle-check" />
-                            <span>Full payment of <strong>R{totalPrice.toLocaleString()} cash</strong> will be collected from buyer at collection. <strong>Nothing to collect at drop-off.</strong></span>
-                        </div>
-                    )}
-                    {isFullyCash && !cashConfirmed && isAtCollection && (
-                        <div className={styles.shortfallBanner}>
-                            <i className="fa-solid fa-coins" />
-                            <span>Collect full payment of <strong>R{totalPrice.toLocaleString()} cash</strong> from buyer before completing collection.</span>
-                        </div>
-                    )}
-                    {isFullyCash && cashConfirmed && (
-                        <div className={styles.cashConfirmedBanner}>
-                            <i className="fa-solid fa-circle-check" />
-                            <span>Cash of <strong>R{totalPrice.toLocaleString()}</strong> confirmed received.</span>
-                        </div>
-                    )}
-
-                    {isPartial && !cashConfirmed && !isAtCollection && (
-                        <div className={styles.cashConfirmedBanner}>
-                            <i className="fa-solid fa-circle-check" />
-                            <span>
-                                R{onlineAmountPaid.toLocaleString()} paid online — <strong>confirmed</strong>.{" "}
-                                Remaining <strong>R{shortfall.toLocaleString()} cash</strong> will be collected from buyer at collection.
-                            </span>
-                        </div>
-                    )}
-                    {isPartial && !cashConfirmed && isAtCollection && (
-                        <div className={styles.shortfallBanner}>
-                            <i className="fa-solid fa-coins" />
-                            <span>
-                                R{onlineAmountPaid.toLocaleString()} paid online — <strong>confirmed</strong>.{" "}
-                                Collect remaining <strong>R{shortfall.toLocaleString()} cash</strong> from buyer before releasing.
-                            </span>
-                        </div>
-                    )}
-                    {isPartial && cashConfirmed && (
-                        <div className={styles.cashConfirmedBanner}>
-                            <i className="fa-solid fa-circle-check" />
-                            <span>R{onlineAmountPaid.toLocaleString()} online + R{shortfall.toLocaleString()} cash — <strong>fully confirmed</strong>.</span>
-                        </div>
-                    )}
-
                     {((txn.status === "pending" && txn.dropOffBooked) || txn.status === "awaiting_collection") && (
                         <div className={styles.detailSection} style={{ marginTop: 8 }}>
                             <h3 className={styles.detailSectionTitle}><i className="fa-solid fa-clipboard-check" /> Inspection Checklist</h3>
@@ -952,7 +734,6 @@ function TransactionDetailPanel({ txn, onClose, onConfirmDropOff, onConfirmColle
                                     Collection Checklist
                                 </div>
 
-                                {/* Step 1 — Receipt verification */}
                                 <div style={{ padding: "10px 14px", borderBottom: "1px solid #f1f5f9", display: "flex", alignItems: "center", gap: 10 }}>
                                     <i className="fa-solid fa-circle-check" style={{ color: "#10b981", fontSize: "1rem", flexShrink: 0 }} />
                                     <div style={{ flex: 1 }}>
@@ -967,7 +748,6 @@ function TransactionDetailPanel({ txn, onClose, onConfirmDropOff, onConfirmColle
                                     </div>
                                 </div>
 
-                                {/* Step 2 — Confirm payment (cash/partial only, AT COLLECTION STAGE ONLY) */}
                                 {!isFullyOnline && !isTrade && hasShortfall && (
                                     <div style={{ padding: "10px 14px", borderBottom: "1px solid #f1f5f9", display: "flex", alignItems: "center", gap: 10 }}>
                                         <i className={`fa-solid ${cashConfirmed ? "fa-circle-check" : "fa-circle"}`} style={{ color: cashConfirmed ? "#10b981" : "#cbd5e1", fontSize: "1rem", flexShrink: 0 }} />
@@ -996,7 +776,6 @@ function TransactionDetailPanel({ txn, onClose, onConfirmDropOff, onConfirmColle
                                     </div>
                                 )}
 
-                                {/* Online payment confirmation row */}
                                 {isFullyOnline && (
                                     <div style={{ padding: "10px 14px", display: "flex", alignItems: "center", gap: 10 }}>
                                         <i className="fa-solid fa-circle-check" style={{ color: "#10b981", fontSize: "1rem", flexShrink: 0 }} />
@@ -1007,7 +786,6 @@ function TransactionDetailPanel({ txn, onClose, onConfirmDropOff, onConfirmColle
                                     </div>
                                 )}
 
-                                {/* Trade — no cash row needed */}
                                 {isTrade && (
                                     <div style={{ padding: "10px 14px", display: "flex", alignItems: "center", gap: 10 }}>
                                         <i className="fa-solid fa-circle-check" style={{ color: "#7c3aed", fontSize: "1rem", flexShrink: 0 }} />
@@ -1019,7 +797,6 @@ function TransactionDetailPanel({ txn, onClose, onConfirmDropOff, onConfirmColle
                                 )}
                             </div>
 
-                            {/* Collection Complete button */}
                             <button
                                 className={styles.confirmCollectionBtn}
                                 onClick={handleCollection}
@@ -1092,7 +869,6 @@ function TransactionCard({ txn, onConfirmDropOff, onConfirmCollection, onRelease
             ? Math.max(0, totalPrice - onlineAmountPaid)
             : (txn.cashShortfall ?? totalPrice);
 
-    const isPaid = isFullyOnline || txn.cashCollectedAtCollection === true || (!isFullyCashCard && !isPartialCard && shortfall === 0);
     const isAtCollection = txn.status === "awaiting_collection";
 
     return (
@@ -1411,6 +1187,8 @@ export default function StaffDashboard() {
     const [lastFetched, setLastFetched]   = useState(null);
     const sellerCacheRef  = useRef({});
     const listingCacheRef = useRef({});
+    const alertedInSessionRef = useRef(new Set());
+    const transactionsRef     = useRef([]);
 
     useEffect(() => {
         const unsub = onAuthStateChanged(auth, async (user) => {
@@ -1436,9 +1214,6 @@ export default function StaffDashboard() {
         return () => unsub();
     }, []);
 
-    // ── Shared transaction mapper ─────────────────────────────────────────────
-    // cashCollectedAtCollection is now mapped from Firestore so the panel
-    // can correctly initialise cashConfirmed without relying on paymentStatus.
     function mapTransaction(id, data) {
         return {
             id,
@@ -1458,7 +1233,6 @@ export default function StaffDashboard() {
             paymentStatus: data.paymentStatus || (data.cashShortfall > 0 ? "Partially Paid" : "Fully Paid"),
             paymentMethod: data.paymentMethod || data.paymentType || "cash",
             paymentType:   data.paymentType || data.paymentMethod || "unknown",
-            // ── FIX: dedicated field for cash collected at collection ──
             cashCollectedAtCollection: data.cashCollectedAtCollection || false,
             tradeItem: (typeof data.tradeItemDetails === "object" && data.tradeItemDetails !== null)
                 ? data.tradeItemDetails
@@ -1611,19 +1385,45 @@ export default function StaffDashboard() {
     }, []);
 
     const handleAlertOverdue = async (txn, type) => {
-        try {
-            await updateDoc(doc(db, "transactions", txn.id), {
-                overdueAlertSentAt: serverTimestamp(),
-                overdueAlertType:   type,
-            });
-            if (type === "drop_off") {
-                await notifyOverdueDropOff(txn);
-            } else {
-                await notifyOverdueCollection(txn);
-            }
-        } catch (err) {
-            console.error("Failed to record overdue alert:", err);
+    const txnRef = doc(db, "transactions", txn.id);
+    
+    // Server-side guard: check if already alerted in the database
+    try {
+        const fresh = await getDoc(txnRef);
+        if (fresh.data()?.overdueAlertSentAt) {
+        console.log(`[handleAlertOverdue] Transaction ${txn.id} already alerted, skipping`);
+        return;
         }
+    } catch (err) {
+        console.error("[handleAlertOverdue] Failed to check existing alert:", err);
+        return;
+    }
+    
+    try {
+        await updateDoc(txnRef, {
+        overdueAlertSentAt: serverTimestamp(),
+        overdueAlertType:   type,
+        });
+        if (type === "drop_off") {
+        await notifyOverdueDropOff({
+            transactionId: txn.id,
+            sellerId:      txn.sellerId,
+            buyerId:       txn.buyerId,
+            listingId:     txn.listingId,
+            listingTitle:  txn.listingTitle || txn.item,
+        });
+        } else {
+        await notifyOverdueCollection({
+            transactionId: txn.id,
+            sellerId:      txn.sellerId,
+            buyerId:       txn.buyerId,
+            listingId:     txn.listingId,
+            listingTitle:  txn.listingTitle || txn.item,
+        });
+        }
+    } catch (err) {
+        console.error("Failed to record overdue alert:", err);
+    }
     };
 
     const handleCancelOverdue = async (txn, overdueType) => {
@@ -1646,9 +1446,25 @@ export default function StaffDashboard() {
             }
 
             if (overdueType === "drop_off") {
-                await notifyCancelledDropOff(txn);
+                const wasOnlinePayment = ['online','full_online','fully_online','partial'].includes(
+                    (txn.paymentType || txn.paymentMethod || '').toLowerCase()
+                );
+                await notifyCancelledDropOff({
+                    transactionId: txn.id,
+                    sellerId:      txn.sellerId,
+                    buyerId:       txn.buyerId,
+                    listingId:     txn.listingId,
+                    listingTitle:  txn.listingTitle || txn.item,
+                    wasOnlinePayment,
+                });
             } else {
-                await notifyCancelledCollection(txn);
+                await notifyCancelledCollection({
+                    transactionId: txn.id,
+                    sellerId:      txn.sellerId,
+                    buyerId:       txn.buyerId,
+                    listingId:     txn.listingId,
+                    listingTitle:  txn.listingTitle || txn.item,
+                });
             }
 
             setTransactions(prev =>
@@ -1659,29 +1475,67 @@ export default function StaffDashboard() {
         }
     };
 
-    // ─── Auto-send overdue alerts ─────────────────────────────────────────────
     useEffect(() => {
-        if (transactions.length === 0) return;
-        async function autoAlert() {
-            for (const txn of transactions) {
-                if (txn.overdueAlertSentAt) continue;
-                if (txn.status === "overdue_cancelled") continue;
-                const overdueDropOff    = isDropOffOverdue(txn);
-                const overdueCollection = isCollectionOverdue(txn);
-                if (!overdueDropOff && !overdueCollection) continue;
-                try {
-                    await handleAlertOverdue(txn, overdueDropOff ? "drop_off" : "collection");
-                    setTransactions(prev => prev.map(t =>
-                        t.id === txn.id ? { ...t, overdueAlertSentAt: new Date().toISOString() } : t
-                    ));
-                } catch (err) { console.error("Auto-alert failed:", txn.id, err); }
-            }
+    const interval = setInterval(async () => {
+    try {
+        // Query only un-alerted transactions that could be overdue
+        const q = query(
+        collection(db, "transactions"),
+        where("status", "in", ["waiting", "accepted", "pending_payment", "awaiting_collection"]),
+        where("overdueAlertSentAt", "==", null)
+        );
+        const snapshot = await getDocs(q);
+        
+        for (const docSnap of snapshot.docs) {
+        const data = docSnap.data();
+        const txn = mapTransaction(docSnap.id, data);
+        
+        // Check if actually overdue
+        if (!isDropOffOverdue(txn) && !isCollectionOverdue(txn)) continue;
+        
+        // Session guard
+        if (alertedInSessionRef.current.has(txn.id)) continue;
+        
+        // Mark and send alert
+        alertedInSessionRef.current.add(txn.id);
+        
+        await handleAlertOverdue(txn, isDropOffOverdue(txn) ? "drop_off" : "collection");
         }
-        autoAlert();
-        const interval = setInterval(autoAlert, 60_000);
-        return () => clearInterval(interval);
+    } catch (err) {
+        console.error("Auto-alert interval failed:", err);
+    }
+    }, 60_000);
+
+    // Also run once immediately on mount
+    const immediateRun = async () => {
+    try {
+        const q = query(
+        collection(db, "transactions"),
+        where("status", "in", ["waiting", "accepted", "pending_payment", "awaiting_collection"]),
+        where("overdueAlertSentAt", "==", null)
+        );
+        const snapshot = await getDocs(q);
+        
+        for (const docSnap of snapshot.docs) {
+        const data = docSnap.data();
+        const txn = mapTransaction(docSnap.id, data);
+        
+        if (!isDropOffOverdue(txn) && !isCollectionOverdue(txn)) continue;
+        if (alertedInSessionRef.current.has(txn.id)) continue;
+        
+        alertedInSessionRef.current.add(txn.id);
+        await handleAlertOverdue(txn, isDropOffOverdue(txn) ? "drop_off" : "collection");
+        }
+    } catch (err) {
+        console.error("Initial auto-alert check failed:", err);
+    }
+    };
+
+    immediateRun();
+
+    return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [transactions]);
+    }, []); // Empty deps - runs once on mount
 
     function getCancelCountdown(txn) {
         const CANCEL_DELAY_MS = 2 * 60 * 1000;
@@ -1789,8 +1643,23 @@ export default function StaffDashboard() {
 
             await updateDoc(doc(db, "transactions", id), firestoreUpdate);
 
-            if (confirmingSeller) await notifyBothParties(txn, "drop_off");
-            if (bothDone) await notifyBothParties(txn, "ready_to_collect");
+            if (confirmingSeller) {
+                await notifyDropOffConfirmed({
+                    transactionId: txn.id,
+                    sellerId:      txn.sellerId,
+                    buyerId:       txn.buyerId,
+                    listingId:     txn.listingId,
+                    listingTitle:  txn.listingTitle || txn.item,
+                });
+            }
+            if (bothDone) {
+                await notifyItemReadyForCollection({
+                    transactionId: txn.id,
+                    buyerId:       txn.buyerId,
+                    listingId:     txn.listingId,
+                    listingTitle:  txn.listingTitle || txn.item,
+                });
+            }
 
         } catch (err) {
             console.error("Failed to confirm drop-off:", err);
@@ -1839,17 +1708,37 @@ export default function StaffDashboard() {
                     firestoreUpdate.collectionConfirmed   = true;
                     firestoreUpdate.collectionConfirmedAt = serverTimestamp();
                     firestoreUpdate.releasedByStaff       = true;
+                    
+                    // Update listing status to "traded" for trade transactions
+                    if (txn.listingId) {
+                        await updateDoc(doc(db, "listings", txn.listingId), {
+                            status: "traded",
+                            tradedAt: serverTimestamp(),
+                            tradedTo: txn.buyerId,
+                        });
+                    }
                 }
 
                 await updateDoc(doc(db, "transactions", id), firestoreUpdate);
 
-                if (bothCollected) await notifyBothParties(txn, "collection");
+                if (bothCollected) {
+                    await notifyTransactionComplete({
+                        transactionId: txn.id,
+                        buyerId:       txn.buyerId,
+                        sellerId:      txn.sellerId,
+                        listingId:     txn.listingId,
+                        listingTitle:  txn.listingTitle || txn.item,
+                        buyerName:     txn.buyer,
+                        sellerName:    txn.seller,
+                    });
+                }
             } catch (err) {
                 console.error("Failed to confirm trade collection:", err);
             }
             return;
         }
 
+        // Regular purchase transaction completion
         setTransactions(prev =>
             prev.map(t => {
                 if (t.id !== id) return t;
@@ -1874,7 +1763,25 @@ export default function StaffDashboard() {
                 releasedAt:            serverTimestamp(),
                 releasedByStaff:       true,
             });
-            await notifyBothParties(txn, "collection");
+            
+            // Update listing status to "sold" for purchase transactions
+            if (txn.listingId) {
+                await updateDoc(doc(db, "listings", txn.listingId), {
+                    status: "sold",
+                    soldAt: serverTimestamp(),
+                    soldTo: txn.buyerId,
+                });
+            }
+            
+            await notifyTransactionComplete({
+                transactionId: txn.id,
+                buyerId:       txn.buyerId,
+                sellerId:      txn.sellerId,
+                listingId:     txn.listingId,
+                listingTitle:  txn.listingTitle || txn.item,
+                buyerName:     txn.buyer,
+                sellerName:    txn.seller,
+            });
         } catch (err) {
             console.error("Failed to confirm collection:", err);
         }
@@ -1893,7 +1800,14 @@ export default function StaffDashboard() {
                 releasedAt:      serverTimestamp(),
                 releasedByStaff: true,
             });
-            if (txn) await notifyBothParties(txn, "ready_to_collect");
+            if (txn) {
+                await notifyItemReadyForCollection({
+                    transactionId: txn.id,
+                    buyerId:       txn.buyerId,
+                    listingId:     txn.listingId,
+                    listingTitle:  txn.listingTitle || txn.item,
+                });
+            }
         } catch (err) {
             console.error("Failed to update release status:", err);
         }
@@ -2213,7 +2127,6 @@ export default function StaffDashboard() {
                     </div>
                 )}
 
-                {/* ── Overdue Tab ── */}
                 {activeTab === "overdue" ? (() => {
                     const overdueDropOffs  = transactions.filter(t => isDropOffOverdue(t)    && t.status !== "overdue_cancelled");
                     const overdueCollects  = transactions.filter(t => isCollectionOverdue(t) && t.status !== "overdue_cancelled");
