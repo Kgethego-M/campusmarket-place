@@ -31,24 +31,24 @@ def get_firestore_client():
 
 class CheckoutSessionRequest(BaseModel):
     transactionId: str = Field(..., min_length=1)
-    buyerEmail: str = Field(..., min_length=3)
-    amount: int = Field(..., gt=0)
-    amountRand: float = Field(..., gt=0)
-    cashAmount: float = Field(default=0, ge=0)
-    totalAmount: float = Field(..., gt=0)
-    currency: str = Field(default="zar", min_length=3, max_length=3)
-    stripeRef: str = Field(..., min_length=1)
-    paymentType: str = Field(..., min_length=1)
-    listingId: str | None = None
-    listingTitle: str = Field(default="Marketplace transaction")
-    successUrl: str = Field(..., min_length=1)
-    cancelUrl: str = Field(..., min_length=1)
-    metadata: dict = Field(default_factory=dict)
+    buyerEmail:    str = Field(..., min_length=3)
+    amount:        int = Field(..., gt=0)
+    amountRand:    float = Field(..., gt=0)
+    cashAmount:    float = Field(default=0, ge=0)
+    totalAmount:   float = Field(..., gt=0)
+    currency:      str = Field(default="zar", min_length=3, max_length=3)
+    stripeRef:     str = Field(..., min_length=1)
+    paymentType:   str = Field(..., min_length=1)
+    listingId:     str | None = None
+    listingTitle:  str = Field(default="Marketplace transaction")
+    successUrl:    str = Field(..., min_length=1)
+    cancelUrl:     str = Field(..., min_length=1)
+    metadata:      dict = Field(default_factory=dict)
 
 
 class VerifySessionRequest(BaseModel):
-    sessionId: str = Field(..., min_length=1)
-    transactionId: str = Field(default="")  # Optional — recovered from session metadata if missing
+    sessionId:     str = Field(..., min_length=1)
+    transactionId: str = Field(default="")  # Recovered from session metadata if missing
 
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -70,12 +70,20 @@ def safe_metadata(value):
     return str(value)[:500]
 
 
+def increment(value):
+    """
+    Safe cross-version Firestore increment helper.
+    firebase-admin >= 3.0 uses firestore.Increment directly.
+    """
+    return firestore.Increment(value)
+
+
 # ─── Routes ───────────────────────────────────────────────────────────────────
 
 @router.get("/health")
 def stripe_health():
     return {
-        "message": "Stripe route is running",
+        "message":          "Stripe route is running",
         "stripeConfigured": bool(os.getenv("STRIPE_SECRET_KEY")),
         "webhookConfigured": bool(os.getenv("STRIPE_WEBHOOK_SECRET")),
     }
@@ -148,102 +156,102 @@ async def verify_session(payload: VerifySessionRequest):
     if session.payment_status != "paid":
         return {"paid": False, "status": session.payment_status}
 
-    # Resolve transactionId
+    # ── Resolve transactionId ─────────────────────────────────────────────────
     transaction_id = payload.transactionId.strip() if payload.transactionId else ""
     if not transaction_id:
         meta = session.get("metadata") or {}
         transaction_id = meta.get("transactionId") or session.get("client_reference_id") or ""
 
     if not transaction_id:
-        raise HTTPException(
-            status_code=400,
-            detail="Cannot resolve transactionId",
-        )
+        raise HTTPException(status_code=400, detail="Cannot resolve transactionId.")
 
     try:
-        db = get_firestore_client()
+        db  = get_firestore_client()
         ref = db.collection("transactions").document(transaction_id)
         tx_snap = ref.get()
 
         if not tx_snap.exists:
-            raise HTTPException(status_code=404, detail=f"Transaction '{transaction_id}' not found.")
+            raise HTTPException(
+                status_code=404,
+                detail=f"Transaction '{transaction_id}' not found in Firestore.",
+            )
 
         tx_data = tx_snap.to_dict()
 
-        # Already updated — idempotent return
+        # ── Idempotency: already updated ──────────────────────────────────────
         if tx_data.get("paymentStatus") == "paid":
             return {"paid": True, "alreadyUpdated": True}
 
-        # Get the amount paid (convert from cents to Rand)
-        amount_paid = session.get("amount_total", 0) / 100
+        # ── Resolve amounts ───────────────────────────────────────────────────
+        amount_paid  = (session.get("amount_total") or 0) / 100
         payment_type = tx_data.get("paymentType", "full_online")
 
-        # ─── NEW: Update analytics revenue ─────────────────────────────────
-        analytics_ref = db.collection("analytics").document("platform")
-        
-        # Check if analytics document exists, create if not
+        # ── Update analytics revenue ──────────────────────────────────────────
+        analytics_ref  = db.collection("analytics").document("platform")
         analytics_snap = analytics_ref.get()
+
         if not analytics_snap.exists:
             analytics_ref.set({
-                "totalRevenue": 0,
-                "onlineRevenue": 0,
-                "pendingCashRevenue": 0,
-                "collectedCashRevenue": 0,
-                "totalPayouts": 0,
-                "totalRefunds": 0,
-                "availableBalance": 0,
-                "createdAt": firestore.SERVER_TIMESTAMP,
-                "lastUpdated": firestore.SERVER_TIMESTAMP,
+                "totalRevenue":          0,
+                "onlineRevenue":         0,
+                "pendingCashRevenue":    0,
+                "collectedCashRevenue":  0,
+                "totalPayouts":          0,
+                "totalRefunds":          0,
+                "availableBalance":      0,
+                "createdAt":             firestore.SERVER_TIMESTAMP,
+                "lastUpdated":           firestore.SERVER_TIMESTAMP,
             })
-        
-        # Increment revenue based on payment type
+
         if payment_type == "full_online":
             analytics_ref.update({
-                "totalRevenue": firestore.Increment(amount_paid),
-                "onlineRevenue": firestore.Increment(amount_paid),
-                "lastUpdated": firestore.SERVER_TIMESTAMP,
+                "totalRevenue":  increment(amount_paid),
+                "onlineRevenue": increment(amount_paid),
+                "lastUpdated":   firestore.SERVER_TIMESTAMP,
             })
-            print(f"[Revenue] Full online payment: +R{amount_paid} for tx {transaction_id}")
-        
+            print(f"[Revenue] Full online: +R{amount_paid} for tx={transaction_id}")
+
         elif payment_type == "partial":
-            # Only the online portion increments now; cash portion later
-            online_amount = tx_data.get("onlineAmount", amount_paid)
+            online_amount = float(tx_data.get("onlineAmount") or amount_paid)
             analytics_ref.update({
-                "totalRevenue": firestore.Increment(online_amount),
-                "onlineRevenue": firestore.Increment(online_amount),
-                "lastUpdated": firestore.SERVER_TIMESTAMP,
+                "totalRevenue":  increment(online_amount),
+                "onlineRevenue": increment(online_amount),
+                "lastUpdated":   firestore.SERVER_TIMESTAMP,
             })
-            print(f"[Revenue] Partial payment: +R{online_amount} online for tx {transaction_id}")
-        
-        # Update transaction
+            print(f"[Revenue] Partial: +R{online_amount} online for tx={transaction_id}")
+
+        # ── Update the transaction document ───────────────────────────────────
         ref.update({
-            "status": "waiting",
-            "paymentStatus": "paid",
-            "paymentProvider": "stripe",
-            "paymentSettled": True,
-            "stripeRef": session.id,
+            "status":                  "waiting",
+            "paymentStatus":           "paid",
+            "paymentProvider":         "stripe",
+            "paymentSettled":          True,
+            "stripeRef":               session.id,
             "stripeCheckoutSessionId": session.id,
-            "revenueRecorded": True,
-            "revenueAmount": amount_paid,
-            "revenueRecordedAt": firestore.SERVER_TIMESTAMP,
-            "updatedAt": firestore.SERVER_TIMESTAMP,
+            "revenueRecorded":         True,
+            "revenueAmount":           amount_paid,
+            "revenueRecordedAt":       firestore.SERVER_TIMESTAMP,
+            "updatedAt":               firestore.SERVER_TIMESTAMP,
         })
 
+        print(f"[verify-session] tx={transaction_id} → status=waiting, paymentStatus=paid")
         return {"paid": True, "alreadyUpdated": False}
 
     except HTTPException:
         raise
     except Exception as exc:
         print(f"[verify-session] ERROR: {exc}")
-        raise HTTPException(status_code=500, detail=f"Firestore update failed: {str(exc)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Firestore update failed: {str(exc)}",
+        ) from exc
 
 
-# ─── Webhook (kept for redundancy — harmless duplicate write if fired) ────────
+# ─── Webhook (redundancy fallback — idempotent with verify-session) ───────────
 
 @router.post("/webhook")
 async def stripe_webhook(request: Request):
-    stripe_client = get_stripe()
-
+    stripe_client  = get_stripe()
     payload        = await request.body()
     signature      = request.headers.get("stripe-signature")
     webhook_secret = os.getenv("STRIPE_WEBHOOK_SECRET")
@@ -268,7 +276,7 @@ async def stripe_webhook(request: Request):
         print(f"[Webhook] checkout.session.completed — session={session_id}, txId={transaction_id}")
 
         if not transaction_id:
-            print("[Webhook] WARNING: No transactionId in metadata or client_reference_id. Skipping Firestore update.")
+            print("[Webhook] WARNING: No transactionId found. Skipping Firestore update.")
             return {"received": True}
 
         try:
@@ -277,7 +285,7 @@ async def stripe_webhook(request: Request):
 
             tx_snap = ref.get()
             if tx_snap.exists and tx_snap.to_dict().get("paymentStatus") == "paid":
-                print(f"[Webhook] tx={transaction_id} already marked paid by verify-session — skipping")
+                print(f"[Webhook] tx={transaction_id} already paid — skipping duplicate write")
                 return {"received": True}
 
             ref.update({
@@ -290,10 +298,13 @@ async def stripe_webhook(request: Request):
                 "updatedAt":               firestore.SERVER_TIMESTAMP,
             })
 
-            print(f"[Webhook] Firestore updated — tx={transaction_id} → status=waiting, paymentStatus=paid")
+            print(f"[Webhook] Firestore updated — tx={transaction_id} → waiting/paid")
 
         except Exception as exc:
-            print(f"[Webhook] ERROR updating Firestore for tx={transaction_id}: {exc}")
-            raise HTTPException(status_code=500, detail=f"Firestore update failed: {str(exc)}") from exc
+            print(f"[Webhook] ERROR for tx={transaction_id}: {exc}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Firestore update failed: {str(exc)}",
+            ) from exc
 
     return {"received": True}
