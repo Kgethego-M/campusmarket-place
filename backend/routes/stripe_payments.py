@@ -6,6 +6,11 @@ from pydantic import BaseModel, Field
 router = APIRouter(prefix="/api/stripe", tags=["stripe"])
 stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
 
+def get_stripe():
+    if not stripe.api_key:
+        raise HTTPException(500, "STRIPE_SECRET_KEY not configured")
+    return stripe
+
 class CheckoutSessionRequest(BaseModel):
     transactionId: str
     buyerEmail: str
@@ -24,10 +29,9 @@ class CheckoutSessionRequest(BaseModel):
 
 @router.post("/create-checkout-session")
 async def create_checkout_session(payload: CheckoutSessionRequest):
-    if not stripe.api_key:
-        raise HTTPException(500, "STRIPE_SECRET_KEY not configured")
+    stripe_client = get_stripe()
     try:
-        session = stripe.checkout.Session.create(
+        session = stripe_client.checkout.Session.create(
             mode="payment",
             customer_email=payload.buyerEmail,
             client_reference_id=payload.transactionId,
