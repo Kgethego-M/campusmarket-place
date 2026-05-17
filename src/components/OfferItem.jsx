@@ -146,11 +146,12 @@ export default function OfferItem({ offer }) {
       console.log('Step 4 done ✓');
 
       if (isTrade) {
-        // ── Trade: notify buyer their trade offer was accepted + book drop-off
+        // ── Trade: notify buyer their trade offer was accepted → go book drop-off
         console.log('Step 5 (trade): notifying buyer', offer.buyerId, '→ trade_waiting');
         await addDoc(collection(db, 'notifications'), {
           userId:        offer.buyerId,
           type:          'trade_waiting',
+          isTrade:       true,
           transactionId: offer.id,
           listingId:     offer.listingId,
           read:          false,
@@ -158,41 +159,25 @@ export default function OfferItem({ offer }) {
           redirectUrl:   `/trade-facility`,
         });
 
-        // ── Trade: notify seller to book a drop-off slot
-        console.log('Step 6 (trade): notifying seller', offer.sellerId, '→ book_dropoff');
-        await addDoc(collection(db, 'notifications'), {
-          userId:        offer.sellerId,
-          type:          'dropoff_booked',
-          transactionId: offer.id,
-          listingId:     offer.listingId,
-          read:          false,
-          createdAt:     serverTimestamp(),
-          redirectUrl:   `/trade-facility`,
-        });
+
       } else {
-        // ── Sale: notify buyer their offer was accepted
+        // ── Sale: notify buyer their offer was accepted → head to payment (or cash confirmation)
         console.log('Step 5 (sale): notifying accepted buyer', offer.buyerId, '→ offer_accepted');
         await addDoc(collection(db, 'notifications'), {
           userId:        offer.buyerId,
           type:          'offer_accepted',
+          isTrade:       false,
+          paymentMethod: offer.paymentMethod || offer.paymentType || null,
+          agreedPrice:   offer.agreedPrice   ?? null,
+          partialAmount: offer.partialAmount  ?? null,
           transactionId: offer.id,
           listingId:     offer.listingId,
           read:          false,
           createdAt:     serverTimestamp(),
-          redirectUrl:   `/payment/${offer.id}`,
+          redirectUrl:   isCashOnly ? `/my-purchases?open=${offer.id}` : `/payment/${offer.id}`,
         });
 
-        // ── Sale: notify seller the buyer has committed and they can book drop-off
-        console.log('Step 6 (sale): notifying seller', offer.sellerId, '→ book_dropoff');
-        await addDoc(collection(db, 'notifications'), {
-          userId:        offer.sellerId,
-          type:          'dropoff_booked',
-          transactionId: offer.id,
-          listingId:     offer.listingId,
-          read:          false,
-          createdAt:     serverTimestamp(),
-          redirectUrl:   `/trade-facility`,
-        });
+
       }
       console.log('All steps done ✓');
 

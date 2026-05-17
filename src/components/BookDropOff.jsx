@@ -388,56 +388,21 @@ export default function BookDropOff() {
 
         const listingTitle = listing?.title ?? "your item";
 
-        // Notify seller: their own drop-off is confirmed
-        try {
-          await addDoc(collection(db, "notifications"), {
-            userId:        transaction.sellerId,
-            type:          "dropoff_booked",
-            transactionId: transaction.id,
-            listingId:     transaction.listingId,
-            listingTitle,
-            title:         "Drop-off slot booked",
-            message:       `Your drop-off for "${listingTitle}" is confirmed for ${selectedDate} at ${selectedTimeSlot}.`,
-            linkTo:        "/trade-facility",
-            read:          false,
-            createdAt:     serverTimestamp(),
-          });
-        } catch (_) {}
-
-        // Notify buyer: different message depending on trade or sale
-        if (transaction.type === 'trade') {
-          // For trade: tell buyer the seller booked AND prompt them to book their own slot
+        // For trade: prompt buyer to book their own drop-off slot if they haven't yet
+        if (transaction.type === 'trade' && !latestData.buyerBookingId) {
           const tradeItemName = typeof transaction.tradeItem === 'object'
             ? transaction.tradeItem?.name
             : (transaction.tradeItem || 'your trade item');
-          if (!latestData.buyerBookingId) {
-            try {
-              await addDoc(collection(db, "notifications"), {
-                userId:        transaction.buyerId,
-                type:          "trade_dropoff_required",
-                transactionId: transaction.id,
-                listingId:     transaction.listingId,
-                listingTitle,
-                title:         "Book your trade drop-off",
-                message:       `The seller has booked their drop-off for "${listingTitle}". Now book your slot to drop off "${tradeItemName}".`,
-                linkTo:        `/book-dropoff/${transaction.id}`,
-                read:          false,
-                createdAt:     serverTimestamp(),
-              });
-            } catch (_) {}
-          }
-        } else {
-          // For sale: just tell buyer the seller has booked
           try {
             await addDoc(collection(db, "notifications"), {
               userId:        transaction.buyerId,
-              type:          "seller_dropoff_booked",
+              type:          "trade_dropoff_required",
               transactionId: transaction.id,
               listingId:     transaction.listingId,
               listingTitle,
-              title:         "Seller booked their drop-off",
-              message:       `The seller has scheduled drop-off for "${listingTitle}" on ${selectedDate} at ${selectedTimeSlot}.`,
-              linkTo:        "/my-purchases",
+              title:         "Book your trade drop-off",
+              message:       `The seller has booked their drop-off for "${listingTitle}". Now book your slot to drop off "${tradeItemName}".`,
+              linkTo:        `/book-dropoff/${transaction.id}`,
               read:          false,
               createdAt:     serverTimestamp(),
             });
