@@ -101,12 +101,17 @@ export default function AdminNavbar({ activePage, adminUser, unreadReports: unre
           {/* Desktop profile dropdown */}
           <div className={styles.menuWrap} ref={dropdownRef}>
             <button
-              className={styles.iconButton}
-              onClick={() => !isLoggingOut && setDropdownOpen(v => !v)}
-              title={adminUser?.name}
-            >
-              <i className="fa-solid fa-user-circle" />
-            </button>
+                className={styles.iconButton}
+                onClick={() => !isLoggingOut && setDropdownOpen(v => !v)}
+                title={adminUser?.name}
+              >
+                <div className={styles.profileAvatar}>
+                  {adminUser?.photoURL
+                    ? <img src={adminUser.photoURL} alt={adminUser?.name} />
+                    : <span>{adminUser?.initials || "A"}</span>
+                  }
+                </div>
+              </button>
 
             {dropdownOpen && !isLoggingOut && (
               <div className={styles.dropdown}>

@@ -522,6 +522,37 @@ function Profile() {
         <h1>My Profile</h1>
       </div>
 
+      {/* ── Warning banner ── */}
+      {profileData.warnings && profileData.warnings.length > 0 && (
+        <div style={{
+          margin: '0 0 16px',
+          padding: '14px 18px',
+          background: '#fffbeb',
+          border: '1.5px solid #fcd34d',
+          borderRadius: 10,
+          display: 'flex',
+          alignItems: 'flex-start',
+          gap: 12,
+        }}>
+          <i className="fas fa-exclamation-triangle" style={{ color: '#d97706', marginTop: 2, flexShrink: 0 }} />
+          <div>
+            <p style={{ margin: '0 0 4px', fontWeight: 700, fontSize: '0.9rem', color: '#92400e' }}>
+              Account Warning{profileData.warnings.length > 1 ? `s (${profileData.warnings.length})` : ''}
+            </p>
+            {profileData.warnings.map((w, i) => (
+              <p key={i} style={{ margin: '2px 0', fontSize: '0.82rem', color: '#78350f' }}>
+                {profileData.warnings.length > 1 ? `${i + 1}. ` : ''}{w.reason}
+                {w.warnedAt && (
+                  <span style={{ color: '#a16207', marginLeft: 6, fontSize: '0.75rem' }}>
+                    · {new Date(w.warnedAt?.toDate ? w.warnedAt.toDate() : w.warnedAt).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric' })}
+                  </span>
+                )}
+              </p>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className={styles.profileCard}>
         <div className={styles.profileLeft}>
           <div className={styles.profilePictureSection}>

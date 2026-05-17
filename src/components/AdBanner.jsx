@@ -1,3 +1,4 @@
+// src/components/AdBanner.jsx
 import { useState, useEffect } from "react";
 import { collection, query, where, getDocs, doc, getDoc } from "firebase/firestore";
 import { useNavigate } from "react-router-dom";
@@ -17,13 +18,17 @@ export default function AdBanner() {
 
   async function fetchActiveAds() {
     try {
+      // Fetch all active ads from "ads" collection
       const q = query(collection(db, "ads"), where("status", "==", "active"));
       const snapshot = await getDocs(q);
       if (snapshot.empty) return;
 
       const validAds = [];
+
       for (const docSnap of snapshot.docs) {
         const ad = { id: docSnap.id, ...docSnap.data() };
+
+        // If the ad has a listingId, fetch the actual listing data
         if (ad.listingId) {
           const listingSnap = await getDoc(doc(db, "listings", ad.listingId));
           if (listingSnap.exists()) {
@@ -31,11 +36,19 @@ export default function AdBanner() {
             const status = listing.status?.toLowerCase();
             const unavailable = ["sold", "inactive", "accepted", "completed"];
             if (!unavailable.includes(status)) {
-              validAds.push(ad);
+              // Override ad fields with live listing data
+              validAds.push({
+                ...ad,
+                title: listing.title || "Listing",
+                price: listing.price,
+                imageUrl: listing.photos?.[0] || listing.imageUrl,
+                sellerName: listing.sellerName || "Seller",
+                campus: listing.campus,
+              });
             }
           }
-        } else {
-          // Ad without a listingId – you may want to skip it
+        } else if (ad.title && ad.title !== "session_id") {
+          // Fallback for ads that already have correct title (no listingId)
           validAds.push(ad);
         }
       }
@@ -45,7 +58,7 @@ export default function AdBanner() {
         setVisible(true);
       }
     } catch (err) {
-      console.error("Error fetching ads:", err);
+      console.error("Error fetching banner ads:", err);
     }
   }
 
@@ -55,11 +68,11 @@ export default function AdBanner() {
   }
 
   function handlePrev() {
-    setCurrentIndex(i => (i === 0 ? ads.length - 1 : i - 1));
+    setCurrentIndex((i) => (i === 0 ? ads.length - 1 : i - 1));
   }
 
   function handleNext() {
-    setCurrentIndex(i => (i === ads.length - 1 ? 0 : i + 1));
+    setCurrentIndex((i) => (i === ads.length - 1 ? 0 : i + 1));
   }
 
   function handleView() {
@@ -74,31 +87,35 @@ export default function AdBanner() {
   const ad = ads[currentIndex];
 
   return (
-    <div style={{
-      position: "fixed",
-      bottom: 0,
-      left: 0,
-      right: 0,
-      backgroundColor: "white",
-      borderTop: "1px solid #e0e0e0",
-      padding: "10px 16px",
-      display: "flex",
-      alignItems: "center",
-      gap: "12px",
-      zIndex: 1000,
-      boxShadow: "0 -4px 16px rgba(0,0,0,0.1)",
-      fontFamily: "'Segoe UI', sans-serif"
-    }}>
-      <span style={{
-        flexShrink: 0,
-        fontSize: "11px",
-        fontWeight: "600",
-        color: "white",
-        backgroundColor: "#ff9800",
-        padding: "4px 8px",
-        borderRadius: "6px",
-        whiteSpace: "nowrap"
-      }}>
+    <div
+      style={{
+        position: "fixed",
+        bottom: 0,
+        left: 0,
+        right: 0,
+        backgroundColor: "white",
+        borderTop: "1px solid #e0e0e0",
+        padding: "10px 16px",
+        display: "flex",
+        alignItems: "center",
+        gap: "12px",
+        zIndex: 1000,
+        boxShadow: "0 -4px 16px rgba(0,0,0,0.1)",
+        fontFamily: "'Segoe UI', sans-serif",
+      }}
+    >
+      <span
+        style={{
+          flexShrink: 0,
+          fontSize: "11px",
+          fontWeight: "600",
+          color: "white",
+          backgroundColor: "#ff9800",
+          padding: "4px 8px",
+          borderRadius: "6px",
+          whiteSpace: "nowrap",
+        }}
+      >
         ✦ Sponsored
       </span>
 
@@ -113,7 +130,7 @@ export default function AdBanner() {
             objectFit: "cover",
             borderRadius: "8px",
             flexShrink: 0,
-            cursor: "pointer"
+            cursor: "pointer",
           }}
         />
       ) : (
@@ -125,31 +142,32 @@ export default function AdBanner() {
             backgroundColor: "#f0f4f8",
             borderRadius: "8px",
             flexShrink: 0,
-            cursor: "pointer"
+            cursor: "pointer",
           }}
         />
       )}
 
-      <div
-        onClick={handleView}
-        style={{ flex: 1, minWidth: 0, cursor: "pointer" }}
-      >
-        <p style={{
-          margin: 0,
-          fontSize: "14px",
-          fontWeight: "600",
-          color: "#333",
-          overflow: "hidden",
-          textOverflow: "ellipsis",
-          whiteSpace: "nowrap"
-        }}>
+      <div onClick={handleView} style={{ flex: 1, minWidth: 0, cursor: "pointer" }}>
+        <p
+          style={{
+            margin: 0,
+            fontSize: "14px",
+            fontWeight: "600",
+            color: "#333",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+          }}
+        >
           {ad.title}
         </p>
-        <p style={{
-          margin: "2px 0 0",
-          fontSize: "12px",
-          color: "#666"
-        }}>
+        <p
+          style={{
+            margin: "2px 0 0",
+            fontSize: "12px",
+            color: "#666",
+          }}
+        >
           R{ad.price}
           {ad.campus ? ` · ${ad.campus}` : ""}
           {ad.sellerName ? ` · by ${ad.sellerName}` : ""}
@@ -158,11 +176,35 @@ export default function AdBanner() {
 
       {ads.length > 1 && (
         <div style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0 }}>
-          <button onClick={handlePrev} style={{ background: "none", border: "none", fontSize: "16px", cursor: "pointer", color: "#666", padding: "4px" }}>‹</button>
+          <button
+            onClick={handlePrev}
+            style={{
+              background: "none",
+              border: "none",
+              fontSize: "16px",
+              cursor: "pointer",
+              color: "#666",
+              padding: "4px",
+            }}
+          >
+            ‹
+          </button>
           <span style={{ fontSize: "12px", color: "#999", minWidth: "32px", textAlign: "center" }}>
             {currentIndex + 1}/{ads.length}
           </span>
-          <button onClick={handleNext} style={{ background: "none", border: "none", fontSize: "16px", cursor: "pointer", color: "#666", padding: "4px" }}>›</button>
+          <button
+            onClick={handleNext}
+            style={{
+              background: "none",
+              border: "none",
+              fontSize: "16px",
+              cursor: "pointer",
+              color: "#666",
+              padding: "4px",
+            }}
+          >
+            ›
+          </button>
         </div>
       )}
 
@@ -177,7 +219,7 @@ export default function AdBanner() {
           borderRadius: "8px",
           cursor: "pointer",
           fontWeight: "600",
-          fontSize: "13px"
+          fontSize: "13px",
         }}
       >
         View
@@ -193,7 +235,7 @@ export default function AdBanner() {
           cursor: "pointer",
           color: "#999",
           padding: "0 4px",
-          lineHeight: 1
+          lineHeight: 1,
         }}
       >
         ×
