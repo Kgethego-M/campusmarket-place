@@ -1,153 +1,112 @@
-import json
 import os
-
+import json
 import stripe
-import firebase_admin
-from firebase_admin import credentials, firestore
-from dotenv import load_dotenv
-from fastapi import APIRouter, HTTPException, Request
+from datetime import datetime, timedelta
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-load_dotenv()
+try:
+    import firebase_admin
+    from firebase_admin import credentials, firestore
+    FIREBASE_AVAILABLE = True
+except ImportError:
+    FIREBASE_AVAILABLE = False
+    print("Firebase Admin not installed. Run: pip install firebase-admin")
 
 router = APIRouter(prefix="/api/stripe", tags=["stripe"])
-
-
-# ─── Firebase Admin (singleton) ───────────────────────────────────────────────
+stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
 
 def get_firestore_client():
-    """Return a Firestore client, initialising Firebase Admin once."""
+    if not FIREBASE_AVAILABLE:
+        return None
     if not firebase_admin._apps:
         service_account_json = os.getenv("FIREBASE_SERVICE_ACCOUNT_JSON")
         if not service_account_json:
-            raise RuntimeError("FIREBASE_SERVICE_ACCOUNT_JSON env var is missing.")
-        service_account_info = json.loads(service_account_json)
-        cred = credentials.Certificate(service_account_info)
-        firebase_admin.initialize_app(cred)
+            print("WARNING: FIREBASE_SERVICE_ACCOUNT_JSON missing. Ads will not be saved.")
+            return None
+        try:
+            service_account_info = json.loads(service_account_json)
+            cred = credentials.Certificate(service_account_info)
+            firebase_admin.initialize_app(cred)
+        except Exception as e:
+            print(f"Firebase init error: {e}")
+            return None
     return firestore.client()
 
-
-# ─── Request models ───────────────────────────────────────────────────────────
+db = get_firestore_client()
 
 class CheckoutSessionRequest(BaseModel):
-    transactionId: str = Field(..., min_length=1)
-    buyerEmail: str = Field(..., min_length=3)
-    amount: int = Field(..., gt=0)
-    amountRand: float = Field(..., gt=0)
-    cashAmount: float = Field(default=0, ge=0)
-    totalAmount: float = Field(..., gt=0)
-    currency: str = Field(default="zar", min_length=3, max_length=3)
-    stripeRef: str = Field(..., min_length=1)
-    paymentType: str = Field(..., min_length=1)
-    listingId: str | None = None
-    listingTitle: str = Field(default="Marketplace transaction")
-    successUrl: str = Field(..., min_length=1)
-    cancelUrl: str = Field(..., min_length=1)
-    metadata: dict = Field(default_factory=dict)
-
+    transactionId: str
+    buyerEmail: str
+    amount: int
+    amountRand: float
+    cashAmount: float = 0
+    totalAmount: float
+    currency: str = "zar"
+    stripeRef: str
+    paymentType: str
+    listingId: str = None
+    listingTitle: str = "Marketplace transaction"
+    successUrl: str
+    cancelUrl: str
+    metadata: dict = {}
 
 class VerifySessionRequest(BaseModel):
-    sessionId: str = Field(..., min_length=1)
-    transactionId: str = Field(default="")  # Optional — recovered from session metadata if missing
-
-
-# ─── Helpers ──────────────────────────────────────────────────────────────────
-
-def get_stripe():
-    secret_key = os.getenv("STRIPE_SECRET_KEY")
-    if not secret_key:
-        raise HTTPException(
-            status_code=500,
-            detail="STRIPE_SECRET_KEY is missing. Check your root .env file.",
-        )
-    stripe.api_key = secret_key
-    return stripe
-
-
-def safe_metadata(value):
-    if value is None:
-        return ""
-    return str(value)[:500]
-
-
-# ─── Routes ───────────────────────────────────────────────────────────────────
-
-@router.get("/health")
-def stripe_health():
-    return {
-        "message": "Stripe route is running",
-        "stripeConfigured": bool(os.getenv("STRIPE_SECRET_KEY")),
-        "webhookConfigured": bool(os.getenv("STRIPE_WEBHOOK_SECRET")),
-    }
-
+    sessionId: str
+    transactionId: str = ""
 
 @router.post("/create-checkout-session")
 async def create_checkout_session(payload: CheckoutSessionRequest):
-    stripe_client = get_stripe()
-
-    metadata = {
-        "transactionId": safe_metadata(payload.transactionId),
-        "stripeRef":     safe_metadata(payload.stripeRef),
-        "paymentType":   safe_metadata(payload.paymentType),
-        "listingId":     safe_metadata(payload.listingId),
-        "amountRand":    safe_metadata(payload.amountRand),
-        "cashAmount":    safe_metadata(payload.cashAmount),
-        "totalAmount":   safe_metadata(payload.totalAmount),
-    }
-    for key, value in payload.metadata.items():
-        metadata[key] = safe_metadata(value)
-
-    success_separator = "&" if "?" in payload.successUrl else "?"
-
+    if not stripe.api_key:
+        raise HTTPException(500, "STRIPE_SECRET_KEY not configured")
     try:
-        session = stripe_client.checkout.Session.create(
+        session = stripe.checkout.Session.create(
             mode="payment",
             customer_email=payload.buyerEmail,
             client_reference_id=payload.transactionId,
-            success_url=payload.successUrl + f"{success_separator}session_id={{CHECKOUT_SESSION_ID}}",
+            success_url=payload.successUrl + "?session_id={CHECKOUT_SESSION_ID}",
             cancel_url=payload.cancelUrl,
             payment_method_types=["card"],
-            line_items=[
-                {
-                    "price_data": {
-                        "currency": payload.currency.lower(),
-                        "unit_amount": payload.amount,
-                        "product_data": {
-                            "name": payload.listingTitle or "Marketplace transaction",
-                        },
-                    },
-                    "quantity": 1,
-                }
-            ],
-            metadata=metadata,
+            line_items=[{
+                "price_data": {
+                    "currency": payload.currency.lower(),
+                    "unit_amount": payload.amount,
+                    "product_data": {"name": payload.listingTitle},
+                },
+                "quantity": 1,
+            }],
+            metadata={
+                "transactionId": payload.transactionId,
+                "stripeRef": payload.stripeRef,
+                "paymentType": payload.paymentType,
+                "listingId": payload.listingId or "",
+                "adType": payload.metadata.get("adType", ""),
+                **payload.metadata,
+            },
         )
         return {"id": session.id, "url": session.url}
-
-    except Exception as exc:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to create Stripe Checkout session: {str(exc)}",
-        ) from exc
-
-
-# ─── Verify Session ───────────────────────────────────────────────────────────
+    except Exception as e:
+        raise HTTPException(500, str(e))
 
 @router.post("/verify-session")
 async def verify_session(payload: VerifySessionRequest):
+<<<<<<< Updated upstream
     """Called by the frontend on the payment-success page."""
     stripe_client = get_stripe()
 
+=======
+    if not stripe.api_key:
+        raise HTTPException(500, "STRIPE_SECRET_KEY not configured")
+>>>>>>> Stashed changes
     try:
-        session = stripe_client.checkout.Session.retrieve(payload.sessionId)
-    except Exception as exc:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Could not retrieve Stripe session: {str(exc)}",
-        ) from exc
+        session = stripe.checkout.Session.retrieve(payload.sessionId)
+    except Exception as e:
+        raise HTTPException(500, f"Could not retrieve session: {str(e)}")
 
     if session.payment_status != "paid":
         return {"paid": False, "status": session.payment_status}
 
+<<<<<<< Updated upstream
     # Resolve transactionId
     transaction_id = payload.transactionId.strip() if payload.transactionId else ""
     if not transaction_id:
@@ -270,30 +229,39 @@ async def stripe_webhook(request: Request):
         if not transaction_id:
             print("[Webhook] WARNING: No transactionId in metadata or client_reference_id. Skipping Firestore update.")
             return {"received": True}
+=======
+    meta = session.get("metadata") or {}
+    listing_id = meta.get("listingId") or ""
+    ad_type = meta.get("adType") or meta.get("type")
+>>>>>>> Stashed changes
 
+    if db and listing_id and ad_type:
         try:
-            db  = get_firestore_client()
-            ref = db.collection("transactions").document(transaction_id)
+            listing_ref = db.collection("listings").document(listing_id)
+            listing_snap = listing_ref.get()
+            if listing_snap.exists:
+                listing_data = listing_snap.to_dict()
+                promotion_data = {
+                    "listingId": listing_id,
+                    "title": listing_data.get("title", "Listing"),
+                    "imageUrl": (listing_data.get("photos") or [None])[0] or listing_data.get("imageUrl"),
+                    "price": listing_data.get("price"),
+                    "type": ad_type,
+                    "status": "active",
+                    "createdAt": firestore.SERVER_TIMESTAMP if FIREBASE_AVAILABLE else datetime.utcnow(),
+                    "expiresAt": datetime.utcnow() + timedelta(days=7),
+                    "stripeSessionId": session.id,
+                }
+                ad_ref = db.collection("ads").document(session.id)
+                ad_ref.set(promotion_data)
+                print(f"✅ Ad created for {listing_id} ({ad_type})")
+            else:
+                print(f"Listing {listing_id} not found")
+        except Exception as e:
+            print(f"Firestore error: {e}")
 
-            tx_snap = ref.get()
-            if tx_snap.exists and tx_snap.to_dict().get("paymentStatus") == "paid":
-                print(f"[Webhook] tx={transaction_id} already marked paid by verify-session — skipping")
-                return {"received": True}
+    return {"paid": True, "alreadyUpdated": False}
 
-            ref.update({
-                "status":                  "waiting",
-                "paymentStatus":           "paid",
-                "paymentProvider":         "stripe",
-                "paymentSettled":          True,
-                "stripeRef":               meta.get("stripeRef", session_id),
-                "stripeCheckoutSessionId": session_id,
-                "updatedAt":               firestore.SERVER_TIMESTAMP,
-            })
-
-            print(f"[Webhook] Firestore updated — tx={transaction_id} → status=waiting, paymentStatus=paid")
-
-        except Exception as exc:
-            print(f"[Webhook] ERROR updating Firestore for tx={transaction_id}: {exc}")
-            raise HTTPException(status_code=500, detail=f"Firestore update failed: {str(exc)}") from exc
-
-    return {"received": True}
+@router.get("/health")
+def health():
+    return {"stripe_configured": bool(stripe.api_key), "firebase_available": db is not None}
