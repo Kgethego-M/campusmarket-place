@@ -9,10 +9,31 @@ import { doc, updateDoc, increment, serverTimestamp, collection, addDoc, getDoc,
 // ── Analytics document reference ─────────────────────────────────────────────
 const getAnalyticsRef = () => doc(db, 'analytics', 'platform');
 
+// ── Ensure analytics document exists ─────────────────────────────────────────
+async function ensureAnalyticsDocument() {
+  const analyticsRef = getAnalyticsRef();
+  const snap = await getDoc(analyticsRef);
+  
+  if (!snap.exists()) {
+    await setDoc(analyticsRef, {
+      totalRevenue: 0,
+      onlineRevenue: 0,
+      pendingCashRevenue: 0,
+      collectedCashRevenue: 0,
+      totalPayouts: 0,
+      totalRefunds: 0,
+      availableBalance: 0,
+      createdAt: serverTimestamp(),
+      lastUpdated: serverTimestamp(),
+    });
+  }
+  return analyticsRef;
+}
+
 // ── Record online payment from Stripe ───────────────────────────────────────
 export async function recordOnlinePayment(transactionId, amount, paymentDetails = {}) {
   try {
-    const analyticsRef = getAnalyticsRef();
+    const analyticsRef = await ensureAnalyticsDocument();
     const txnRef = doc(db, 'transactions', transactionId);
     
     const txnSnap = await getDoc(txnRef);
@@ -51,10 +72,10 @@ export async function recordOnlinePayment(transactionId, amount, paymentDetails 
   }
 }
 
-// ── Record cash confirmation ────────────────────────────────────────────────
+// ── Record cash confirmation (when buyer commits to cash payment) ────────────
 export async function recordCashConfirmation(transactionId, amount) {
   try {
-    const analyticsRef = getAnalyticsRef();
+    const analyticsRef = await ensureAnalyticsDocument();
     const txnRef = doc(db, 'transactions', transactionId);
     
     await updateDoc(analyticsRef, {
@@ -81,18 +102,35 @@ export async function recordCashConfirmation(transactionId, amount) {
   }
 }
 
-// ── Record cash collected ───────────────────────────────────────────────────
+// ── Record cash collected (when staff physically receives cash) ──────────────
 export async function recordCashCollected(transactionId, amount) {
   try {
-    const analyticsRef = getAnalyticsRef();
+    const analyticsRef = await ensureAnalyticsDocument();
     const txnRef = doc(db, 'transactions', transactionId);
     
-    await updateDoc(analyticsRef, {
-      pendingCashRevenue: increment(-amount),
+    // Get current analytics to check pending amount
+    const analyticsSnap = await getDoc(analyticsRef);
+    const currentData = analyticsSnap.data();
+    const currentPending = currentData?.pendingCashRevenue || 0;
+    
+    // Only update pendingCashRevenue if there is a positive pending amount
+    // For cash-on-delivery, pendingCashRevenue might be 0, so we don't decrement
+    const updateData = {
       collectedCashRevenue: increment(amount),
       totalRevenue: increment(amount),
       lastUpdated: serverTimestamp(),
-    });
+    };
+    
+    // Only decrement pending if there is pending cash to decrement
+    if (currentPending > 0 && amount <= currentPending) {
+      updateData.pendingCashRevenue = increment(-amount);
+    } else if (currentPending > 0 && amount > currentPending) {
+      // If collecting more than pending, set pending to 0
+      updateData.pendingCashRevenue = increment(-currentPending);
+    }
+    // If currentPending is 0, don't modify pendingCashRevenue at all
+    
+    await updateDoc(analyticsRef, updateData);
     
     await addDoc(collection(db, 'transactions', transactionId, 'revenueEvents'), {
       type: 'cash_collected',
@@ -117,7 +155,7 @@ export async function recordCashCollected(transactionId, amount) {
 // ── Record seller payout ────────────────────────────────────────────────────
 export async function recordSellerPayout(transactionId, amount, sellerId) {
   try {
-    const analyticsRef = getAnalyticsRef();
+    const analyticsRef = await ensureAnalyticsDocument();
     
     await updateDoc(analyticsRef, {
       totalPayouts: increment(amount),
@@ -149,7 +187,7 @@ export async function recordSellerPayout(transactionId, amount, sellerId) {
 // ── Record refund ───────────────────────────────────────────────────────────
 export async function recordRefund(transactionId, amount, reason) {
   try {
-    const analyticsRef = getAnalyticsRef();
+    const analyticsRef = await ensureAnalyticsDocument();
     
     await updateDoc(analyticsRef, {
       totalRevenue: increment(-amount),
@@ -187,7 +225,6 @@ export async function getRevenueAnalytics() {
     const snap = await getDoc(analyticsRef);
     
     if (!snap.exists()) {
-      // ✅ This creates the document automatically - NO separate script needed!
       await setDoc(analyticsRef, {
         totalRevenue: 0,
         onlineRevenue: 0,

@@ -13,6 +13,7 @@ import useExportReport from "../hooks/useExportReport";
 import { validateFacilityConfig, generateTimeSlots, getTotalCapacity } from "../utils/facilityConfig.utils";
 import UtilisationReport from "./UtilisationReport.jsx";
 import AdminNavbar from "./AdminNavbar";
+import { getRevenueAnalytics } from "../services/revenueService";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Small inline toast
@@ -60,17 +61,23 @@ function ModerationSummaryTab({ reports }) {
     });
   }, [reports, selectedDays]);
 
-  const total          = filtered.length;
-  const pending        = filtered.filter(r => r.status === "pending").length;
-  const resolved       = filtered.filter(r => r.status === "resolved").length;
-  const dismissed      = filtered.filter(r => r.resolution === "dismiss").length;
+  const total = filtered.length;
+  const pending = filtered.filter(r => r.status === "pending").length;
+  const resolved = filtered.filter(r => r.status === "resolved").length;
+  const dismissed = filtered.filter(r => r.resolution === "dismiss").length;
   const removedReviews = filtered.filter(r => r.resolution === "remove_review").length;
-  const removedList    = filtered.filter(r => r.resolution === "remove_listing").length;
-  const suspended      = filtered.filter(r => r.resolution === "suspend_user").length;
+  const removedList = filtered.filter(r => r.resolution === "remove_listing").length;
+  const suspended = filtered.filter(r => r.resolution === "suspend_user").length;
 
   const byType = ["user", "listing", "review"].map(type => {
     const rows = filtered.filter(r => r.reportType === type);
-    return { type, total: rows.length, pending: rows.filter(r => r.status === "pending").length, resolved: rows.filter(r => r.status === "resolved").length, dismissed: rows.filter(r => r.resolution === "dismiss").length };
+    return { 
+      type, 
+      total: rows.length, 
+      pending: rows.filter(r => r.status === "pending").length, 
+      resolved: rows.filter(r => r.status === "resolved").length, 
+      dismissed: rows.filter(r => r.resolution === "dismiss").length 
+    };
   });
 
   const reasonCounts = {};
@@ -106,35 +113,52 @@ function ModerationSummaryTab({ reports }) {
 
       {/* Stat cards */}
       <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
-        {card("fas fa-flag",         "Total Reports",    total)}
-        {card("fas fa-clock",        "Pending",          pending,        pending  > 0 ? "#d97706" : "#1e293b")}
-        {card("fas fa-check-circle", "Resolved",         resolved,       "#16a34a")}
-        {card("fas fa-times-circle", "Dismissed",        dismissed)}
-        {card("fas fa-star",         "Reviews Removed",  removedReviews, removedReviews > 0 ? "#dc2626" : "#1e293b")}
-        {card("fas fa-store",        "Listings Removed", removedList,    removedList    > 0 ? "#dc2626" : "#1e293b")}
-        {card("fas fa-ban",          "Users Suspended",  suspended,      suspended      > 0 ? "#dc2626" : "#1e293b")}
+        {card("fas fa-flag", "Total Reports", total)}
+        {card("fas fa-clock", "Pending", pending, pending > 0 ? "#d97706" : "#1e293b")}
+        {card("fas fa-check-circle", "Resolved", resolved, "#16a34a")}
+        {card("fas fa-times-circle", "Dismissed", dismissed)}
+        {card("fas fa-star", "Reviews Removed", removedReviews, removedReviews > 0 ? "#dc2626" : "#1e293b")}
+        {card("fas fa-store", "Listings Removed", removedList, removedList > 0 ? "#dc2626" : "#1e293b")}
+        {card("fas fa-ban", "Users Suspended", suspended, suspended > 0 ? "#dc2626" : "#1e293b")}
       </div>
 
       {/* Breakdown table */}
       <div style={{ background: "#fff", border: "1.5px solid #e2e8f0", borderRadius: 12, overflow: "hidden" }}>
-        <div style={{ padding: "12px 18px", borderBottom: "1px solid #f1f5f9" }}><h4 style={{ margin: 0, fontSize: "0.85rem", fontWeight: 700, color: "#0f172a" }}>Breakdown by Report Type</h4></div>
+        <div style={{ padding: "12px 18px", borderBottom: "1px solid #f1f5f9" }}>
+          <h4 style={{ margin: 0, fontSize: "0.85rem", fontWeight: 700, color: "#0f172a" }}>Breakdown by Report Type</h4>
+        </div>
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.82rem" }}>
-          <thead><tr style={{ background: "#f8fafc" }}>
-            {["Type", "Total", "Pending", "Resolved", "Dismissed"].map(h => (
-              <th key={h} style={{ padding: "9px 14px", textAlign: "left", fontWeight: 700, color: "#64748b", fontSize: "0.72rem", textTransform: "uppercase", letterSpacing: "0.05em", borderBottom: "1px solid #f1f5f9" }}>{h}</th>
-            ))}
-          </tr></thead>
+          <thead>
+            <tr style={{ background: "#f8fafc" }}>
+              <th style={{ padding: "9px 14px", textAlign: "left", fontWeight: 700, color: "#64748b", fontSize: "0.72rem", textTransform: "uppercase", letterSpacing: "0.05em", borderBottom: "1px solid #f1f5f9" }}>Type</th>
+              <th style={{ padding: "9px 14px", textAlign: "left", fontWeight: 700, color: "#64748b", fontSize: "0.72rem", textTransform: "uppercase", letterSpacing: "0.05em", borderBottom: "1px solid #f1f5f9" }}>Total</th>
+              <th style={{ padding: "9px 14px", textAlign: "left", fontWeight: 700, color: "#64748b", fontSize: "0.72rem", textTransform: "uppercase", letterSpacing: "0.05em", borderBottom: "1px solid #f1f5f9" }}>Pending</th>
+              <th style={{ padding: "9px 14px", textAlign: "left", fontWeight: 700, color: "#64748b", fontSize: "0.72rem", textTransform: "uppercase", letterSpacing: "0.05em", borderBottom: "1px solid #f1f5f9" }}>Resolved</th>
+              <th style={{ padding: "9px 14px", textAlign: "left", fontWeight: 700, color: "#64748b", fontSize: "0.72rem", textTransform: "uppercase", letterSpacing: "0.05em", borderBottom: "1px solid #f1f5f9" }}>Dismissed</th>
+            </tr>
+          </thead>
           <tbody>
             {byType.map(row => (
               <tr key={row.type} style={{ borderBottom: "1px solid #f8fafc" }}>
-                <td style={{ padding: "11px 14px", fontWeight: 600, color: "#1e293b" }}>{{ 
-  user:    <i className="fas fa-user"  style={{ color: "#94a3b8" }} />, 
-  listing: <i className="fas fa-store" style={{ color: "#6AA6DA" }} />, 
-  review:  <i className="fas fa-star"  style={{ color: "#f59e0b" }} /> 
-}[row.type]} {row.type.charAt(0).toUpperCase() + row.type.slice(1)}</td>
+                <td style={{ padding: "11px 14px", fontWeight: 600, color: "#1e293b" }}>
+                  <i className={`fas ${row.type === "user" ? "fa-user" : row.type === "listing" ? "fa-tag" : "fa-star"}`} style={{ marginRight: 6, color: "#6AA6DA" }} />
+                  {row.type.charAt(0).toUpperCase() + row.type.slice(1)}
+                </td>
                 <td style={{ padding: "11px 14px", fontWeight: 700, color: row.total > 0 ? "#1e293b" : "#94a3b8" }}>{row.total}</td>
-                <td style={{ padding: "11px 14px" }}>{row.pending > 0 ? <span style={{ background: "#fef3c7", color: "#d97706", borderRadius: 20, padding: "2px 9px", fontWeight: 700, fontSize: "0.72rem" }}>{row.pending}</span> : <span style={{ color: "#94a3b8" }}>0</span>}</td>
-                <td style={{ padding: "11px 14px" }}>{row.resolved > 0 ? <span style={{ background: "#f0fdf4", color: "#16a34a", borderRadius: 20, padding: "2px 9px", fontWeight: 700, fontSize: "0.72rem" }}>{row.resolved}</span> : <span style={{ color: "#94a3b8" }}>0</span>}</td>
+                <td style={{ padding: "11px 14px" }}>
+                  {row.pending > 0 ? (
+                    <span style={{ background: "#fef3c7", color: "#d97706", borderRadius: 20, padding: "2px 9px", fontWeight: 700, fontSize: "0.72rem" }}>{row.pending}</span>
+                  ) : (
+                    <span style={{ color: "#94a3b8" }}>0</span>
+                  )}
+                </td>
+                <td style={{ padding: "11px 14px" }}>
+                  {row.resolved > 0 ? (
+                    <span style={{ background: "#f0fdf4", color: "#16a34a", borderRadius: 20, padding: "2px 9px", fontWeight: 700, fontSize: "0.72rem" }}>{row.resolved}</span>
+                  ) : (
+                    <span style={{ color: "#94a3b8" }}>0</span>
+                  )}
+                </td>
                 <td style={{ padding: "11px 14px", color: row.dismissed > 0 ? "#64748b" : "#94a3b8", fontWeight: row.dismissed > 0 ? 600 : 400 }}>{row.dismissed}</td>
               </tr>
             ))}
@@ -152,7 +176,9 @@ function ModerationSummaryTab({ reports }) {
       {/* Top reasons bar chart */}
       {topReasons.length > 0 && (
         <div style={{ background: "#fff", border: "1.5px solid #e2e8f0", borderRadius: 12, overflow: "hidden" }}>
-          <div style={{ padding: "12px 18px", borderBottom: "1px solid #f1f5f9" }}><h4 style={{ margin: 0, fontSize: "0.85rem", fontWeight: 700, color: "#0f172a" }}>Top Report Reasons</h4></div>
+          <div style={{ padding: "12px 18px", borderBottom: "1px solid #f1f5f9" }}>
+            <h4 style={{ margin: 0, fontSize: "0.85rem", fontWeight: 700, color: "#0f172a" }}>Top Report Reasons</h4>
+          </div>
           <div style={{ padding: "12px 18px", display: "flex", flexDirection: "column", gap: 10 }}>
             {topReasons.map(([reason, count]) => {
               const pct = total > 0 ? Math.round((count / total) * 100) : 0;
@@ -187,8 +213,8 @@ export default function AdminDashboard() {
   const dropdownRef = useRef(null);
 
   // ── UI state ─────────────────────────────────────────────────────────────
-  const [activeTab, setActiveTab]       = useState("users");
-  const [modSubTab, setModSubTab]       = useState("listings"); // "listings" | "reports" | "summary"
+  const [activeTab, setActiveTab] = useState("users");
+  const [modSubTab, setModSubTab] = useState("listings");
   const [reportSearch, setReportSearch] = useState("");
   const [expandedReport, setExpandedReport] = useState(null);
   const [dropdownOpen, setDropdownOpen] = useState(false);
@@ -199,6 +225,7 @@ export default function AdminDashboard() {
   // ── Data state ───────────────────────────────────────────────────────────
   const [adminUser, setAdminUser] = useState({ name: "Admin", email: "", photoURL: "", initials: "A" });
   const [stats, setStats] = useState({ totalUsers: 0, openReports: 0, transactions: 0, revenue: 0 });
+  const [revenueData, setRevenueData] = useState(null);
   const [pendingStaff, setPendingStaff] = useState([]);
   const [allUsers, setAllUsers] = useState([]);
   const [listings, setListings] = useState([]);
@@ -234,7 +261,7 @@ export default function AdminDashboard() {
     { Metric: "Total Users", Value: stats.totalUsers },
     { Metric: "Open Reports", Value: stats.openReports },
     { Metric: "Transactions", Value: stats.transactions },
-    { Metric: "Revenue (Paid)", Value: `R ${stats.revenue.toLocaleString()}` },
+    { Metric: "Total Revenue", Value: `R ${(revenueData?.totalRevenue || 0).toLocaleString()}` },
   ];
   const { exportToCSV: exportSummaryCSV, exportToPDF: exportSummaryPDF } = useExportReport("Admin_Summary", summaryHeaders, summaryRows);
 
@@ -293,25 +320,17 @@ export default function AdminDashboard() {
   const reportsHeaders = ["Type", "ReportedItem", "Reason", "Details", "ReportedBy", "Status", "Resolution", "Date"];
 
   const reportTypeIcon = (type) => {
-    if (type === "listing") return <i className="fas fa-store"     style={{ fontSize: "1rem", color: "#6AA6DA" }} />;
-    if (type === "review")  return <i className="fas fa-star"      style={{ fontSize: "1rem", color: "#f59e0b" }} />;
-    return                         <i className="fas fa-user"      style={{ fontSize: "1rem", color: "#94a3b8" }} />;
+    if (type === "listing") return "🛍️";
+    if (type === "review")  return "⭐";
+    return "👤";
   };
+
   // ── Helper: navigate to the reported item ─────────────────────────────────
   const navigateToReported = (e, report) => {
     e.stopPropagation();
     if (report.reportType === "listing") navigate(`/listing/${report.reportedId}?preview=true`);
     else if (report.reportType === "user") navigate(`/profile/${report.reportedId}`);
   };
-
-  const reportedNameStyle = (reportType) => ({
-    fontWeight: 700,
-    fontSize: "0.88rem",
-    color: reportType === "listing" || reportType === "user" ? "#2563eb" : "#0f172a",
-    cursor: reportType === "listing" || reportType === "user" ? "pointer" : "default",
-    textDecoration: reportType === "listing" || reportType === "user" ? "underline" : "none",
-    textDecorationStyle: "dotted",
-  });
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (user) => {
@@ -333,35 +352,46 @@ export default function AdminDashboard() {
     return () => unsub();
   }, [navigate]);
 
-  // ── Fetch dashboard data ─────────────────────────────────────────────────
+  // ── Real-time users listener ────────────────────────────────────────────
   useEffect(() => {
-    async function load() {
+    const unsub = onSnapshot(collection(db, "users"), (snap) => {
+      const users = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      setAllUsers(users);
+      setPendingStaff(users.filter(u => u.userType === "staff" && !u.approved));
+      setStats(prev => ({
+        ...prev,
+        totalUsers: users.length,
+      }));
+    });
+    return () => unsub();
+  }, []);
+
+  // ── Real-time listings listener ──────────────────────────────────────────
+  useEffect(() => {
+    const q = query(collection(db, "listings"), orderBy("timestamp", "desc"));
+    const unsub = onSnapshot(q, (snap) => {
+      const listData = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      setListings(listData);
+      const sold = listData.filter(l => l.status === "sold" || l.status === "traded");
+      setStats(prev => ({
+        ...prev,
+        transactions: sold.length,
+      }));
+    });
+    return () => unsub();
+  }, []);
+
+  // ── Fetch revenue analytics ──────────────────────────────────────────────
+  useEffect(() => {
+    async function fetchRevenue() {
       try {
-        const usersSnap = await getDocs(collection(db, "users"));
-        const users = usersSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-        setAllUsers(users);
-        setPendingStaff(users.filter(u => u.userType === "staff" && !u.approved));
-
-        const listSnap = await getDocs(query(collection(db, "listings"), orderBy("timestamp", "desc")));
-        const listData = listSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-        setListings(listData);
-
-        const sold = listData.filter(l => l.status === "sold");
-        const revenue = sold.reduce((sum, l) => sum + (Number(l.price) || 0), 0);
-
-        setStats(prev => ({
-          ...prev,
-          totalUsers: users.length,
-          transactions: sold.length,
-          revenue,
-        }));
-      } catch (e) {
-        console.error("Dashboard load error:", e);
-      } finally {
-        setLoading(false);
+        const analytics = await getRevenueAnalytics();
+        setRevenueData(analytics);
+      } catch (err) {
+        console.error("Failed to fetch revenue analytics:", err);
       }
     }
-    load();
+    fetchRevenue();
   }, []);
 
   // ── Real-time reports listener ───────────────────────────────────────────
@@ -432,15 +462,11 @@ export default function AdminDashboard() {
   // ── Actions ──────────────────────────────────────────────────────────────
   const approveStaff = async (userId) => {
     await updateDoc(doc(db, "users", userId), { approved: true });
-    setPendingStaff(prev => prev.filter(u => u.id !== userId));
-    setAllUsers(prev => prev.map(u => u.id === userId ? { ...u, approved: true } : u));
     showToast("Staff member approved.");
   };
 
   const rejectStaff = async (userId) => {
     await updateDoc(doc(db, "users", userId), { userType: "student", approved: false });
-    setPendingStaff(prev => prev.filter(u => u.id !== userId));
-    setAllUsers(prev => prev.map(u => u.id === userId ? { ...u, userType: "student" } : u));
     showToast("Staff request rejected.", "warning");
   };
 
@@ -465,9 +491,8 @@ export default function AdminDashboard() {
     try {
       const update = currentlySuspended
         ? { suspended: false, suspendedBy: null, suspendedAt: null }
-        : { suspended: true,  suspendedBy: adminUid, suspendedAt: new Date() };
+        : { suspended: true, suspendedBy: adminUid, suspendedAt: new Date() };
       await updateDoc(doc(db, "users", userId), update);
-      setAllUsers(prev => prev.map(u => u.id === userId ? { ...u, ...update } : u));
       showToast(currentlySuspended ? "User unsuspended." : "User suspended.", currentlySuspended ? "success" : "warning");
     } catch (err) {
       console.error(err);
@@ -484,7 +509,6 @@ export default function AdminDashboard() {
         closeConfirm();
         try {
           await deleteDoc(doc(db, "listings", listing.id));
-          setListings(prev => prev.filter(x => x.id !== listing.id));
           showToast("Listing removed.");
         } catch (err) {
           console.error(err);
@@ -499,16 +523,11 @@ export default function AdminDashboard() {
     if (!adminUid) return;
     try {
       await updateDoc(doc(db, "reports", report.id), {
-        status:     "resolved",
+        status: "resolved",
         resolution,
         resolvedBy: adminUid,
         resolvedAt: new Date(),
       });
-      setReports(prev => prev.map(r =>
-        r.id === report.id
-          ? { ...r, status: "resolved", resolution, resolvedBy: adminUid }
-          : r
-      ));
       showToast("Report resolved.");
     } catch (err) {
       console.error(err);
@@ -541,12 +560,14 @@ export default function AdminDashboard() {
   const previewSlots = generateTimeSlots(facilityConfig.openTime, facilityConfig.closeTime);
   const previewCapacity = getTotalCapacity({ ...facilityConfig, slotsPerHour: Number(facilityConfig.slotsPerHour) });
 
-  if (loading) return (
-    <div className={styles.loadingScreen}>
-      <div className={styles.spinner} />
-      <p>Loading admin dashboard…</p>
-    </div>
-  );
+  if (loading && allUsers.length === 0) {
+    return (
+      <div className={styles.loadingScreen}>
+        <div className={styles.spinner} />
+        <p>Loading admin dashboard…</p>
+      </div>
+    );
+  }
 
   return (
     <div className={styles.shell}>
@@ -579,38 +600,48 @@ export default function AdminDashboard() {
 
         {/* Stat cards */}
         <div className={styles.statsRow}>
-          {[
-            { label: "Total Users", value: stats.totalUsers, icon: "fas fa-users" },
-            { label: "Open Reports", value: stats.openReports, icon: "fas fa-flag", highlight: stats.openReports > 0 },
-            { label: "Completed Transactions", value: stats.transactions, icon: "fas fa-exchange-alt" },
-            { label: "Revenue (Paid)", value: `R ${stats.revenue.toLocaleString()}`, icon: "fas fa-wallet" },
-          ].map(({ label, value, icon, highlight }) => (
-            <div key={label} className={`${styles.statCard} ${highlight ? styles.statCardAlert : ""}`}>
-              <span className={styles.statLabel}>{label}</span>
-              <span className={styles.statValue}>{value}</span>
-              <i className={`${icon} ${styles.statIcon}`} />
-            </div>
-          ))}
+          <div className={styles.statCard}>
+            <span className={styles.statLabel}>Total Users</span>
+            <span className={styles.statValue}>{stats.totalUsers}</span>
+            <i className="fas fa-users" />
+          </div>
+          <div className={`${styles.statCard} ${stats.openReports > 0 ? styles.statCardAlert : ""}`}>
+            <span className={styles.statLabel}>Open Reports</span>
+            <span className={styles.statValue}>{stats.openReports}</span>
+            <i className="fas fa-flag" />
+          </div>
+          <div className={styles.statCard}>
+            <span className={styles.statLabel}>Completed Transactions</span>
+            <span className={styles.statValue}>{stats.transactions}</span>
+            <i className="fas fa-exchange-alt" />
+          </div>
+          <div className={styles.statCard}>
+            <span className={styles.statLabel}>Total Revenue</span>
+            <span className={styles.statValue}>R {(revenueData?.totalRevenue || 0).toLocaleString()}</span>
+            <i className="fas fa-wallet" />
+          </div>
         </div>
 
         {/* Tabs */}
         <div className={styles.tabs}>
-          {[
-            { id: "users",       icon: "fas fa-users",       label: "Users" },
-            { id: "suspended",   icon: "fas fa-ban",          label: "Suspended" },
-            { id: "moderation",  icon: "fas fa-shield-alt",   label: "Moderation" },
-            { id: "payments",    icon: "fas fa-credit-card",  label: "Payments" },
-            { id: "utilisation", icon: "fas fa-calendar-alt", label: "Utilisation Reports" },
-            { id: "settings",    icon: "fas fa-cog",          label: "Settings" },
-          ].map(t => (
-            <button
-              key={t.id}
-              className={`${styles.tab} ${activeTab === t.id ? styles.tabActive : ""}`}
-              onClick={() => setActiveTab(t.id)}
-            >
-              <i className={t.icon} /> {t.label}
-            </button>
-          ))}
+          <button className={`${styles.tab} ${activeTab === "users" ? styles.tabActive : ""}`} onClick={() => setActiveTab("users")}>
+            <i className="fas fa-users" /> Users
+          </button>
+          <button className={`${styles.tab} ${activeTab === "suspended" ? styles.tabActive : ""}`} onClick={() => setActiveTab("suspended")}>
+            <i className="fas fa-ban" /> Suspended
+          </button>
+          <button className={`${styles.tab} ${activeTab === "moderation" ? styles.tabActive : ""}`} onClick={() => setActiveTab("moderation")}>
+            <i className="fas fa-shield-alt" /> Moderation
+          </button>
+          <button className={`${styles.tab} ${activeTab === "payments" ? styles.tabActive : ""}`} onClick={() => setActiveTab("payments")}>
+            <i className="fas fa-credit-card" /> Payments
+          </button>
+          <button className={`${styles.tab} ${activeTab === "utilisation" ? styles.tabActive : ""}`} onClick={() => setActiveTab("utilisation")}>
+            <i className="fas fa-calendar-alt" /> Utilisation Reports
+          </button>
+          <button className={`${styles.tab} ${activeTab === "settings" ? styles.tabActive : ""}`} onClick={() => setActiveTab("settings")}>
+            <i className="fas fa-cog" /> Settings
+          </button>
         </div>
 
         {/* ── USERS TAB ── */}
@@ -676,18 +707,63 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* ── SUSPENDED USERS TAB ── */}
+        {/* ── SUSPENDED USERS TAB (with CSV/PDF export) ── */}
         {activeTab === "suspended" && (
           <div className={styles.tabContent}>
             <div className={styles.card}>
-              <h3 className={styles.cardTitle}>
-                Suspended Users
-                {suspendedUsers.length > 0 && (
-                  <span style={{ marginLeft: 10, background: "#dc2626", color: "#fff", borderRadius: 20, padding: "2px 10px", fontSize: "0.72rem", fontWeight: 700 }}>
-                    {suspendedUsers.length}
-                  </span>
-                )}
-              </h3>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px" }}>
+                <h3 className={styles.cardTitle}>
+                  Suspended Users
+                  {suspendedUsers.length > 0 && (
+                    <span style={{ marginLeft: 10, background: "#dc2626", color: "#fff", borderRadius: 20, padding: "2px 10px", fontSize: "0.72rem", fontWeight: 700 }}>
+                      {suspendedUsers.length}
+                    </span>
+                  )}
+                </h3>
+                <div style={{ display: "flex", gap: "8px" }}>
+                  <button
+                    onClick={() => {
+                      if (suspendedUsers.length === 0) {
+                        showToast("No suspended users to export.", "warning");
+                        return;
+                      }
+                      const headers = ["Name", "Email", "Suspended At", "Suspended By"];
+                      const rows = suspendedUsers.map(u => ({
+                        Name: `${u.firstName || ""} ${u.lastName || ""}`.trim(),
+                        Email: u.email || "",
+                        "Suspended At": u.suspendedAt?.toDate ? u.suspendedAt.toDate().toLocaleString() : u.suspendedAt || "",
+                        "Suspended By": u.suspendedBy || "",
+                      }));
+                      const csvRows = [headers, ...rows.map(r => headers.map(h => r[h]))];
+                      const csvContent = csvRows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(",")).join("\n");
+                      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+                      const link = document.createElement("a");
+                      const url = URL.createObjectURL(blob);
+                      link.href = url;
+                      link.setAttribute("download", "suspended_users.csv");
+                      document.body.appendChild(link);
+                      link.click();
+                      document.body.removeChild(link);
+                      URL.revokeObjectURL(url);
+                    }}
+                    style={{ background: "#4a90d9", color: "white", border: "none", padding: "6px 12px", borderRadius: "8px", cursor: "pointer", fontWeight: "500", fontSize: "0.75rem" }}
+                  >
+                    CSV
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (suspendedUsers.length === 0) {
+                        showToast("No suspended users to export.", "warning");
+                        return;
+                      }
+                      window.print();
+                    }}
+                    style={{ background: "#4a90d9", color: "white", border: "none", padding: "6px 12px", borderRadius: "8px", cursor: "pointer", fontWeight: "500", fontSize: "0.75rem" }}
+                  >
+                    PDF
+                  </button>
+                </div>
+              </div>
               {suspendedUsers.length === 0 ? (
                 <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, padding: "32px 0" }}>
                   <i className="fas fa-check-circle" style={{ fontSize: "2rem", color: "#16a34a" }} />
@@ -713,51 +789,98 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* ── MODERATION TAB*/}
+        {/* ── MODERATION TAB ── */}
         {activeTab === "moderation" && (
           <div className={styles.tabContent}>
-            {modSubTab === "listings" && (
-              <ReportCard title="Listing Moderation" headers={listingsHeaders} data={listingsExportData}>
-                <div className={styles.cardHeader}>
-                  <div className={styles.searchWrap}>
-                    <i className="fas fa-search" />
-                    <input className={styles.searchInput} type="text" placeholder="Search listings…" value={listingSearch} onChange={e => setListingSearch(e.target.value)} />
-                  </div>
+            <ReportCard title="Listing Moderation" headers={listingsHeaders} data={listingsExportData}>
+              <div className={styles.cardHeader}>
+                <div className={styles.searchWrap}>
+                  <i className="fas fa-search" />
+                  <input className={styles.searchInput} type="text" placeholder="Search listings…" value={listingSearch} onChange={e => setListingSearch(e.target.value)} />
                 </div>
-                {filteredListings.length === 0 ? (
-                  <p className={styles.emptyNote}>{listingSearch ? "No listings match your search." : "No listings to moderate."}</p>
-                ) : (
-                  <div className={styles.modList}>
-                    {filteredListings.map(l => {
-                      const img = l.imageUrl || l.photos?.[0] || null;
-                      return (
-                        <div key={l.id} className={styles.modRow}>
-                          <div className={styles.modThumb}>
-                            {img
-                              ? <img src={img} alt={l.title || "listing"} style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: 8 }} />
-                              : <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", background: "#f1f5f9", borderRadius: 8, color: "#94a3b8" }}><i className="fas fa-image" style={{ fontSize: "1.4rem" }} /></div>
-                            }
-                          </div>
-                          <div className={styles.modInfo}>
-                            <span className={styles.modTitle}>{l.title}</span>
-                            <span className={styles.modMeta}>{l.category} · R {Number(l.price || 0).toLocaleString()}</span>
-                          </div>
-                          <span className={`${styles.modStatus} ${styles[l.status || "active"]}`}>{l.status || "active"}</span>
-                          <button className={styles.btnReject} onClick={() => handleRemoveListing(l)} disabled={l.status === "removed"}>Remove</button>
+              </div>
+              {filteredListings.length === 0 ? (
+                <p className={styles.emptyNote}>{listingSearch ? "No listings match your search." : "No listings to moderate."}</p>
+              ) : (
+                <div className={styles.modList}>
+                  {filteredListings.map(l => {
+                    const img = l.imageUrl || l.photos?.[0] || null;
+                    return (
+                      <div key={l.id} className={styles.modRow}>
+                        <div className={styles.modThumb}>
+                          {img ? (
+                            <img src={img} alt={l.title || "listing"} style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: 8 }} />
+                          ) : (
+                            <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", background: "#f1f5f9", borderRadius: 8, color: "#94a3b8" }}>
+                              <i className="fas fa-image" style={{ fontSize: "1.4rem" }} />
+                            </div>
+                          )}
                         </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </ReportCard>
-            )}
+                        <div className={styles.modInfo}>
+                          <span className={styles.modTitle}>{l.title}</span>
+                          <span className={styles.modMeta}>{l.category} · R {Number(l.price || 0).toLocaleString()}</span>
+                        </div>
+                        <span className={`${styles.modStatus} ${styles[l.status || "active"]}`}>{l.status || "active"}</span>
+                        <button className={styles.btnReject} onClick={() => handleRemoveListing(l)} disabled={l.status === "removed"}>Remove</button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </ReportCard>
           </div>
         )}
 
-        {/* ── PAYMENTS TAB ── */}
+        {/* ── PAYMENTS TAB (with CSV/PDF export) ── */}
         {activeTab === "payments" && (
           <div className={styles.tabContent}>
-            <ReportCard title="Completed Transactions" headers={paymentsHeaders} data={paymentsExportData}>
+            <div className={styles.card}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px", marginBottom: "16px" }}>
+                <h3 className={styles.cardTitle}>Completed Transactions</h3>
+                <div style={{ display: "flex", gap: "8px" }}>
+                  <button
+                    onClick={() => {
+                      if (paymentsExportData.length === 0) {
+                        showToast("No completed transactions to export.", "warning");
+                        return;
+                      }
+                      const headers = ["Item", "Type", "Amount", "Status"];
+                      const rows = paymentsExportData.map(item => ({
+                        Item: item.Item,
+                        Type: item.Type,
+                        Amount: item.Amount,
+                        Status: item.Status,
+                      }));
+                      const csvRows = [headers, ...rows.map(r => headers.map(h => r[h]))];
+                      const csvContent = csvRows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(",")).join("\n");
+                      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+                      const link = document.createElement("a");
+                      const url = URL.createObjectURL(blob);
+                      link.href = url;
+                      link.setAttribute("download", "completed_transactions.csv");
+                      document.body.appendChild(link);
+                      link.click();
+                      document.body.removeChild(link);
+                      URL.revokeObjectURL(url);
+                    }}
+                    style={{ background: "#4a90d9", color: "white", border: "none", padding: "6px 12px", borderRadius: "8px", cursor: "pointer", fontWeight: "500", fontSize: "0.75rem" }}
+                  >
+                    CSV
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (paymentsExportData.length === 0) {
+                        showToast("No completed transactions to export.", "warning");
+                        return;
+                      }
+                      window.print();
+                    }}
+                    style={{ background: "#4a90d9", color: "white", border: "none", padding: "6px 12px", borderRadius: "8px", cursor: "pointer", fontWeight: "500", fontSize: "0.75rem" }}
+                  >
+                    PDF
+                  </button>
+                </div>
+              </div>
               {listings.filter(l => l.status === "sold" || l.status === "traded").length === 0 ? (
                 <p className={styles.emptyNote}>No completed transactions yet.</p>
               ) : (
@@ -775,7 +898,7 @@ export default function AdminDashboard() {
                   ))}
                 </div>
               )}
-            </ReportCard>
+            </div>
           </div>
         )}
 
