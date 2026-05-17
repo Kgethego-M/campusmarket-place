@@ -52,40 +52,7 @@
 - **When** they select a drop-off slot on D+7 at 11:59 PM
 - **Then** the slot is accepted
 
-### US28 — Cancel + refund buyer when inspection fails
-
-**Test 1: Order status updates correctly on inspection failure**
-- **Given** an item has been dropped off and is pending inspection
-- **When** inspection fails (e.g., item damaged, wrong item, counterfeit)
-- **Then** order status immediately updates to "Cancelled – Inspection Failed"
-
-**Test 2: Buyer receives full automatic refund**
-- **Given** inspection fails
-- **When** the failure is recorded
-- **Then** the buyer's original payment method is refunded the full amount within [specified time, e.g., 1 hour]
-- **And** no manual intervention is required
-
-**Test 3: Buyer is notified of failure and refund**
-- **Given** inspection fails and refund is processed
-- **When** both actions are complete
-- **Then** buyer receives an email notification
-- **And** buyer receives an in-app notification
-- **And** the notification states both the failure reason and refund confirmation
-
-**Test 4: Seller is notified of inspection failure**
-- **Given** inspection fails
-- **When** the failure is recorded
-- **Then** seller receives an email notification
-- **And** seller receives an in-app notification
-- **And** the notification explains why the item failed inspection
-
-**Test 5: No partial refunds or holds remain**
-- **Given** inspection fails
-- **When** refund is processed
-- **Then** the buyer's balance shows $0 owed
-- **And** no pending authorizations remain on the transaction
-
-### US29 — Allow students to trade items instead of direct payments
+### US28 — Allow students to trade items instead of direct payments
 
 **Test 1: Trade option available during checkout**
 - **Given** a student buyer is at the checkout screen
@@ -125,7 +92,7 @@
 - **And** transaction history shows both items and both parties
 - **And** no refund option is available unless both parties agree to reverse
 
-### US30 — Notify seller about overdue drop-off and auto-cancel after exceeding grace period
+### US29 — Notify seller about overdue drop-off and auto-cancel after exceeding grace period
 
 **Test 1: Overdue notification sent immediately after missed drop-off**
 - **Given** a seller has a scheduled drop-off time of T

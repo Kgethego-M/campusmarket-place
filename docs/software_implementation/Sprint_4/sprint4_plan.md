@@ -48,21 +48,20 @@ The main objective of Sprint 4 is to **address and resolve all outstanding probl
 |------------|-------------|----------|
 | US26 | Cancel initiation of purchase (buyer side) | High |
 | US27 | Restrict drop-off dates to ≤7 days after payment | High |
-| US28 | Cancel + refund buyer when inspection fails | High |
-| US29 | Allow students to trade instead of direct payments | Medium |
-| US30 | Notify seller about overdue drop-off + auto-cancel after grace period | High |
-| US31 | Fix notification logic for cash payments after inspection | High |
-| US32 | Remove "Sell Item" from nav bar; add floating action button (+) | Medium |
-| US33 | Make listings clickable in admin report review screen | Medium |
-| US34 | Overdue collection penalties & compensation logic | High |
-| US35 | Remove legacy statuses (At Facility, Declined, Completed) | Low |
-| US36 | Change cart icon to "Favourites" | Low |
-| US37 | Remove all "collection" terminology from app | Low |
-| US38 | Promote listings for payments (paid promotion feature) | Medium |
-| US39 | Add loader/loading states throughout app | Low |
-| US40 | Fix overall app flow (end-to-end transaction path) | High |
-| US41 | Staff page implementation/cleanup | Medium |
-| US42 | Automate payment process where possible | High |
+| US28 | Allow students to trade instead of direct payments | Medium |
+| US29 | Notify seller about overdue drop-off + auto-cancel after grace period | High |
+| US30 | Fix notification logic for cash payments after inspection | High |
+| US31 | Remove "Sell Item" from nav bar; add floating action button (+) | Medium |
+| US32 | Make listings clickable in admin report review screen | Medium |
+| US33 | Overdue collection penalties & compensation logic | High |
+| US34 | Remove legacy statuses (At Facility, Declined, Completed) | Low |
+| US35 | Change cart icon to "Favourites" | Low |
+| US36 | Remove all "collection" terminology from app | Low |
+| US37 | Promote listings for payments (paid promotion feature) | Medium |
+| US38 | Add loader/loading states throughout app | Low |
+| US29 | Fix overall app flow (end-to-end transaction path) | High |
+| US40 | Staff page implementation/cleanup | Medium |
+| US41 | Automate payment process where possible | High |
 
 ---
 

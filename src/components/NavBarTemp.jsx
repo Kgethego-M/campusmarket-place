@@ -3,9 +3,10 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { auth, db } from "../firebase";
 import {
     collection, query, where, onSnapshot, getDocs,
-    doc, getDoc, updateDoc, deleteDoc,
+    doc, getDoc, updateDoc,
 } from "firebase/firestore";
 import { signOut, onAuthStateChanged } from "firebase/auth";
+import { markRatingAsRead, isRatingNotificationDismissed } from "../services/notificationService";
 import styles from "./NavBar.module.css";
 
 const NAV_LINKS = [
@@ -88,10 +89,10 @@ export default function Navbar() {
 
     const [isLoggingOut,       setIsLoggingOut]       = useState(false);
     const [notificationsOpen,  setNotificationsOpen]  = useState(false);
-    const [avatarMenuOpen,     setAvatarMenuOpen]      = useState(false);
-    const [currentUser,        setCurrentUser]         = useState(null);
-    const [notifications,      setNotifications]       = useState([]);  // all unread, sorted
-    const [userDisplay,        setUserDisplay]         = useState({
+    const [avatarMenuOpen,     setAvatarMenuOpen]     = useState(false);
+    const [currentUser,        setCurrentUser]        = useState(null);
+    const [notifications,      setNotifications]      = useState([]);
+    const [userDisplay,        setUserDisplay]        = useState({
         name: 'Student', email: '', photoURL: '', initials: 'S',
     });
 
@@ -106,12 +107,16 @@ export default function Navbar() {
     };
 
     // ── Notification click ────────────────────────────────────────────────────
-    // Simply use the redirectPath from the notification document
 
     const handleNotificationClick = async (n) => {
         setNotificationsOpen(false);
         
-        // Mark as read before navigating
+        // For rating notifications, mark as read in localStorage
+        if (n.type === 'rate_seller' || n.type === 'rate_buyer') {
+            markRatingAsRead(n.id);
+        }
+        
+        // Mark as read in Firestore
         await markAsRead(n.id);
         
         // Use the redirectPath from the notification
@@ -263,8 +268,6 @@ export default function Navbar() {
     };
 
     // ── Real-time notifications listener ─────────────────────────────────────
-    // Reads ALL unread notifications for the current user from Firestore.
-    // notificationService.js is the only writer, so every doc has redirectPath.
 
     useEffect(() => {
         if (!currentUser) return;
@@ -306,7 +309,15 @@ export default function Navbar() {
                 return true;
             });
 
-            setNotifications(deduped);
+            // Filter out rating notifications that were dismissed
+            const finalNotifications = deduped.filter(n => {
+                if (n.type === 'rate_seller' || n.type === 'rate_buyer') {
+                    return !isRatingNotificationDismissed(n.id);
+                }
+                return true;
+            });
+
+            setNotifications(finalNotifications);
         });
         return () => unsub();
     }, [currentUser]);

@@ -786,7 +786,7 @@ export default function ViewSellerRatings({ userId: propUserId, onBack }) {
               <>
                 <div className={styles.transactionsList}>
                   {previewReviews.map((review, i) => (
-                    <ReviewCard key={review.id} review={review} animate delay={i * 60} onReport={canReportReview(review) ? handleReportReview : null} />
+                    <ReviewCard key={review.id} review={review} animate delay={i * 60} onReport={!isAdminPreview && canReportReview(review) ? handleReportReview : null} />
                   ))}
                 </div>
                 {hasMore && (
@@ -819,8 +819,18 @@ export default function ViewSellerRatings({ userId: propUserId, onBack }) {
               <>
                 <div className={styles.listingsGrid}>
                   {previewListings.map((listing, i) => (
-                    <div key={listing.id} className={styles.listingCardWrap} style={{ animationDelay: `${i * 70}ms` }}>
+                    <div
+                      key={listing.id}
+                      className={styles.listingCardWrap}
+                      style={{
+                        animationDelay: `${i * 70}ms`,
+                        ...(isAdminPreview ? { position: 'relative', pointerEvents: 'none', userSelect: 'none' } : {}),
+                      }}
+                    >
                       <ListingCard listing={listing} visible />
+                      {isAdminPreview && (
+                        <div style={{ position: 'absolute', inset: 0, zIndex: 10, cursor: 'default' }} />
+                      )}
                     </div>
                   ))}
                 </div>

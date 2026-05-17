@@ -115,32 +115,7 @@
 
 ---
 
-## US28 — Cancel + Refund Buyer When Inspection Fails
-
-> As a buyer, I want my order to be automatically cancelled and refunded if the item fails inspection so that I am not left waiting or charged for an item that cannot be delivered.
-
-**Route:** System-level / Staff dashboard | Access: Automated + Staff
-
-| Task | Assignee | Status |
-|---|---|---|
-| Add "Cancelled – Inspection Failed" status to transaction state machine | Dev 3 | 📋 To Do |
-| Trigger full refund to buyer's original payment method on inspection failure | Dev 3 | 📋 To Do |
-| Send email and in-app notification to buyer with failure reason and refund confirmation | Dev 3 | 📋 To Do |
-| Send email and in-app notification to seller explaining failure reason | Dev 3 | 📋 To Do |
-| (Deferred) Add reschedule drop-off option | Dev 3 | ⏸️ Deferred |
-
-**Acceptance Tests**
-
-| Given | When | Then |
-|---|---|---|
-| An item has been dropped off and is pending inspection | Inspection fails | Order status immediately updates to "Cancelled – Inspection Failed" |
-| Inspection fails | The failure is recorded | The buyer's original payment method is refunded the full amount and no manual intervention is required |
-| Inspection fails and refund is processed | Both actions are complete | Buyer receives email notification, in-app notification, and both state failure reason and refund confirmation |
-| Inspection fails | The failure is recorded | Seller receives email and in-app notification explaining why the item failed inspection |
-
----
-
-## US29 — Allow Students to Trade Instead of Direct Payments
+## US28 — Allow Students to Trade Instead of Direct Payments
 
 > As a student buyer, I want to offer an item I own in trade instead of paying money so that I can acquire needed items without spending cash and participate in a barter economy on campus.
 
@@ -169,7 +144,7 @@
 
 ---
 
-## US30 — Notify Seller About Overdue Drop-Off and Auto-Cancel After Exceeding Grace Period
+## US29 — Notify Seller About Overdue Drop-Off and Auto-Cancel After Exceeding Grace Period
 
 > As a marketplace admin, I want the system to notify a seller when drop-off is overdue and automatically cancel the transaction if the seller fails to drop off within a specified grace period so that buyers aren't left waiting indefinitely and marketplace trust is maintained.
 
@@ -198,7 +173,7 @@
 
 ---
 
-## US31 — Fix Cash Payment Notification Logic After Inspection
+## US30 — Fix Cash Payment Notification Logic After Inspection
 
 > As a buyer paying with full cash, I want to be notified after inspection passes so that I can come collect my item without confusion or delay.
 
@@ -219,7 +194,7 @@
 
 ---
 
-## US32 — Replace "Sell Item" Nav Link with Floating Action Button
+## US31 — Replace "Sell Item" Nav Link with Floating Action Button
 
 > As a user, I want a floating action button (+) to create a new listing instead of a navigation link so that the interface is cleaner and the primary action is more accessible.
 
@@ -243,7 +218,7 @@
 
 ---
 
-## US33 — Make Listings Clickable in Admin Report Review Screen
+## US32 — Make Listings Clickable in Admin Report Review Screen
 
 > As an admin reviewing reports, I want listings to be clickable so that I can quickly navigate to the offending listing for moderation action.
 
@@ -264,7 +239,7 @@
 
 ---
 
-## US34 — Overdue Collection Penalties & Compensation Logic
+## US33 — Overdue Collection Penalties & Compensation Logic
 
 > As a marketplace admin, I want overdue collection to trigger penalties and compensation so that buyers are incentivized to collect items on time and sellers are compensated for delays.
 
@@ -288,7 +263,7 @@
 
 ---
 
-## US35 — Remove Legacy Statuses (At Facility, Declined, Completed)
+## US34 — Remove Legacy Statuses (At Facility, Declined, Completed)
 
 > As a marketplace admin, I want legacy statuses removed from the system so that the transaction state machine is cleaner and users are not confused by obsolete states.
 
@@ -310,7 +285,7 @@
 
 ---
 
-## US36 — Change Cart Icon to "Favourites"
+## US35 — Change Cart Icon to "Favourites"
 
 > As a user, I want the cart icon to be renamed to "Favourites" so that it accurately represents saving items for later rather than a shopping cart.
 
@@ -332,7 +307,7 @@
 
 ---
 
-## US37 — Remove All "Collection" Terminology from App
+## US36 — Remove All "Collection" Terminology from App
 
 > As a marketplace admin, I want all "collection" terminology removed from the app so that users are not confused by legacy terms that no longer match the drop-off/pickup model.
 
@@ -354,7 +329,7 @@
 
 ---
 
-## US38 — Promote Listings for Payments (Paid Promotion)
+## US37 — Promote Listings for Payments (Paid Promotion)
 
 > As a student seller, I want to promote my listing for a fee so that it appears more prominently in search results or as a sponsored item.
 
@@ -379,7 +354,7 @@
 
 ---
 
-## US39 — Add Loader/Loading States Throughout App
+## US38 — Add Loader/Loading States Throughout App
 
 > As a user, I want to see loading indicators when data is being fetched so that I know the app is working and not frozen.
 
@@ -400,7 +375,7 @@
 
 ---
 
-## US40 — Fix Overall App Flow (End-to-End)
+## US39 — Fix Overall App Flow (End-to-End)
 
 > As a user, I want the entire transaction flow to work seamlessly end-to-end so that I can buy, pay, drop off, inspect, and pick up without broken steps or missing notifications.
 
@@ -423,7 +398,7 @@
 
 ---
 
-## US41 — Staff Page Implementation/Cleanup
+## US40 — Staff Page Implementation/Cleanup
 
 > As a staff member, I want a fully functional staff dashboard so that I can manage drop-offs, inspections, and pickups efficiently.
 

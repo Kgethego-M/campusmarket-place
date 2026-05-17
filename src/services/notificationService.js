@@ -15,7 +15,7 @@
 
 import {
   collection, addDoc, getDocs, query, doc, updateDoc,
-  where, serverTimestamp, deleteDoc,
+  where, serverTimestamp, deleteDoc, getDoc,
 } from 'firebase/firestore';
 import { db } from '../firebase';
 
@@ -169,7 +169,7 @@ export async function notifyTradeAccepted({
 
 /**
  * Called from OfferItem.jsx handleDecline().
- * Buyer gets "offer_declined" → no redirect (null).
+ * Buyer gets "offer_declined" → redirects to browse page.
  */
 export async function notifyOfferDeclined({
   transactionId, buyerId, listingId, listingTitle,
@@ -177,7 +177,7 @@ export async function notifyOfferDeclined({
   return _write(
     buyerId,
     'offer_declined',
-    null,
+    '/view-listing',  // Redirect to browse page
     { transactionId, listingId, listingTitle },
   );
 }
@@ -303,7 +303,7 @@ export async function notifyDropOffConfirmed({
 
 /**
  * Called from StaffDashboard.jsx when bothDone === true (status → awaiting_collection).
- * Buyer gets "item_ready_for_collection" → no redirect.
+ * Buyer gets "item_ready_for_collection" → redirects to trade facility.
  */
 export async function notifyItemReadyForCollection({
   transactionId, buyerId, listingId, listingTitle,
@@ -311,7 +311,7 @@ export async function notifyItemReadyForCollection({
   return _write(
     buyerId,
     'item_ready_for_collection',
-    null,
+    '/trade-facility',
     { transactionId, listingId, listingTitle },
   );
 }
@@ -511,42 +511,41 @@ export async function markNotificationAsRead(notificationId) {
   await updateDoc(notifRef, { read: true });
 }
 
-// ─── 15. Notify buyer of acceptance (legacy wrapper) ──────────────────────────
+// ─── 15. Mark rating as read (store in localStorage) ──────────────────────────
 
 /**
- * Legacy wrapper for notifyOfferAccepted.
- * Kept for backward compatibility with older code that expects notifyBuyerOfAcceptance.
- * 
- * @deprecated Use notifyOfferAccepted instead
+ * Called from NavBar.jsx when a rating notification is clicked.
+ * Stores dismissed rating IDs in localStorage so they don't reappear.
  */
-export async function notifyBuyerOfAcceptance({ transactionId, buyerId }) {
-  console.warn('[notificationService] notifyBuyerOfAcceptance is deprecated. Use notifyOfferAccepted instead.');
-  
-  let listingId = null;
-  let listingTitle = null;
-  let agreedPrice = null;
-  
+export function markRatingAsRead(notificationId) {
   try {
-    const txSnap = await getDoc(doc(db, 'transactions', transactionId));
-    if (txSnap.exists()) {
-      const txData = txSnap.data();
-      listingId = txData.listingId;
-      listingTitle = txData.listingTitle || 'your item';
-      agreedPrice = txData.agreedPrice;
+    const stored = localStorage.getItem('readRatingNotifs');
+    const dismissedIds = stored ? JSON.parse(stored) : [];
+    if (!dismissedIds.includes(notificationId)) {
+      dismissedIds.push(notificationId);
+      localStorage.setItem('readRatingNotifs', JSON.stringify(dismissedIds));
     }
   } catch (err) {
-    console.error('[notificationService] Failed to fetch transaction details:', err);
+    console.error('Failed to mark rating as read:', err);
   }
-  
-  return _write(
-    buyerId,
-    'offer_accepted',
-    `/payment/${transactionId}`,
-    { transactionId, listingId, listingTitle, agreedPrice },
-  );
 }
 
-// ─── 16. Notify all admins when a report is submitted ─────────────────────────
+// ─── 16. Check if rating notification was already dismissed ───────────────────
+
+/**
+ * Called from NavBar.jsx to filter out rating notifications that were already read.
+ */
+export function isRatingNotificationDismissed(notificationId) {
+  try {
+    const stored = localStorage.getItem('readRatingNotifs');
+    const dismissedIds = stored ? JSON.parse(stored) : [];
+    return dismissedIds.includes(notificationId);
+  } catch {
+    return false;
+  }
+}
+
+// ─── 17. Notify all admins when a report is submitted ─────────────────────────
 
 /**
  * Called when a user submits a report (listing, user, or message).
