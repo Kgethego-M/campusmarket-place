@@ -289,6 +289,18 @@ function isCollectionOverdue(txn) {
 }
 
 // ─── Navbar ───────────────────────────────────────────────────────────────────
+
+// ─── Format facility hours from admin config ───────────────────────────────────
+function formatFacilityHours(config) {
+    if (!config || !config.openTime || !config.closeTime) return "Loading…";
+    const fmt = (t) => {
+        const [h, m] = t.split(":").map(Number);
+        const suffix = h >= 12 ? "PM" : "AM";
+        const hour   = h % 12 || 12;
+        return m === 0 ? `${hour}:00 ${suffix}` : `${hour}:${String(m).padStart(2, "0")} ${suffix}`;
+    };
+    return `${fmt(config.openTime)} – ${fmt(config.closeTime)} (Mon–Fri)`;
+}
 function StaffNavbar() {
     const navigate = useNavigate();
 
@@ -1301,7 +1313,7 @@ function TimeSlotsView({ transactions, facilityConfig }) {
 }
 
 // ─── Staff Profile Panel ──────────────────────────────────────────────────────
-function StaffProfilePanel({ staffName, staffEmail, staffInitials, staffPhoto, staffShift, onClose, onLogout, isLoggingOut }) {
+function StaffProfilePanel({ staffName, staffEmail, staffInitials, staffPhoto, staffShift, memberSince, facilityHours, onClose, onLogout, isLoggingOut }) {
     return (
         <div className={styles.profileOverlay} onClick={onClose}>
             <div className={styles.profilePanel} onClick={e => e.stopPropagation()}>
@@ -1343,16 +1355,14 @@ function StaffProfilePanel({ staffName, staffEmail, staffInitials, staffPhoto, s
                         <i className="fa-solid fa-calendar-check" />
                         <div>
                             <span className={styles.profileInfoLbl}>Member Since</span>
-                            <span className={styles.profileInfoVal}>January 2024</span>
+                            <span className={styles.profileInfoVal}>{memberSince || "—"}</span>
                         </div>
                     </div>
                     <div className={styles.profileInfoRow}>
                         <i className="fa-solid fa-clock" />
                         <div>
-                            <span className={styles.profileInfoLbl}>Shift</span>
-                            <span className={styles.profileInfoVal}>
-                                {staffShift?.start || "08:00"} – {staffShift?.end || "16:00"} ({staffShift?.days || "Mon–Fri"})
-                            </span>
+                            <span className={styles.profileInfoLbl}>Facility Hours</span>
+                            <span className={styles.profileInfoVal}>{facilityHours || "Loading…"}</span>
                         </div>
                     </div>
                 </div>
@@ -1388,7 +1398,7 @@ export default function StaffDashboard() {
     const [isLoggingOut, setIsLoggingOut] = useState(false);
     const [showProfile, setShowProfile]   = useState(false);
     const [staffUser, setStaffUser]       = useState({
-        name: "", email: "", photoURL: "", initials: "",
+        name: "", email: "", photoURL: "", initials: "", memberSince: "",
     });
     const [authReady, setAuthReady]       = useState(false);
     const [loadingTxns, setLoadingTxns]   = useState(true);
@@ -1486,18 +1496,23 @@ export default function StaffDashboard() {
             const parts = (user.displayName || "").split(" ");
             const fn = parts[0] || "", ln = parts.slice(1).join(" ") || "";
             const ini = `${fn[0] || ""}${ln[0] || ""}`.toUpperCase() || "S";
-            setStaffUser({ name: user.displayName || "Staff", email: user.email || "", photoURL: user.photoURL || "", initials: ini });
+            const memberSince = user.metadata.creationTime
+                ? new Date(user.metadata.creationTime).toLocaleDateString("en-US", { month: "long", year: "numeric" })
+                : "";
+            setStaffUser({ name: user.displayName || "Staff", email: user.email || "", photoURL: user.photoURL || "", initials: ini, memberSince });
             try {
                 const snap = await getDoc(doc(db, "users", user.uid));
                 if (snap.exists()) {
                     const d = snap.data();
                     const f = d.firstName || fn, l = d.lastName || ln;
-                    setStaffUser({
+                    setStaffUser(prev => ({
+                        ...prev,
                         name:     `${f} ${l}`.trim() || user.displayName || "Staff",
                         email:    d.email     || user.email    || "",
                         photoURL: d.photoURL  || user.photoURL || "",
                         initials: `${f[0] || ""}${l[0] || ""}`.toUpperCase() || "S",
-                    });
+                        // memberSince stays from Auth metadata
+                    }));
                 }
             } catch {} finally { setAuthReady(true); }
         });
@@ -2649,6 +2664,8 @@ export default function StaffDashboard() {
                     staffInitials={staffUser.initials}
                     staffPhoto={staffUser.photoURL}
                     staffShift={staffShift}
+                    memberSince={staffUser.memberSince}
+                    facilityHours={formatFacilityHours(facilityConfig)}
                     onClose={() => setShowProfile(false)}
                     onLogout={handleLogout}
                     isLoggingOut={isLoggingOut}

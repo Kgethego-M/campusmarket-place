@@ -127,7 +127,11 @@ function ModerationSummaryTab({ reports }) {
           <tbody>
             {byType.map(row => (
               <tr key={row.type} style={{ borderBottom: "1px solid #f8fafc" }}>
-                <td style={{ padding: "11px 14px", fontWeight: 600, color: "#1e293b" }}>{{ user: "👤", listing: "🛍️", review: "⭐" }[row.type]} {row.type.charAt(0).toUpperCase() + row.type.slice(1)}</td>
+                <td style={{ padding: "11px 14px", fontWeight: 600, color: "#1e293b" }}>{{ 
+  user:    <i className="fas fa-user"  style={{ color: "#94a3b8" }} />, 
+  listing: <i className="fas fa-store" style={{ color: "#6AA6DA" }} />, 
+  review:  <i className="fas fa-star"  style={{ color: "#f59e0b" }} /> 
+}[row.type]} {row.type.charAt(0).toUpperCase() + row.type.slice(1)}</td>
                 <td style={{ padding: "11px 14px", fontWeight: 700, color: row.total > 0 ? "#1e293b" : "#94a3b8" }}>{row.total}</td>
                 <td style={{ padding: "11px 14px" }}>{row.pending > 0 ? <span style={{ background: "#fef3c7", color: "#d97706", borderRadius: 20, padding: "2px 9px", fontWeight: 700, fontSize: "0.72rem" }}>{row.pending}</span> : <span style={{ color: "#94a3b8" }}>0</span>}</td>
                 <td style={{ padding: "11px 14px" }}>{row.resolved > 0 ? <span style={{ background: "#f0fdf4", color: "#16a34a", borderRadius: 20, padding: "2px 9px", fontWeight: 700, fontSize: "0.72rem" }}>{row.resolved}</span> : <span style={{ color: "#94a3b8" }}>0</span>}</td>
@@ -289,11 +293,10 @@ export default function AdminDashboard() {
   const reportsHeaders = ["Type", "ReportedItem", "Reason", "Details", "ReportedBy", "Status", "Resolution", "Date"];
 
   const reportTypeIcon = (type) => {
-    if (type === "listing") return "🛍️";
-    if (type === "review")  return "⭐";
-    return "👤";
+    if (type === "listing") return <i className="fas fa-store"     style={{ fontSize: "1rem", color: "#6AA6DA" }} />;
+    if (type === "review")  return <i className="fas fa-star"      style={{ fontSize: "1rem", color: "#f59e0b" }} />;
+    return                         <i className="fas fa-user"      style={{ fontSize: "1rem", color: "#94a3b8" }} />;
   };
-
   // ── Helper: navigate to the reported item ─────────────────────────────────
   const navigateToReported = (e, report) => {
     e.stopPropagation();
