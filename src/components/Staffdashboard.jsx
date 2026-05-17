@@ -1392,7 +1392,7 @@ export default function StaffDashboard() {
     const [selectedOverdue, setSelectedOverdue] = useState(new Set());
     const [bulkActioning, setBulkActioning]     = useState(false);
     const [search, setSearch]                 = useState("");
-    const [collectionSearch, setCollectionSearch] = useState("");
+
     const [transactions, setTransactions]     = useState([]);
     const [campus, setCampus]                 = useState("All Campuses");
     const [isLoggingOut, setIsLoggingOut] = useState(false);
@@ -2113,12 +2113,7 @@ export default function StaffDashboard() {
                 return matchSearch && matchCampus && t.status === "pending" && !isOvDrop;
             }
             if (activeTab === "collections") {
-                const matchColl = !collectionSearch ||
-                    t.item.toLowerCase().includes(collectionSearch.toLowerCase()) ||
-                    t.seller.toLowerCase().includes(collectionSearch.toLowerCase()) ||
-                    t.buyer.toLowerCase().includes(collectionSearch.toLowerCase()) ||
-                    (t.receiptId && t.receiptId.toLowerCase().includes(collectionSearch.toLowerCase()));
-                return matchColl && matchCampus && t.status === "awaiting_collection" && !isOvColl;
+                return matchSearch && matchCampus && t.status === "awaiting_collection" && !isOvColl;
             }
             if (activeTab === "overdue") {
                 if (overdueSubTab === "drop_offs") return matchSearch && matchCampus && isOvDrop && t.status !== "overdue_cancelled";
@@ -2331,30 +2326,7 @@ export default function StaffDashboard() {
                         ))}
                     </div>
 
-                    {activeTab === "collections" && (
-                        <div className={styles.controlRow} style={{ marginTop: 0 }}>
-                            <div className={styles.searchWrap}>
-                                <i className="fa-solid fa-magnifying-glass" />
-                                <input
-                                    className={styles.searchInput}
-                                    type="text"
-                                    placeholder="Search by item, buyer, seller or receipt ID..."
-                                    value={collectionSearch}
-                                    onChange={e => setCollectionSearch(e.target.value)}
-                                    autoFocus
-                                />
-                                {collectionSearch && (
-                                    <button
-                                        onClick={() => setCollectionSearch("")}
-                                        style={{ background: "none", border: "none", cursor: "pointer", color: "#94a3b8", padding: "0 4px" }}
-                                        title="Clear search"
-                                    >
-                                        <i className="fa-solid fa-xmark" />
-                                    </button>
-                                )}
-                            </div>
-                        </div>
-                    )}
+
 
                     {activeTab === "overdue" ? (() => {
                         const overdueDropOffs = transactions.filter(t => isDropOffOverdue(t) && t.status !== "overdue_cancelled");
