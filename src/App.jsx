@@ -5,6 +5,7 @@ import {
   Route,
   Navigate,
   useNavigate,
+  useLocation,
 } from 'react-router-dom';
 import { onAuthStateChanged } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
@@ -48,15 +49,18 @@ import BookCollection from './components/BookCollection';
 // SPRINT 3 IMPORTS
 import AdminAnalytics from './components/AdminAnalytics';
 import ViewCart from './components/ViewCart';
+import AdPayment from "./components/AdPayment";
+import PromoteSuccess from "./components/PromoteSuccess";
 
 // -------------------------
-// Protected Route
+// Protected Route (with return-to URL)
 // -------------------------
 function ProtectedRoute({ children, allowedRoles }) {
   const [loading, setLoading] = useState(true);
   const [firebaseUser, setFirebaseUser] = useState(null);
   const [roleAllowed, setRoleAllowed] = useState(false);
   const [isSuspended, setIsSuspended] = useState(false);
+  const location = useLocation();
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
@@ -91,7 +95,6 @@ function ProtectedRoute({ children, allowedRoles }) {
         }
 
         const userRole = userData.role || userData.userType;
-
         setIsSuspended(false);
         setRoleAllowed(allowedRoles.includes(userRole));
       } catch (err) {
@@ -107,20 +110,13 @@ function ProtectedRoute({ children, allowedRoles }) {
 
   if (loading) {
     return (
-      <div
-        style={{
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
-          minHeight: '100vh',
-        }}
-      >
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh' }}>
         Loading...
       </div>
     );
   }
 
-  if (!firebaseUser) return <Navigate to="/login" replace />;
+  if (!firebaseUser) return <Navigate to="/login" state={{ from: location }} replace />;
   if (isSuspended) return <Navigate to="/suspended" replace />;
   if (!roleAllowed) return <AccessDenied />;
 
@@ -137,16 +133,11 @@ function LandingPageWrapper() {
 
 function LoginWrapper() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const from = location.state?.from?.pathname || '/view-listing';
 
   return (
-    <div
-      style={{
-        display: 'flex',
-        justifyContent: 'center',
-        alignItems: 'center',
-        minHeight: '100vh',
-      }}
-    >
+    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh' }}>
       <LoginForm
         onSwitchToSignup={() => navigate('/signup')}
         onLoginSuccess={(userData) => {
@@ -162,7 +153,7 @@ function LoginWrapper() {
           } else if (role === 'staff') {
             navigate('/staff');
           } else {
-            navigate('/view-listing');
+            navigate(from);
           }
         }}
       />
@@ -174,14 +165,7 @@ function SignupWrapper() {
   const navigate = useNavigate();
 
   return (
-    <div
-      style={{
-        display: 'flex',
-        justifyContent: 'center',
-        alignItems: 'center',
-        minHeight: '100vh',
-      }}
-    >
+    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh' }}>
       <SignupForm
         onSwitchToLogin={() => navigate('/login')}
         onLoginSuccess={() => navigate('/view-listing')}
@@ -203,16 +187,27 @@ export function AppRoutes() {
       <Route path="/suspended" element={<SuspendedPage />} />
       <Route path="/access-denied" element={<AccessDenied />} />
 
+      {/* Ad promotion routes */}
+      <Route
+        path="/promote-payment"
+        element={
+          <ProtectedRoute allowedRoles={['student']}>
+            <AdPayment />
+          </ProtectedRoute>
+        }
+      />
+      <Route path="/promote-success" element={<PromoteSuccess />} />
+
       {/* General */}
       <Route path="/dashboard" element={<Dashboard />} />
       <Route path="/profile" element={<Profile />} />
       <Route path="/profile/:userId" element={<ViewRating />} />
       <Route path="/view-rating" element={<ViewRating userId="sampleUserId" />} />
-      <Route path="/chat" element={<ProtectedRoute allowedRoles={['student']}><Chat/></ProtectedRoute>} />
+      <Route path="/chat" element={<ProtectedRoute allowedRoles={['student']}><Chat /></ProtectedRoute>} />
       <Route path="/chat/:transactionId" element={<Chat />} />
       <Route path="/edit-listing/:id" element={<EditListing />} />
       <Route path="/staff" element={<ProtectedRoute allowedRoles={['staff']}><StaffDashboard /></ProtectedRoute>} />
-      <Route path="/admin" element={<ProtectedRoute allowedRoles={['admin']}><AdminDashboard /></ProtectedRoute>}/>
+      <Route path="/admin" element={<ProtectedRoute allowedRoles={['admin']}><AdminDashboard /></ProtectedRoute>} />
       
       {/* SPRINT 2 ROUTES */}
       <Route path="/trade-facility" element={<ProtectedRoute allowedRoles={['student']}><TradeFacility /></ProtectedRoute>} />
@@ -236,7 +231,6 @@ export function AppRoutes() {
           </ProtectedRoute>
         }
       />
-
       <Route
         path="/create-listing"
         element={
@@ -245,8 +239,6 @@ export function AppRoutes() {
           </ProtectedRoute>
         }
       />
-
-      {/* NEW: Favourites route (renamed from cart) */}
       <Route
         path="/favourites"
         element={
@@ -255,8 +247,6 @@ export function AppRoutes() {
           </ProtectedRoute>
         }
       />
-
-      {/* Redirect old /cart to /favourites */}
       <Route path="/cart" element={<Navigate to="/favourites" replace />} />
 
       <Route
@@ -267,7 +257,6 @@ export function AppRoutes() {
           </ProtectedRoute>
         }
       />
-
       <Route
         path="/chat/:transactionId"
         element={
@@ -276,7 +265,6 @@ export function AppRoutes() {
           </ProtectedRoute>
         }
       />
-
       <Route
         path="/trade-facility"
         element={
@@ -285,7 +273,6 @@ export function AppRoutes() {
           </ProtectedRoute>
         }
       />
-
       <Route
         path="/book-dropoff/:transactionId"
         element={
@@ -294,7 +281,6 @@ export function AppRoutes() {
           </ProtectedRoute>
         }
       />
-
       <Route
         path="/book-collection/:transactionId"
         element={
@@ -303,7 +289,6 @@ export function AppRoutes() {
           </ProtectedRoute>
         }
       />
-
       <Route
         path="/payment/:txId"
         element={
@@ -322,7 +307,6 @@ export function AppRoutes() {
           </ProtectedRoute>
         }
       />
-
       <Route
         path="/payment-cancelled"
         element={
@@ -340,7 +324,6 @@ export function AppRoutes() {
           </ProtectedRoute>
         }
       />
-
       <Route
         path="/my-purchases"
         element={
@@ -350,7 +333,7 @@ export function AppRoutes() {
         }
       />
 
-      /* Staff Routes */
+      {/* Staff Routes */}
       <Route
         path="/staff"
         element={
@@ -360,7 +343,7 @@ export function AppRoutes() {
         }
       />
 
-      /* Admin Routes */
+      {/* Admin Routes */}
       <Route
         path="/admin"
         element={
@@ -369,7 +352,6 @@ export function AppRoutes() {
           </ProtectedRoute>
         }
       />
-
       <Route
         path="/admin/analytics"
         element={
@@ -378,7 +360,6 @@ export function AppRoutes() {
           </ProtectedRoute>
         }
       />
-
       <Route
         path="/admin/reports"
         element={
@@ -387,7 +368,6 @@ export function AppRoutes() {
           </ProtectedRoute>
         }
       />
-
       <Route
         path="/admin/moderation-summary"
         element={

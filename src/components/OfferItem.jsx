@@ -89,12 +89,20 @@ export default function OfferItem({ offer }) {
     setWorking(true);
     try {
       const isTrade = offer.type === 'trade';
+      const paymentMethod = (offer.paymentMethod || offer.paymentType || "").toLowerCase();
+      const isCashOnly = paymentMethod === "cash" || paymentMethod === "cod" || paymentMethod === "fully_cash";
+      
+      // For cash transactions, payment is already confirmed (buyer committed)
+      const shouldConfirmPayment = isCashOnly;
+      
       const newStatus = isTrade ? 'accepted' : 'accepted';
 
       console.log('Step 1: updating transaction', offer.id, '→', newStatus);
       await updateDoc(doc(db, 'transactions', offer.id), {
         status:    newStatus,
         updatedAt: serverTimestamp(),
+        // For cash transactions, set paymentConfirmed true immediately
+        ...(shouldConfirmPayment && { paymentConfirmed: true, paymentConfirmedAt: serverTimestamp() })
       });
       console.log('Step 1 done ✓');
 
@@ -139,7 +147,7 @@ export default function OfferItem({ offer }) {
 
       if (isTrade) {
         // ── Trade: notify buyer their trade offer was accepted + book drop-off
-        console.log('Step 5 (trade): notifying buyer', offer.buyerId, '→ trade_waiting + book_dropoff');
+        console.log('Step 5 (trade): notifying buyer', offer.buyerId, '→ trade_waiting');
         await addDoc(collection(db, 'notifications'), {
           userId:        offer.buyerId,
           type:          'trade_waiting',
@@ -147,6 +155,7 @@ export default function OfferItem({ offer }) {
           listingId:     offer.listingId,
           read:          false,
           createdAt:     serverTimestamp(),
+          redirectUrl:   `/trade-facility`,
         });
 
         // ── Trade: notify seller to book a drop-off slot
@@ -158,9 +167,10 @@ export default function OfferItem({ offer }) {
           listingId:     offer.listingId,
           read:          false,
           createdAt:     serverTimestamp(),
+          redirectUrl:   `/trade-facility`,
         });
       } else {
-        // ── Sale: notify buyer their offer was accepted (proceeds to payment)
+        // ── Sale: notify buyer their offer was accepted
         console.log('Step 5 (sale): notifying accepted buyer', offer.buyerId, '→ offer_accepted');
         await addDoc(collection(db, 'notifications'), {
           userId:        offer.buyerId,
@@ -169,10 +179,11 @@ export default function OfferItem({ offer }) {
           listingId:     offer.listingId,
           read:          false,
           createdAt:     serverTimestamp(),
+          redirectUrl:   `/payment/${offer.id}`,
         });
 
-        // ── Sale: notify seller the buyer has been accepted + book drop-off
-        console.log('Step 6 (sale): notifying seller', offer.sellerId, '→ dropoff_booked');
+        // ── Sale: notify seller the buyer has committed and they can book drop-off
+        console.log('Step 6 (sale): notifying seller', offer.sellerId, '→ book_dropoff');
         await addDoc(collection(db, 'notifications'), {
           userId:        offer.sellerId,
           type:          'dropoff_booked',
@@ -180,6 +191,7 @@ export default function OfferItem({ offer }) {
           listingId:     offer.listingId,
           read:          false,
           createdAt:     serverTimestamp(),
+          redirectUrl:   `/trade-facility`,
         });
       }
       console.log('All steps done ✓');
@@ -207,6 +219,7 @@ export default function OfferItem({ offer }) {
         listingId:     offer.listingId,
         read:          false,
         createdAt:     serverTimestamp(),
+        redirectUrl:   `/view-listing`,
       });
       await deleteDoc(doc(db, 'transactions', offer.id));
       setDone(true);

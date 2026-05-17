@@ -31,3 +31,13 @@ export const declineOffer = async ({ transactionId, sellerId }) => {
     updatedAt:  serverTimestamp(),
   });
 };
+
+// Add this new function to confirm payment for cash transactions
+export const confirmCashPayment = async ({ transactionId, buyerId }) => {
+  await updateDoc(doc(db, 'transactions', transactionId), {
+    paymentConfirmed: true,
+    paymentConfirmedAt: serverTimestamp(),
+    paymentConfirmedBy: buyerId,
+    updatedAt: serverTimestamp(),
+  });
+};

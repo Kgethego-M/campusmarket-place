@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useState, useEffect, useRef } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
 import { auth, db } from "../firebase.js";
 import { collection, query, where, getDocs, doc, getDoc } from "firebase/firestore";
 import NavBar from "./NavBarTemp.jsx";
@@ -123,7 +123,7 @@ function TradeItemMini({ tradeItem, label = "Buyer's trade item" }) {
 }
 
 // ── Buyer tracker card ────────────────────────────────────────────────────────
-function BuyerTrackerCard({ txn, idx }) {
+function BuyerTrackerCard({ txn, idx, isHighlighted, highlightRef }) {
   const stage    = getPipelineStage(txn);
   const failed   = txn.dropOffStatus === "inspection_fail";
   const imageUrl = txn.listing?.photos?.[0] ?? null;
@@ -131,8 +131,15 @@ function BuyerTrackerCard({ txn, idx }) {
 
   return (
     <div
+      ref={isHighlighted ? highlightRef : null}
       className={`${styles.trackerCard} ${failed ? styles.trackerCardFailed : ""}`}
-      style={{ animationDelay: `${idx * 0.06}s` }}
+      style={{
+        animationDelay: `${idx * 0.06}s`,
+        ...(isHighlighted ? {
+          boxShadow: '0 0 0 3px #8b5cf6, 0 4px 20px rgba(139,92,246,0.18)',
+          borderColor: '#8b5cf6',
+        } : {}),
+      }}
     >
       {/* Item summary */}
       <div className={styles.trackerTop}>
@@ -246,12 +253,20 @@ function BuyerTrackerCard({ txn, idx }) {
 }
 
 function getSellerStatusBadge(txn) {
-  const s = txn.dropOffStatus;
-  if (s === "inspection_pass")       return { label: "Inspection passed", color: "#166534", bg: "#dcfce7" };
-  if (s === "inspection_fail")       return { label: "Inspection failed",  color: "#791F1F", bg: "#FCEBEB" };
-  if (s === "dropped_off")           return { label: "Item dropped off",   color: "#166534", bg: "#dcfce7" };
-  if (s === "scheduled")             return { label: "Drop-off scheduled", color: "#92400e", bg: "#fef3c7" };
-  return                                    { label: "Awaiting drop-off",  color: "#1e40af", bg: "#dbeafe" };
+    const s = txn.dropOffStatus;
+    const paymentMethod = (txn.paymentMethod || txn.paymentType || "").toLowerCase();
+    const isCashOnly = paymentMethod === "cash" || paymentMethod === "cod" || paymentMethod === "fully_cash";
+    
+    if (s === "inspection_pass")       return { label: "Inspection passed", color: "#166534", bg: "#dcfce7" };
+    if (s === "inspection_fail")       return { label: "Inspection failed",  color: "#791F1F", bg: "#FCEBEB" };
+    if (s === "dropped_off")           return { label: "Item dropped off",   color: "#166534", bg: "#dcfce7" };
+    if (s === "scheduled")             return { label: "Drop-off scheduled", color: "#92400e", bg: "#fef3c7" };
+    
+    if (!isCashOnly && !txn.paymentConfirmed && txn.status === "accepted") {
+        return { label: "Awaiting payment", color: "#92400e", bg: "#fef3c7" };
+    }
+    
+    return { label: "Awaiting drop-off",  color: "#1e40af", bg: "#dbeafe" };
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────────
@@ -261,12 +276,36 @@ export default function TradeFacility() {
   const [sellerTransactions, setSellerTransactions] = useState([]);
   const [buyerTransactions,  setBuyerTransactions]  = useState([]);
   const [activeTab,          setActiveTab]          = useState("seller");
+
+  // ── Highlight / scroll state ───────────────────────────────────────────────
+  const [highlightId, setHighlightId] = useState(null);
+  const highlightRef                  = useRef(null);
+
   const navigate = useNavigate();
+  const location = useLocation();
 
   useEffect(() => {
     document.body.style.background = "#f5f7fa";
     return () => { document.body.style.background = ""; };
   }, []);
+
+  // ── Read ?tab= and ?highlight= from URL ───────────────────────────────────
+  useEffect(() => {
+    const params    = new URLSearchParams(location.search);
+    const tabParam  = params.get('tab');
+    const highlight = params.get('highlight');
+    if (tabParam === 'buyer' || tabParam === 'seller') setActiveTab(tabParam);
+    if (highlight) setHighlightId(highlight);
+  }, [location.search]);
+
+  // ── Scroll to highlighted card once data is ready ─────────────────────────
+  useEffect(() => {
+    if (highlightId && highlightRef.current) {
+      setTimeout(() => {
+        highlightRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 300);
+    }
+  }, [highlightId, sellerTransactions, buyerTransactions]);
 
   useEffect(() => {
     const unsubscribe = auth.onAuthStateChanged((currentUser) => {
@@ -320,10 +359,8 @@ export default function TradeFacility() {
           } else {
             txn.counterpartyName = "Unknown Buyer";
           }
-          // Prefer structured tradeItemDetails (has imageUrl) over legacy string
           txn.tradeItem = txn.tradeItemDetails ?? txn.tradeItem ?? null;
           txn.isSeller = true;
-
           return txn;
         })),
 
@@ -341,19 +378,22 @@ export default function TradeFacility() {
           } else {
             txn.counterpartyName = "Unknown Seller";
           }
-          // Prefer structured tradeItemDetails (has imageUrl) over legacy string
           txn.tradeItem = txn.tradeItemDetails ?? txn.tradeItem ?? null;
           txn.isSeller = false;
-
           return txn;
         })),
       ]);
 
       const ORDER = { waiting: 0, accepted: 1, awaiting_collection: 2, completed: 3 };
-      enrichedSeller.sort((a, b) => (ORDER[a.status] ?? 9) - (ORDER[b.status] ?? 9));
+
+      const filteredSeller = enrichedSeller.filter(
+        (txn) => !txn.dropOffConfirmed && !txn.sellerDropOffConfirmed
+      );
+
+      filteredSeller.sort((a, b) => (ORDER[a.status] ?? 9) - (ORDER[b.status] ?? 9));
       enrichedBuyer.sort((a, b)  => (ORDER[a.status] ?? 9) - (ORDER[b.status] ?? 9));
 
-      setSellerTransactions(enrichedSeller);
+      setSellerTransactions(filteredSeller);
       setBuyerTransactions(enrichedBuyer);
     } catch (err) {
       console.error("Error fetching transactions:", err);
@@ -366,10 +406,12 @@ export default function TradeFacility() {
     if (!txn.isSeller) return false;
     if (!["waiting", "accepted"].includes(txn.status)) return false;
     if (txn.bookingId) return false;
-    // For sale or "either" transactions, require buyer to have confirmed payment
     const isTrade = txn.type === 'trade';
-    if (!isTrade && !txn.paymentConfirmed) return false;
-    return true;
+    if (isTrade) return true;
+    const paymentMethod = (txn.paymentMethod || txn.paymentType || "").toLowerCase();
+    const isCashOnly = paymentMethod === "cash" || paymentMethod === "cod" || paymentMethod === "fully_cash";
+    if (isCashOnly) return txn.paymentConfirmed === true;
+    return txn.paymentConfirmed === true;
   };
 
   const hasDropOffBooked = (txn) =>
@@ -389,11 +431,6 @@ export default function TradeFacility() {
     return txn.type === "trade";
   };
 
-  // Trade transactions where the current user is also the buyer — shown in seller tab
-  // so the seller can see the buyer's trade drop-off card
-  // In this context "seller tab" shows the seller's own items AND
-  // also any trade transactions where this user is the BUYER (to let them book their slot)
-  // We surface buyer-side trade txns in the seller tab as a separate purple card
   const buyerTradeTxns = buyerTransactions.filter(t => t.type === 'trade');
 
   if (loading) {
@@ -530,12 +567,24 @@ export default function TradeFacility() {
             {activeTab === "seller" && (
               <>
                 {sellerTransactions.map((txn, idx) => {
-                  const badge    = getSellerStatusBadge(txn);
-                  const imageUrl = txn.listing?.photos?.[0] ?? null;
-                  const isTrade  = txn.type === 'trade';
+                  const badge       = getSellerStatusBadge(txn);
+                  const imageUrl    = txn.listing?.photos?.[0] ?? null;
+                  const isTrade     = txn.type === 'trade';
+                  const isHighlighted = highlightId === txn.id;
 
                   return (
-                    <div key={txn.id} className={styles.card} style={{ animationDelay: `${idx * 0.06}s` }}>
+                    <div
+                      key={txn.id}
+                      ref={isHighlighted ? highlightRef : null}
+                      className={styles.card}
+                      style={{
+                        animationDelay: `${idx * 0.06}s`,
+                        ...(isHighlighted ? {
+                          boxShadow: '0 0 0 3px #8b5cf6, 0 4px 20px rgba(139,92,246,0.18)',
+                          borderColor: '#8b5cf6',
+                        } : {}),
+                      }}
+                    >
                       <div className={styles.imgWrap}>
                         {imageUrl
                           ? <img src={imageUrl} alt={txn.listing?.title} className={styles.img} />
@@ -583,12 +632,10 @@ export default function TradeFacility() {
                           </p>
                         )}
 
-                        {/* Buyer's trade item visible to seller */}
                         {isTrade && txn.tradeItem && (
                           <TradeItemMini tradeItem={txn.tradeItem} label="Buyer's trade item" />
                         )}
 
-                        {/* Buyer drop-off status for trades */}
                         {isTrade && txn.buyerDropOffDate && (
                           <p style={{ fontSize: "0.73rem", color: "#6d28d9", marginTop: 6, fontWeight: 600 }}>
                             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" style={{ marginRight: 4, verticalAlign: 'middle' }}>
@@ -642,16 +689,27 @@ export default function TradeFacility() {
                       </div>
                     )}
                     {buyerTradeTxns.map((txn, idx) => {
-                      const hasBooked    = !!txn.buyerBookingId;
-                      const tradeItem    = txn.tradeItem;
-                      const tradeItemObj = tradeItem && typeof tradeItem === 'object' ? tradeItem : null;
+                      const hasBooked     = !!txn.buyerBookingId;
+                      const tradeItem     = txn.tradeItem;
+                      const tradeItemObj  = tradeItem && typeof tradeItem === 'object' ? tradeItem : null;
                       const tradeItemName = tradeItemObj?.name ?? (typeof tradeItem === 'string' ? tradeItem : 'Trade item');
-                      const cs           = CONDITION_COLORS[tradeItemObj?.condition] || { color: '#6b7280', bg: '#f3f4f6' };
-                      const imageUrl     = txn.listing?.photos?.[0] ?? null;
+                      const cs            = CONDITION_COLORS[tradeItemObj?.condition] || { color: '#6b7280', bg: '#f3f4f6' };
+                      const imageUrl      = txn.listing?.photos?.[0] ?? null;
+                      const isHighlighted = highlightId === txn.id;
 
                       return (
-                        <div key={`buyer-trade-${txn.id}`} className={styles.buyerDropOffCard} style={{ animationDelay: `${(sellerTransactions.length + idx) * 0.06}s` }}>
-                          {/* Card header */}
+                        <div
+                          key={`buyer-trade-${txn.id}`}
+                          ref={isHighlighted ? highlightRef : null}
+                          className={styles.buyerDropOffCard}
+                          style={{
+                            animationDelay: `${(sellerTransactions.length + idx) * 0.06}s`,
+                            ...(isHighlighted ? {
+                              boxShadow: '0 0 0 3px #8b5cf6, 0 4px 20px rgba(139,92,246,0.18)',
+                              borderColor: '#8b5cf6',
+                            } : {}),
+                          }}
+                        >
                           <div className={styles.buyerDropOffHeader}>
                             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
                               <path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/>
@@ -669,7 +727,6 @@ export default function TradeFacility() {
                           </div>
 
                           <div className={styles.buyerDropOffBody}>
-                            {/* Trade item image */}
                             <div className={styles.buyerDropOffItemWrap}>
                               {tradeItemObj?.imageUrl
                                 ? <img src={tradeItemObj.imageUrl} alt={tradeItemName} className={styles.buyerDropOffImg} />
@@ -683,7 +740,6 @@ export default function TradeFacility() {
                             </div>
 
                             <div className={styles.buyerDropOffInfo}>
-                              {/* What they're receiving */}
                               <p style={{ margin: '0 0 2px', fontSize: '0.7rem', color: '#7c3aed', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                                 You receive
                               </p>
@@ -691,7 +747,6 @@ export default function TradeFacility() {
                                 {txn.listing?.title ?? 'Listing item'}
                               </p>
                               <div style={{ borderTop: '1px solid #e9d5ff', margin: '6px 0' }} />
-                              {/* What they're dropping off */}
                               <p style={{ margin: '0 0 2px', fontSize: '0.7rem', color: '#7c3aed', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                                 You drop off
                               </p>
@@ -709,7 +764,6 @@ export default function TradeFacility() {
                                 )}
                               </div>
 
-                              {/* Seller info */}
                               <p style={{ margin: '6px 0 0', fontSize: '0.72rem', color: '#6b7280', display: 'flex', alignItems: 'center', gap: 4 }}>
                                 <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                                   <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/>
@@ -752,9 +806,15 @@ export default function TradeFacility() {
               </>
             )}
 
-            {/* Buyer tab — tracker cards only, no drop-off CTA blocks */}
+            {/* Buyer tab — tracker cards only */}
             {activeTab === "buyer" && buyerTransactions.map((txn, idx) => (
-              <BuyerTrackerCard key={txn.id} txn={txn} idx={idx} />
+              <BuyerTrackerCard
+                key={txn.id}
+                txn={txn}
+                idx={idx}
+                isHighlighted={highlightId === txn.id}
+                highlightRef={highlightRef}
+              />
             ))}
 
           </div>

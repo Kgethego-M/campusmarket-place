@@ -20,6 +20,7 @@ import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   doc, getDoc, collection, query, where,
   getDocs, addDoc, serverTimestamp, setDoc, updateDoc, arrayUnion, arrayRemove,
+  deleteDoc,
 } from 'firebase/firestore';
 import { auth, db } from '../firebase';
 import { onAuthStateChanged } from 'firebase/auth';
@@ -258,7 +259,16 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
   const [cartLoading, setCartLoading]     = useState(false);
   const [toast, setToast]                 = useState(null);
   const [showPromoteModal, setShowPromoteModal] = useState(false);
-  
+
+  // ── Promotion status ───────────────────────────────────────────────────────
+  // null = still checking, false = not promoted, true = already promoted
+  const [isPromoted, setIsPromoted] = useState(null);
+
+  // Cancel offer states
+  const [cancelConfirming, setCancelConfirming]     = useState(false);
+  const [cancelLoading, setCancelLoading]           = useState(false);
+  const [createdTransactionId, setCreatedTransactionId] = useState(null);
+
   // Alert Modal states
   const [showPriceAlert, setShowPriceAlert] = useState(false);
   const [showPartialAlert, setShowPartialAlert] = useState(false);
@@ -282,6 +292,33 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
   const sellerId     = listing.sellerUID || listing.sellerId;
   const isOwnListing = currentUser && currentUser.uid === sellerId;
 
+  // ── Check promotion status from ads collection ─────────────────────────────
+  useEffect(() => {
+    // Only owners see the promote button — skip the check for everyone else
+    if (!listing.id || !isOwnListing) {
+      setIsPromoted(false);
+      return;
+    }
+    let cancelled = false;
+    const checkPromotion = async () => {
+      try {
+        const adsSnap = await getDocs(
+          query(collection(db, 'ads'), where('listingId', '==', listing.id))
+        );
+        if (!cancelled && adsSnap && typeof adsSnap.empty !== 'undefined') {
+          setIsPromoted(!adsSnap.empty);
+        } else if (!cancelled) {
+          setIsPromoted(false);
+        }
+      } catch (err) {
+        console.error('Failed to check promotion status:', err);
+        if (!cancelled) setIsPromoted(false);
+      }
+    };
+    checkPromotion();
+    return () => { cancelled = true; };
+  }, [listing.id, isOwnListing]);
+
   // ── Reset trade fields when modal closes ──────────────────────────────────
   const closeModal = () => {
     setIsModalOpen(false);
@@ -291,7 +328,6 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
     setTradeItemDesc('');
     setTradeImageFile(null);
     setTradeImagePreview(null);
-    // Reset alert states
     setShowPriceAlert(false);
     setShowPartialAlert(false);
     setShowPartialExceedAlert(false);
@@ -350,9 +386,15 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
     const buyerId = currentUser.uid;
     if (!sellerId) throw new Error('Seller information is missing from this listing');
     if (buyerId === sellerId) throw new Error('Cannot message yourself');
-    const q = query(collection(db, 'chats'), where('participants', 'array-contains', buyerId));
+    const q = query(
+      collection(db, 'chats'),
+      where('participants', 'array-contains', buyerId)
+    );
     const snap = await getDocs(q);
-    const existing = snap.docs.find((d) => d.data().participants?.includes(sellerId));
+    const existing = snap.docs.find((d) => {
+      const data = d.data();
+      return Array.isArray(data.participants) && data.participants.includes(sellerId);
+    });
     if (existing) return existing.id;
     const ref = await addDoc(collection(db, 'chats'), {
       participants:          [buyerId, sellerId],
@@ -386,24 +428,44 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
     navigate(isOwnListing ? '/profile' : `/profile/${sellerId}`);
   }
 
-  // ── Partial payment validation (must be LESS THAN agreed price) ───────────
+  // ── Cancel offer ──────────────────────────────────────────────────────────
+  const handleCancelOffer = async () => {
+    const txId = existingTransaction?.id ?? createdTransactionId;
+    if (!txId) {
+      showToast('Could not find offer to withdraw. Try refreshing the page.', 'error');
+      return;
+    }
+    setCancelLoading(true);
+    try {
+      await deleteDoc(doc(db, 'transactions', txId));
+      setCancelConfirming(false);
+      showToast('Offer withdrawn successfully');
+      navigate(0);
+    } catch (err) {
+      console.error('Cancel offer error:', err);
+      showToast('Failed to withdraw offer. Please try again.', 'error');
+    } finally {
+      setCancelLoading(false);
+    }
+  };
+
+  // ── Partial payment validation ─────────────────────────────────────────────
   const validatePartialAmount = (amount, totalPrice) => {
     if (!amount) return true;
     const amountNum = Number(amount);
     const totalNum = Number(totalPrice);
     if (isNaN(amountNum) || isNaN(totalNum)) return true;
-    return amountNum < totalNum; // Must be strictly less than
+    return amountNum < totalNum;
   };
 
   const handlePartialAmountChange = (e) => {
     const value = e.target.value;
     const amountNum = Number(value);
     const totalNum = Number(agreedPrice);
-    
+
     if (!validatePartialAmount(value, agreedPrice)) {
       setAlertMessage(`Partial online payment must be less than the total agreed price of R${totalNum.toLocaleString()}`);
       setShowPartialExceedAlert(true);
-      // Auto-correct to agreedPrice - 1 if total > 0 and amount >= total
       if (amountNum >= totalNum && totalNum > 0) {
         setPartialAmount((totalNum - 1).toString());
       } else {
@@ -414,7 +476,7 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
     }
   };
 
-  // ── Offer with payment validation ──────────────────────────────────────────
+  // ── Offer submission ───────────────────────────────────────────────────────
   const handleTransaction = async () => {
     if (submitting) return;
     if (!purchaseType) {
@@ -422,22 +484,19 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
       setShowPriceAlert(true);
       return;
     }
-    
-    // SALE VALIDATIONS
+
     if (purchaseType === 'sale') {
       if (!agreedPrice) {
         setAlertMessage('Please enter an agreed price');
         setShowPriceAlert(true);
         return;
       }
-      
       const agreedPriceNum = Number(agreedPrice);
       if (isNaN(agreedPriceNum) || agreedPriceNum < 10) {
         setAlertMessage('Agreed price must be at least R10');
         setShowPriceAlert(true);
         return;
       }
-      
       if (paymentType === 'partial') {
         const partialAmountNum = Number(partialAmount);
         if (!partialAmount || isNaN(partialAmountNum) || partialAmountNum < 10) {
@@ -452,15 +511,13 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
         }
       }
     }
-    
-    // Trade item validation - only item name is required, others are optional with warnings
+
     if (purchaseType === 'trade') {
       if (!tradeItemName) {
         setAlertMessage('Please describe what you want to trade');
         setShowPriceAlert(true);
         return;
       }
-      // Only show warnings for category, condition, and photo - don't block submission
       if (!tradeItemCategory) {
         showToast('Tip: Adding a category helps the seller understand your offer', 'warn');
       }
@@ -481,7 +538,6 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
       else if (paymentType === 'partial') paymentMethod = 'partial';
     }
 
-    // Upload trade item image to Cloudinary
     let tradeImageUrl = null;
     if (purchaseType === 'trade' && tradeImageFile) {
       setTradeImageUploading(true);
@@ -498,7 +554,6 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
       }
     }
 
-    // Build the structured tradeItem object
     const tradeItemPayload = purchaseType === 'trade' ? {
       name:        tradeItemName,
       category:    tradeItemCategory,
@@ -523,6 +578,7 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
       tradeItemDetails: tradeItemPayload,
       terms:         terms || null,
       createdAt:     new Date().toISOString(),
+      paymentConfirmed: (paymentType === 'cash' || paymentType === 'cod') ? true : false,
     };
 
     try {
@@ -534,6 +590,7 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
         listingTitle: listing.title,
       });
       closeModal();
+      setCreatedTransactionId(transactionId);
       setOfferSent(true);
       showToast('Offer sent! The seller will review it shortly.');
     } catch (err) {
@@ -554,17 +611,92 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
 
   const renderButton = () => {
     if (!currentUser || isOwnListing) return null;
+
     if (existingTransaction?.status === 'pending' || offerSent) {
       return (
         <div style={styles.pendingBanner} data-testid="pending-offer-banner">
           <IconClock />
-          <div>
+          <div style={{ flex: 1 }}>
             <p style={styles.pendingTitle}>Offer Already Initiated</p>
             <p style={styles.pendingSubtitle}>We're waiting for the seller to approve your offer.</p>
+
+            {!cancelConfirming ? (
+              <button
+                onClick={() => setCancelConfirming(true)}
+                style={{
+                  marginTop: 10,
+                  padding: '7px 14px',
+                  backgroundColor: 'transparent',
+                  border: '1.5px solid #f87171',
+                  borderRadius: 8,
+                  color: '#dc2626',
+                  fontSize: '0.8rem',
+                  fontWeight: '600',
+                  cursor: 'pointer',
+                  fontFamily: 'Segoe UI, system-ui, sans-serif',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
+                }}
+              >
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+                Withdraw offer
+              </button>
+            ) : (
+              <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <p style={{ margin: 0, fontSize: '0.8rem', color: '#92400e', fontWeight: '600' }}>
+                  Are you sure you want to withdraw this offer?
+                </p>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button
+                    onClick={handleCancelOffer}
+                    disabled={cancelLoading}
+                    style={{
+                      padding: '7px 16px',
+                      backgroundColor: '#dc2626',
+                      border: 'none',
+                      borderRadius: 8,
+                      color: '#fff',
+                      fontSize: '0.8rem',
+                      fontWeight: '700',
+                      cursor: cancelLoading ? 'not-allowed' : 'pointer',
+                      opacity: cancelLoading ? 0.65 : 1,
+                      fontFamily: 'Segoe UI, system-ui, sans-serif',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 6,
+                    }}
+                  >
+                    {cancelLoading && <IconLoader />}
+                    {cancelLoading ? 'Withdrawing…' : 'Yes, withdraw'}
+                  </button>
+                  <button
+                    onClick={() => setCancelConfirming(false)}
+                    disabled={cancelLoading}
+                    style={{
+                      padding: '7px 14px',
+                      backgroundColor: 'transparent',
+                      border: '1.5px solid #d1d5db',
+                      borderRadius: 8,
+                      color: '#555',
+                      fontSize: '0.8rem',
+                      fontWeight: '600',
+                      cursor: cancelLoading ? 'not-allowed' : 'pointer',
+                      fontFamily: 'Segoe UI, system-ui, sans-serif',
+                    }}
+                  >
+                    Keep offer
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       );
     }
+
     const lt = listing.listingType || listing.type;
     const isTradeOnly = lt === 'For Trade' || lt === 'trade';
     const isSaleOnly  = lt === 'For Sale'  || lt === 'sale';
@@ -589,7 +721,6 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
   const conditionColor = { New: '#4CAF50', 'Like New': '#8BC34A', Good: '#FFC107', Fair: '#FF9800', Poor: '#F44336' };
   const typeColor      = { 'For Sale': '#e07b3a', 'For Trade': '#3a7be0', 'For Sale or Trade': '#7b3ae0', sale: '#e07b3a', trade: '#3a7be0', either: '#7b3ae0' };
 
-  // Normalise "either" → human-readable label for the badge
   const typeBadgeLabel = {
     'For Sale':         'For Sale',
     'For Trade':        'For Trade',
@@ -615,7 +746,13 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
       {showPromoteModal && (
         <PromoteListingModal
           listing={listing}
-          onClose={() => setShowPromoteModal(false)}
+          onClose={() => {
+            setShowPromoteModal(false);
+            // Re-check promotion status after modal closes (user may have just promoted)
+            getDocs(query(collection(db, 'ads'), where('listingId', '==', listing.id)))
+              .then(snap => setIsPromoted(!snap.empty))
+              .catch(() => {});
+          }}
         />
       )}
 
@@ -636,7 +773,6 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
           </div>
 
           <h1 style={styles.title}>{listing.title}</h1>
-          {/* Hide price for trade-only listings */}
           {type !== 'For Trade' && type !== 'trade' && (
             <p style={styles.price}>R {Number(listing.price).toLocaleString()}</p>
           )}
@@ -707,18 +843,18 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
               {cartLoading
                 ? <IconLoader />
                 : <svg
-  width="16"
-  height="16"
-  viewBox="0 0 24 24"
-  fill={inCart ? "currentColor" : "none"}
-  stroke="currentColor"
-  strokeWidth="2"
-  strokeLinecap="round"
-  strokeLinejoin="round"
-  style={{ flexShrink: 0 }}
->
-  <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
-</svg>
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill={inCart ? "currentColor" : "none"}
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    style={{ flexShrink: 0 }}
+                  >
+                    <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
+                  </svg>
               }
               <span>{inCart ? 'Remove from cart' : 'Add to favorites'}</span>
             </button>
@@ -726,9 +862,14 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
 
           {/* ── Message Seller ── */}
           {!isAdminPreview && currentUser && !isOwnListing && (
-            <button style={styles.messageBtn} onClick={handleMessageSeller} disabled={chatLoading}>
+            <button
+              style={styles.messageBtn}
+              onClick={handleMessageSeller}
+              disabled={chatLoading}
+              data-testid="message-seller-btn"
+            >
               {chatLoading
-                ? <><IconLoader /><span>Opening chat…</span></>
+                ? <><IconLoader /><span data-testid="chat-loading-text">Opening chat…</span></>
                 : <><IconMessage /><span>Message Seller</span></>
               }
             </button>
@@ -758,12 +899,30 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
 
           {/* ── Promote listing (owner only) ── */}
           {!isAdminPreview && isOwnListing && (
-            <button
-              onClick={() => setShowPromoteModal(true)}
-              style={{ ...styles.buyBtn, backgroundColor: '#ff9800', marginTop: '8px' }}
-            >
-              ✦ Promote listing
-            </button>
+            isPromoted === true ? (
+              /* Already promoted — show a non-interactive status pill */
+              <div style={styles.promotedBadge}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+                  <polyline points="20 6 9 17 4 12"/>
+                </svg>
+                <span>Listing already promoted</span>
+              </div>
+            ) : (
+              /* Not yet promoted — show the button (skeleton while checking) */
+              <button
+                onClick={() => isPromoted !== null && setShowPromoteModal(true)}
+                disabled={isPromoted === null}
+                style={{
+                  ...styles.buyBtn,
+                  backgroundColor: isPromoted === null ? '#d1d5db' : '#ff9800',
+                  marginTop: '8px',
+                  cursor: isPromoted === null ? 'default' : 'pointer',
+                  opacity: isPromoted === null ? 0.7 : 1,
+                }}
+              >
+                {isPromoted === null ? 'Checking promotion…' : '✦ Promote listing'}
+              </button>
+            )
           )}
 
           {/* ── Seller card ── */}
@@ -789,8 +948,7 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
               <span style={styles.sellerChevron}>›</span>
             </div>
           )}
-          </div>
-          
+        </div>
 
         {/* ── Purchase modal ── */}
         {isModalOpen && (
@@ -811,7 +969,7 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
                 Review and confirm your details for "{listing.title}"
               </p>
 
-              {/* ── Choose type (For Sale or Trade / either listings) ── */}
+              {/* ── Choose type ── */}
               {(() => {
                 const lt = listing.listingType || listing.type;
                 return (lt === 'For Sale or Trade' || lt === 'either') && !purchaseType;
@@ -819,12 +977,8 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
                 <div style={modalStyles.section}>
                   <label style={modalStyles.label}>How would you like to proceed?</label>
                   <div style={{ display: 'flex', gap: '10px' }}>
-                    <button onClick={() => setPurchaseType('sale')}  style={modalStyles.choiceBtn}>
-                      Cash Purchase
-                    </button>
-                    <button onClick={() => setPurchaseType('trade')} style={modalStyles.choiceBtn}>
-                      Trade Item
-                    </button>
+                    <button onClick={() => setPurchaseType('sale')}  style={modalStyles.choiceBtn}>Cash Purchase</button>
+                    <button onClick={() => setPurchaseType('trade')} style={modalStyles.choiceBtn}>Trade Item</button>
                   </div>
                 </div>
               )}
@@ -835,11 +989,22 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
                   <label htmlFor="agreed-price" style={modalStyles.label}>
                     Agreed Price (R) <span style={{ color: '#dc2626' }}>* (Minimum R10)</span>
                   </label>
-                  <input id="agreed-price" type="number" value={agreedPrice}
-                    onChange={(e) => setAgreedPrice(e.target.value)} style={modalStyles.input}/>
+                  <input 
+                    id="agreed-price" 
+                    aria-label="Agreed price"
+                    type="number" 
+                    value={agreedPrice}
+                    onChange={(e) => setAgreedPrice(e.target.value)} 
+                    style={modalStyles.input}
+                  />
                   <label htmlFor="payment-method" style={modalStyles.label}>Payment Method</label>
-                  <select id="payment-method" value={paymentType}
-                    onChange={(e) => setPaymentType(e.target.value)} style={modalStyles.input}>
+                  <select 
+                    id="payment-method" 
+                    aria-label="Payment method"
+                    value={paymentType}
+                    onChange={(e) => setPaymentType(e.target.value)} 
+                    style={modalStyles.input}
+                  >
                     <option value="full_online">Fully Online</option>
                     <option value="partial">Partial Online / Partial Cash</option>
                     <option value="cash">Full Cash on Delivery</option>
@@ -849,11 +1014,12 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
                       <label htmlFor="partial-amount" style={modalStyles.label}>
                         Online Payment Amount (R) <span style={{ color: '#dc2626' }}>* (Minimum R10, Must be less than total)</span>
                       </label>
-                      <input 
+                      <input
                         id="partial-amount"
-                        type="number" 
+                        aria-label="Online payment amount"
+                        type="number"
                         placeholder="Enter online payment amount"
-                        value={partialAmount} 
+                        value={partialAmount}
                         onChange={handlePartialAmountChange}
                         style={modalStyles.input}
                       />
@@ -865,11 +1031,9 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
                 </div>
               )}
 
-              {/* ── Trade fields (structured) ── */}
+              {/* ── Trade fields ── */}
               {purchaseType === 'trade' && (
                 <div style={modalStyles.section}>
-
-                  {/* Info banner */}
                   <div style={{
                     display: 'flex', gap: 10, padding: '10px 13px', marginBottom: 16,
                     backgroundColor: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 8,
@@ -886,11 +1050,11 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
                     </span>
                   </div>
 
-                  {/* Item name - Required */}
-                  <label style={modalStyles.label}>
-                    Item Name <span style={{ color: '#dc2626' }}>*</span>
-                  </label>
+                  <label htmlFor="trade-item-name" style={modalStyles.label}>Item Name <span style={{ color: '#dc2626' }}>*</span></label>
                   <input
+                    id="trade-item-name"
+                    name="tradeItemName"
+                    aria-label="Trade item name"
                     type="text"
                     placeholder="Describe your trade item (e.g. Sony WH-1000XM4 Headphones)"
                     value={tradeItemName}
@@ -898,11 +1062,11 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
                     style={modalStyles.input}
                   />
 
-                  {/* Category - Optional but recommended */}
-                  <label style={modalStyles.label}>
-                    Category <span style={{ color: '#dc2626' }}>*</span>
-                  </label>
+                  <label htmlFor="trade-category" style={modalStyles.label}>Category <span style={{ color: '#dc2626' }}>*</span></label>
                   <select
+                    id="trade-category"
+                    name="tradeCategory"
+                    aria-label="Category"
                     value={tradeItemCategory}
                     onChange={(e) => setTradeItemCategory(e.target.value)}
                     style={{ ...modalStyles.input, color: tradeItemCategory ? '#1a1a1a' : '#9ca3af' }}
@@ -911,28 +1075,23 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
                     {TRADE_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
                   </select>
 
-                  {/* Condition - Optional but recommended */}
-                  <label style={modalStyles.label}>
-                    Condition <span style={{ color: '#dc2626' }}>*</span>
-                  </label>
+                  <label style={modalStyles.label}>Condition <span style={{ color: '#dc2626' }}>*</span></label>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 6, marginBottom: 14 }}>
                     {TRADE_CONDITIONS.map(({ label, color, bg, border }) => (
                       <button
                         key={label}
                         type="button"
+                        aria-label={`Condition ${label}`}
                         onClick={() => setTradeItemCondition(label)}
                         style={{
-                          padding: '8px 4px',
-                          borderRadius: 8,
+                          padding: '8px 4px', borderRadius: 8,
                           border: `2px solid ${tradeItemCondition === label ? color : '#e5e7eb'}`,
                           backgroundColor: tradeItemCondition === label ? bg : '#fff',
                           color: tradeItemCondition === label ? color : '#6b7280',
                           fontWeight: tradeItemCondition === label ? '700' : '500',
-                          fontSize: '0.7rem',
-                          cursor: 'pointer',
+                          fontSize: '0.7rem', cursor: 'pointer',
                           fontFamily: 'Segoe UI, system-ui, sans-serif',
-                          transition: 'all 0.15s',
-                          lineHeight: '1.3',
+                          transition: 'all 0.15s', lineHeight: '1.3',
                         }}
                       >
                         {label}
@@ -940,19 +1099,20 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
                     ))}
                   </div>
 
-                  {/* Description - Optional */}
-                  <label style={modalStyles.label}>
+                  <label htmlFor="trade-description" style={modalStyles.label}>
                     Description{' '}
                     <span style={{ color: '#6b7280', fontWeight: '400' }}>(optional)</span>
                   </label>
                   <textarea
+                    id="trade-description"
+                    name="tradeDescription"
+                    aria-label="Trade item description"
                     placeholder="Brand, model, age, included accessories, any defects…"
                     value={tradeItemDesc}
                     onChange={(e) => setTradeItemDesc(e.target.value)}
                     style={{ ...modalStyles.textarea, marginBottom: 14 }}
                   />
 
-                  {/* Image upload - Optional but recommended */}
                   <label style={modalStyles.label}>
                     Photo of your item <span style={{ color: '#dc2626' }}>*</span>
                     <span style={{ color: '#6b7280', fontWeight: '400', marginLeft: 4 }}>(recommended for verification)</span>
@@ -963,13 +1123,11 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
                       <img
                         src={tradeImagePreview}
                         alt="Trade item preview"
-                        style={{
-                          width: '100%', maxHeight: 200, objectFit: 'cover',
-                          borderRadius: 10, border: '2px solid #86efac', display: 'block',
-                        }}
+                        style={{ width: '100%', maxHeight: 200, objectFit: 'cover', borderRadius: 10, border: '2px solid #86efac', display: 'block' }}
                       />
                       <button
                         type="button"
+                        aria-label="Remove image"
                         onClick={() => {
                           if (tradeImagePreview) URL.revokeObjectURL(tradeImagePreview);
                           setTradeImageFile(null);
@@ -981,7 +1139,6 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
                           width: 28, height: 28, borderRadius: '50%', cursor: 'pointer',
                           fontSize: '0.85rem', display: 'flex', alignItems: 'center', justifyContent: 'center',
                         }}
-                        aria-label="Remove image"
                       >✕</button>
                       <p style={{ fontSize: '0.72rem', color: '#16a34a', margin: '6px 0 0', fontFamily: 'Segoe UI, system-ui, sans-serif' }}>
                         ✓ Photo ready
@@ -1038,8 +1195,10 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
 
               {/* ── Optional terms ── */}
               <div style={modalStyles.section}>
-                <label style={modalStyles.label}>Changes to terms (optional)</label>
+                <label htmlFor="terms" style={modalStyles.label}>Changes to terms (optional)</label>
                 <textarea
+                  id="terms"
+                  aria-label="Terms"
                   placeholder="E.g. Seller agreed to include charger..."
                   value={terms}
                   onChange={(e) => setTerms(e.target.value)}
@@ -1081,7 +1240,6 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
           message={alertMessage}
           type="error"
         />
-
         <AlertModal
           open={showPartialAlert}
           onClose={() => setShowPartialAlert(false)}
@@ -1089,7 +1247,6 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
           message={alertMessage || "Online payment amount must be at least R10. Please enter a valid amount of R10 or more."}
           type="error"
         />
-
         <AlertModal
           open={showPartialExceedAlert}
           onClose={() => setShowPartialExceedAlert(false)}
@@ -1185,12 +1342,21 @@ const styles = {
   cartBtn:          { width: '100%', padding: '12px', border: '1.5px solid', borderRadius: '10px', fontSize: '0.9rem', fontWeight: '600', cursor: 'pointer', fontFamily: 'Segoe UI, system-ui, sans-serif', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', transition: 'all 0.18s' },
   messageBtn:       { width: '100%', padding: '11px', backgroundColor: 'transparent', color: '#444', border: '1px solid #6aa6da57', borderRadius: '10px', fontSize: '0.875rem', fontWeight: '500', cursor: 'pointer', fontFamily: 'Segoe UI, system-ui, sans-serif', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' },
   reportBtn:        { width: '100%', padding: '10px', backgroundColor: 'transparent', color: '#dc2626', border: '1.5px solid #fca5a5', borderRadius: '10px', fontSize: '0.82rem', fontWeight: '500', cursor: 'pointer', fontFamily: 'Segoe UI, system-ui, sans-serif', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '7px' },
-  pendingBanner:       { display: 'flex', alignItems: 'center', gap: '12px', padding: '16px', backgroundColor: '#fff8e1', border: '1px solid #ffe082', borderRadius: '10px', fontFamily: 'Segoe UI, system-ui, sans-serif' },
+  pendingBanner:       { display: 'flex', alignItems: 'flex-start', gap: '12px', padding: '16px', backgroundColor: '#fff8e1', border: '1px solid #ffe082', borderRadius: '10px', fontFamily: 'Segoe UI, system-ui, sans-serif' },
   pendingTitle:        { margin: '0 0 4px', fontWeight: '700', fontSize: '0.95rem', color: '#b45309' },
   pendingSubtitle:     { margin: '0', fontSize: '0.85rem', color: '#92400e' },
   ownerBanner:         { display: 'flex', alignItems: 'center', gap: '12px', padding: '16px', backgroundColor: '#e8f4fd', border: '1px solid #90caf9', borderRadius: '10px', fontFamily: 'Segoe UI, system-ui, sans-serif' },
   ownerBannerTitle:    { margin: '0 0 4px', fontWeight: '700', fontSize: '0.95rem', color: '#0d47a1' },
   ownerBannerSubtitle: { margin: '0', fontSize: '0.85rem', color: '#1565c0' },
+  promotedBadge: {
+    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+    padding: '12px 16px', marginTop: '8px',
+    backgroundColor: '#f0fdf4', border: '1.5px solid #86efac',
+    borderRadius: '10px', color: '#15803d',
+    fontSize: '0.9rem', fontWeight: '700',
+    fontFamily: 'Segoe UI, system-ui, sans-serif',
+    cursor: 'default', userSelect: 'none',
+  },
   sellerCard:    { display: 'flex', alignItems: 'center', gap: '14px', padding: '14px', border: '1px solid #dde3ea', borderRadius: '12px', marginTop: '4px', cursor: 'pointer', backgroundColor: '#fff', transition: 'box-shadow 0.15s', outline: 'none', userSelect: 'none' },
   sellerAvatar:  { width: '46px', height: '46px', borderRadius: '50%', backgroundColor: '#166bc0', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', flexShrink: 0 },
   sellerInitial: { fontSize: '1.1rem', fontWeight: '700', color: '#fff' },
