@@ -127,11 +127,7 @@ function ModerationSummaryTab({ reports }) {
           <tbody>
             {byType.map(row => (
               <tr key={row.type} style={{ borderBottom: "1px solid #f8fafc" }}>
-                <td style={{ padding: "11px 14px", fontWeight: 600, color: "#1e293b" }}>{{ 
-  user:    <i className="fas fa-user"  style={{ color: "#94a3b8" }} />, 
-  listing: <i className="fas fa-store" style={{ color: "#6AA6DA" }} />, 
-  review:  <i className="fas fa-star"  style={{ color: "#f59e0b" }} /> 
-}[row.type]} {row.type.charAt(0).toUpperCase() + row.type.slice(1)}</td>
+                <td style={{ padding: "11px 14px", fontWeight: 600, color: "#1e293b" }}>{{ user: "👤", listing: "🛍️", review: "⭐" }[row.type]} {row.type.charAt(0).toUpperCase() + row.type.slice(1)}</td>
                 <td style={{ padding: "11px 14px", fontWeight: 700, color: row.total > 0 ? "#1e293b" : "#94a3b8" }}>{row.total}</td>
                 <td style={{ padding: "11px 14px" }}>{row.pending > 0 ? <span style={{ background: "#fef3c7", color: "#d97706", borderRadius: 20, padding: "2px 9px", fontWeight: 700, fontSize: "0.72rem" }}>{row.pending}</span> : <span style={{ color: "#94a3b8" }}>0</span>}</td>
                 <td style={{ padding: "11px 14px" }}>{row.resolved > 0 ? <span style={{ background: "#f0fdf4", color: "#16a34a", borderRadius: 20, padding: "2px 9px", fontWeight: 700, fontSize: "0.72rem" }}>{row.resolved}</span> : <span style={{ color: "#94a3b8" }}>0</span>}</td>
@@ -293,10 +289,11 @@ export default function AdminDashboard() {
   const reportsHeaders = ["Type", "ReportedItem", "Reason", "Details", "ReportedBy", "Status", "Resolution", "Date"];
 
   const reportTypeIcon = (type) => {
-    if (type === "listing") return <i className="fas fa-store"     style={{ fontSize: "1rem", color: "#6AA6DA" }} />;
-    if (type === "review")  return <i className="fas fa-star"      style={{ fontSize: "1rem", color: "#f59e0b" }} />;
-    return                         <i className="fas fa-user"      style={{ fontSize: "1rem", color: "#94a3b8" }} />;
+    if (type === "listing") return "🛍️";
+    if (type === "review")  return "⭐";
+    return "👤";
   };
+
   // ── Helper: navigate to the reported item ─────────────────────────────────
   const navigateToReported = (e, report) => {
     e.stopPropagation();
@@ -676,43 +673,91 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* ── SUSPENDED USERS TAB ── */}
-        {activeTab === "suspended" && (
-          <div className={styles.tabContent}>
-            <div className={styles.card}>
-              <h3 className={styles.cardTitle}>
-                Suspended Users
-                {suspendedUsers.length > 0 && (
-                  <span style={{ marginLeft: 10, background: "#dc2626", color: "#fff", borderRadius: 20, padding: "2px 10px", fontSize: "0.72rem", fontWeight: 700 }}>
-                    {suspendedUsers.length}
-                  </span>
-                )}
-              </h3>
-              {suspendedUsers.length === 0 ? (
-                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, padding: "32px 0" }}>
-                  <i className="fas fa-check-circle" style={{ fontSize: "2rem", color: "#16a34a" }} />
-                  <p className={styles.emptyNote}>No suspended users.</p>
-                </div>
-              ) : (
-                <div className={styles.userList}>
-                  {suspendedUsers.map(u => (
-                    <div key={u.id} className={styles.userRow} style={{ opacity: 0.85 }}>
-                      <div className={styles.userAvatar}>
-                        {u.photoURL ? <img src={u.photoURL} alt="" /> : <span>{(u.firstName?.[0] || "?").toUpperCase()}</span>}
-                      </div>
-                      <div className={styles.userInfo}>
-                        <span className={styles.userName}>{u.firstName} {u.lastName}</span>
-                        <span className={styles.userMeta}>{u.email}</span>
-                      </div>
-                      <button className={styles.btnUnsuspend} onClick={() => handleToggleSuspend(u)}>Unsuspend</button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        )}
+{/* ── SUSPENDED USERS TAB ── */}
+{activeTab === "suspended" && (
+  <div className={styles.tabContent}>
+    <div className={styles.card}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px" }}>
+        <h3 className={styles.cardTitle}>
+          Suspended Users
+          {suspendedUsers.length > 0 && (
+            <span style={{ marginLeft: 10, background: "#dc2626", color: "#fff", borderRadius: 20, padding: "2px 10px", fontSize: "0.72rem", fontWeight: 700 }}>
+              {suspendedUsers.length}
+            </span>
+          )}
+        </h3>
+        {/* CSV & PDF buttons – always visible */}
+        <div style={{ display: "flex", gap: "8px" }}>
+          {/* CSV export button */}
+          <button
+            onClick={() => {
+              if (suspendedUsers.length === 0) {
+                showToast("No suspended users to export.", "warning");
+                return;
+              }
+              const headers = ["Name", "Email", "Suspended At", "Suspended By"];
+              const rows = suspendedUsers.map(u => ({
+                Name: `${u.firstName || ""} ${u.lastName || ""}`.trim(),
+                Email: u.email || "",
+                "Suspended At": u.suspendedAt?.toDate ? u.suspendedAt.toDate().toLocaleString() : u.suspendedAt || "",
+                "Suspended By": u.suspendedBy || "",
+              }));
+              const csvRows = [headers, ...rows.map(r => headers.map(h => r[h]))];
+              const csvContent = csvRows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(",")).join("\n");
+              const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+              const link = document.createElement("a");
+              const url = URL.createObjectURL(blob);
+              link.href = url;
+              link.setAttribute("download", "suspended_users.csv");
+              document.body.appendChild(link);
+              link.click();
+              document.body.removeChild(link);
+              URL.revokeObjectURL(url);
+            }}
+            style={{ background: "#4a90d9", color: "white", border: "none", padding: "6px 12px", borderRadius: "8px", cursor: "pointer", fontWeight: "500", fontSize: "0.75rem" }}
+          >
+            CSV
+          </button>
+          {/* PDF export – uses browser print dialog */}
+          <button
+            onClick={() => {
+              if (suspendedUsers.length === 0) {
+                showToast("No suspended users to export.", "warning");
+                return;
+              }
+              window.print();
+            }}
+            style={{ background: "#4a90d9", color: "white", border: "none", padding: "6px 12px", borderRadius: "8px", cursor: "pointer", fontWeight: "500", fontSize: "0.75rem" }}
+          >
+            PDF
+          </button>
+        </div>
+      </div>
 
+      {suspendedUsers.length === 0 ? (
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, padding: "32px 0" }}>
+          <i className="fas fa-check-circle" style={{ fontSize: "2rem", color: "#16a34a" }} />
+          <p className={styles.emptyNote}>No suspended users.</p>
+        </div>
+      ) : (
+        <div className={styles.userList}>
+          {suspendedUsers.map(u => (
+            <div key={u.id} className={styles.userRow} style={{ opacity: 0.85 }}>
+              <div className={styles.userAvatar}>
+                {u.photoURL ? <img src={u.photoURL} alt="" /> : <span>{(u.firstName?.[0] || "?").toUpperCase()}</span>}
+              </div>
+              <div className={styles.userInfo}>
+                <span className={styles.userName}>{u.firstName} {u.lastName}</span>
+                <span className={styles.userMeta}>{u.email}</span>
+              </div>
+              <button className={styles.btnUnsuspend} onClick={() => handleToggleSuspend(u)}>Unsuspend</button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  </div>
+)}
         {/* ── MODERATION TAB*/}
         {activeTab === "moderation" && (
           <div className={styles.tabContent}>
@@ -754,30 +799,78 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* ── PAYMENTS TAB ── */}
-        {activeTab === "payments" && (
-          <div className={styles.tabContent}>
-            <ReportCard title="Completed Transactions" headers={paymentsHeaders} data={paymentsExportData}>
-              {listings.filter(l => l.status === "sold" || l.status === "traded").length === 0 ? (
-                <p className={styles.emptyNote}>No completed transactions yet.</p>
-              ) : (
-                <div className={styles.payTable}>
-                  <div className={styles.payHeader}>
-                    <span>Item</span><span>Type</span><span>Amount</span><span>Status</span>
-                  </div>
-                  {listings.filter(l => l.status === "sold" || l.status === "traded").map(l => (
-                    <div key={l.id} className={styles.payRow}>
-                      <span className={styles.payTitle}>{l.title}</span>
-                      <span className={styles.payType}>{l.listingType || "—"}</span>
-                      <span className={styles.payAmount}>R {Number(l.price || 0).toLocaleString()}</span>
-                      <span className={`${styles.payStatus} ${styles[l.status]}`}>{l.status}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </ReportCard>
+{/* ── PAYMENTS TAB ── */}
+{activeTab === "payments" && (
+  <div className={styles.tabContent}>
+    <div className={styles.card}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px", marginBottom: "16px" }}>
+        <h3 className={styles.cardTitle}>Completed Transactions</h3>
+        <div style={{ display: "flex", gap: "8px" }}>
+          {/* CSV export button */}
+          <button
+            onClick={() => {
+              if (paymentsExportData.length === 0) {
+                showToast("No completed transactions to export.", "warning");
+                return;
+              }
+              const headers = ["Item", "Type", "Amount", "Status"];
+              const rows = paymentsExportData.map(item => ({
+                Item: item.Item,
+                Type: item.Type,
+                Amount: item.Amount,
+                Status: item.Status,
+              }));
+              const csvRows = [headers, ...rows.map(r => headers.map(h => r[h]))];
+              const csvContent = csvRows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(",")).join("\n");
+              const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+              const link = document.createElement("a");
+              const url = URL.createObjectURL(blob);
+              link.href = url;
+              link.setAttribute("download", "completed_transactions.csv");
+              document.body.appendChild(link);
+              link.click();
+              document.body.removeChild(link);
+              URL.revokeObjectURL(url);
+            }}
+            style={{ background: "#4a90d9", color: "white", border: "none", padding: "6px 12px", borderRadius: "8px", cursor: "pointer", fontWeight: "500", fontSize: "0.75rem" }}
+          >
+            CSV
+          </button>
+          {/* PDF export – uses browser print dialog */}
+          <button
+            onClick={() => {
+              if (paymentsExportData.length === 0) {
+                showToast("No completed transactions to export.", "warning");
+                return;
+              }
+              window.print();
+            }}
+            style={{ background: "#4a90d9", color: "white", border: "none", padding: "6px 12px", borderRadius: "8px", cursor: "pointer", fontWeight: "500", fontSize: "0.75rem" }}
+          >
+            PDF
+          </button>
+        </div>
+      </div>
+      {listings.filter(l => l.status === "sold" || l.status === "traded").length === 0 ? (
+        <p className={styles.emptyNote}>No completed transactions yet.</p>
+      ) : (
+        <div className={styles.payTable}>
+          <div className={styles.payHeader}>
+            <span>Item</span><span>Type</span><span>Amount</span><span>Status</span>
           </div>
-        )}
+          {listings.filter(l => l.status === "sold" || l.status === "traded").map(l => (
+            <div key={l.id} className={styles.payRow}>
+              <span className={styles.payTitle}>{l.title}</span>
+              <span className={styles.payType}>{l.listingType || "—"}</span>
+              <span className={styles.payAmount}>R {Number(l.price || 0).toLocaleString()}</span>
+              <span className={`${styles.payStatus} ${styles[l.status]}`}>{l.status}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  </div>
+)}
 
         {/* ── UTILISATION REPORTS TAB ── */}
         {activeTab === "utilisation" && (
