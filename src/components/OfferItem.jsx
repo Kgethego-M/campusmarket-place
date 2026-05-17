@@ -4,7 +4,7 @@ import {
   doc, getDoc, updateDoc, deleteDoc,
   collection, query, where, getDocs, addDoc, serverTimestamp,
 } from 'firebase/firestore';
-import { db } from '../firebase';
+import { auth, db } from '../firebase';
 import styles from './OfferItem.module.css';
 
 const shimmerStyle = {
@@ -145,8 +145,8 @@ export default function OfferItem({ offer }) {
       );
       console.log('Step 4 done ✓');
 
+      // ── Step 5: notify the buyer ──────────────────────────────
       if (isTrade) {
-        // ── Trade: notify buyer their trade offer was accepted → go book drop-off
         console.log('Step 5 (trade): notifying buyer', offer.buyerId, '→ trade_waiting');
         await addDoc(collection(db, 'notifications'), {
           userId:        offer.buyerId,
@@ -158,10 +158,7 @@ export default function OfferItem({ offer }) {
           createdAt:     serverTimestamp(),
           redirectUrl:   `/trade-facility`,
         });
-
-
       } else {
-        // ── Sale: notify buyer their offer was accepted → head to payment (or cash confirmation)
         console.log('Step 5 (sale): notifying accepted buyer', offer.buyerId, '→ offer_accepted');
         await addDoc(collection(db, 'notifications'), {
           userId:        offer.buyerId,
@@ -176,9 +173,27 @@ export default function OfferItem({ offer }) {
           createdAt:     serverTimestamp(),
           redirectUrl:   isCashOnly ? `/my-purchases?open=${offer.id}` : `/payment/${offer.id}`,
         });
-
-
       }
+      console.log('Step 5 done ✓');
+
+      // ── Step 6: notify the seller to book their drop-off ─────
+      const sellerId    = offer.sellerId || auth.currentUser?.uid;
+      const listingTitle = listing?.title || 'your item';
+
+      console.log('Step 6: notifying seller', sellerId, '→ offer_accepted_seller');
+      await addDoc(collection(db, 'notifications'), {
+        userId:        sellerId,
+        type:          'offer_accepted_seller',
+        transactionId: offer.id,
+        listingId:     offer.listingId,
+        listingTitle,
+        read:          false,
+        createdAt:     serverTimestamp(),
+        // Opens Trade Facility on the seller tab, scrolled to & highlighted this transaction
+        redirectUrl:   `/trade-facility?tab=seller&highlight=${offer.id}`,
+      });
+      console.log('Step 6 done ✓');
+
       console.log('All steps done ✓');
 
       setDone(true);

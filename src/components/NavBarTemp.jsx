@@ -168,6 +168,11 @@ export default function Navbar() {
                 const highlight = n.transactionId || n.listingId || '';
                 navigate(`/profile?tab=offers&highlight=${highlight}`);
 
+            } else if (n.type === 'offer_accepted_seller') {
+                // Seller accepted an offer — go straight to their card in Trade Facility
+                const highlight = n.transactionId || '';
+                navigate(`/trade-facility?tab=seller${highlight ? `&highlight=${highlight}` : ''}`);
+
             } else if (n.type === 'offer_accepted') {
                 // Cash offers → show the purchase card; online/partial → Stripe payment page
                 const pm = (n.paymentMethod || '').toLowerCase();
@@ -218,6 +223,7 @@ export default function Navbar() {
     };
 
     const notificationIcon = (type) => {
+        if (type === 'offer_accepted_seller')                       return 'fa-calendar-plus';
         if (type === 'buyer_paid')                           return 'fa-money-bill-wave';
         if (type === 'new_offer')                            return 'fa-shopping-cart';
         if (type === 'offer_accepted')                       return 'fa-circle-check';
@@ -243,6 +249,7 @@ export default function Navbar() {
     };
 
     const notificationIconColor = (type) => {
+        if (type === 'offer_accepted_seller')                       return '#16a34a';
         if (type === 'buyer_paid')                           return '#16a34a';
         if (type === 'new_offer')                            return '#3b82f6';
         if (type === 'offer_accepted')                       return '#22c55e';
@@ -292,6 +299,7 @@ export default function Navbar() {
             }
             return `Your offer on ${title || 'your item'} was accepted! Head to payment.${price}`;
         }
+        if (n.type === 'offer_accepted_seller')     return `You accepted an offer on ${title || 'your item'}. Book a drop-off for it in Trade Facility.`;
         if (n.type === 'trade_waiting')             return `Your trade offer on ${title || 'your item'} was accepted — head to the trade facility to book a drop-off slot.`;
         if (n.type === 'offer_declined') {
             if (isTrade) return `Your trade offer on ${title || 'your item'} was declined.`;

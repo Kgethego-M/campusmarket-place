@@ -388,6 +388,22 @@ export default function BookDropOff() {
 
         const listingTitle = listing?.title ?? "your item";
 
+        // Notify seller: their drop-off slot is confirmed, with item name
+        try {
+          await addDoc(collection(db, "notifications"), {
+            userId:        transaction.sellerId,
+            type:          "dropoff_booked",
+            transactionId: transaction.id,
+            listingId:     transaction.listingId,
+            listingTitle,
+            title:         "Drop-off slot booked",
+            message:       `Your drop-off for "${listingTitle}" is confirmed for ${selectedDate} at ${selectedTimeSlot}.`,
+            linkTo:        "/trade-facility",
+            read:          false,
+            createdAt:     serverTimestamp(),
+          });
+        } catch (_) {}
+
         // For trade: prompt buyer to book their own drop-off slot if they haven't yet
         if (transaction.type === 'trade' && !latestData.buyerBookingId) {
           const tradeItemName = typeof transaction.tradeItem === 'object'
