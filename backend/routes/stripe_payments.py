@@ -8,7 +8,7 @@ stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
 
 def get_stripe():
     if not stripe.api_key:
-        raise HTTPException(500, "STRIPE_SECRET_KEY not configured")
+        raise HTTPException(500, "STRIPE_SECRET_KEY is missing")
     return stripe
 
 class CheckoutSessionRequest(BaseModel):
@@ -29,7 +29,7 @@ class CheckoutSessionRequest(BaseModel):
 
 @router.post("/create-checkout-session")
 async def create_checkout_session(payload: CheckoutSessionRequest):
-    stripe_client = get_stripe()
+    stripe_client = get_stripe()  # this will now raise correct message
     try:
         session = stripe_client.checkout.Session.create(
             mode="payment",
