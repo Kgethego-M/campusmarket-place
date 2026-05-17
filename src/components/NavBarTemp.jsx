@@ -102,8 +102,8 @@ async function resolveAndNavigate(notification, currentUser, navigate) {
                     // Seller → Trade Facility, highlight the transaction card
                     navigate(`/trade-facility?tab=seller&highlight=${transactionId}`);
                 } else {
-                    // Buyer → My Purchases, open + filter the transaction card
-                    navigate(`/my-purchases?filter=${filter}&open=${transactionId}`);
+                    // Buyer → My Purchases
+                    navigate('/my-purchases');
                 }
                 return;
             }
@@ -115,10 +115,7 @@ async function resolveAndNavigate(notification, currentUser, navigate) {
     // Fallback: use notification type to determine destination
     const isBuyerNotification = BUYER_TYPES.includes(notification.type);
     if (isBuyerNotification) {
-        const dest = transactionId
-            ? `/my-purchases?open=${transactionId}`
-            : '/my-purchases';
-        navigate(dest);
+        navigate('/my-purchases');
     } else {
         const dest = transactionId
             ? `/trade-facility?tab=seller&highlight=${transactionId}`
@@ -288,8 +285,8 @@ export default function Navbar() {
         if (n.type === 'cancelled_dropoff_buyer')    return `Your transaction for ${title} was cancelled — the seller did not drop off in time.`;
         if (n.type === 'cancelled_collection_seller') return `The buyer did not collect ${title} — the transaction has been cancelled. Please come to the trade facility to collect your item.`;
         if (n.type === 'cancelled_collection_buyer') return `Your transaction for ${title} was cancelled due to non-collection.`;
-        if (n.type === 'rate_seller') return `Rate your experience with ${n.reviewedUserName} as a seller${n.listingTitle ? ` for "${n.listingTitle}"${price}` : ''}`;
-        if (n.type === 'rate_buyer')  return `Rate your buyer ${n.reviewedUserName}${n.listingTitle ? ` — "${n.listingTitle}"${price}` : ''}`;
+        if (n.type === 'rate_seller') return `How was ${n.reviewedUserName} as a seller${n.listingTitle ? ` for "${n.listingTitle}"${price}` : ''}`;
+        if (n.type === 'rate_buyer')  return `How was ${n.reviewedUserName} as a buyer${n.listingTitle ? ` — "${n.listingTitle}"${price}` : ''}`;
         return n.message || 'Notification';
     };
 
@@ -411,7 +408,7 @@ export default function Navbar() {
                         if (userSnap.exists())    { const ud = userSnap.data();    sellerName   = `${ud.firstName || ''} ${ud.lastName || ''}`.trim() || sellerName; }
                         if (listingSnap.exists()) { const ld = listingSnap.data(); listingTitle = listingTitle || ld.title || ld.Title || ''; listingPrice = ld.price || ld.Price || null; }
                     } catch (_) {}
-                    results.push({ id: `buyer-${d.id}`, source: 'rating', type: 'rate_seller', title: `Rate your experience with ${sellerName}`, message: `Your purchase is complete — how was the transaction?`, listingId, listingTitle, listingPrice, purchaseId: d.id, reviewedUserId: data.sellerId, reviewedUserName: sellerName, role: 'seller', createdAt: data.updatedAt || data.createdAt });
+                    results.push({ id: `buyer-${d.id}`, source: 'rating', type: 'rate_seller', title: `How was ${sellerName} as a seller`, message: `Your purchase is complete — how was the transaction?`, listingId, listingTitle, listingPrice, purchaseId: d.id, reviewedUserId: data.sellerId, reviewedUserName: sellerName, role: 'seller', createdAt: data.updatedAt || data.createdAt });
                 }
 
                 for (const d of sellerSnap.docs) {
@@ -424,7 +421,7 @@ export default function Navbar() {
                         if (userSnap.exists())    { const ud = userSnap.data();    buyerName    = `${ud.firstName || ''} ${ud.lastName || ''}`.trim() || buyerName; }
                         if (listingSnap.exists()) { const ld = listingSnap.data(); listingTitle = listingTitle || ld.title || ld.Title || ''; listingPrice = ld.price || ld.Price || null; }
                     } catch (_) {}
-                    results.push({ id: `seller-${d.id}`, source: 'rating', type: 'rate_buyer', title: `Rate your buyer — ${buyerName}`, message: `Your listing was purchased — how was the buyer?`, listingId, listingTitle, listingPrice, purchaseId: d.id, reviewedUserId: data.buyerId, reviewedUserName: buyerName, role: 'buyer', createdAt: data.updatedAt || data.createdAt });
+                    results.push({ id: `seller-${d.id}`, source: 'rating', type: 'rate_buyer', title: `How was ${buyerName} as a buyer`, message: `Your listing was purchased — how was the buyer?`, listingId, listingTitle, listingPrice, purchaseId: d.id, reviewedUserId: data.buyerId, reviewedUserName: buyerName, role: 'buyer', createdAt: data.updatedAt || data.createdAt });
                 }
 
                 // Show all rating notifications that don't yet have a submitted review
