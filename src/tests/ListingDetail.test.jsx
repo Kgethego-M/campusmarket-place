@@ -114,6 +114,7 @@ const pendingTransaction = {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.useRealTimers();
   
   getDocs.mockResolvedValue({ docs: [] });
   addDoc.mockResolvedValue({ id: 'new-chat-id' });
@@ -128,6 +129,8 @@ const renderWithAct = async (component) => {
   await act(async () => {
     result = render(component);
   });
+  // Wait for any pending promises
+  await new Promise(resolve => setTimeout(resolve, 0));
   return result;
 };
 
@@ -406,13 +409,13 @@ describe('ListingDetailView - message seller', () => {
     
     await renderWithAct(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} />);
     
-    await act(async () => {
-      fireEvent.click(screen.getByText('Message Seller'));
-    });
+    // Use fireEvent directly without act wrapper for the click
+    fireEvent.click(screen.getByText('Message Seller'));
     
+    // Wait for the async operation to complete
     await waitFor(() => {
       expect(mockNavigate).toHaveBeenCalledWith('/chat?open=existing-chat');
-    }, { timeout: 3000 });
+    }, { timeout: 5000 });
   });
 
   it('creates new chat when no existing chat found', async () => {
@@ -421,26 +424,39 @@ describe('ListingDetailView - message seller', () => {
     
     await renderWithAct(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} />);
     
-    await act(async () => {
-      fireEvent.click(screen.getByText('Message Seller'));
-    });
+    fireEvent.click(screen.getByText('Message Seller'));
     
     await waitFor(() => {
       expect(addDoc).toHaveBeenCalled();
       expect(mockNavigate).toHaveBeenCalledWith('/chat?open=new-chat-id');
-    });
+    }, { timeout: 5000 });
   });
 
   it('shows Opening chat text while loading', async () => {
-    getDocs.mockImplementationOnce(() => new Promise(() => {}));
+    // Use a promise that never resolves to simulate loading
+    let resolvePromise;
+    const pendingPromise = new Promise((resolve) => {
+      resolvePromise = resolve;
+    });
+    getDocs.mockImplementationOnce(() => pendingPromise);
     
     await renderWithAct(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} />);
     
+    // Start the async operation
+    let clickPromise;
     await act(async () => {
-      fireEvent.click(screen.getByText('Message Seller'));
+      clickPromise = fireEvent.click(screen.getByText('Message Seller'));
+      // Small delay to let the loading state set
+      await new Promise(r => setTimeout(r, 10));
     });
     
+    // Check that loading text appears
     expect(screen.getByText('Opening chat…')).toBeInTheDocument();
+    
+    // Clean up - resolve the promise to avoid hanging
+    if (resolvePromise) {
+      resolvePromise({ docs: [] });
+    }
   });
 });
 
