@@ -4,11 +4,11 @@ import { auth, db } from "../firebase.js";
 import { signOut, onAuthStateChanged } from "firebase/auth";
 import {
     doc, getDoc, updateDoc, serverTimestamp,
-    collection, addDoc, query, where, getDocs, onSnapshot, deleteDoc,
+    collection, addDoc, query, where, getDocs, onSnapshot,
 } from "firebase/firestore";
 import styles from "./Staffdashboard.module.css";
 import { recordCashCollected } from "../services/revenueService";
-import AlertModal from "./AlertModal";
+
 
 // ─── Firestore helpers ────────────────────────────────────────────────────────
 
@@ -25,24 +25,9 @@ async function sendNotification(userId, payload) {
     }
 }
 
-async function notificationAlreadyExists(txnId, type) {
-    try {
-        const q = query(
-            collection(db, "notifications"),
-            where("transactionId", "==", txnId),
-            where("type", "==", type),
-            where("createdAt", ">=", new Date(Date.now() - 24 * 60 * 60 * 1000))
-        );
-        const snapshot = await getDocs(q);
-        return !snapshot.empty;
-    } catch (err) {
-        console.error("Failed to check existing notification:", err);
-        return false;
-    }
-}
-
 async function notifyBothParties(txn, stage) {
     if (!txn.buyerId || !txn.sellerId) return;
+
     const title = txn.listingTitle || txn.item;
 
     if (stage === "drop_off") {
@@ -86,64 +71,54 @@ async function notifyBothParties(txn, stage) {
     }
 }
 
+// ─── Overdue notification helpers ────────────────────────────────────────────
+
 async function notifyOverdueCollection(txn) {
     if (!txn.buyerId || !txn.sellerId) return;
     const title = txn.listingTitle || txn.item;
 
-    const buyerExists = await notificationAlreadyExists(txn.id, "overdue_collection_buyer");
-    const sellerExists = await notificationAlreadyExists(txn.id, "overdue_collection_seller");
-    
-    if (!buyerExists) {
-        const buyerMsg = `Your collection of "${title}" is overdue. You have 24 hours to collect your item from the trade facility — please come in as soon as possible. If the item is not collected within 24 hours, this transaction will be automatically cancelled and the item returned to the seller.`;
-        await sendNotification(txn.buyerId, {
-            type:          "overdue_collection_buyer",
-            listingId:     txn.listingId || null,
-            transactionId: txn.id,
-            listingTitle:  title,
-            message:       buyerMsg,
-        });
-    }
+    const buyerMsg  = `Your collection of "${title}" is overdue. You have 24 hours to collect your item from the trade facility — please come in as soon as possible. If the item is not collected within 24 hours, this transaction will be automatically cancelled and the item returned to the seller.`;
+    const sellerMsg = `The buyer has not yet collected "${title}". They have been notified and given 24 hours to collect. If they do not collect within 24 hours, the transaction will be cancelled and you will be asked to come collect your item.`;
 
-    if (!sellerExists) {
-        const sellerMsg = `The buyer has not yet collected "${title}". They have been notified and given 24 hours to collect. If they do not collect within 24 hours, the transaction will be cancelled and you will be asked to come collect your item.`;
-        await sendNotification(txn.sellerId, {
-            type:          "overdue_collection_seller",
-            listingId:     txn.listingId || null,
-            transactionId: txn.id,
-            listingTitle:  title,
-            message:       sellerMsg,
-        });
-    }
+    await sendNotification(txn.buyerId, {
+        type:          "overdue_collection_buyer",
+        listingId:     txn.listingId || null,
+        transactionId: txn.id,
+        listingTitle:  title,
+        message:       buyerMsg,
+    });
+
+    await sendNotification(txn.sellerId, {
+        type:          "overdue_collection_seller",
+        listingId:     txn.listingId || null,
+        transactionId: txn.id,
+        listingTitle:  title,
+        message:       sellerMsg,
+    });
 }
 
 async function notifyOverdueDropOff(txn) {
     if (!txn.buyerId || !txn.sellerId) return;
     const title = txn.listingTitle || txn.item;
 
-    const buyerExists = await notificationAlreadyExists(txn.id, "overdue_dropoff_buyer");
-    const sellerExists = await notificationAlreadyExists(txn.id, "overdue_dropoff_seller");
-    
-    if (!sellerExists) {
-        const sellerMsg = `Your drop-off for "${title}" is overdue. You have 24 hours to drop off the item at the trade facility. If the item is not dropped off within 24 hours, this transaction will be automatically cancelled.`;
-        await sendNotification(txn.sellerId, {
-            type:          "overdue_dropoff_seller",
-            listingId:     txn.listingId || null,
-            transactionId: txn.id,
-            listingTitle:  title,
-            message:       sellerMsg,
-        });
-    }
+    const sellerMsg = `Your drop-off for "${title}" is overdue. You have 24 hours to drop off the item at the trade facility. If the item is not dropped off within 24 hours, this transaction will be automatically cancelled.`;
+    const buyerMsg  = `The seller has not yet dropped off "${title}" at the trade facility. They have been notified and given 24 hours to drop off. If they do not drop off within 24 hours, this transaction will be cancelled.`;
 
-    if (!buyerExists) {
-        const buyerMsg = `The seller has not yet dropped off "${title}" at the trade facility. They have been notified and given 24 hours to drop off. If they do not drop off within 24 hours, this transaction will be cancelled.`;
-        await sendNotification(txn.buyerId, {
-            type:          "overdue_dropoff_buyer",
-            listingId:     txn.listingId || null,
-            transactionId: txn.id,
-            listingTitle:  title,
-            message:       buyerMsg,
-        });
-    }
+    await sendNotification(txn.sellerId, {
+        type:          "overdue_dropoff_seller",
+        listingId:     txn.listingId || null,
+        transactionId: txn.id,
+        listingTitle:  title,
+        message:       sellerMsg,
+    });
+
+    await sendNotification(txn.buyerId, {
+        type:          "overdue_dropoff_buyer",
+        listingId:     txn.listingId || null,
+        transactionId: txn.id,
+        listingTitle:  title,
+        message:       buyerMsg,
+    });
 }
 
 async function notifyCancelledDropOff(txn) {
@@ -199,6 +174,8 @@ async function notifyCancelledCollection(txn) {
     });
 }
 
+
+
 const TABS = [
     { key: "drop_offs",   label: "Drop Offs",         icon: "fa-truck-arrow-right"  },
     { key: "collections", label: "Collections",        icon: "fa-person-walking"     },
@@ -215,6 +192,7 @@ const STATUS_META = {
     completed:           { label: "Completed",         cls: "done",     icon: "fa-check-double"    },
 };
 
+// ─── Payment type configuration ───────────────────────────────────────────────
 const PAYMENT_CONFIG = {
     full_online: { label: "Fully Online",     icon: "fa-globe",               color: "#10b981", bg: "#d1fae5", staffNote: "Paid in full online. No cash to collect at any stage." },
     partial:     { label: "Partial Online",   icon: "fa-credit-card",         color: "#f59e0b", bg: "#fed7aa", staffNote: "Online portion is confirmed. Collect the remaining cash from the buyer at collection — not at drop-off." },
@@ -236,6 +214,8 @@ function getPaymentConfig(txn) {
 function getReceiptRef(txn) {
     return txn.receiptRef || txn.receiptId || `RCP-${(txn.id || "").slice(-8).toUpperCase()}`;
 }
+
+// ─── Date/Time helpers ────────────────────────────────────────────────────────
 
 function parseSlotStart(timeSlot) {
     if (!timeSlot) return null;
@@ -268,6 +248,7 @@ function isBookingTimeReached(dateStr, timeSlot) {
     return new Date() >= deadline;
 }
 
+// ─── Overdue helpers ─────────────────────────────────────────────────────────
 function isDropOffOverdue(txn) {
     if (txn.status !== "pending" || !txn.dropOffBooked) return false;
     if (!txn.dropOffDate) return false;
@@ -286,6 +267,27 @@ function isCollectionOverdue(txn) {
     }
     if (!deadlineMs) return false;
     return Date.now() > deadlineMs;
+}
+
+// ─── Confirm Dialog ───────────────────────────────────────────────────────────
+function ConfirmDialog({ title, message, confirmLabel, confirmClass, onConfirm, onCancel }) {
+    return (
+        <div className={styles.dialogOverlay} onClick={onCancel}>
+            <div className={styles.dialogBox} onClick={e => e.stopPropagation()}>
+                <div className={styles.dialogIcon}>
+                    <i className="fa-solid fa-circle-question" />
+                </div>
+                <h3 className={styles.dialogTitle}>{title}</h3>
+                <p className={styles.dialogMessage}>{message}</p>
+                <div className={styles.dialogActions}>
+                    <button className={styles.dialogCancel} onClick={onCancel}>Cancel</button>
+                    <button className={`${styles.dialogConfirm} ${styles[confirmClass] || ""}`} onClick={onConfirm}>
+                        {confirmLabel}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
 }
 
 // ─── Navbar ───────────────────────────────────────────────────────────────────
@@ -316,6 +318,7 @@ function TransactionDetailPanel({ txn, onClose, onConfirmDropOff, onConfirmColle
 
     const allChecked = txn.checklist.every(c => c.done);
 
+    // ── Payment method helpers ────────────────────────────────
     const paymentConfig    = getPaymentConfig(txn);
     const isTrade          = (txn.type || "").toLowerCase() === "trade";
     const paymentMethod    = (txn.paymentMethod || txn.paymentType || "cash").toLowerCase();
@@ -324,55 +327,34 @@ function TransactionDetailPanel({ txn, onClose, onConfirmDropOff, onConfirmColle
     const isPartial        = !isTrade && (paymentMethod === "partial" || paymentMethod === "partial_online" || paymentMethod === "split" || paymentMethod === "partially online" || paymentMethod === "partially_online");
 
     const totalPrice       = txn.price ?? 0;
-const onlineAmountPaid = txn.onlineAmountPaid ?? 0;
+    const onlineAmountPaid = txn.onlineAmountPaid ?? 0;
+    const shortfall        = isTrade || isFullyOnline
+        ? 0
+        : isPartial
+            ? Math.max(0, totalPrice - onlineAmountPaid)
+            : (txn.cashShortfall > 0 ? txn.cashShortfall : totalPrice);
 
-// Calculate shortfall correctly for all payment types
-const shortfall = (() => {
-    // Trade transactions have no cash payment
-    if (isTrade) return 0;
-    // Fully online - no cash to collect
-    if (isFullyOnline) return 0;
-    // Partial payment - remaining cash after online payment
-    if (isPartial) return Math.max(0, totalPrice - onlineAmountPaid);
-    // Full cash / COD - use cashShortfall if set, otherwise total price
-    if (isFullyCash) {
-        // If cash already collected, shortfall is 0
-        if (txn.cashCollected === true) return 0;
-        // Use cashShortfall from transaction or fall back to total price
-        return (txn.cashShortfall !== undefined && txn.cashShortfall !== null && txn.cashShortfall > 0) 
-            ? txn.cashShortfall 
-            : totalPrice;
-    }
-    // Default fallback
-    return txn.cashShortfall > 0 ? txn.cashShortfall : totalPrice;
-})();
+    const hasShortfall = !isTrade && !isFullyOnline && (isFullyCash || isPartial);
 
-const hasShortfall = !isTrade && !isFullyOnline && (isFullyCash || isPartial);
+    const isAtCollection = txn.status === "awaiting_collection";
 
-// Check if cash has been collected (for cash/partial transactions)
-const isCashCollected = txn.cashCollected === true || txn.paymentStatus === "Fully Paid";
+    // ── FIX: cashConfirmed is now based on the dedicated cashCollectedAtCollection
+    // field, NOT paymentStatus. This ensures the button only disappears after staff
+    // physically confirms receiving cash at collection — not from any earlier Firestore write.
+    const [cashConfirmed, setCashConfirmed] = useState(
+        isFullyOnline || txn.cashCollectedAtCollection === true
+    );
 
-// For cash/COD transactions, only show paid when cash has been collected
-const isPaid = isFullyOnline || 
-              (txn.paymentStatus === "Fully Paid") || 
-              (isFullyCash && isCashCollected) ||
-              (isPartial && isCashCollected) ||
-              (!isFullyCash && !isPartial && shortfall === 0);
+    const [saving,        setSaving]        = useState(false);
+    const [alertSending,  setAlertSending]  = useState(false);
+    const [alertSent,     setAlertSent]     = useState(!!txn.overdueAlertSentAt);
+    const [dropOffLoading,    setDropOffLoading]    = useState(false);
+    const [collectionLoading, setCollectionLoading] = useState(false);
 
-const [cashConfirmed, setCashConfirmed] = useState(
-    isFullyOnline || isCashCollected
-);
-const [saving,        setSaving]        = useState(false);
-const [alertSending,  setAlertSending]  = useState(false);
-const [alertSent,     setAlertSent]     = useState(!!txn.overdueAlertSentAt);
-const [dropOffLoading,    setDropOffLoading]    = useState(false);
-const [collectionLoading, setCollectionLoading] = useState(false);
-
-    const canConfirmCash = !isFullyOnline && hasShortfall && !cashConfirmed;
+    const canConfirmCash = !isFullyOnline && hasShortfall && !cashConfirmed && isAtCollection;
     const canRelease     = allChecked;
 
     const waitingForDropOff    = txn.status === "pending" && !txn.dropOffBooked;
-    const waitingForCollection = txn.status === "awaiting_collection";
     const showConfirmDropOff   = txn.status === "pending" && txn.dropOffBooked;
     const showConfirmCollection = txn.status === "awaiting_collection";
 
@@ -397,14 +379,28 @@ const [collectionLoading, setCollectionLoading] = useState(false);
         return () => { document.body.style.overflow = ""; };
     }, []);
 
+    // ── FIX: handleConfirmCash now writes cashCollectedAtCollection: true
+    // as the source of truth, so a page reload correctly reflects cash was collected.
     async function handleConfirmCash() {
-        setCashConfirmed(true); setSaving(true);
+        setCashConfirmed(true);
+        setSaving(true);
         try {
             const cashAmount = shortfall > 0 ? shortfall : totalPrice;
-            await updateDoc(doc(db, "transactions", txn.id), { cashShortfall: 0, paymentStatus: "Fully Paid", cashConfirmedAt: serverTimestamp() });
+            await updateDoc(doc(db, "transactions", txn.id), {
+                cashCollectedAtCollection: true,
+                cashCollectedAt:           serverTimestamp(),
+                cashCollectedByStaff:      auth.currentUser?.uid || null,
+                paymentStatus:             "Fully Paid",
+                cashShortfall:             0,
+            });
             await recordCashCollected(txn.id, cashAmount);
-        } catch (err) { console.error(err); } finally { setSaving(false); }
+        } catch (err) {
+            console.error(err);
+        } finally {
+            setSaving(false);
+        }
     }
+
     async function handleAlertOverdue() {
         setAlertSending(true);
         try { await onAlertOverdue(txn, isOverdueDropOff ? "drop_off" : "collection"); setAlertSent(true); }
@@ -587,8 +583,14 @@ const [collectionLoading, setCollectionLoading] = useState(false);
                                                 <span className={styles.paidChip}><i className="fa-solid fa-circle-check" /> Paid Online</span>
                                             ) : cashConfirmed ? (
                                                 <span className={styles.paidChip}><i className="fa-solid fa-circle-check" /> Paid</span>
+                                            ) : isFullyCash ? (
+                                                isAtCollection
+                                                    ? <span className={styles.shortfallChip}><i className="fa-solid fa-coins" /> Collect R{totalPrice.toLocaleString()} cash</span>
+                                                    : <span className={styles.shortfallChip}><i className="fa-solid fa-clock" /> Cash due at collection</span>
                                             ) : hasShortfall ? (
-                                                <span className={styles.shortfallChip}><i className="fa-solid fa-triangle-exclamation" /> Cash owed: R{shortfall.toLocaleString()}</span>
+                                                isAtCollection
+                                                    ? <span className={styles.shortfallChip}><i className="fa-solid fa-triangle-exclamation" /> Cash owed: R{shortfall.toLocaleString()}</span>
+                                                    : <span className={styles.shortfallChip}><i className="fa-solid fa-clock" /> Cash due at collection</span>
                                             ) : (
                                                 <span className={styles.paidChip}><i className="fa-solid fa-circle-check" /> Paid</span>
                                             )}
@@ -615,7 +617,9 @@ const [collectionLoading, setCollectionLoading] = useState(false);
                                                     R{shortfall.toLocaleString()}
                                                     {cashConfirmed
                                                         ? <span className={styles.paidChip}><i className="fa-solid fa-circle-check" /> Received</span>
-                                                        : <span className={styles.shortfallChip}><i className="fa-solid fa-coins" /> Collect at pickup</span>
+                                                        : isAtCollection
+                                                            ? <span className={styles.shortfallChip}><i className="fa-solid fa-coins" /> Collect now</span>
+                                                            : <span className={styles.shortfallChip}><i className="fa-solid fa-clock" /> Collect at pickup</span>
                                                     }
                                                 </span>
                                             </div>
@@ -765,10 +769,10 @@ const [collectionLoading, setCollectionLoading] = useState(false);
                             <span>Drop-off booked by <strong>{txn.seller}</strong> for <strong>{txn.dropOffDate}</strong> at <strong>{txn.dropOffTimeSlot}</strong>. Confirm once item is received.</span>
                         </div>
                     )}
-                    {waitingForCollection && (
+                    {txn.status === "awaiting_collection" && (
                         <div className={styles.waitingBanner}>
                             <i className="fa-solid fa-clipboard-check" />
-                            <span>Item received at facility. Complete the <strong>inspection checklist</strong> below, then press <strong>Confirm Drop-Off</strong> to notify the buyer.</span>
+                            <span>Item is at the facility and ready for collection. Verify the buyer's receipt, collect payment if required, then confirm collection.</span>
                         </div>
                     )}
                     {txn.collectionBooked && txn.collectionDate && (
@@ -783,21 +787,49 @@ const [collectionLoading, setCollectionLoading] = useState(false);
                             <span>Awaiting item drop-off from seller. Click <strong>Confirm Drop-Off</strong> once you have physically received the item.</span>
                         </div>
                     )}
+
+                    {/* ── Payment info banners ── */}
                     {isFullyOnline && txn.type === "Purchase" && (
                         <div className={styles.cashConfirmedBanner}>
                             <i className="fa-solid fa-circle-check" />
                             <span>Full payment of <strong>R{totalPrice.toLocaleString()}</strong> confirmed online — no cash required.</span>
                         </div>
                     )}
-                    {isPartial && !cashConfirmed && (
-                        <div className={txn.status === "pending" ? styles.cashConfirmedBanner : styles.shortfallBanner}>
-                            <i className={`fa-solid ${txn.status === "pending" ? "fa-circle-check" : "fa-coins"}`} />
+
+                    {isFullyCash && !cashConfirmed && !isAtCollection && (
+                        <div className={styles.cashConfirmedBanner}>
+                            <i className="fa-solid fa-circle-check" />
+                            <span>Full payment of <strong>R{totalPrice.toLocaleString()} cash</strong> will be collected from buyer at collection. <strong>Nothing to collect at drop-off.</strong></span>
+                        </div>
+                    )}
+                    {isFullyCash && !cashConfirmed && isAtCollection && (
+                        <div className={styles.shortfallBanner}>
+                            <i className="fa-solid fa-coins" />
+                            <span>Collect full payment of <strong>R{totalPrice.toLocaleString()} cash</strong> from buyer before completing collection.</span>
+                        </div>
+                    )}
+                    {isFullyCash && cashConfirmed && (
+                        <div className={styles.cashConfirmedBanner}>
+                            <i className="fa-solid fa-circle-check" />
+                            <span>Cash of <strong>R{totalPrice.toLocaleString()}</strong> confirmed received.</span>
+                        </div>
+                    )}
+
+                    {isPartial && !cashConfirmed && !isAtCollection && (
+                        <div className={styles.cashConfirmedBanner}>
+                            <i className="fa-solid fa-circle-check" />
                             <span>
                                 R{onlineAmountPaid.toLocaleString()} paid online — <strong>confirmed</strong>.{" "}
-                                {txn.status === "pending"
-                                    ? <>Remaining <strong>R{shortfall.toLocaleString()} cash</strong> will be collected from buyer at collection.</>
-                                    : <>Collect remaining <strong>R{shortfall.toLocaleString()} cash</strong> from buyer before releasing.</>
-                                }
+                                Remaining <strong>R{shortfall.toLocaleString()} cash</strong> will be collected from buyer at collection.
+                            </span>
+                        </div>
+                    )}
+                    {isPartial && !cashConfirmed && isAtCollection && (
+                        <div className={styles.shortfallBanner}>
+                            <i className="fa-solid fa-coins" />
+                            <span>
+                                R{onlineAmountPaid.toLocaleString()} paid online — <strong>confirmed</strong>.{" "}
+                                Collect remaining <strong>R{shortfall.toLocaleString()} cash</strong> from buyer before releasing.
                             </span>
                         </div>
                     )}
@@ -805,23 +837,6 @@ const [collectionLoading, setCollectionLoading] = useState(false);
                         <div className={styles.cashConfirmedBanner}>
                             <i className="fa-solid fa-circle-check" />
                             <span>R{onlineAmountPaid.toLocaleString()} online + R{shortfall.toLocaleString()} cash — <strong>fully confirmed</strong>.</span>
-                        </div>
-                    )}
-                    {isFullyCash && !cashConfirmed && (
-                        <div className={txn.status === "pending" ? styles.cashConfirmedBanner : styles.shortfallBanner}>
-                            <i className={`fa-solid ${txn.status === "pending" ? "fa-circle-check" : "fa-coins"}`} />
-                            <span>
-                                {txn.status === "pending"
-                                    ? <>Full payment of <strong>R{totalPrice.toLocaleString()} cash</strong> will be confirmed by staff at collection.</>
-                                    : <>Collect full payment of <strong>R{totalPrice.toLocaleString()} cash</strong> from buyer before releasing.</>
-                                }
-                            </span>
-                        </div>
-                    )}
-                    {isFullyCash && cashConfirmed && (
-                        <div className={styles.cashConfirmedBanner}>
-                            <i className="fa-solid fa-circle-check" />
-                            <span>Cash of <strong>R{totalPrice.toLocaleString()}</strong> confirmed received.</span>
                         </div>
                     )}
 
@@ -834,7 +849,7 @@ const [collectionLoading, setCollectionLoading] = useState(false);
                                     <span>Complete <strong>all inspection steps</strong> before confirming drop-off.</span>
                                 </div>
                             )}
-                            {!dropOffTimeReached && (
+                            {!dropOffTimeReached && txn.status === "pending" && (
                                 <div className={styles.timeGateBanner}>
                                     <i className="fa-solid fa-lock" />
                                     <span>Inspection available from <strong>{txn.dropOffDate}</strong>{txn.dropOffTimeSlot && <> at <strong>{txn.dropOffTimeSlot}</strong></>}.</span>
@@ -844,12 +859,12 @@ const [collectionLoading, setCollectionLoading] = useState(false);
                                 {txn.checklist.map((step, i) => (
                                     <button
                                         key={i}
-                                        className={`${styles.checkItem} ${step.done ? styles.checkDone : styles.checkPending} ${!dropOffTimeReached ? styles.checkLocked : ""}`}
-                                        onClick={() => dropOffTimeReached && onMarkStep && onMarkStep(txn.id, i, txn._dropOffRole || "seller")}
-                                        disabled={step.done || !dropOffTimeReached}
-                                        title={!dropOffTimeReached ? `Locked until ${txn.dropOffDate}${txn.dropOffTimeSlot ? ` at ${txn.dropOffTimeSlot}` : ""}` : undefined}
+                                        className={`${styles.checkItem} ${step.done ? styles.checkDone : styles.checkPending} ${!dropOffTimeReached && txn.status === "pending" ? styles.checkLocked : ""}`}
+                                        onClick={() => (dropOffTimeReached || txn.status === "awaiting_collection") && onMarkStep && onMarkStep(txn.id, i, txn._dropOffRole || "seller")}
+                                        disabled={step.done || (!dropOffTimeReached && txn.status === "pending")}
+                                        title={(!dropOffTimeReached && txn.status === "pending") ? `Locked until ${txn.dropOffDate}${txn.dropOffTimeSlot ? ` at ${txn.dropOffTimeSlot}` : ""}` : undefined}
                                     >
-                                        <i className={`fa-solid ${!dropOffTimeReached ? "fa-lock" : step.done ? "fa-circle-check" : "fa-circle"}`} />
+                                        <i className={`fa-solid ${(!dropOffTimeReached && txn.status === "pending") ? "fa-lock" : step.done ? "fa-circle-check" : "fa-circle"}`} />
                                         {step.label}
                                     </button>
                                 ))}
@@ -930,12 +945,14 @@ const [collectionLoading, setCollectionLoading] = useState(false);
                                     </div>
                                 </div>
                             )}
+
                             <div style={{ marginBottom: 12, background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 10, overflow: "hidden" }}>
                                 <div style={{ padding: "8px 14px", background: "#f1f5f9", borderBottom: "1px solid #e2e8f0", fontSize: "0.72rem", fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.05em" }}>
                                     <i className="fa-solid fa-clipboard-check" style={{ marginRight: 6 }} />
                                     Collection Checklist
                                 </div>
 
+                                {/* Step 1 — Receipt verification */}
                                 <div style={{ padding: "10px 14px", borderBottom: "1px solid #f1f5f9", display: "flex", alignItems: "center", gap: 10 }}>
                                     <i className="fa-solid fa-circle-check" style={{ color: "#10b981", fontSize: "1rem", flexShrink: 0 }} />
                                     <div style={{ flex: 1 }}>
@@ -950,14 +967,15 @@ const [collectionLoading, setCollectionLoading] = useState(false);
                                     </div>
                                 </div>
 
-                                {!isFullyOnline && hasShortfall && (
+                                {/* Step 2 — Confirm payment (cash/partial only, AT COLLECTION STAGE ONLY) */}
+                                {!isFullyOnline && !isTrade && hasShortfall && (
                                     <div style={{ padding: "10px 14px", borderBottom: "1px solid #f1f5f9", display: "flex", alignItems: "center", gap: 10 }}>
                                         <i className={`fa-solid ${cashConfirmed ? "fa-circle-check" : "fa-circle"}`} style={{ color: cashConfirmed ? "#10b981" : "#cbd5e1", fontSize: "1rem", flexShrink: 0 }} />
                                         <div style={{ flex: 1 }}>
                                             <p style={{ margin: 0, fontSize: "0.8rem", fontWeight: 600, color: "#1e293b" }}>
                                                 {isPartial
                                                     ? `Collect R${shortfall.toLocaleString()} cash (R${onlineAmountPaid.toLocaleString()} paid online)`
-                                                    : `Collect full payment — R${shortfall.toLocaleString()} cash`
+                                                    : `Collect full payment — R${totalPrice.toLocaleString()} cash`
                                                 }
                                             </p>
                                             {cashConfirmed
@@ -978,6 +996,7 @@ const [collectionLoading, setCollectionLoading] = useState(false);
                                     </div>
                                 )}
 
+                                {/* Online payment confirmation row */}
                                 {isFullyOnline && (
                                     <div style={{ padding: "10px 14px", display: "flex", alignItems: "center", gap: 10 }}>
                                         <i className="fa-solid fa-circle-check" style={{ color: "#10b981", fontSize: "1rem", flexShrink: 0 }} />
@@ -987,18 +1006,35 @@ const [collectionLoading, setCollectionLoading] = useState(false);
                                         </div>
                                     </div>
                                 )}
+
+                                {/* Trade — no cash row needed */}
+                                {isTrade && (
+                                    <div style={{ padding: "10px 14px", display: "flex", alignItems: "center", gap: 10 }}>
+                                        <i className="fa-solid fa-circle-check" style={{ color: "#7c3aed", fontSize: "1rem", flexShrink: 0 }} />
+                                        <div>
+                                            <p style={{ margin: 0, fontSize: "0.8rem", fontWeight: 600, color: "#1e293b" }}>Trade — no cash payment</p>
+                                            <p style={{ margin: "2px 0 0", fontSize: "0.73rem", color: "#7c3aed" }}>Verify both items are present before releasing</p>
+                                        </div>
+                                    </div>
+                                )}
                             </div>
 
+                            {/* Collection Complete button */}
                             <button
                                 className={styles.confirmCollectionBtn}
                                 onClick={handleCollection}
-                                disabled={collectionLoading || (!isFullyOnline && !isTrade && hasShortfall && !cashConfirmed) || tradeCollectionBlocked}
+                                disabled={
+                                    collectionLoading ||
+                                    (!isFullyOnline && !isTrade && hasShortfall && !cashConfirmed) ||
+                                    tradeCollectionBlocked
+                                }
                                 style={((!isFullyOnline && !isTrade && hasShortfall && !cashConfirmed) || tradeCollectionBlocked) ? { opacity: 0.45, cursor: "not-allowed" } : undefined}
                             >
-                                <i className={`fa-solid ${collectionLoading ? "fa-spinner fa-spin" : tradeCollectionBlocked ? "fa-lock" : "fa-handshake"}`} />
+                                <i className={`fa-solid ${collectionLoading ? "fa-spinner fa-spin" : tradeCollectionBlocked ? "fa-lock" : (!isFullyOnline && !isTrade && hasShortfall && !cashConfirmed) ? "fa-coins" : "fa-handshake"}`} />
                                 {collectionLoading ? "Confirming…"
                                     : tradeCollectionBlocked ? "Awaiting Other Party's Drop-off"
-                                    : (!isFullyOnline && !isTrade && hasShortfall && !cashConfirmed) ? "Confirm Payment First"
+                                    : (!isFullyOnline && !isTrade && hasShortfall && !cashConfirmed)
+                                        ? isFullyCash ? "Collect Cash First" : "Confirm Payment First"
                                     : "Collection Complete"}
                             </button>
                         </>
@@ -1046,6 +1082,7 @@ function TransactionCard({ txn, onConfirmDropOff, onConfirmCollection, onRelease
     const paymentMethod    = (txn.paymentMethod || "cash").toLowerCase();
     const isFullyOnline    = paymentMethod === "online"  || paymentMethod === "fully_online"  || paymentMethod === "fully online";
     const isPartialCard    = paymentMethod === "partial" || paymentMethod === "partial_online" || paymentMethod === "split" || paymentMethod === "partially online" || paymentMethod === "partially_online";
+    const isFullyCashCard  = paymentMethod === "cash" || paymentMethod === "cod" || paymentMethod === "in_person" || paymentMethod === "in person";
 
     const totalPrice       = txn.price ?? 0;
     const onlineAmountPaid = txn.onlineAmountPaid ?? 0;
@@ -1055,13 +1092,9 @@ function TransactionCard({ txn, onConfirmDropOff, onConfirmCollection, onRelease
             ? Math.max(0, totalPrice - onlineAmountPaid)
             : (txn.cashShortfall ?? totalPrice);
 
-    const hasShortfall = shortfall > 0;
-    // For cash/COD transactions, only show paid when cash has been collected
-const isCashPayment = paymentMethod === "cash" || paymentMethod === "cod" || paymentMethod === "fully_cash";
-const isPaid = isFullyOnline || 
-              (txn.paymentStatus === "Fully Paid") || 
-              (isCashPayment && txn.cashCollected === true) ||
-              (!isCashPayment && shortfall === 0);
+    const isPaid = isFullyOnline || txn.cashCollectedAtCollection === true || (!isFullyCashCard && !isPartialCard && shortfall === 0);
+    const isAtCollection = txn.status === "awaiting_collection";
+
     return (
         <>
             <div
@@ -1158,50 +1191,41 @@ const isPaid = isFullyOnline ||
                         </div>
 
                         <div className={styles.txnMeta}>
-    {txn.type === "Purchase" ? (
-        <span className={styles.txnTag}>
-            Purchase · R{totalPrice?.toLocaleString()}
-            {(() => {
-                const isCashPaymentLocal = paymentMethod === "cash" || paymentMethod === "cod" || paymentMethod === "fully_cash";
-                const isCashCollected = txn.cashCollected === true || txn.paymentStatus === "Fully Paid";
-                
-                if (isFullyOnline) {
-                    return <span className={styles.paidChip}><i className="fa-solid fa-wifi" /> Online</span>;
-                }
-                if (isCashPaymentLocal && isCashCollected) {
-                    return <span className={styles.paidChip}><i className="fa-solid fa-circle-check" /> Cash Collected</span>;
-                }
-                if (isCashPaymentLocal && !isCashCollected && shortfall > 0) {
-                    return <span className={styles.shortfallChip}><i className="fa-solid fa-coins" /> R{shortfall.toLocaleString()} cash due at pickup</span>;
-                }
-                if (isPaid) {
-                    return <span className={styles.paidChip}><i className="fa-solid fa-circle-check" /> Paid</span>;
-                }
-                if (isPartialCard && shortfall > 0) {
-                    return <span className={styles.shortfallChip}><i className="fa-solid fa-coins" /> R{shortfall.toLocaleString()} cash due</span>;
-                }
-                if (shortfall > 0) {
-                    return <span className={styles.shortfallChip}><i className="fa-solid fa-coins" /> R{shortfall.toLocaleString()} payment pending</span>;
-                }
-                return <span className={styles.shortfallChip}><i className="fa-solid fa-triangle-exclamation" /> Payment pending</span>;
-            })()}
-        </span>
-    ) : (
-        <span className={styles.txnTag}>Trade · {txn.tradeFor || (txn.tradeItem?.name) || "—"}</span>
-    )}
-    {(txn.status === "awaiting_collection" || txn.status === "completed") && (
-        <span style={{
-            display: "inline-flex", alignItems: "center", gap: 4,
-            fontFamily: "monospace", fontWeight: 700, fontSize: "0.78rem",
-            letterSpacing: "0.06em", background: "#faf5ff",
-            border: "1.5px dashed #a78bfa", borderRadius: 6,
-            padding: "1px 8px", color: "#1e293b", marginLeft: 4,
-        }}>
-            <i className="fa-solid fa-receipt" style={{ color: "#7c3aed", fontSize: "0.72rem" }} />
-            {receiptRef}
-        </span>
-    )}
-</div>
+                            {txn.type === "Purchase" ? (
+                                <span className={styles.txnTag}>
+                                    Purchase · R{totalPrice?.toLocaleString()}
+                                    {isFullyOnline ? (
+                                        <span className={styles.paidChip}><i className="fa-solid fa-wifi" /> Online</span>
+                                    ) : txn.cashCollectedAtCollection ? (
+                                        <span className={styles.paidChip}><i className="fa-solid fa-circle-check" /> Paid</span>
+                                    ) : isFullyCashCard ? (
+                                        isAtCollection
+                                            ? <span className={styles.shortfallChip}><i className="fa-solid fa-coins" /> Collect R{totalPrice.toLocaleString()} cash</span>
+                                            : <span className={styles.shortfallChip}><i className="fa-solid fa-clock" /> Cash at collection</span>
+                                    ) : isPartialCard ? (
+                                        isAtCollection
+                                            ? <span className={styles.shortfallChip}><i className="fa-solid fa-coins" /> R{shortfall.toLocaleString()} cash due</span>
+                                            : <span className={styles.shortfallChip}><i className="fa-solid fa-clock" /> R{shortfall.toLocaleString()} cash at collection</span>
+                                    ) : (
+                                        <span className={styles.paidChip}><i className="fa-solid fa-circle-check" /> Paid</span>
+                                    )}
+                                </span>
+                            ) : (
+                                <span className={styles.txnTag}>Trade · {txn.tradeFor || (txn.tradeItem?.name) || "—"}</span>
+                            )}
+                            {(txn.status === "awaiting_collection" || txn.status === "completed") && (
+                                <span style={{
+                                    display: "inline-flex", alignItems: "center", gap: 4,
+                                    fontFamily: "monospace", fontWeight: 700, fontSize: "0.78rem",
+                                    letterSpacing: "0.06em", background: "#faf5ff",
+                                    border: "1.5px dashed #a78bfa", borderRadius: 6,
+                                    padding: "1px 8px", color: "#1e293b", marginLeft: 4,
+                                }}>
+                                    <i className="fa-solid fa-receipt" style={{ color: "#7c3aed", fontSize: "0.72rem" }} />
+                                    {receiptRef}
+                                </span>
+                            )}
+                        </div>
                     </div>
 
                     <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 5, flexShrink: 0 }}>
@@ -1252,57 +1276,13 @@ const isPaid = isFullyOnline ||
 }
 
 // ─── Time Slots View ──────────────────────────────────────────────────────────
-function TimeSlotsView({ transactions, facilityConfig }) {
-    const generateDynamicTimeSlots = () => {
-        const slots = [];
-        const [openHour, openMinute] = facilityConfig.openTime.split(':').map(Number);
-        const [closeHour, closeMinute] = facilityConfig.closeTime.split(':').map(Number);
-        
-        const startMinutes = openHour * 60 + openMinute;
-        const endMinutes = closeHour * 60 + closeMinute;
-        const slotDuration = 60 / facilityConfig.slotsPerHour;
-        
-        for (let time = startMinutes; time < endMinutes; time += slotDuration) {
-            const startHour = Math.floor(time / 60);
-            const startMin = Math.floor(time % 60);
-            const endTime = time + slotDuration;
-            const endHour = Math.floor(endTime / 60);
-            const endMin = Math.floor(endTime % 60);
-            
-            const startStr = `${startHour.toString().padStart(2, '0')}:${startMin.toString().padStart(2, '0')}`;
-            const endStr = `${endHour.toString().padStart(2, '0')}:${endMin.toString().padStart(2, '0')}`;
-            slots.push(`${startStr} – ${endStr}`);
-        }
-        
-        return slots;
-    };
-
-    const dynamicSlots = generateDynamicTimeSlots();
-    
+function TimeSlotsView({ transactions }) {
     const slots = {};
-    dynamicSlots.forEach(slot => {
-        slots[slot] = [];
-    });
-    
     transactions.forEach(t => {
-        if (t.timeSlot && slots[t.timeSlot]) {
-            slots[t.timeSlot].push(t);
-        } else if (t.timeSlot) {
-            if (!slots[t.timeSlot]) slots[t.timeSlot] = [];
-            slots[t.timeSlot].push(t);
-        }
+        if (!slots[t.timeSlot]) slots[t.timeSlot] = [];
+        slots[t.timeSlot].push(t);
     });
-    
     const sorted = Object.entries(slots).sort(([a], [b]) => a.localeCompare(b));
-
-    if (dynamicSlots.length === 0) {
-        return (
-            <div className={styles.emptyState}>
-                <i className="fa-solid fa-clock" />
-                <p>No time slots configured. Please ask an admin to set up facility hours.</p>
-            </div>
-        );
-    }
 
     return (
         <div className={styles.slotsGrid}>
@@ -1313,32 +1293,25 @@ function TimeSlotsView({ transactions, facilityConfig }) {
                         <span className={styles.slotTime}>{slot}</span>
                         <span className={styles.slotCount}>{txns.length} item{txns.length > 1 ? "s" : ""}</span>
                     </div>
-                    {txns.length === 0 ? (
-                        <div className={styles.slotEmpty}>
-                            <i className="fa-regular fa-calendar" />
-                            <span>No bookings</span>
-                        </div>
-                    ) : (
-                        txns.map(t => {
-                            const meta = STATUS_META[t.status] || STATUS_META.pending;
-                            const paymentConfig = getPaymentConfig(t);
-                            return (
-                                <div key={t.id} className={styles.slotItem}>
-                                    <div className={styles.slotItemLeft}>
-                                        <span className={styles.slotItemTitle}>{t.item}</span>
-                                        <span className={styles.slotItemParties}>{t.seller} → {t.buyer}</span>
-                                        <span className={styles.paymentBadgeSmall} style={{ background: paymentConfig.bg, color: paymentConfig.color, fontSize: "9px", padding: "1px 6px" }}>
-                                            <i className={`fa-solid ${paymentConfig.icon}`} />
-                                            {paymentConfig.label}
-                                        </span>
-                                    </div>
-                                    <span className={`${styles.statusBadge} ${styles[`status_${meta.cls}`]}`}>
-                                        {meta.label}
+                    {txns.map(t => {
+                        const meta = STATUS_META[t.status] || STATUS_META.pending;
+                        const paymentConfig = getPaymentConfig(t);
+                        return (
+                            <div key={t.id} className={styles.slotItem}>
+                                <div className={styles.slotItemLeft}>
+                                    <span className={styles.slotItemTitle}>{t.item}</span>
+                                    <span className={styles.slotItemParties}>{t.seller} → {t.buyer}</span>
+                                    <span className={styles.paymentBadgeSmall} style={{ background: paymentConfig.bg, color: paymentConfig.color, fontSize: "9px", padding: "1px 6px" }}>
+                                        <i className={`fa-solid ${paymentConfig.icon}`} />
+                                        {paymentConfig.label}
                                     </span>
                                 </div>
-                            );
-                        })
-                    )}
+                                <span className={`${styles.statusBadge} ${styles[`status_${meta.cls}`]}`}>
+                                    {meta.label}
+                                </span>
+                            </div>
+                        );
+                    })}
                 </div>
             ))}
         </div>
@@ -1346,7 +1319,7 @@ function TimeSlotsView({ transactions, facilityConfig }) {
 }
 
 // ─── Staff Profile Panel ──────────────────────────────────────────────────────
-function StaffProfilePanel({ staffName, staffEmail, staffInitials, staffPhoto, staffShift, onClose, onLogout, isLoggingOut }) {
+function StaffProfilePanel({ staffName, staffEmail, staffInitials, staffPhoto, onClose, onLogout, isLoggingOut }) {
     return (
         <div className={styles.profileOverlay} onClick={onClose}>
             <div className={styles.profilePanel} onClick={e => e.stopPropagation()}>
@@ -1395,9 +1368,7 @@ function StaffProfilePanel({ staffName, staffEmail, staffInitials, staffPhoto, s
                         <i className="fa-solid fa-clock" />
                         <div>
                             <span className={styles.profileInfoLbl}>Shift</span>
-                            <span className={styles.profileInfoVal}>
-                                {staffShift?.start || "08:00"} – {staffShift?.end || "16:00"} ({staffShift?.days || "Mon–Fri"})
-                            </span>
+                            <span className={styles.profileInfoVal}>08:00 – 16:00 (Mon–Fri)</span>
                         </div>
                     </div>
                 </div>
@@ -1438,92 +1409,8 @@ export default function StaffDashboard() {
     const [authReady, setAuthReady]       = useState(false);
     const [loadingTxns, setLoadingTxns]   = useState(true);
     const [lastFetched, setLastFetched]   = useState(null);
-    const [facilityConfig, setFacilityConfig] = useState({
-        openTime: "09:00",
-        closeTime: "16:00",
-        slotsPerHour: 1,
-    });
-    const [staffShift, setStaffShift] = useState({
-        start: "09:00",
-        end: "16:00",
-        days: "Mon–Fri"
-    });
-    const [configLoading, setConfigLoading] = useState(true);
-    const [confirmModal, setConfirmModal] = useState({ 
-        open: false, 
-        title: '', 
-        message: '', 
-        onConfirm: null,
-        confirmText: 'Yes, Cancel',
-        type: 'warning'
-    });
     const sellerCacheRef  = useRef({});
     const listingCacheRef = useRef({});
-
-    // Show confirmation modal helper
-    const showConfirmModal = (title, message, onConfirm, confirmText = 'Yes, Cancel') => {
-        setConfirmModal({
-            open: true,
-            title,
-            message,
-            onConfirm: () => {
-                onConfirm();
-                setConfirmModal(prev => ({ ...prev, open: false }));
-            },
-            confirmText,
-            type: 'warning'
-        });
-    };
-
-    // Real-time facility config listener
-    useEffect(() => {
-        const facilityConfigRef = doc(db, "facilityConfig", "default");
-        
-        const loadInitialConfig = async () => {
-            try {
-                const snap = await getDoc(facilityConfigRef);
-                if (snap.exists()) {
-                    const data = snap.data();
-                    setFacilityConfig({
-                        openTime: data.openTime ?? "09:00",
-                        closeTime: data.closeTime ?? "16:00",
-                        slotsPerHour: data.slotsPerHour ?? 1,
-                    });
-                    setStaffShift({
-                        start: data.openTime ?? "09:00",
-                        end: data.closeTime ?? "16:00",
-                        days: "Mon–Fri"
-                    });
-                }
-            } catch (err) {
-                console.error("Failed to load facility config:", err);
-            } finally {
-                setConfigLoading(false);
-            }
-        };
-        
-        loadInitialConfig();
-        
-        const unsub = onSnapshot(facilityConfigRef, (doc) => {
-            if (doc.exists()) {
-                const data = doc.data();
-                setFacilityConfig({
-                    openTime: data.openTime ?? "09:00",
-                    closeTime: data.closeTime ?? "16:00",
-                    slotsPerHour: data.slotsPerHour ?? 1,
-                });
-                setStaffShift({
-                    start: data.openTime ?? "09:00",
-                    end: data.closeTime ?? "16:00",
-                    days: "Mon–Fri"
-                });
-            }
-        }, (error) => {
-            console.error("Error listening to facility config:", error);
-        });
-        
-        return () => unsub();
-    }, []);
 
     useEffect(() => {
         const unsub = onAuthStateChanged(auth, async (user) => {
@@ -1548,6 +1435,76 @@ export default function StaffDashboard() {
         });
         return () => unsub();
     }, []);
+
+    // ── Shared transaction mapper ─────────────────────────────────────────────
+    // cashCollectedAtCollection is now mapped from Firestore so the panel
+    // can correctly initialise cashConfirmed without relying on paymentStatus.
+    function mapTransaction(id, data) {
+        return {
+            id,
+            item: (typeof data.listingTitle === "object" && data.listingTitle !== null)
+                ? (data.listingTitle.name || data.listingTitle.title || "Item")
+                : (data.listingTitle || "Item"),
+            itemImage:     listingCacheRef.current[data.listingId] ?? data.itemImage ?? null,
+            seller:        sellerCacheRef.current[data.sellerId] || data.sellerName || "Seller",
+            sellerId:      data.sellerId,
+            buyer:         data.buyerName || "Buyer",
+            buyerId:       data.buyerId,
+            listingId:     data.listingId    || null,
+            listingTitle:  data.listingTitle || "Item",
+            type:          data.type === "sale" || data.type === "Purchase" ? "Purchase" : "Trade",
+            price:         data.agreedPrice  || data.price || 0,
+            cashShortfall: data.cashShortfall ?? 0,
+            paymentStatus: data.paymentStatus || (data.cashShortfall > 0 ? "Partially Paid" : "Fully Paid"),
+            paymentMethod: data.paymentMethod || data.paymentType || "cash",
+            paymentType:   data.paymentType || data.paymentMethod || "unknown",
+            // ── FIX: dedicated field for cash collected at collection ──
+            cashCollectedAtCollection: data.cashCollectedAtCollection || false,
+            tradeItem: (typeof data.tradeItemDetails === "object" && data.tradeItemDetails !== null)
+                ? data.tradeItemDetails
+                : (typeof data.tradeItem === "object" && data.tradeItem !== null)
+                ? data.tradeItem
+                : null,
+            tradeFor: (typeof data.tradeItemDetails === "object" && data.tradeItemDetails !== null)
+                ? (data.tradeItemDetails.name || data.tradeItemDetails.title || null)
+                : (typeof data.tradeItem === "object" && data.tradeItem !== null)
+                ? (data.tradeItem.name || data.tradeItem.title || null)
+                : (data.tradeItem || null),
+            buyerDropOffDate:     data.buyerDropOffDate     || null,
+            buyerDropOffTimeSlot: data.buyerDropOffTimeSlot || null,
+            buyerBookingId:       data.buyerBookingId       || null,
+            timeSlot:      data.dropOffTimeSlot || data.timeSlot || "TBD",
+            status: (data.status === "accepted" || data.status === "waiting")
+                ? "pending"
+                : (data.status === "pending_payment")
+                ? "pending_payment"
+                : (data.status || "pending"),
+            campus:            data.campus || "Main Campus",
+            dropOffBooked:     !!(data.bookingId || data.dropOffStatus === "scheduled"),
+            dropOffDate:       data.dropOffDate     || null,
+            dropOffTimeSlot:   data.dropOffTimeSlot || null,
+            collectionBooked:  !!(data.collectionBookingId || data.collectionStatus === "scheduled"),
+            collectionDate:    data.collectionDate     || null,
+            collectionTimeSlot: data.collectionTimeSlot || null,
+            receiptId:         data.receiptId || null,
+            overdueAlertSentAt: data.overdueAlertSentAt || null,
+            droppedOffAt: data.droppedOffAt?.toDate ? data.droppedOffAt.toDate().toISOString() : data.droppedOffAt || null,
+            collectionDeadline: data.collectionDeadline?.toDate ? data.collectionDeadline.toDate().toISOString() : data.collectionDeadline || null,
+            onlineAmountPaid: data.onlineAmount ?? data.onlineAmountPaid ?? data.depositAmount ?? 0,
+            sellerDropOffConfirmed: data.sellerDropOffConfirmed || false,
+            buyerDropOffConfirmed:  data.buyerDropOffConfirmed  || false,
+            buyerCollectionConfirmed:  data.buyerCollectionConfirmed  || false,
+            sellerCollectionConfirmed: data.sellerCollectionConfirmed || false,
+            checklist: data.checklist
+                ? data.checklist.filter(c => c.label !== "Confirmed Payment")
+                : [
+                    { label: "Confirmed Drop-off", done: data.sellerDropOffConfirmed || data.dropOffConfirmed || false },
+                    { label: "Inspected Item",     done: data.itemInspected    || false },
+                ],
+            buyerChecklist: data.buyerChecklist || null,
+            date: data.createdAt?.toDate ? data.createdAt.toDate() : new Date(),
+        };
+    }
 
     useEffect(() => {
         const q = query(
@@ -1591,69 +1548,7 @@ export default function StaffDashboard() {
                     }
                 });
 
-                const live = base.map(({ _ref: id, _data: data }) => ({
-                    id,
-                    item: (typeof (data.listingTitle) === "object" && data.listingTitle !== null)
-                        ? (data.listingTitle.name || data.listingTitle.title || "Item")
-                        : (data.listingTitle || "Item"),
-                    itemImage: listingCacheRef.current[data.listingId] ?? data.itemImage ?? null,
-                    seller: sellerCacheRef.current[data.sellerId] || data.sellerName || "Seller",
-                    sellerId: data.sellerId,
-                    buyer: data.buyerName || "Buyer",
-                    buyerId: data.buyerId,
-                    listingId: data.listingId || null,
-                    listingTitle: data.listingTitle || "Item",
-                    type: data.type === "sale" || data.type === "Purchase" ? "Purchase" : "Trade",
-                    price: data.agreedPrice || data.price || 0,
-                    cashShortfall: data.cashShortfall ?? 0,
-                    paymentStatus: data.paymentStatus || (data.cashShortfall > 0 ? "Partially Paid" : "Fully Paid"),
-                    paymentMethod: data.paymentMethod || data.paymentType || "cash",
-                    paymentType: data.paymentType || data.paymentMethod || "unknown",
-                    tradeItem: (typeof data.tradeItemDetails === "object" && data.tradeItemDetails !== null)
-                        ? data.tradeItemDetails
-                        : (typeof data.tradeItem === "object" && data.tradeItem !== null)
-                        ? data.tradeItem
-                        : null,
-                    tradeFor: (typeof data.tradeItemDetails === "object" && data.tradeItemDetails !== null)
-                        ? (data.tradeItemDetails.name || data.tradeItemDetails.title || null)
-                        : (typeof data.tradeItem === "object" && data.tradeItem !== null)
-                        ? (data.tradeItem.name || data.tradeItem.title || null)
-                        : (data.tradeItem || null),
-                    buyerDropOffDate: data.buyerDropOffDate || null,
-                    buyerDropOffTimeSlot: data.buyerDropOffTimeSlot || null,
-                    buyerBookingId: data.buyerBookingId || null,
-                    timeSlot: data.dropOffTimeSlot || data.timeSlot || "TBD",
-                    status: (data.status === "accepted" || data.status === "waiting")
-                        ? "pending"
-                        : (data.status === "pending_payment")
-                        ? "pending_payment"
-                        : (data.status || "pending"),
-                    campus: data.campus || "Main Campus",
-                    dropOffBooked: !!(data.bookingId || data.dropOffStatus === "scheduled"),
-                    dropOffDate: data.dropOffDate || null,
-                    dropOffTimeSlot: data.dropOffTimeSlot || null,
-                    collectionBooked: !!(data.collectionBookingId || data.collectionStatus === "scheduled"),
-                    collectionDate: data.collectionDate || null,
-                    collectionTimeSlot: data.collectionTimeSlot || null,
-                    receiptId: data.receiptId || null,
-                    overdueAlertSentAt: data.overdueAlertSentAt || null,
-                    droppedOffAt: data.droppedOffAt?.toDate ? data.droppedOffAt.toDate().toISOString() : data.droppedOffAt || null,
-                    collectionDeadline: data.collectionDeadline?.toDate ? data.collectionDeadline.toDate().toISOString() : data.collectionDeadline || null,
-                    onlineAmountPaid: data.onlineAmount ?? data.onlineAmountPaid ?? data.depositAmount ?? 0,
-                    sellerDropOffConfirmed: data.sellerDropOffConfirmed || false,
-                    buyerDropOffConfirmed: data.buyerDropOffConfirmed || false,
-                    buyerCollectionConfirmed: data.buyerCollectionConfirmed || false,
-                    sellerCollectionConfirmed: data.sellerCollectionConfirmed || false,
-                    checklist: data.checklist
-                        ? data.checklist.filter(c => c.label !== "Confirmed Payment")
-                        : [
-                            { label: "Confirmed Drop-off", done: data.sellerDropOffConfirmed || data.dropOffConfirmed || false },
-                            { label: "Inspected Item", done: data.itemInspected || false },
-                        ],
-                    buyerChecklist: data.buyerChecklist || null,
-                    date: data.createdAt?.toDate ? data.createdAt.toDate() : new Date(),
-                }));
-
+                const live = base.map(({ _ref: id, _data: data }) => mapTransaction(id, data));
                 setTransactions(live);
                 setLastFetched(new Date());
             } catch (err) {
@@ -1664,6 +1559,7 @@ export default function StaffDashboard() {
         });
 
         return () => unsub();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     const fetchTransactions = useCallback(async () => {
@@ -1679,11 +1575,11 @@ export default function StaffDashboard() {
             const snapshot = await getDocs(q);
             const base = snapshot.docs.map(d => ({ _ref: d.id, _data: d.data() }));
 
-            const sellerIds = [...new Set(base.map(b => b._data.sellerId).filter(Boolean))];
+            const sellerIds  = [...new Set(base.map(b => b._data.sellerId).filter(Boolean))];
             const listingIds = [...new Set(base.map(b => b._data.listingId).filter(Boolean))];
 
             const [sellerSnaps, listingSnaps] = await Promise.all([
-                Promise.all(sellerIds.map(id => getDoc(doc(db, "users", id)))),
+                Promise.all(sellerIds.map(id  => getDoc(doc(db, "users",    id)))),
                 Promise.all(listingIds.map(id => getDoc(doc(db, "listings", id)))),
             ]);
 
@@ -1703,69 +1599,7 @@ export default function StaffDashboard() {
                 }
             });
 
-            const live = base.map(({ _ref: id, _data: data }) => ({
-                id,
-                item: (typeof data.listingTitle === "object" && data.listingTitle !== null)
-                    ? (data.listingTitle.name || data.listingTitle.title || "Item")
-                    : (data.listingTitle || "Item"),
-                itemImage: listingCacheRef.current[data.listingId] ?? data.itemImage ?? null,
-                seller: sellerCacheRef.current[data.sellerId] || data.sellerName || "Seller",
-                sellerId: data.sellerId,
-                buyer: data.buyerName || "Buyer",
-                buyerId: data.buyerId,
-                listingId: data.listingId || null,
-                listingTitle: data.listingTitle || "Item",
-                type: data.type === "sale" || data.type === "Purchase" ? "Purchase" : "Trade",
-                price: data.agreedPrice || data.price || 0,
-                cashShortfall: data.cashShortfall ?? 0,
-                paymentStatus: data.paymentStatus || (data.cashShortfall > 0 ? "Partially Paid" : "Fully Paid"),
-                paymentMethod: data.paymentMethod || data.paymentType || "cash",
-                paymentType: data.paymentType || data.paymentMethod || "unknown",
-                tradeItem: (typeof data.tradeItemDetails === "object" && data.tradeItemDetails !== null)
-                    ? data.tradeItemDetails
-                    : (typeof data.tradeItem === "object" && data.tradeItem !== null)
-                    ? data.tradeItem
-                    : null,
-                tradeFor: (typeof data.tradeItemDetails === "object" && data.tradeItemDetails !== null)
-                    ? (data.tradeItemDetails.name || data.tradeItemDetails.title || null)
-                    : (typeof data.tradeItem === "object" && data.tradeItem !== null)
-                    ? (data.tradeItem.name || data.tradeItem.title || null)
-                    : (data.tradeItem || null),
-                buyerDropOffDate: data.buyerDropOffDate || null,
-                buyerDropOffTimeSlot: data.buyerDropOffTimeSlot || null,
-                buyerBookingId: data.buyerBookingId || null,
-                timeSlot: data.dropOffTimeSlot || data.timeSlot || "TBD",
-                status: (data.status === "accepted" || data.status === "waiting")
-                    ? "pending"
-                    : (data.status === "pending_payment")
-                    ? "pending_payment"
-                    : (data.status || "pending"),
-                campus: data.campus || "Main Campus",
-                dropOffBooked: !!(data.bookingId || data.dropOffStatus === "scheduled"),
-                dropOffDate: data.dropOffDate || null,
-                dropOffTimeSlot: data.dropOffTimeSlot || null,
-                collectionBooked: !!(data.collectionBookingId || data.collectionStatus === "scheduled"),
-                collectionDate: data.collectionDate || null,
-                collectionTimeSlot: data.collectionTimeSlot || null,
-                receiptId: data.receiptId || null,
-                overdueAlertSentAt: data.overdueAlertSentAt || null,
-                droppedOffAt: data.droppedOffAt?.toDate ? data.droppedOffAt.toDate().toISOString() : data.droppedOffAt || null,
-                collectionDeadline: data.collectionDeadline?.toDate ? data.collectionDeadline.toDate().toISOString() : data.collectionDeadline || null,
-                onlineAmountPaid: data.onlineAmount ?? data.onlineAmountPaid ?? data.depositAmount ?? 0,
-                sellerDropOffConfirmed: data.sellerDropOffConfirmed || false,
-                buyerDropOffConfirmed: data.buyerDropOffConfirmed || false,
-                buyerCollectionConfirmed: data.buyerCollectionConfirmed || false,
-                sellerCollectionConfirmed: data.sellerCollectionConfirmed || false,
-                checklist: data.checklist
-                    ? data.checklist.filter(c => c.label !== "Confirmed Payment")
-                    : [
-                        { label: "Confirmed Drop-off", done: data.sellerDropOffConfirmed || data.dropOffConfirmed || false },
-                        { label: "Inspected Item", done: data.itemInspected || false },
-                    ],
-                buyerChecklist: data.buyerChecklist || null,
-                date: data.createdAt?.toDate ? data.createdAt.toDate() : new Date(),
-            }));
-
+            const live = base.map(({ _ref: id, _data: data }) => mapTransaction(id, data));
             setTransactions(live);
             setLastFetched(new Date());
         } catch (err) {
@@ -1773,15 +1607,14 @@ export default function StaffDashboard() {
         } finally {
             setLoadingTxns(false);
         }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     const handleAlertOverdue = async (txn, type) => {
-        if (txn.overdueAlertSentAt) return;
-        
         try {
             await updateDoc(doc(db, "transactions", txn.id), {
                 overdueAlertSentAt: serverTimestamp(),
-                overdueAlertType: type,
+                overdueAlertType:   type,
             });
             if (type === "drop_off") {
                 await notifyOverdueDropOff(txn);
@@ -1796,18 +1629,18 @@ export default function StaffDashboard() {
     const handleCancelOverdue = async (txn, overdueType) => {
         try {
             await updateDoc(doc(db, "transactions", txn.id), {
-                status: "overdue_cancelled",
-                cancelledAt: serverTimestamp(),
-                cancelReason: overdueType === "drop_off" ? "seller_no_dropoff" : "buyer_no_collection",
-                cancelledByStaff: true,
+                status:            "overdue_cancelled",
+                cancelledAt:       serverTimestamp(),
+                cancelReason:      overdueType === "drop_off" ? "seller_no_dropoff" : "buyer_no_collection",
+                cancelledByStaff:  true,
             });
 
             if (txn.listingId) {
                 await updateDoc(doc(db, "listings", txn.listingId), {
-                    status: "cancelled",
-                    cancelReason: overdueType === "drop_off" ? "seller_no_dropoff" : "buyer_no_collection",
-                    cancelledAt: serverTimestamp(),
-                    cancelledByStaff: true,
+                    status:              "cancelled",
+                    cancelReason:        overdueType === "drop_off" ? "seller_no_dropoff" : "buyer_no_collection",
+                    cancelledAt:         serverTimestamp(),
+                    cancelledByStaff:    true,
                     pendingSellerAction: true,
                 });
             }
@@ -1826,39 +1659,34 @@ export default function StaffDashboard() {
         }
     };
 
+    // ─── Auto-send overdue alerts ─────────────────────────────────────────────
     useEffect(() => {
         if (transactions.length === 0) return;
-        
         async function autoAlert() {
             for (const txn of transactions) {
-                if (txn.status === "overdue_cancelled") continue;
                 if (txn.overdueAlertSentAt) continue;
-                
-                const overdueDropOff = isDropOffOverdue(txn);
+                if (txn.status === "overdue_cancelled") continue;
+                const overdueDropOff    = isDropOffOverdue(txn);
                 const overdueCollection = isCollectionOverdue(txn);
-                
                 if (!overdueDropOff && !overdueCollection) continue;
-                
                 try {
                     await handleAlertOverdue(txn, overdueDropOff ? "drop_off" : "collection");
                     setTransactions(prev => prev.map(t =>
                         t.id === txn.id ? { ...t, overdueAlertSentAt: new Date().toISOString() } : t
                     ));
-                } catch (err) { 
-                    console.error("Auto-alert failed:", txn.id, err); 
-                }
+                } catch (err) { console.error("Auto-alert failed:", txn.id, err); }
             }
         }
-        
         autoAlert();
         const interval = setInterval(autoAlert, 60_000);
         return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [transactions]);
 
     function getCancelCountdown(txn) {
-        const CANCEL_DELAY_MS = 24 * 60 * 60 * 1000;
+        const CANCEL_DELAY_MS = 2 * 60 * 1000;
         if (!txn.overdueAlertSentAt) return null;
-        const alertMs = new Date(txn.overdueAlertSentAt).getTime();
+        const alertMs  = new Date(txn.overdueAlertSentAt).getTime();
         const cancelAt = alertMs + CANCEL_DELAY_MS;
         const remaining = cancelAt - Date.now();
         if (remaining <= 0) return "Cancelling now…";
@@ -1909,9 +1737,7 @@ export default function StaffDashboard() {
                 localStorage.removeItem("userData");
                 await signOut(auth);
                 navigate("/login");
-            } catch { 
-                showConfirmModal("Logout Error", "Failed to logout. Please try again.", () => {}, "OK");
-            }
+            } catch { alert("Failed to logout."); }
             finally { setIsLoggingOut(false); }
         }, 1800);
     };
@@ -1921,12 +1747,12 @@ export default function StaffDashboard() {
         if (!txn) return;
 
         const isTrade = (txn.type || "").toLowerCase() === "trade";
-        const confirmingBuyer = role === "buyer";
+        const confirmingBuyer  = role === "buyer";
         const confirmingSeller = !confirmingBuyer;
 
         const sellerNowDone = confirmingSeller || txn.sellerDropOffConfirmed;
-        const buyerNowDone = confirmingBuyer || txn.buyerDropOffConfirmed || !isTrade;
-        const bothDone = sellerNowDone && buyerNowDone;
+        const buyerNowDone  = confirmingBuyer  || txn.buyerDropOffConfirmed || !isTrade;
+        const bothDone      = sellerNowDone && buyerNowDone;
 
         setTransactions(prev =>
             prev.map(t => {
@@ -1934,8 +1760,8 @@ export default function StaffDashboard() {
                 return {
                     ...t,
                     sellerDropOffConfirmed: confirmingSeller ? true : t.sellerDropOffConfirmed,
-                    buyerDropOffConfirmed: confirmingBuyer ? true : t.buyerDropOffConfirmed,
-                    status: bothDone ? "awaiting_collection" : t.status,
+                    buyerDropOffConfirmed:  confirmingBuyer  ? true : t.buyerDropOffConfirmed,
+                    status:    bothDone ? "awaiting_collection" : t.status,
                     checklist: bothDone ? t.checklist.map(s => ({ ...s, done: true })) : t.checklist,
                 };
             })
@@ -1943,21 +1769,21 @@ export default function StaffDashboard() {
 
         try {
             const firestoreUpdate = confirmingBuyer ? {
-                buyerDropOffConfirmed: true,
+                buyerDropOffConfirmed:   true,
                 buyerDropOffConfirmedAt: serverTimestamp(),
                 buyerDropOffConfirmedBy: auth.currentUser?.uid || null,
             } : {
-                sellerDropOffConfirmed: true,
+                sellerDropOffConfirmed:   true,
                 sellerDropOffConfirmedAt: serverTimestamp(),
                 sellerDropOffConfirmedBy: auth.currentUser?.uid || null,
-                dropOffConfirmed: true,
-                dropOffConfirmedAt: serverTimestamp(),
-                droppedOffAt: serverTimestamp(),
+                dropOffConfirmed:         true,
+                dropOffConfirmedAt:       serverTimestamp(),
+                droppedOffAt:             serverTimestamp(),
             };
 
             if (bothDone) {
-                firestoreUpdate.status = "awaiting_collection";
-                firestoreUpdate.releasedAt = serverTimestamp();
+                firestoreUpdate.status         = "awaiting_collection";
+                firestoreUpdate.releasedAt     = serverTimestamp();
                 firestoreUpdate.releasedByStaff = true;
             }
 
@@ -1978,19 +1804,19 @@ export default function StaffDashboard() {
         const isTrade = (txn.type || "").toLowerCase() === "trade";
 
         if (isTrade && collectionRole) {
-            const confirmingBuyer = collectionRole === "buyer";
+            const confirmingBuyer  = collectionRole === "buyer";
             const confirmingSeller = collectionRole === "seller";
 
-            const buyerNowCollected = confirmingBuyer || !!txn.buyerCollectionConfirmed;
+            const buyerNowCollected  = confirmingBuyer  || !!txn.buyerCollectionConfirmed;
             const sellerNowCollected = confirmingSeller || !!txn.sellerCollectionConfirmed;
-            const bothCollected = buyerNowCollected && sellerNowCollected;
+            const bothCollected      = buyerNowCollected && sellerNowCollected;
 
             setTransactions(prev =>
                 prev.map(t => {
                     if (t.id !== id) return t;
                     return {
                         ...t,
-                        buyerCollectionConfirmed: confirmingBuyer ? true : t.buyerCollectionConfirmed,
+                        buyerCollectionConfirmed:  confirmingBuyer  ? true : t.buyerCollectionConfirmed,
                         sellerCollectionConfirmed: confirmingSeller ? true : t.sellerCollectionConfirmed,
                         status: bothCollected ? "completed" : t.status,
                     };
@@ -1999,20 +1825,20 @@ export default function StaffDashboard() {
 
             try {
                 const firestoreUpdate = confirmingBuyer ? {
-                    buyerCollectionConfirmed: true,
+                    buyerCollectionConfirmed:   true,
                     buyerCollectionConfirmedAt: serverTimestamp(),
                     buyerCollectionConfirmedBy: auth.currentUser?.uid || null,
                 } : {
-                    sellerCollectionConfirmed: true,
+                    sellerCollectionConfirmed:   true,
                     sellerCollectionConfirmedAt: serverTimestamp(),
                     sellerCollectionConfirmedBy: auth.currentUser?.uid || null,
                 };
 
                 if (bothCollected) {
-                    firestoreUpdate.status = "completed";
-                    firestoreUpdate.collectionConfirmed = true;
+                    firestoreUpdate.status                = "completed";
+                    firestoreUpdate.collectionConfirmed   = true;
                     firestoreUpdate.collectionConfirmedAt = serverTimestamp();
-                    firestoreUpdate.releasedByStaff = true;
+                    firestoreUpdate.releasedByStaff       = true;
                 }
 
                 await updateDoc(doc(db, "transactions", id), firestoreUpdate);
@@ -2039,14 +1865,14 @@ export default function StaffDashboard() {
 
         try {
             await updateDoc(doc(db, "transactions", id), {
-                status: "completed",
-                paymentStatus: "Fully Paid",
-                cashShortfall: 0,
-                collectionConfirmed: true,
+                status:                "completed",
+                paymentStatus:         "Fully Paid",
+                cashShortfall:         0,
+                collectionConfirmed:   true,
                 collectionConfirmedAt: serverTimestamp(),
                 collectionConfirmedBy: auth.currentUser?.uid || null,
-                releasedAt: serverTimestamp(),
-                releasedByStaff: true,
+                releasedAt:            serverTimestamp(),
+                releasedByStaff:       true,
             });
             await notifyBothParties(txn, "collection");
         } catch (err) {
@@ -2063,8 +1889,8 @@ export default function StaffDashboard() {
 
         try {
             await updateDoc(doc(db, "transactions", id), {
-                status: "awaiting_collection",
-                releasedAt: serverTimestamp(),
+                status:          "awaiting_collection",
+                releasedAt:      serverTimestamp(),
                 releasedByStaff: true,
             });
             if (txn) await notifyBothParties(txn, "ready_to_collect");
@@ -2081,7 +1907,7 @@ export default function StaffDashboard() {
             if (isBuyerRole) {
                 const current = t.buyerChecklist || [
                     { label: "Confirmed Drop-off", done: t.buyerDropOffConfirmed || false },
-                    { label: "Inspected Item", done: t.buyerDropOffConfirmed || false },
+                    { label: "Inspected Item",     done: t.buyerDropOffConfirmed || false },
                 ];
                 const updated = current.map((s, i) => i === stepIdx ? { ...s, done: true } : s);
                 return { ...t, buyerChecklist: updated };
@@ -2097,7 +1923,7 @@ export default function StaffDashboard() {
             if (isBuyerRole) {
                 const current = txn.buyerChecklist || [
                     { label: "Confirmed Drop-off", done: txn.buyerDropOffConfirmed || false },
-                    { label: "Inspected Item", done: txn.buyerDropOffConfirmed || false },
+                    { label: "Inspected Item",     done: txn.buyerDropOffConfirmed || false },
                 ];
                 const updated = current.map((s, i) => i === stepIdx ? { ...s, done: true } : s);
                 await updateDoc(doc(db, "transactions", txnId), { buyerChecklist: updated });
@@ -2116,10 +1942,11 @@ export default function StaffDashboard() {
         (t.dropOffDate === today && t.dropOffBooked) ||
         (t.collectionDate === today && t.collectionBooked);
 
-    const awaitingColl = transactions.filter(t => t.status === "awaiting_collection");
-    const completed = transactions.filter(t => t.status === "completed");
+    const todayTxns      = transactions.filter(t => isDueToday(t));
+    const awaitingColl   = transactions.filter(t => t.status === "awaiting_collection");
+    const completed      = transactions.filter(t => t.status === "completed");
     const pendingDropOff = transactions.filter(t => t.status === "pending");
-    const overdueCount = transactions.filter(t => isDropOffOverdue(t) || isCollectionOverdue(t)).length;
+    const overdueCount   = transactions.filter(t => isDropOffOverdue(t) || isCollectionOverdue(t)).length;
 
     const timeSlotToMinutes = (slot) => {
         if (!slot || slot === "TBD") return Infinity;
@@ -2131,9 +1958,9 @@ export default function StaffDashboard() {
     const visibleTxns = transactions
         .filter(t => {
             const matchSearch = !search ||
-                t.item.toLowerCase().includes(search.toLowerCase()) ||
+                t.item.toLowerCase().includes(search.toLowerCase())   ||
                 t.seller.toLowerCase().includes(search.toLowerCase()) ||
-                t.buyer.toLowerCase().includes(search.toLowerCase()) ||
+                t.buyer.toLowerCase().includes(search.toLowerCase())  ||
                 getReceiptRef(t).toLowerCase().includes(search.toLowerCase());
             const matchCampus = campus === "All Campuses" || t.campus === campus;
             const isOvDrop = isDropOffOverdue(t);
@@ -2144,9 +1971,9 @@ export default function StaffDashboard() {
             }
             if (activeTab === "collections") {
                 const matchColl = !collectionSearch ||
-                    t.item.toLowerCase().includes(collectionSearch.toLowerCase()) ||
-                    t.seller.toLowerCase().includes(collectionSearch.toLowerCase()) ||
-                    t.buyer.toLowerCase().includes(collectionSearch.toLowerCase()) ||
+                    t.item.toLowerCase().includes(collectionSearch.toLowerCase())     ||
+                    t.seller.toLowerCase().includes(collectionSearch.toLowerCase())   ||
+                    t.buyer.toLowerCase().includes(collectionSearch.toLowerCase())    ||
                     (t.receiptId && t.receiptId.toLowerCase().includes(collectionSearch.toLowerCase()));
                 return matchColl && matchCampus && t.status === "awaiting_collection" && !isOvColl;
             }
@@ -2155,9 +1982,9 @@ export default function StaffDashboard() {
                 if (overdueSubTab === "collections") return matchSearch && matchCampus && isOvColl && t.status !== "overdue_cancelled";
                 return false;
             }
-            if (activeTab === "history") return matchSearch && matchCampus && t.status === "completed";
+            if (activeTab === "history")    return matchSearch && matchCampus && t.status === "completed";
             if (activeTab === "time_slots") return matchSearch && matchCampus && t.status !== "completed";
-            if (activeTab === "all") return matchSearch && matchCampus && t.status !== "completed";
+            if (activeTab === "all")        return matchSearch && matchCampus && t.status !== "completed";
             return matchSearch && matchCampus && t.status !== "completed";
         })
         .sort((a, b) => {
@@ -2189,23 +2016,23 @@ export default function StaffDashboard() {
                 result.push({
                     ...t,
                     _dropOffRole: "buyer",
-                    item: t.tradeItem.name || t.tradeItem.title || "Trade Item",
+                    item:      t.tradeItem.name || t.tradeItem.title || "Trade Item",
                     itemImage: t.tradeItem.imageUrl || null,
-                    dropOffDate: t.buyerDropOffDate || t.dropOffDate,
+                    dropOffDate:     t.buyerDropOffDate     || t.dropOffDate,
                     dropOffTimeSlot: t.buyerDropOffTimeSlot || t.dropOffTimeSlot,
-                    timeSlot: t.buyerDropOffTimeSlot || t.dropOffTimeSlot || "TBD",
-                    dropOffBooked: !!(t.buyerDropOffDate || t.dropOffBooked),
+                    timeSlot:        t.buyerDropOffTimeSlot || t.dropOffTimeSlot || "TBD",
+                    dropOffBooked:   !!(t.buyerDropOffDate || t.dropOffBooked),
                     seller: t.buyer,
-                    buyer: t.seller,
+                    buyer:  t.seller,
                     checklist: t.buyerChecklist || [
                         { label: "Confirmed Drop-off", done: t.buyerDropOffConfirmed },
-                        { label: "Inspected Item", done: t.buyerDropOffConfirmed },
+                        { label: "Inspected Item",     done: t.buyerDropOffConfirmed },
                     ],
                     status: "pending",
-                    _originalItem: t.item,
+                    _originalItem:      t.item,
                     _originalItemImage: t.itemImage,
-                    _originalSeller: t.seller,
-                    _originalBuyer: t.buyer,
+                    _originalSeller:    t.seller,
+                    _originalBuyer:     t.buyer,
                 });
             }
         }
@@ -2224,24 +2051,24 @@ export default function StaffDashboard() {
                 result.push({
                     ...t,
                     _collectionRole: "seller",
-                    item: t.tradeItem?.name || t.tradeItem?.title || "Trade Item",
+                    item:      t.tradeItem?.name || t.tradeItem?.title || "Trade Item",
                     itemImage: t.tradeItem?.imageUrl || null,
                     seller: t.buyer,
-                    buyer: t.seller,
-                    _originalItem: t.item,
+                    buyer:  t.seller,
+                    _originalItem:      t.item,
                     _originalItemImage: t.itemImage,
-                    _originalSeller: t.seller,
-                    _originalBuyer: t.buyer,
+                    _originalSeller:    t.seller,
+                    _originalBuyer:     t.buyer,
                 });
             }
             if (!t.buyerCollectionConfirmed) {
                 result.push({
                     ...t,
                     _collectionRole: "buyer",
-                    _originalItem: t.item,
+                    _originalItem:      t.item,
                     _originalItemImage: t.itemImage,
-                    _originalSeller: t.seller,
-                    _originalBuyer: t.buyer,
+                    _originalSeller:    t.seller,
+                    _originalBuyer:     t.buyer,
                 });
             }
         }
@@ -2255,10 +2082,10 @@ export default function StaffDashboard() {
             : visibleTxns;
 
     const STATS = [
-        { label: "Pending Drop-off", value: pendingDropOff.length, icon: "fa-truck-arrow-right", color: "#f59e0b" },
-        { label: "Awaiting Collection", value: awaitingColl.length, icon: "fa-person-walking", color: "#8b5cf6" },
-        { label: "Overdue", value: overdueCount, icon: "fa-circle-exclamation", color: "#ef4444", onClick: () => setActiveTab("overdue") },
-        { label: "Completed", value: completed.length, icon: "fa-circle-check", color: "#10b981" },
+        { label: "Pending Drop-off",    value: pendingDropOff.length, icon: "fa-truck-arrow-right",  color: "#f59e0b" },
+        { label: "Awaiting Collection", value: awaitingColl.length,   icon: "fa-person-walking",     color: "#8b5cf6" },
+        { label: "Overdue",             value: overdueCount,          icon: "fa-circle-exclamation", color: "#ef4444", onClick: () => setActiveTab("overdue") },
+        { label: "Completed",           value: completed.length,      icon: "fa-circle-check",       color: "#10b981" },
     ];
 
     return (
@@ -2271,420 +2098,408 @@ export default function StaffDashboard() {
                     <p style={{ fontSize: "1rem", fontWeight: 500, margin: 0 }}>Loading Staff Dashboard…</p>
                 </div>
             ) : (
-                <main className={styles.main}>
-                    <div className={styles.pageTitle}>
-                        <div className={styles.pageTitleLeft}>
-                            <h1>Staff Dashboard</h1>
-                            <p>Manage item handling, bookings &amp; transaction control</p>
+            <main className={styles.main}>
+                <div className={styles.pageTitle}>
+                    <div className={styles.pageTitleLeft}>
+                        <h1>Staff Dashboard</h1>
+                        <p>Manage item handling, bookings &amp; transaction control</p>
+                    </div>
+                    <button className={styles.profileBtn} onClick={() => setShowProfile(true)}>
+                        <div className={styles.profileBtnAvatar}>
+                            {staffUser.photoURL
+                                ? <img src={staffUser.photoURL} alt={staffUser.name} />
+                                : <span>{staffUser.initials}</span>
+                            }
                         </div>
-                        <button className={styles.profileBtn} onClick={() => setShowProfile(true)}>
-                            <div className={styles.profileBtnAvatar}>
-                                {staffUser.photoURL
-                                    ? <img src={staffUser.photoURL} alt={staffUser.name} />
-                                    : <span>{staffUser.initials}</span>
-                                }
+                        <div className={styles.profileBtnInfo}>
+                            <span className={styles.profileBtnName}>{staffUser.name}</span>
+                            <span className={styles.profileBtnRole}>
+                                <i className="fa-solid fa-shield-halved" /> Staff Member
+                            </span>
+                        </div>
+                        <i className="fa-solid fa-chevron-right" style={{ color: "#bbb", fontSize: "0.75rem" }} />
+                    </button>
+                </div>
+
+                <div className={styles.statsRow}>
+                    {STATS.map(s => (
+                        <div
+                            key={s.label}
+                            className={styles.statCard}
+                            onClick={s.onClick}
+                            style={s.onClick ? { cursor: "pointer" } : undefined}
+                        >
+                            <div className={styles.statIconWrap} style={{ background: `${s.color}18`, color: s.color }}>
+                                <i className={`fa-solid ${s.icon}`} />
                             </div>
-                            <div className={styles.profileBtnInfo}>
-                                <span className={styles.profileBtnName}>{staffUser.name}</span>
-                                <span className={styles.profileBtnRole}>
-                                    <i className="fa-solid fa-shield-halved" /> Staff Member
-                                </span>
+                            <div className={styles.statInfo}>
+                                <span className={styles.statValue}>{s.value}</span>
+                                <span className={styles.statLabel}>{s.label}</span>
                             </div>
-                            <i className="fa-solid fa-chevron-right" style={{ color: "#bbb", fontSize: "0.75rem" }} />
+                        </div>
+                    ))}
+                </div>
+
+                <div className={styles.controlRow}>
+                    <div className={styles.searchWrap}>
+                        <i className="fa-solid fa-magnifying-glass" />
+                        <input
+                            className={styles.searchInput}
+                            type="text"
+                            placeholder="Search by item, buyer, seller or receipt ID..."
+                            value={search}
+                            onChange={e => setSearch(e.target.value)}
+                        />
+                    </div>
+                    <button
+                        className={styles.refreshBtn}
+                        onClick={fetchTransactions}
+                        disabled={loadingTxns}
+                        title="Refresh transactions"
+                    >
+                        <i className={`fa-solid fa-rotate-right ${loadingTxns ? "fa-spin" : ""}`} />
+                        {lastFetched && (
+                            <span className={styles.refreshTime}>
+                                {lastFetched.toLocaleTimeString("en-ZA", { hour: "2-digit", minute: "2-digit" })}
+                            </span>
+                        )}
+                    </button>
+                </div>
+
+                <div className={styles.tabs}>
+                    {TABS.map(tab => (
+                        <button
+                            key={tab.key}
+                            className={`${styles.tab} ${activeTab === tab.key ? styles.tabActive : ""} ${tab.key === "overdue" && overdueCount > 0 ? styles.tabOverdue : ""}`}
+                            onClick={() => setActiveTab(tab.key)}
+                        >
+                            <i className={`fa-solid ${tab.icon}`} />
+                            {tab.label}
+                            {tab.key === "drop_offs" && transactions.filter(t => t.status === "pending" && !isDropOffOverdue(t)).length > 0 && (
+                                <span className={styles.tabDot} />
+                            )}
+                            {tab.key === "collections" && transactions.filter(t => t.status === "awaiting_collection" && !isCollectionOverdue(t)).length > 0 && (
+                                <span className={styles.tabDot} />
+                            )}
+                            {tab.key === "overdue" && overdueCount > 0 && (
+                                <span className={styles.tabDot}/>
+                            )}
                         </button>
-                    </div>
+                    ))}
+                </div>
 
-                    <div className={styles.statsRow}>
-                        {STATS.map(s => (
-                            <div
-                                key={s.label}
-                                className={styles.statCard}
-                                onClick={s.onClick}
-                                style={s.onClick ? { cursor: "pointer" } : undefined}
-                            >
-                                <div className={styles.statIconWrap} style={{ background: `${s.color}18`, color: s.color }}>
-                                    <i className={`fa-solid ${s.icon}`} />
-                                </div>
-                                <div className={styles.statInfo}>
-                                    <span className={styles.statValue}>{s.value}</span>
-                                    <span className={styles.statLabel}>{s.label}</span>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-
-                    <div className={styles.controlRow}>
+                {activeTab === "collections" && (
+                    <div className={styles.controlRow} style={{ marginTop: 0 }}>
                         <div className={styles.searchWrap}>
                             <i className="fa-solid fa-magnifying-glass" />
                             <input
                                 className={styles.searchInput}
                                 type="text"
                                 placeholder="Search by item, buyer, seller or receipt ID..."
-                                value={search}
-                                onChange={e => setSearch(e.target.value)}
+                                value={collectionSearch}
+                                onChange={e => setCollectionSearch(e.target.value)}
+                                autoFocus
                             />
-                        </div>
-                        <button
-                            className={styles.refreshBtn}
-                            onClick={fetchTransactions}
-                            disabled={loadingTxns}
-                            title="Refresh transactions"
-                        >
-                            <i className={`fa-solid fa-rotate-right ${loadingTxns ? "fa-spin" : ""}`} />
-                            {lastFetched && (
-                                <span className={styles.refreshTime}>
-                                    {lastFetched.toLocaleTimeString("en-ZA", { hour: "2-digit", minute: "2-digit" })}
-                                </span>
-                            )}
-                        </button>
-                    </div>
-
-                    <div className={styles.tabs}>
-                        {TABS.map(tab => (
-                            <button
-                                key={tab.key}
-                                className={`${styles.tab} ${activeTab === tab.key ? styles.tabActive : ""} ${tab.key === "overdue" && overdueCount > 0 ? styles.tabOverdue : ""}`}
-                                onClick={() => setActiveTab(tab.key)}
-                            >
-                                <i className={`fa-solid ${tab.icon}`} />
-                                {tab.label}
-                                {tab.key === "drop_offs" && transactions.filter(t => t.status === "pending" && !isDropOffOverdue(t)).length > 0 && (
-                                    <span className={styles.tabDot} />
-                                )}
-                                {tab.key === "collections" && transactions.filter(t => t.status === "awaiting_collection" && !isCollectionOverdue(t)).length > 0 && (
-                                    <span className={styles.tabDot} />
-                                )}
-                                {tab.key === "overdue" && overdueCount > 0 && (
-                                    <span className={styles.tabDot} />
-                                )}
-                            </button>
-                        ))}
-                    </div>
-
-                    {activeTab === "collections" && (
-                        <div className={styles.controlRow} style={{ marginTop: 0 }}>
-                            <div className={styles.searchWrap}>
-                                <i className="fa-solid fa-magnifying-glass" />
-                                <input
-                                    className={styles.searchInput}
-                                    type="text"
-                                    placeholder="Search by item, buyer, seller or receipt ID..."
-                                    value={collectionSearch}
-                                    onChange={e => setCollectionSearch(e.target.value)}
-                                    autoFocus
-                                />
-                                {collectionSearch && (
-                                    <button
-                                        onClick={() => setCollectionSearch("")}
-                                        style={{ background: "none", border: "none", cursor: "pointer", color: "#94a3b8", padding: "0 4px" }}
-                                        title="Clear search"
-                                    >
-                                        <i className="fa-solid fa-xmark" />
-                                    </button>
-                                )}
-                            </div>
-                        </div>
-                    )}
-
-                    {activeTab === "overdue" ? (() => {
-                        const overdueDropOffs = transactions.filter(t => isDropOffOverdue(t) && t.status !== "overdue_cancelled");
-                        const overdueCollects = transactions.filter(t => isCollectionOverdue(t) && t.status !== "overdue_cancelled");
-                        const subList = overdueSubTab === "drop_offs" ? overdueDropOffs : overdueCollects;
-                        const allSelected = subList.length > 0 && subList.every(t => selectedOverdue.has(t.id));
-                        const someSelected = subList.some(t => selectedOverdue.has(t.id));
-                        const selectedTxns = subList.filter(t => selectedOverdue.has(t.id));
-                        const allAlerted = selectedTxns.length > 0 && selectedTxns.every(t => !!t.overdueAlertSentAt);
-                        const noneAlerted = selectedTxns.every(t => !t.overdueAlertSentAt);
-
-                        function toggleAll() {
-                            if (allSelected) {
-                                setSelectedOverdue(prev => {
-                                    const next = new Set(prev);
-                                    subList.forEach(t => next.delete(t.id));
-                                    return next;
-                                });
-                            } else {
-                                setSelectedOverdue(prev => {
-                                    const next = new Set(prev);
-                                    subList.forEach(t => next.add(t.id));
-                                    return next;
-                                });
-                            }
-                        }
-
-                        function toggleOne(id) {
-                            setSelectedOverdue(prev => {
-                                const next = new Set(prev);
-                                next.has(id) ? next.delete(id) : next.add(id);
-                                return next;
-                            });
-                        }
-
-                        return (
-                            <div>
-                                <div style={{ display: "flex", gap: 8, margin: "12px 0 0" }}>
-                                    {[
-                                        { key: "drop_offs", label: "Overdue Drop-offs", count: overdueDropOffs.length },
-                                        { key: "collections", label: "Overdue Collections", count: overdueCollects.length },
-                                    ].map(st => (
-                                        <button
-                                            key={st.key}
-                                            onClick={() => { setOverdueSubTab(st.key); setSelectedOverdue(new Set()); }}
-                                            style={{
-                                                display: "flex", alignItems: "center", gap: 8,
-                                                padding: "8px 18px", borderRadius: 10, border: "none", cursor: "pointer",
-                                                fontWeight: 700, fontSize: "0.85rem",
-                                                background: overdueSubTab === st.key ? "#fef2f2" : "#f8fafc",
-                                                color: overdueSubTab === st.key ? "#dc2626" : "#64748b",
-                                                borderBottom: overdueSubTab === st.key ? "2px solid #dc2626" : "2px solid transparent",
-                                            }}
-                                        >
-                                            {st.label}
-                                            {st.count > 0 && (
-                                                <span style={{ background: "#dc2626", color: "#fff", borderRadius: 99, fontSize: "0.72rem", fontWeight: 800, padding: "1px 7px", minWidth: 20, textAlign: "center" }}>
-                                                    {st.count}
-                                                </span>
-                                            )}
-                                        </button>
-                                    ))}
-                                </div>
-
-                                {subList.length === 0 ? (
-                                    <div className={styles.emptyState} style={{ marginTop: 24 }}>
-                                        <i className="fa-solid fa-circle-check" style={{ color: "#10b981" }} />
-                                        <p>No overdue {overdueSubTab === "drop_offs" ? "drop-offs" : "collections"}</p>
-                                    </div>
-                                ) : (
-                                    <>
-                                        <div style={{
-                                            display: "flex", alignItems: "center", gap: 10,
-                                            margin: "12px 0 8px", padding: "10px 14px",
-                                            background: "#fff", border: "1px solid #e2e8f0",
-                                            borderRadius: 10,
-                                        }}>
-                                            <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", userSelect: "none", fontWeight: 600, fontSize: "0.85rem", color: "#374151" }}>
-                                                <input
-                                                    type="checkbox"
-                                                    checked={allSelected}
-                                                    ref={el => { if (el) el.indeterminate = someSelected && !allSelected; }}
-                                                    onChange={toggleAll}
-                                                    style={{ width: 16, height: 16, accentColor: "#dc2626", cursor: "pointer" }}
-                                                />
-                                                {allSelected ? "Deselect all" : `Select all (${subList.length})`}
-                                            </label>
-
-                                            {someSelected && (
-                                                <>
-                                                    <span style={{ color: "#cbd5e1", fontSize: "1.1rem" }}>|</span>
-                                                    <span style={{ fontSize: "0.82rem", color: "#64748b" }}>{selectedTxns.length} selected</span>
-
-                                                    {!allAlerted && (
-                                                        <button
-                                                            onClick={() => handleBulkAlert(selectedTxns.filter(t => !t.overdueAlertSentAt))}
-                                                            disabled={bulkActioning}
-                                                            style={{
-                                                                marginLeft: "auto", display: "flex", alignItems: "center", gap: 6,
-                                                                padding: "7px 16px", borderRadius: 8, border: "none", cursor: "pointer",
-                                                                background: "#f59e0b", color: "#fff", fontWeight: 700, fontSize: "0.82rem",
-                                                                opacity: bulkActioning ? 0.6 : 1,
-                                                            }}
-                                                        >
-                                                            <i className={`fa-solid ${bulkActioning ? "fa-spinner fa-spin" : "fa-bell"}`} />
-                                                            Send Alert{selectedTxns.filter(t => !t.overdueAlertSentAt).length > 1 ? "s" : ""}
-                                                        </button>
-                                                    )}
-
-                                                    {allAlerted && (
-                                                        <button
-                                                            onClick={() => {
-                                                                showConfirmModal(
-                                                                    'Cancel Transactions',
-                                                                    `Are you sure you want to cancel ${selectedTxns.length} transaction${selectedTxns.length > 1 ? 's' : ''}? This action cannot be undone.`,
-                                                                    () => handleBulkCancel(selectedTxns),
-                                                                    `Yes, Cancel ${selectedTxns.length}`
-                                                                );
-                                                            }}
-                                                            disabled={bulkActioning}
-                                                            style={{
-                                                                marginLeft: "auto", display: "flex", alignItems: "center", gap: 6,
-                                                                padding: "7px 16px", borderRadius: 8,
-                                                                border: "1.5px solid #dc2626", cursor: "pointer",
-                                                                background: "#fff", color: "#dc2626", fontWeight: 700, fontSize: "0.82rem",
-                                                                opacity: bulkActioning ? 0.6 : 1,
-                                                            }}
-                                                        >
-                                                            <i className={`fa-solid ${bulkActioning ? "fa-spinner fa-spin" : "fa-ban"}`} />
-                                                            Cancel Transaction{selectedTxns.length > 1 ? "s" : ""}
-                                                        </button>
-                                                    )}
-
-                                                    {!allAlerted && !noneAlerted && (
-                                                        <button
-                                                            onClick={() => {
-                                                                const count = selectedTxns.filter(t => t.overdueAlertSentAt).length;
-                                                                showConfirmModal(
-                                                                    'Cancel Alerted Transactions',
-                                                                    `Are you sure you want to cancel ${count} alerted transaction${count > 1 ? 's' : ''}? This action cannot be undone.`,
-                                                                    () => handleBulkCancel(selectedTxns.filter(t => t.overdueAlertSentAt)),
-                                                                    `Yes, Cancel ${count}`
-                                                                );
-                                                            }}
-                                                            disabled={bulkActioning}
-                                                            style={{
-                                                                display: "flex", alignItems: "center", gap: 6,
-                                                                padding: "7px 16px", borderRadius: 8,
-                                                                border: "1.5px solid #dc2626", cursor: "pointer",
-                                                                background: "#fff", color: "#dc2626", fontWeight: 700, fontSize: "0.82rem",
-                                                                opacity: bulkActioning ? 0.6 : 1,
-                                                            }}
-                                                        >
-                                                            <i className={`fa-solid ${bulkActioning ? "fa-spinner fa-spin" : "fa-ban"}`} />
-                                                            Cancel Alerted ({selectedTxns.filter(t => t.overdueAlertSentAt).length})
-                                                        </button>
-                                                    )}
-                                                </>
-                                            )}
-                                        </div>
-
-                                        <div className={styles.txnList}>
-                                            {subList.map(txn => {
-                                                const alertSent = !!txn.overdueAlertSentAt;
-                                                const countdown = getCancelCountdown(txn);
-                                                const isSelected = selectedOverdue.has(txn.id);
-                                                const payConfig = getPaymentConfig(txn);
-
-                                                return (
-                                                    <div
-                                                        key={txn.id}
-                                                        style={{
-                                                            display: "flex", alignItems: "center", gap: 12,
-                                                            padding: "12px 14px",
-                                                            background: isSelected ? "#fff5f5" : "#fff",
-                                                            border: `1.5px solid ${isSelected ? "#fca5a5" : "#fee2e2"}`,
-                                                            borderRadius: 12, marginBottom: 8,
-                                                            transition: "background 0.15s",
-                                                        }}
-                                                    >
-                                                        <input
-                                                            type="checkbox"
-                                                            checked={isSelected}
-                                                            onChange={() => toggleOne(txn.id)}
-                                                            style={{ width: 16, height: 16, accentColor: "#dc2626", cursor: "pointer", flexShrink: 0 }}
-                                                        />
-
-                                                        <div style={{ width: 44, height: 44, borderRadius: 8, overflow: "hidden", flexShrink: 0, background: "#f1f5f9", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                                                            {txn.itemImage
-                                                                ? <img src={txn.itemImage} alt={txn.item} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                                                                : <i className="fa-solid fa-box-open" style={{ color: "#94a3b8" }} />
-                                                            }
-                                                        </div>
-
-                                                        <div style={{ flex: 1, minWidth: 0 }}>
-                                                            <p style={{ margin: 0, fontWeight: 700, fontSize: "0.88rem", color: "#1e293b", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                                                                {txn.item}
-                                                            </p>
-                                                            <p style={{ margin: "2px 0 0", fontSize: "0.78rem", color: "#64748b" }}>
-                                                                {txn.seller} → {txn.buyer}
-                                                            </p>
-                                                            {txn.dropOffDate && (
-                                                                <p style={{ margin: "2px 0 0", fontSize: "0.75rem", color: "#dc2626", fontWeight: 600 }}>
-                                                                    <i className="fa-solid fa-calendar-xmark" style={{ marginRight: 4 }} />
-                                                                    Due: {txn.dropOffDate}{txn.dropOffTimeSlot ? ` · ${txn.dropOffTimeSlot}` : ""}
-                                                                </p>
-                                                            )}
-                                                        </div>
-
-                                                        <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 5, flexShrink: 0 }}>
-                                                            <span style={{ padding: "2px 8px", background: payConfig.bg, color: payConfig.color, borderRadius: 99, fontSize: "0.72rem", fontWeight: 700 }}>
-                                                                <i className={`fa-solid ${payConfig.icon}`} style={{ marginRight: 3 }} />{payConfig.label}
-                                                            </span>
-                                                            {alertSent ? (
-                                                                <>
-                                                                    <span style={{ padding: "2px 9px", background: "#dcfce7", color: "#16a34a", borderRadius: 99, fontSize: "0.72rem", fontWeight: 700 }}>
-                                                                        <i className="fa-solid fa-bell" style={{ marginRight: 3 }} />Alert Sent
-                                                                    </span>
-                                                                    {countdown && (
-                                                                        <span style={{ padding: "2px 9px", background: "#fef2f2", color: "#dc2626", borderRadius: 99, fontSize: "0.72rem", fontWeight: 700 }}>
-                                                                            <i className="fa-solid fa-clock" style={{ marginRight: 3 }} />{countdown}
-                                                                        </span>
-                                                                    )}
-                                                                </>
-                                                            ) : (
-                                                                <span style={{ padding: "2px 9px", background: "#fef3c7", color: "#92400e", borderRadius: 99, fontSize: "0.72rem", fontWeight: 700 }}>
-                                                                    <i className="fa-solid fa-triangle-exclamation" style={{ marginRight: 3 }} />Alert Pending
-                                                                </span>
-                                                            )}
-                                                        </div>
-
-                                                        <div style={{ display: "flex", flexDirection: "column", gap: 5, flexShrink: 0 }}>
-                                                            {!alertSent && (
-                                                                <button
-                                                                    onClick={() => handleBulkAlert([txn])}
-                                                                    disabled={bulkActioning}
-                                                                    style={{ padding: "5px 12px", background: "#f59e0b", color: "#fff", border: "none", borderRadius: 7, fontSize: "0.75rem", fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}
-                                                                >
-                                                                    <i className="fa-solid fa-bell" style={{ marginRight: 4 }} />Send Alert
-                                                                </button>
-                                                            )}
-                                                            {alertSent && (
-                                                                <button
-                                                                    onClick={() => {
-                                                                        showConfirmModal(
-                                                                            'Cancel Transaction',
-                                                                            `Are you sure you want to cancel the transaction for "${txn.item}"? This action cannot be undone.`,
-                                                                            () => handleBulkCancel([txn]),
-                                                                            'Yes, Cancel'
-                                                                        );
-                                                                    }}
-                                                                    disabled={bulkActioning}
-                                                                    style={{ padding: "5px 12px", background: "#fff", color: "#dc2626", border: "1.5px solid #dc2626", borderRadius: 7, fontSize: "0.75rem", fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}
-                                                                >
-                                                                    <i className="fa-solid fa-ban" style={{ marginRight: 4 }} />Cancel Txn
-                                                                </button>
-                                                            )}
-                                                        </div>
-                                                    </div>
-                                                );
-                                            })}
-                                        </div>
-                                    </>
-                                )}
-                            </div>
-                        );
-                    })() : activeTab === "time_slots" ? (
-                        <TimeSlotsView transactions={visibleTxns} facilityConfig={facilityConfig} />
-                    ) : displayTxns.length === 0 ? (
-                        <div className={styles.emptyState}>
-                            <i className="fa-solid fa-box-open" />
-                            <p>No transactions found</p>
-                            {search && (
-                                <button className={styles.clearBtn} onClick={() => setSearch("")}>
-                                    Clear search
+                            {collectionSearch && (
+                                <button
+                                    onClick={() => setCollectionSearch("")}
+                                    style={{ background: "none", border: "none", cursor: "pointer", color: "#94a3b8", padding: "0 4px" }}
+                                    title="Clear search"
+                                >
+                                    <i className="fa-solid fa-xmark" />
                                 </button>
                             )}
                         </div>
-                    ) : (
-                        <div className={styles.txnList}>
-                            {displayTxns.map(txn => (
-                                <TransactionCard
-                                    key={
-                                        txn._dropOffRole === "buyer" ? `${txn.id}_buyer_dropoff`
-                                            : txn._collectionRole === "seller" ? `${txn.id}_seller_collection`
-                                                : txn._collectionRole === "buyer" ? `${txn.id}_buyer_collection`
-                                                    : txn.id
-                                    }
-                                    txn={txn}
-                                    onConfirmDropOff={handleConfirmDropOff}
-                                    onConfirmCollection={handleConfirmCollection}
-                                    onRelease={handleRelease}
-                                    onMarkStep={handleMarkStep}
-                                    onAlertOverdue={handleAlertOverdue}
-                                    onCancelOverdue={handleCancelOverdue}
-                                />
-                            ))}
+                    </div>
+                )}
+
+                {/* ── Overdue Tab ── */}
+                {activeTab === "overdue" ? (() => {
+                    const overdueDropOffs  = transactions.filter(t => isDropOffOverdue(t)    && t.status !== "overdue_cancelled");
+                    const overdueCollects  = transactions.filter(t => isCollectionOverdue(t) && t.status !== "overdue_cancelled");
+                    const subList = overdueSubTab === "drop_offs" ? overdueDropOffs : overdueCollects;
+                    const allSelected = subList.length > 0 && subList.every(t => selectedOverdue.has(t.id));
+                    const someSelected = subList.some(t => selectedOverdue.has(t.id));
+                    const selectedTxns = subList.filter(t => selectedOverdue.has(t.id));
+                    const allAlerted   = selectedTxns.length > 0 && selectedTxns.every(t => !!t.overdueAlertSentAt);
+                    const noneAlerted  = selectedTxns.every(t => !t.overdueAlertSentAt);
+
+                    function toggleAll() {
+                        if (allSelected) {
+                            setSelectedOverdue(prev => {
+                                const next = new Set(prev);
+                                subList.forEach(t => next.delete(t.id));
+                                return next;
+                            });
+                        } else {
+                            setSelectedOverdue(prev => {
+                                const next = new Set(prev);
+                                subList.forEach(t => next.add(t.id));
+                                return next;
+                            });
+                        }
+                    }
+
+                    function toggleOne(id) {
+                        setSelectedOverdue(prev => {
+                            const next = new Set(prev);
+                            next.has(id) ? next.delete(id) : next.add(id);
+                            return next;
+                        });
+                    }
+
+                    return (
+                        <div>
+                            <div style={{ display: "flex", gap: 8, margin: "12px 0 0" }}>
+                                {[
+                                    { key: "drop_offs",   label: "Overdue Drop-offs",   count: overdueDropOffs.length  },
+                                    { key: "collections", label: "Overdue Collections", count: overdueCollects.length  },
+                                ].map(st => (
+                                    <button
+                                        key={st.key}
+                                        onClick={() => { setOverdueSubTab(st.key); setSelectedOverdue(new Set()); }}
+                                        style={{
+                                            display: "flex", alignItems: "center", gap: 8,
+                                            padding: "8px 18px", borderRadius: 10, border: "none", cursor: "pointer",
+                                            fontWeight: 700, fontSize: "0.85rem",
+                                            background: overdueSubTab === st.key ? "#fef2f2" : "#f8fafc",
+                                            color:      overdueSubTab === st.key ? "#dc2626"  : "#64748b",
+                                            borderBottom: overdueSubTab === st.key ? "2px solid #dc2626" : "2px solid transparent",
+                                        }}
+                                    >
+                                        {st.label}
+                                        {st.count > 0 && (
+                                            <span style={{ background: "#dc2626", color: "#fff", borderRadius: 99, fontSize: "0.72rem", fontWeight: 800, padding: "1px 7px", minWidth: 20, textAlign: "center" }}>
+                                                {st.count}
+                                            </span>
+                                        )}
+                                    </button>
+                                ))}
+                            </div>
+
+                            {subList.length === 0 ? (
+                                <div className={styles.emptyState} style={{ marginTop: 24 }}>
+                                    <i className="fa-solid fa-circle-check" style={{ color: "#10b981" }} />
+                                    <p>No overdue {overdueSubTab === "drop_offs" ? "drop-offs" : "collections"}</p>
+                                </div>
+                            ) : (
+                                <>
+                                    <div style={{
+                                        display: "flex", alignItems: "center", gap: 10,
+                                        margin: "12px 0 8px", padding: "10px 14px",
+                                        background: "#fff", border: "1px solid #e2e8f0",
+                                        borderRadius: 10,
+                                    }}>
+                                        <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", userSelect: "none", fontWeight: 600, fontSize: "0.85rem", color: "#374151" }}>
+                                            <input
+                                                type="checkbox"
+                                                checked={allSelected}
+                                                ref={el => { if (el) el.indeterminate = someSelected && !allSelected; }}
+                                                onChange={toggleAll}
+                                                style={{ width: 16, height: 16, accentColor: "#dc2626", cursor: "pointer" }}
+                                            />
+                                            {allSelected ? "Deselect all" : `Select all (${subList.length})`}
+                                        </label>
+
+                                        {someSelected && (
+                                            <>
+                                                <span style={{ color: "#cbd5e1", fontSize: "1.1rem" }}>|</span>
+                                                <span style={{ fontSize: "0.82rem", color: "#64748b" }}>{selectedTxns.length} selected</span>
+
+                                                {!allAlerted && (
+                                                    <button
+                                                        onClick={() => handleBulkAlert(selectedTxns.filter(t => !t.overdueAlertSentAt))}
+                                                        disabled={bulkActioning}
+                                                        style={{
+                                                            marginLeft: "auto", display: "flex", alignItems: "center", gap: 6,
+                                                            padding: "7px 16px", borderRadius: 8, border: "none", cursor: "pointer",
+                                                            background: "#f59e0b", color: "#fff", fontWeight: 700, fontSize: "0.82rem",
+                                                            opacity: bulkActioning ? 0.6 : 1,
+                                                        }}
+                                                    >
+                                                        <i className={`fa-solid ${bulkActioning ? "fa-spinner fa-spin" : "fa-bell"}`} />
+                                                        Send Alert{selectedTxns.filter(t => !t.overdueAlertSentAt).length > 1 ? "s" : ""}
+                                                    </button>
+                                                )}
+
+                                                {allAlerted && (
+                                                    <button
+                                                        onClick={() => {
+                                                            if (!window.confirm(`Cancel ${selectedTxns.length} transaction${selectedTxns.length > 1 ? "s" : ""}? This cannot be undone.`)) return;
+                                                            handleBulkCancel(selectedTxns);
+                                                        }}
+                                                        disabled={bulkActioning}
+                                                        style={{
+                                                            marginLeft: "auto", display: "flex", alignItems: "center", gap: 6,
+                                                            padding: "7px 16px", borderRadius: 8,
+                                                            border: "1.5px solid #dc2626", cursor: "pointer",
+                                                            background: "#fff", color: "#dc2626", fontWeight: 700, fontSize: "0.82rem",
+                                                            opacity: bulkActioning ? 0.6 : 1,
+                                                        }}
+                                                    >
+                                                        <i className={`fa-solid ${bulkActioning ? "fa-spinner fa-spin" : "fa-ban"}`} />
+                                                        Cancel Transaction{selectedTxns.length > 1 ? "s" : ""}
+                                                    </button>
+                                                )}
+
+                                                {!allAlerted && !noneAlerted && (
+                                                    <button
+                                                        onClick={() => {
+                                                            if (!window.confirm(`Cancel ${selectedTxns.filter(t => t.overdueAlertSentAt).length} alerted transaction(s)? This cannot be undone.`)) return;
+                                                            handleBulkCancel(selectedTxns.filter(t => t.overdueAlertSentAt));
+                                                        }}
+                                                        disabled={bulkActioning}
+                                                        style={{
+                                                            display: "flex", alignItems: "center", gap: 6,
+                                                            padding: "7px 16px", borderRadius: 8,
+                                                            border: "1.5px solid #dc2626", cursor: "pointer",
+                                                            background: "#fff", color: "#dc2626", fontWeight: 700, fontSize: "0.82rem",
+                                                            opacity: bulkActioning ? 0.6 : 1,
+                                                        }}
+                                                    >
+                                                        <i className={`fa-solid ${bulkActioning ? "fa-spinner fa-spin" : "fa-ban"}`} />
+                                                        Cancel Alerted ({selectedTxns.filter(t => t.overdueAlertSentAt).length})
+                                                    </button>
+                                                )}
+                                            </>
+                                        )}
+                                    </div>
+
+                                    <div className={styles.txnList}>
+                                        {subList.map(txn => {
+                                            const alertSent   = !!txn.overdueAlertSentAt;
+                                            const countdown   = getCancelCountdown(txn);
+                                            const isSelected  = selectedOverdue.has(txn.id);
+                                            const payConfig   = getPaymentConfig(txn);
+
+                                            return (
+                                                <div
+                                                    key={txn.id}
+                                                    style={{
+                                                        display: "flex", alignItems: "center", gap: 12,
+                                                        padding: "12px 14px",
+                                                        background: isSelected ? "#fff5f5" : "#fff",
+                                                        border: `1.5px solid ${isSelected ? "#fca5a5" : "#fee2e2"}`,
+                                                        borderRadius: 12, marginBottom: 8,
+                                                        transition: "background 0.15s",
+                                                    }}
+                                                >
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={isSelected}
+                                                        onChange={() => toggleOne(txn.id)}
+                                                        style={{ width: 16, height: 16, accentColor: "#dc2626", cursor: "pointer", flexShrink: 0 }}
+                                                    />
+
+                                                    <div style={{ width: 44, height: 44, borderRadius: 8, overflow: "hidden", flexShrink: 0, background: "#f1f5f9", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                                                        {txn.itemImage
+                                                            ? <img src={txn.itemImage} alt={txn.item} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                                                            : <i className="fa-solid fa-box-open" style={{ color: "#94a3b8" }} />
+                                                        }
+                                                    </div>
+
+                                                    <div style={{ flex: 1, minWidth: 0 }}>
+                                                        <p style={{ margin: 0, fontWeight: 700, fontSize: "0.88rem", color: "#1e293b", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                                                            {txn.item}
+                                                        </p>
+                                                        <p style={{ margin: "2px 0 0", fontSize: "0.78rem", color: "#64748b" }}>
+                                                            {txn.seller} → {txn.buyer}
+                                                        </p>
+                                                        {txn.dropOffDate && (
+                                                            <p style={{ margin: "2px 0 0", fontSize: "0.75rem", color: "#dc2626", fontWeight: 600 }}>
+                                                                <i className="fa-solid fa-calendar-xmark" style={{ marginRight: 4 }} />
+                                                                Due: {txn.dropOffDate}{txn.dropOffTimeSlot ? ` · ${txn.dropOffTimeSlot}` : ""}
+                                                            </p>
+                                                        )}
+                                                    </div>
+
+                                                    <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 5, flexShrink: 0 }}>
+                                                        <span style={{ padding: "2px 8px", background: payConfig.bg, color: payConfig.color, borderRadius: 99, fontSize: "0.72rem", fontWeight: 700 }}>
+                                                            <i className={`fa-solid ${payConfig.icon}`} style={{ marginRight: 3 }} />{payConfig.label}
+                                                        </span>
+                                                        {alertSent ? (
+                                                            <>
+                                                                <span style={{ padding: "2px 9px", background: "#dcfce7", color: "#16a34a", borderRadius: 99, fontSize: "0.72rem", fontWeight: 700 }}>
+                                                                    <i className="fa-solid fa-bell" style={{ marginRight: 3 }} />Alert Sent
+                                                                </span>
+                                                                {countdown && (
+                                                                    <span style={{ padding: "2px 9px", background: "#fef2f2", color: "#dc2626", borderRadius: 99, fontSize: "0.72rem", fontWeight: 700 }}>
+                                                                        <i className="fa-solid fa-clock" style={{ marginRight: 3 }} />{countdown}
+                                                                    </span>
+                                                                )}
+                                                            </>
+                                                        ) : (
+                                                            <span style={{ padding: "2px 9px", background: "#fef3c7", color: "#92400e", borderRadius: 99, fontSize: "0.72rem", fontWeight: 700 }}>
+                                                                <i className="fa-solid fa-triangle-exclamation" style={{ marginRight: 3 }} />Alert Pending
+                                                            </span>
+                                                        )}
+                                                    </div>
+
+                                                    <div style={{ display: "flex", flexDirection: "column", gap: 5, flexShrink: 0 }}>
+                                                        {!alertSent && (
+                                                            <button
+                                                                onClick={() => handleBulkAlert([txn])}
+                                                                disabled={bulkActioning}
+                                                                style={{ padding: "5px 12px", background: "#f59e0b", color: "#fff", border: "none", borderRadius: 7, fontSize: "0.75rem", fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}
+                                                            >
+                                                                <i className="fa-solid fa-bell" style={{ marginRight: 4 }} />Send Alert
+                                                            </button>
+                                                        )}
+                                                        {alertSent && (
+                                                            <button
+                                                                onClick={() => {
+                                                                    if (!window.confirm(`Cancel transaction for "${txn.item}"? This cannot be undone.`)) return;
+                                                                    handleBulkCancel([txn]);
+                                                                }}
+                                                                disabled={bulkActioning}
+                                                                style={{ padding: "5px 12px", background: "#fff", color: "#dc2626", border: "1.5px solid #dc2626", borderRadius: 7, fontSize: "0.75rem", fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}
+                                                            >
+                                                                <i className="fa-solid fa-ban" style={{ marginRight: 4 }} />Cancel Txn
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </>
+                            )}
                         </div>
-                    )}
-                </main>
+                    );
+                })() : activeTab === "time_slots" ? (
+                    <TimeSlotsView transactions={visibleTxns} />
+                ) : displayTxns.length === 0 ? (
+                    <div className={styles.emptyState}>
+                        <i className="fa-solid fa-box-open" />
+                        <p>No transactions found</p>
+                        {search && (
+                            <button className={styles.clearBtn} onClick={() => setSearch("")}>
+                                Clear search
+                            </button>
+                        )}
+                    </div>
+                ) : (
+                    <div className={styles.txnList}>
+                        {displayTxns.map(txn => (
+                            <TransactionCard
+                                key={
+                                    txn._dropOffRole === "buyer" ? `${txn.id}_buyer_dropoff`
+                                    : txn._collectionRole === "seller" ? `${txn.id}_seller_collection`
+                                    : txn._collectionRole === "buyer"  ? `${txn.id}_buyer_collection`
+                                    : txn.id
+                                }
+                                txn={txn}
+                                onConfirmDropOff={handleConfirmDropOff}
+                                onConfirmCollection={handleConfirmCollection}
+                                onRelease={handleRelease}
+                                onMarkStep={handleMarkStep}
+                                onAlertOverdue={handleAlertOverdue}
+                                onCancelOverdue={handleCancelOverdue}
+                            />
+                        ))}
+                    </div>
+                )}
+            </main>
             )}
 
             {showProfile && (
@@ -2693,7 +2508,6 @@ export default function StaffDashboard() {
                     staffEmail={staffUser.email}
                     staffInitials={staffUser.initials}
                     staffPhoto={staffUser.photoURL}
-                    staffShift={staffShift}
                     onClose={() => setShowProfile(false)}
                     onLogout={handleLogout}
                     isLoggingOut={isLoggingOut}
@@ -2708,15 +2522,6 @@ export default function StaffDashboard() {
                     </div>
                 </div>
             )}
-
-            {/* Alert Modal for confirmations */}
-            <AlertModal
-                open={confirmModal.open}
-                onClose={() => setConfirmModal(prev => ({ ...prev, open: false }))}
-                title={confirmModal.title}
-                message={confirmModal.message}
-                type={confirmModal.type}
-            />
         </div>
     );
 }
