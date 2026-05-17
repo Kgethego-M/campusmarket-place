@@ -111,6 +111,11 @@ export default function PromoteSuccess() {
 
   const displayTitle = listing?.title || titleParam || "Your listing";
   const displayImage = listing?.photos?.[0] || listing?.imageUrl || null;
+  
+  // Truncate long payment IDs
+  const displayPaymentId = uniquePaymentId?.length > 30 
+    ? `${uniquePaymentId.substring(0, 15)}...${uniquePaymentId.substring(uniquePaymentId.length - 10)}` 
+    : uniquePaymentId;
 
   return (
     <>
@@ -122,23 +127,36 @@ export default function PromoteSuccess() {
               <i className="fas fa-check-circle" />
             </div>
             <h2>Your listing is now live!</h2>
-            <p>
+            <p className={styles.successMessage}>
               <strong>{displayTitle}</strong> is being promoted as a{" "}
               <strong>{adType === "banner" ? "Banner ad" : "Premium popup"}</strong>{" "}
               for the next 7 days. Buyers will start seeing it shortly.
             </p>
+            
             {displayImage && (
-              <img
-                src={displayImage}
-                alt={displayTitle}
-                style={{ maxWidth: "200px", borderRadius: "8px", margin: "1rem 0" }}
-              />
+              <div className={styles.successImage}>
+                <img
+                  src={displayImage}
+                  alt={displayTitle}
+                />
+              </div>
             )}
-            <p className={styles.refText}>
-              Payment confirmed via Stripe<br />
-              Ref: {uniquePaymentId}
-            </p>
+            
+            {/* Contained payment reference */}
+            <div className={styles.paymentRefBox}>
+              <div className={styles.paymentRefIcon}>
+                <i className="fas fa-receipt" />
+              </div>
+              <div className={styles.paymentRefContent}>
+                <span className={styles.paymentRefLabel}>Payment confirmed via Stripe</span>
+                <span className={styles.paymentRefValue} title={uniquePaymentId}>
+                  Ref: {displayPaymentId}
+                </span>
+              </div>
+            </div>
+            
             {error && <div className={styles.errorMsg}>{error}</div>}
+            
             <div className={styles.successActions}>
               <button
                 className={styles.primaryBtn}
