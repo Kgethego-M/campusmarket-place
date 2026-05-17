@@ -8,6 +8,7 @@ import {
 import NavBar from "./NavBarTemp.jsx";
 import styles from "./BookDropOff.module.css";
 import { generateTimeSlots } from "../utils/facilityConfig.utils";
+import { notifyDropOffBooked } from "../services/notificationService";
 
 const CLOUDINARY_CLOUD_NAME    = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME;
 const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
@@ -56,6 +57,11 @@ function toDateStr(date) {
   const m = String(date.getMonth() + 1).padStart(2, "0");
   const d = String(date.getDate()).padStart(2, "0");
   return `${y}-${m}-${d}`;
+}
+
+function formatPrice(price) {
+  if (price === undefined || price === null) return "0.00";
+  return price.toLocaleString();
 }
 
 const CONDITION_COLORS = {
@@ -495,37 +501,18 @@ export default function BookDropOff() {
         const tradeItemName = updatedTradeItem?.name ?? "your trade item";
         const listingTitle  = listing?.title ?? "the listing";
 
-        // Notify buyer: their trade drop-off is confirmed
-        try {
-          await addDoc(collection(db, "notifications"), {
-            userId:        transaction.buyerId,
-            type:          "buyer_dropoff_booked",
-            transactionId: transaction.id,
-            listingId:     transaction.listingId,
-            listingTitle,
-            title:         "Trade drop-off booked",
-            message:       `Your drop-off of "${tradeItemName}" is confirmed for ${selectedDate} at ${selectedTimeSlot}.`,
-            linkTo:        "/trade-facility",
-            read:          false,
-            createdAt:     serverTimestamp(),
-          });
-        } catch (_) {}
-
-        // Notify seller: buyer has booked their trade drop-off
-        try {
-          await addDoc(collection(db, "notifications"), {
-            userId:        transaction.sellerId,
-            type:          "buyer_dropoff_booked",
-            transactionId: transaction.id,
-            listingId:     transaction.listingId,
-            listingTitle,
-            title:         "Buyer booked their trade drop-off",
-            message:       `The buyer will drop off "${tradeItemName}" for "${listingTitle}" on ${selectedDate} at ${selectedTimeSlot}.`,
-            linkTo:        "/trade-facility",
-            read:          false,
-            createdAt:     serverTimestamp(),
-          });
-        } catch (_) {}
+        // Use notification service
+        await notifyDropOffBooked({
+          transactionId: transaction.id,
+          sellerId:      transaction.sellerId,
+          buyerId:       transaction.buyerId,
+          listingId:     transaction.listingId,
+          listingTitle:  listingTitle,
+          role:          'buyer',
+          date:          selectedDate,
+          timeSlot:      selectedTimeSlot,
+          tradeItemName: tradeItemName,
+        });
       }
 
       navigate("/trade-facility");
@@ -539,6 +526,7 @@ export default function BookDropOff() {
 
   function getPaymentMessage() {
     const price = formatPrice(listing?.price);
+    const paymentMethod = transaction?.paymentMethod || "unknown";
     switch (paymentMethod) {
       case "online":  return `Buyer paid R${price} online — no cash needed at drop-off.`;
       case "cod":     return `Buyer pays R${price} cash on delivery. Collect at the facility.`;

@@ -319,6 +319,12 @@ export default function AdminDashboard() {
   }));
   const reportsHeaders = ["Type", "ReportedItem", "Reason", "Details", "ReportedBy", "Status", "Resolution", "Date"];
 
+  const reportTypeIcon = (type) => {
+    if (type === "listing") return "🛍️";
+    if (type === "review")  return "⭐";
+    return "👤";
+  };
+
   // ── Helper: navigate to the reported item ─────────────────────────────────
   const navigateToReported = (e, report) => {
     e.stopPropagation();
@@ -701,18 +707,63 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* ── SUSPENDED USERS TAB ── */}
+        {/* ── SUSPENDED USERS TAB (with CSV/PDF export) ── */}
         {activeTab === "suspended" && (
           <div className={styles.tabContent}>
             <div className={styles.card}>
-              <h3 className={styles.cardTitle}>
-                Suspended Users
-                {suspendedUsers.length > 0 && (
-                  <span style={{ marginLeft: 10, background: "#dc2626", color: "#fff", borderRadius: 20, padding: "2px 10px", fontSize: "0.72rem", fontWeight: 700 }}>
-                    {suspendedUsers.length}
-                  </span>
-                )}
-              </h3>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px" }}>
+                <h3 className={styles.cardTitle}>
+                  Suspended Users
+                  {suspendedUsers.length > 0 && (
+                    <span style={{ marginLeft: 10, background: "#dc2626", color: "#fff", borderRadius: 20, padding: "2px 10px", fontSize: "0.72rem", fontWeight: 700 }}>
+                      {suspendedUsers.length}
+                    </span>
+                  )}
+                </h3>
+                <div style={{ display: "flex", gap: "8px" }}>
+                  <button
+                    onClick={() => {
+                      if (suspendedUsers.length === 0) {
+                        showToast("No suspended users to export.", "warning");
+                        return;
+                      }
+                      const headers = ["Name", "Email", "Suspended At", "Suspended By"];
+                      const rows = suspendedUsers.map(u => ({
+                        Name: `${u.firstName || ""} ${u.lastName || ""}`.trim(),
+                        Email: u.email || "",
+                        "Suspended At": u.suspendedAt?.toDate ? u.suspendedAt.toDate().toLocaleString() : u.suspendedAt || "",
+                        "Suspended By": u.suspendedBy || "",
+                      }));
+                      const csvRows = [headers, ...rows.map(r => headers.map(h => r[h]))];
+                      const csvContent = csvRows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(",")).join("\n");
+                      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+                      const link = document.createElement("a");
+                      const url = URL.createObjectURL(blob);
+                      link.href = url;
+                      link.setAttribute("download", "suspended_users.csv");
+                      document.body.appendChild(link);
+                      link.click();
+                      document.body.removeChild(link);
+                      URL.revokeObjectURL(url);
+                    }}
+                    style={{ background: "#4a90d9", color: "white", border: "none", padding: "6px 12px", borderRadius: "8px", cursor: "pointer", fontWeight: "500", fontSize: "0.75rem" }}
+                  >
+                    CSV
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (suspendedUsers.length === 0) {
+                        showToast("No suspended users to export.", "warning");
+                        return;
+                      }
+                      window.print();
+                    }}
+                    style={{ background: "#4a90d9", color: "white", border: "none", padding: "6px 12px", borderRadius: "8px", cursor: "pointer", fontWeight: "500", fontSize: "0.75rem" }}
+                  >
+                    PDF
+                  </button>
+                </div>
+              </div>
               {suspendedUsers.length === 0 ? (
                 <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, padding: "32px 0" }}>
                   <i className="fas fa-check-circle" style={{ fontSize: "2rem", color: "#16a34a" }} />
@@ -738,7 +789,7 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* ── MODERATION TAB */}
+        {/* ── MODERATION TAB ── */}
         {activeTab === "moderation" && (
           <div className={styles.tabContent}>
             <ReportCard title="Listing Moderation" headers={listingsHeaders} data={listingsExportData}>
@@ -780,10 +831,56 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* ── PAYMENTS TAB ── */}
+        {/* ── PAYMENTS TAB (with CSV/PDF export) ── */}
         {activeTab === "payments" && (
           <div className={styles.tabContent}>
-            <ReportCard title="Completed Transactions" headers={paymentsHeaders} data={paymentsExportData}>
+            <div className={styles.card}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px", marginBottom: "16px" }}>
+                <h3 className={styles.cardTitle}>Completed Transactions</h3>
+                <div style={{ display: "flex", gap: "8px" }}>
+                  <button
+                    onClick={() => {
+                      if (paymentsExportData.length === 0) {
+                        showToast("No completed transactions to export.", "warning");
+                        return;
+                      }
+                      const headers = ["Item", "Type", "Amount", "Status"];
+                      const rows = paymentsExportData.map(item => ({
+                        Item: item.Item,
+                        Type: item.Type,
+                        Amount: item.Amount,
+                        Status: item.Status,
+                      }));
+                      const csvRows = [headers, ...rows.map(r => headers.map(h => r[h]))];
+                      const csvContent = csvRows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(",")).join("\n");
+                      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+                      const link = document.createElement("a");
+                      const url = URL.createObjectURL(blob);
+                      link.href = url;
+                      link.setAttribute("download", "completed_transactions.csv");
+                      document.body.appendChild(link);
+                      link.click();
+                      document.body.removeChild(link);
+                      URL.revokeObjectURL(url);
+                    }}
+                    style={{ background: "#4a90d9", color: "white", border: "none", padding: "6px 12px", borderRadius: "8px", cursor: "pointer", fontWeight: "500", fontSize: "0.75rem" }}
+                  >
+                    CSV
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (paymentsExportData.length === 0) {
+                        showToast("No completed transactions to export.", "warning");
+                        return;
+                      }
+                      window.print();
+                    }}
+                    style={{ background: "#4a90d9", color: "white", border: "none", padding: "6px 12px", borderRadius: "8px", cursor: "pointer", fontWeight: "500", fontSize: "0.75rem" }}
+                  >
+                    PDF
+                  </button>
+                </div>
+              </div>
               {listings.filter(l => l.status === "sold" || l.status === "traded").length === 0 ? (
                 <p className={styles.emptyNote}>No completed transactions yet.</p>
               ) : (
@@ -801,7 +898,7 @@ export default function AdminDashboard() {
                   ))}
                 </div>
               )}
-            </ReportCard>
+            </div>
           </div>
         )}
 

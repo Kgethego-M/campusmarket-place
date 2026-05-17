@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { auth, db } from "../firebase.js";
-import { collection, query, where, getDocs, doc, getDoc } from "firebase/firestore";
+import { collection, query, where, getDocs, doc, getDoc, onSnapshot } from "firebase/firestore";
 import NavBar from "./NavBarTemp.jsx";
 import styles from "./TradeFacility.module.css";
 
@@ -307,6 +307,7 @@ export default function TradeFacility() {
     }
   }, [highlightId, sellerTransactions, buyerTransactions]);
 
+  // ── Auth and initial data fetch ───────────────────────────────────────────
   useEffect(() => {
     const unsubscribe = auth.onAuthStateChanged((currentUser) => {
       if (currentUser) {
@@ -322,19 +323,46 @@ export default function TradeFacility() {
     return () => unsubscribe();
   }, [navigate]);
 
+  // ── Real-time listener for buyer transactions (auto-refresh when status changes)
+  useEffect(() => {
+    if (!user) return;
+    
+    const q = query(
+      collection(db, "transactions"),
+      where("buyerId", "==", user.uid),
+      where("status", "in", ["waiting", "accepted", "pending_payment", "awaiting_collection"])
+    );
+    
+    const unsubscribe = onSnapshot(q, () => {
+      fetchTransactions(user.uid);
+    });
+    
+    return () => unsubscribe();
+  }, [user]);
+
   async function fetchTransactions(uid) {
     setLoading(true);
     try {
+      // Only fetch active transactions - exclude completed from the query
       const ACTIVE_STATUSES = [
-        "waiting", "accepted", "awaiting_collection", "completed",
+        "waiting", 
+        "accepted", 
+        "pending_payment",
+        "awaiting_collection",
       ];
 
       const [sellerResults, buyerResults] = await Promise.all([
         Promise.all(ACTIVE_STATUSES.map(status =>
-          getDocs(query(collection(db, "transactions"), where("sellerId", "==", uid), where("status", "==", status)))
+          getDocs(query(collection(db, "transactions"), 
+            where("sellerId", "==", uid), 
+            where("status", "==", status)
+          ))
         )),
         Promise.all(ACTIVE_STATUSES.map(status =>
-          getDocs(query(collection(db, "transactions"), where("buyerId", "==", uid), where("status", "==", status)))
+          getDocs(query(collection(db, "transactions"), 
+            where("buyerId", "==", uid), 
+            where("status", "==", status)
+          ))
         )),
       ]);
 
@@ -384,7 +412,7 @@ export default function TradeFacility() {
         })),
       ]);
 
-      const ORDER = { waiting: 0, accepted: 1, awaiting_collection: 2, completed: 3 };
+      const ORDER = { waiting: 0, accepted: 1, awaiting_collection: 2 };
 
       const filteredSeller = enrichedSeller.filter(
         (txn) => !txn.dropOffConfirmed && !txn.sellerDropOffConfirmed
@@ -433,6 +461,9 @@ export default function TradeFacility() {
 
   const buyerTradeTxns = buyerTransactions.filter(t => t.type === 'trade');
 
+  // Buyer transactions for the Track Pick-up tab (all active transactions)
+  const activeBuyerTransactions = buyerTransactions;
+
   if (loading) {
     return (
       <>
@@ -480,10 +511,10 @@ export default function TradeFacility() {
     );
   }
 
-  const currentTransactions = activeTab === "seller" ? sellerTransactions : buyerTransactions;
+  const currentTransactions = activeTab === "seller" ? sellerTransactions : activeBuyerTransactions;
   const totalCount = activeTab === "seller"
     ? sellerTransactions.length + buyerTradeTxns.length
-    : buyerTransactions.length;
+    : activeBuyerTransactions.length;
 
   return (
     <>
@@ -521,9 +552,9 @@ export default function TradeFacility() {
             onClick={() => setActiveTab("buyer")}
           >
             Track Pick-up
-            {buyerTransactions.length > 0 && (
+            {activeBuyerTransactions.length > 0 && (
               <span className={`${styles.toggleCount} ${activeTab === "buyer" ? styles.toggleCountActive : ""}`}>
-                {buyerTransactions.length}
+                {activeBuyerTransactions.length}
               </span>
             )}
           </button>
@@ -546,7 +577,7 @@ export default function TradeFacility() {
               Browse listings
             </button>
           </div>
-        ) : activeTab === "buyer" && buyerTransactions.length === 0 ? (
+        ) : activeTab === "buyer" && activeBuyerTransactions.length === 0 ? (
           <div className={styles.empty}>
             <div className={styles.emptyIcon}>
               <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
@@ -806,8 +837,8 @@ export default function TradeFacility() {
               </>
             )}
 
-            {/* Buyer tab — tracker cards only */}
-            {activeTab === "buyer" && buyerTransactions.map((txn, idx) => (
+            {/* Buyer tab — tracker cards only, active transactions only */}
+            {activeTab === "buyer" && activeBuyerTransactions.map((txn, idx) => (
               <BuyerTrackerCard
                 key={txn.id}
                 txn={txn}
