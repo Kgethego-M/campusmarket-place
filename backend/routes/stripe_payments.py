@@ -1,88 +1,117 @@
 import os
-import stripe
-from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, Field
-from firebase_admin import firestore, initialize_app, credentials
 import json
+import stripe
+from fastapi import APIRouter, HTTPException, Request
+from pydantic import BaseModel
+from firebase_admin import firestore, credentials
+import firebase_admin
 
 router = APIRouter(prefix="/api/stripe", tags=["stripe"])
-stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
 
-# Lazy initialization - only initialize Firebase if credentials are available
-db = None
+# ─── Firebase Admin (singleton) ───────────────────────────────────────────────
 
 def get_firestore():
-    global db
-    if db is not None:
-        return db
-    
-    # Check if we're in a test/CI environment
-    if os.getenv("CI") or os.getenv("GITHUB_ACTIONS") or not os.getenv("FIREBASE_SERVICE_ACCOUNT_JSON"):
-        print("⚠️ Firebase credentials not available - running in test mode")
-        return None
-    
+    if not firebase_admin._apps:
+        service_account_json = os.getenv("FIREBASE_SERVICE_ACCOUNT_JSON")
+        if not service_account_json:
+            print("⚠️ Firebase credentials not available - running in test mode")
+            return None
+        try:
+            cred = credentials.Certificate(json.loads(service_account_json))
+            firebase_admin.initialize_app(cred)
+            print("✅ Firebase initialized successfully")
+        except Exception as e:
+            print(f"⚠️ Failed to initialize Firebase: {e}")
+            return None
     try:
-        # Try to initialize Firebase with service account
-        firebase_creds = os.getenv("FIREBASE_SERVICE_ACCOUNT_JSON")
-        if firebase_creds:
-            cred = credentials.Certificate(json.loads(firebase_creds))
-            firebase_app = initialize_app(cred)
-        else:
-            # Try default credentials (for production environments like Azure)
-            firebase_app = initialize_app()
-        
-        db = firestore.client()
-        print("✅ Firebase initialized successfully")
-        return db
+        return firestore.client()
     except Exception as e:
-        print(f"⚠️ Failed to initialize Firebase: {e}")
+        print(f"⚠️ Failed to get Firestore client: {e}")
         return None
 
+
 def get_stripe():
-    if not stripe.api_key:
-        # In CI/test, allow Stripe to be missing
-        if os.getenv("CI") or os.getenv("GITHUB_ACTIONS"):
-            return None
+    key = os.getenv("STRIPE_SECRET_KEY")
+    if not key:
         raise HTTPException(500, "STRIPE_SECRET_KEY is missing")
+    stripe.api_key = key
     return stripe
+
+
+def safe_meta(value):
+    if value is None:
+        return ""
+    return str(value)[:500]
+
+
+# ─── Request models ───────────────────────────────────────────────────────────
 
 class CheckoutSessionRequest(BaseModel):
     transactionId: str
-    buyerEmail: str
-    amount: int
-    amountRand: float
-    cashAmount: float = 0
-    totalAmount: float
-    currency: str = "zar"
-    stripeRef: str
-    paymentType: str
-    listingId: str = None
-    listingTitle: str = "Marketplace transaction"
-    successUrl: str
-    cancelUrl: str
-    metadata: dict = {}
+    buyerEmail:    str
+    amount:        int
+    amountRand:    float
+    cashAmount:    float = 0
+    totalAmount:   float
+    currency:      str = "zar"
+    stripeRef:     str
+    paymentType:   str
+    listingId:     str | None = None
+    listingTitle:  str = "Marketplace transaction"
+    successUrl:    str
+    cancelUrl:     str
+    metadata:      dict = {}
+
 
 class VerifySessionRequest(BaseModel):
-    sessionId: str
-    transactionId: str
+    sessionId:     str
+    transactionId: str = ""
+
+
+# ─── Routes ───────────────────────────────────────────────────────────────────
+
+@router.get("/health")
+def health():
+    return {
+        "stripe_configured":   bool(os.getenv("STRIPE_SECRET_KEY")),
+        "firebase_configured": get_firestore() is not None,
+    }
+
 
 @router.post("/create-checkout-session")
 async def create_checkout_session(payload: CheckoutSessionRequest):
     stripe_client = get_stripe()
-    if stripe_client is None:
-        raise HTTPException(503, "Stripe is not configured")
-    
+
+    if payload.paymentType == "ad_promotion":
+        product_name = f"[AD PROMOTION] {payload.listingTitle}"
+    else:
+        product_name = payload.listingTitle or "Marketplace transaction"
+
+    metadata = {
+        "transactionId": safe_meta(payload.transactionId),
+        "stripeRef":     safe_meta(payload.stripeRef),
+        "paymentType":   safe_meta(payload.paymentType),
+        "listingId":     safe_meta(payload.listingId),
+        "amountRand":    safe_meta(payload.amountRand),
+        "cashAmount":    safe_meta(payload.cashAmount),
+        "totalAmount":   safe_meta(payload.totalAmount),
+    }
+    for key, value in payload.metadata.items():
+        metadata[key] = safe_meta(value)
+
+    # ✅ KEY FIX: use & if successUrl already contains ?, else use ?
+    # The frontend sends successUrl as:  /payment-success?tx=TX_ID
+    # Without this fix the redirect becomes: /payment-success?tx=TX_ID?session_id=...
+    # which breaks URL parsing and makes txId come back as null in the frontend.
+    separator   = "&" if "?" in payload.successUrl else "?"
+    success_url = payload.successUrl + f"{separator}session_id={{CHECKOUT_SESSION_ID}}"
+
     try:
-        if payload.paymentType == "ad_promotion":
-            product_name = f"[AD PROMOTION] {payload.listingTitle}"
-        else:
-            product_name = payload.listingTitle
-        
         session = stripe_client.checkout.Session.create(
             mode="payment",
             customer_email=payload.buyerEmail,
             client_reference_id=payload.transactionId,
-            success_url=payload.successUrl + "?session_id={CHECKOUT_SESSION_ID}",
+            success_url=success_url,
             cancel_url=payload.cancelUrl,
             payment_method_types=["card"],
             line_items=[{
@@ -93,76 +122,172 @@ async def create_checkout_session(payload: CheckoutSessionRequest):
                 },
                 "quantity": 1,
             }],
-            metadata={
-                "transactionId": payload.transactionId,
-                "stripeRef": payload.stripeRef,
-                "paymentType": payload.paymentType,
-                "listingId": payload.listingId or "",
-                "adType": payload.metadata.get("adType", ""),
-                **payload.metadata,
-            },
+            metadata=metadata,
         )
         return {"id": session.id, "url": session.url}
     except Exception as e:
-        raise HTTPException(500, str(e))
+        raise HTTPException(500, f"Failed to create Stripe session: {str(e)}")
+
 
 @router.post("/verify-session")
-async def verify_checkout_session(payload: VerifySessionRequest):
+async def verify_session(payload: VerifySessionRequest):
     stripe_client = get_stripe()
-    if stripe_client is None:
-        raise HTTPException(503, "Stripe is not configured")
-    
+
     try:
-        print(f"🔍 Verifying session: {payload.sessionId} for transaction: {payload.transactionId}")
-        
-        # 1. Retrieve the session from Stripe
         session = stripe_client.checkout.Session.retrieve(payload.sessionId)
-        
-        print(f"💰 Payment status: {session.payment_status}")
-        
-        if session.payment_status != 'paid':
-            return {"paid": False, "status": session.payment_status}
-        
-        # 2. Get Firestore - skip if not available (test environment)
+    except Exception as e:
+        raise HTTPException(500, f"Could not retrieve Stripe session: {str(e)}")
+
+    print(f"🔍 verify-session: session={payload.sessionId}, payment_status={session.payment_status}")
+
+    if session.payment_status != "paid":
+        return {"paid": False, "status": session.payment_status}
+
+    # ── Resolve transactionId ─────────────────────────────────────────────────
+    transaction_id = payload.transactionId.strip()
+    if not transaction_id:
+        meta = session.get("metadata") or {}
+        transaction_id = meta.get("transactionId") or session.get("client_reference_id") or ""
+
+    if not transaction_id:
+        raise HTTPException(400, "Cannot resolve transactionId from session or payload.")
+
+    # ── Firestore update ──────────────────────────────────────────────────────
+    fs = get_firestore()
+    if fs is None:
+        print("⚠️ Firestore not available — skipping DB update")
+        return {"paid": True, "warning": "Firestore not configured"}
+
+    try:
+        ref     = fs.collection("transactions").document(transaction_id)
+        tx_snap = ref.get()
+
+        if not tx_snap.exists:
+            print(f"❌ Transaction {transaction_id} not found in Firestore")
+            raise HTTPException(404, f"Transaction '{transaction_id}' not found.")
+
+        tx_data = tx_snap.to_dict()
+
+        # Idempotency — already updated
+        if tx_data.get("paymentStatus") == "paid":
+            print(f"ℹ️ tx={transaction_id} already paid — skipping")
+            return {"paid": True, "alreadyUpdated": True}
+
+        # ── Analytics increment ───────────────────────────────────────────────
+        amount_paid  = (session.get("amount_total") or 0) / 100
+        payment_type = tx_data.get("paymentType", "full_online")
+
+        analytics_ref  = fs.collection("analytics").document("platform")
+        analytics_snap = analytics_ref.get()
+
+        if not analytics_snap.exists:
+            analytics_ref.set({
+                "totalRevenue":         0,
+                "onlineRevenue":        0,
+                "pendingCashRevenue":   0,
+                "collectedCashRevenue": 0,
+                "totalPayouts":         0,
+                "totalRefunds":         0,
+                "availableBalance":     0,
+                "createdAt":            firestore.SERVER_TIMESTAMP,
+                "lastUpdated":          firestore.SERVER_TIMESTAMP,
+            })
+
+        if payment_type == "partial":
+            online_amount = float(tx_data.get("onlineAmount") or amount_paid)
+            analytics_ref.update({
+                "totalRevenue":  firestore.Increment(online_amount),
+                "onlineRevenue": firestore.Increment(online_amount),
+                "lastUpdated":   firestore.SERVER_TIMESTAMP,
+            })
+        else:
+            analytics_ref.update({
+                "totalRevenue":  firestore.Increment(amount_paid),
+                "onlineRevenue": firestore.Increment(amount_paid),
+                "lastUpdated":   firestore.SERVER_TIMESTAMP,
+            })
+
+        # ── Update transaction ────────────────────────────────────────────────
+        ref.update({
+            "status":                  "waiting",
+            "paymentStatus":           "paid",
+            "paymentProvider":         "stripe",
+            "paymentSettled":          True,
+            "stripeRef":               session.id,
+            "stripeCheckoutSessionId": session.id,
+            "stripeSessionId":         session.id,
+            "revenueRecorded":         True,
+            "revenueAmount":           amount_paid,
+            "revenueRecordedAt":       firestore.SERVER_TIMESTAMP,
+            "updatedAt":               firestore.SERVER_TIMESTAMP,
+        })
+
+        print(f"✅ tx={transaction_id} → status=waiting, paymentStatus=paid")
+        return {"paid": True, "alreadyUpdated": False, "transactionId": transaction_id}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ verify-session Firestore error: {e}")
+        raise HTTPException(500, f"Firestore update failed: {str(e)}")
+
+
+# ─── Webhook (redundancy fallback) ────────────────────────────────────────────
+
+@router.post("/webhook")
+async def stripe_webhook(request: Request):
+    stripe_client  = get_stripe()
+    payload        = await request.body()
+    signature      = request.headers.get("stripe-signature")
+    webhook_secret = os.getenv("STRIPE_WEBHOOK_SECRET")
+
+    if not webhook_secret:
+        raise HTTPException(500, "STRIPE_WEBHOOK_SECRET is missing.")
+
+    try:
+        event = stripe_client.Webhook.construct_event(payload, signature, webhook_secret)
+    except ValueError:
+        raise HTTPException(400, "Invalid webhook payload.")
+    except Exception:
+        raise HTTPException(400, "Invalid webhook signature.")
+
+    if event["type"] == "checkout.session.completed":
+        session        = event["data"]["object"]
+        session_id     = session.get("id", "")
+        meta           = session.get("metadata") or {}
+        transaction_id = meta.get("transactionId") or session.get("client_reference_id", "")
+
+        print(f"[Webhook] checkout.session.completed — session={session_id}, tx={transaction_id}")
+
+        if not transaction_id:
+            print("[Webhook] No transactionId found — skipping")
+            return {"received": True}
+
         fs = get_firestore()
         if fs is None:
-            print("⚠️ Firestore not available - skipping database update")
-            return {"paid": True, "status": "paid", "warning": "Firestore not configured"}
-        
-        # 3. Update the transaction in Firestore
-        tx_ref = fs.collection('transactions').document(payload.transactionId)
-        tx_snapshot = tx_ref.get()
-        
-        if not tx_snapshot.exists:
-            print(f"❌ Transaction {payload.transactionId} not found in Firestore")
-            return {"paid": True, "status": "paid", "warning": "Transaction not found in database"}
-        
-        tx_data = tx_snapshot.to_dict()
-        
-        # 4. Only update if not already updated
-        if tx_data.get('paymentStatus') != 'paid' and tx_data.get('status') != 'waiting':
-            update_data = {
-                'status': 'waiting',
-                'paymentStatus': 'paid',
-                'paymentProvider': 'stripe',
-                'stripeSessionId': payload.sessionId,
-                'paymentVerifiedAt': firestore.SERVER_TIMESTAMP,
-                'updatedAt': firestore.SERVER_TIMESTAMP,
-            }
-            tx_ref.update(update_data)
-            print(f"✅ Transaction {payload.transactionId} updated to waiting")
-        else:
-            print(f"ℹ️ Transaction already updated - status: {tx_data.get('status')}, paymentStatus: {tx_data.get('paymentStatus')}")
-        
-        return {"paid": True, "status": "paid", "transactionId": payload.transactionId}
-        
-    except Exception as e:
-        print(f"❌ Verify session error: {e}")
-        raise HTTPException(500, str(e))
+            return {"received": True}
 
-@router.get("/health")
-def health():
-    return {
-        "stripe_configured": bool(stripe.api_key),
-        "firebase_configured": get_firestore() is not None
-    }
+        try:
+            ref     = fs.collection("transactions").document(transaction_id)
+            tx_snap = ref.get()
+
+            if tx_snap.exists and tx_snap.to_dict().get("paymentStatus") == "paid":
+                print(f"[Webhook] tx={transaction_id} already paid — skipping")
+                return {"received": True}
+
+            ref.update({
+                "status":                  "waiting",
+                "paymentStatus":           "paid",
+                "paymentProvider":         "stripe",
+                "paymentSettled":          True,
+                "stripeRef":               meta.get("stripeRef", session_id),
+                "stripeCheckoutSessionId": session_id,
+                "updatedAt":               firestore.SERVER_TIMESTAMP,
+            })
+            print(f"[Webhook] tx={transaction_id} → waiting/paid")
+
+        except Exception as e:
+            print(f"[Webhook] ERROR for tx={transaction_id}: {e}")
+            raise HTTPException(500, f"Firestore update failed: {str(e)}")
+
+    return {"received": True}
