@@ -1,7 +1,14 @@
 // src/pages/PromoteSuccess.jsx
 import { useEffect, useState } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
-import { getFirestore, doc, getDoc, setDoc } from "firebase/firestore";
+import {
+  getFirestore,
+  doc,
+  getDoc,
+  setDoc,
+  updateDoc,
+  increment,
+} from "firebase/firestore";
 import NavBar from "../components/NavBarTemp";
 import styles from "./Payment.module.css";
 
@@ -13,11 +20,12 @@ export default function PromoteSuccess() {
   const [error, setError] = useState("");
   const [adCreated, setAdCreated] = useState(false);
 
-  const listingId = searchParams.get("lid");
-  const adType = searchParams.get("type");
-  const stripeRef = searchParams.get("ref");
-  const titleParam = searchParams.get("title");
-  const sessionId = searchParams.get("session_id");
+  const listingId      = searchParams.get("lid");
+  const adType         = searchParams.get("type");
+  const stripeRef      = searchParams.get("ref");
+  const titleParam     = searchParams.get("title");
+  const sessionId      = searchParams.get("session_id");
+  const amountParam    = searchParams.get("amount"); // amount in Rand, passed from checkout
   const uniquePaymentId = sessionId || stripeRef;
 
   useEffect(() => {
@@ -29,8 +37,9 @@ export default function PromoteSuccess() {
 
     let isMounted = true;
     const storageKey = `ad_created_${uniquePaymentId}`;
+
     if (sessionStorage.getItem(storageKey) === "true") {
-      // Already created in this session
+      // Already created in this session — just fetch listing for display
       const fetchListingOnly = async () => {
         const db = getFirestore();
         const listingRef = doc(db, "listings", listingId);
@@ -45,46 +54,88 @@ export default function PromoteSuccess() {
     const createAd = async () => {
       const db = getFirestore();
       try {
-        // Check if ad already exists using the uniquePaymentId as doc ID
+        // ── Check if ad already exists (idempotency) ──────────────────────
         const adDocRef = doc(db, "ads", uniquePaymentId);
         const existingAd = await getDoc(adDocRef);
+
         if (existingAd.exists()) {
           console.log("Ad already exists, skipping creation");
           setAdCreated(true);
-          // Fetch listing for display
           const listingRef = doc(db, "listings", listingId);
           const listingSnap = await getDoc(listingRef);
-          if (listingSnap.exists()) setListing(listingSnap.data());
-          setLoading(false);
+          if (isMounted && listingSnap.exists()) setListing(listingSnap.data());
+          if (isMounted) setLoading(false);
           return;
         }
 
-        // Fetch listing details
+        // ── Fetch listing details ─────────────────────────────────────────
         const listingRef = doc(db, "listings", listingId);
         const listingSnap = await getDoc(listingRef);
         if (!listingSnap.exists()) throw new Error("Listing not found");
         const listingData = listingSnap.data();
-        setListing(listingData);
+        if (isMounted) setListing(listingData);
 
-        // Create ad document directly
+        // ── Create ad document ────────────────────────────────────────────
         const adData = {
           listingId,
-          title: listingData.title || titleParam || "Listing",
-          imageUrl: listingData.photos?.[0] || listingData.imageUrl || null,
-          price: listingData.price,
-          type: adType || "banner",
-          status: "active",
-          createdAt: new Date(),
-          expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+          title:           listingData.title || titleParam || "Listing",
+          imageUrl:        listingData.photos?.[0] || listingData.imageUrl || null,
+          price:           listingData.price,
+          type:            adType || "banner",
+          status:          "active",
+          createdAt:       new Date(),
+          expiresAt:       new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
           stripeSessionId: uniquePaymentId,
+          amountPaid:      amountParam ? Number(amountParam) : null,
         };
         await setDoc(adDocRef, adData);
-        console.log("✅ Ad created directly from success page");
+        console.log("✅ Ad created");
+
+        // ── Update analytics revenue ──────────────────────────────────────
+        // The ad promotion payment never goes through verify-session, so
+        // we must update analytics here directly after the ad is created.
+        const adAmount = amountParam ? Number(amountParam) : 0;
+        if (adAmount > 0) {
+          try {
+            const analyticsRef = doc(db, "analytics", "platform");
+            const analyticsSnap = await getDoc(analyticsRef);
+
+            if (analyticsSnap.exists()) {
+              // ✅ Use Firestore increment() for atomic update
+              await updateDoc(analyticsRef, {
+                totalRevenue:  increment(adAmount),
+                onlineRevenue: increment(adAmount),
+                lastUpdated:   new Date(),
+              });
+            } else {
+              // Create analytics doc if it doesn't exist yet
+              await setDoc(analyticsRef, {
+                totalRevenue:         adAmount,
+                onlineRevenue:        adAmount,
+                pendingCashRevenue:   0,
+                collectedCashRevenue: 0,
+                totalPayouts:         0,
+                totalRefunds:         0,
+                availableBalance:     0,
+                createdAt:            new Date(),
+                lastUpdated:          new Date(),
+              });
+            }
+            console.log(`📊 Analytics updated: +R${adAmount} from ad promotion`);
+          } catch (analyticsErr) {
+            // Analytics failure must never block the success page
+            console.error("⚠️ Analytics update failed (non-fatal):", analyticsErr);
+          }
+        }
+
         setAdCreated(true);
         sessionStorage.setItem(storageKey, "true");
+
       } catch (err) {
         console.error("Ad creation error:", err);
-        setError("Payment succeeded but promotion could not be created. Please contact support.");
+        if (isMounted) {
+          setError("Payment succeeded but promotion could not be created. Please contact support.");
+        }
       } finally {
         if (isMounted) setLoading(false);
       }
@@ -92,7 +143,7 @@ export default function PromoteSuccess() {
 
     createAd();
     return () => { isMounted = false; };
-  }, [listingId, adType, titleParam, uniquePaymentId]);
+  }, [listingId, adType, titleParam, uniquePaymentId, amountParam]);
 
   if (loading) {
     return (
@@ -109,12 +160,10 @@ export default function PromoteSuccess() {
     );
   }
 
-  const displayTitle = listing?.title || titleParam || "Your listing";
-  const displayImage = listing?.photos?.[0] || listing?.imageUrl || null;
-  
-  // Truncate long payment IDs
-  const displayPaymentId = uniquePaymentId?.length > 30 
-    ? `${uniquePaymentId.substring(0, 15)}...${uniquePaymentId.substring(uniquePaymentId.length - 10)}` 
+  const displayTitle    = listing?.title || titleParam || "Your listing";
+  const displayImage    = listing?.photos?.[0] || listing?.imageUrl || null;
+  const displayPaymentId = uniquePaymentId?.length > 30
+    ? `${uniquePaymentId.substring(0, 15)}...${uniquePaymentId.substring(uniquePaymentId.length - 10)}`
     : uniquePaymentId;
 
   return (
@@ -132,17 +181,13 @@ export default function PromoteSuccess() {
               <strong>{adType === "banner" ? "Banner ad" : "Premium popup"}</strong>{" "}
               for the next 7 days. Buyers will start seeing it shortly.
             </p>
-            
+
             {displayImage && (
               <div className={styles.successImage}>
-                <img
-                  src={displayImage}
-                  alt={displayTitle}
-                />
+                <img src={displayImage} alt={displayTitle} />
               </div>
             )}
-            
-            {/* Contained payment reference */}
+
             <div className={styles.paymentRefBox}>
               <div className={styles.paymentRefIcon}>
                 <i className="fas fa-receipt" />
@@ -154,9 +199,9 @@ export default function PromoteSuccess() {
                 </span>
               </div>
             </div>
-            
+
             {error && <div className={styles.errorMsg}>{error}</div>}
-            
+
             <div className={styles.successActions}>
               <button
                 className={styles.primaryBtn}
