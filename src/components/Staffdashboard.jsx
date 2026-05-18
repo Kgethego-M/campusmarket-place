@@ -1034,12 +1034,12 @@ function TransactionCard({ txn, onConfirmDropOff, onConfirmCollection, onRelease
     const isPartialCard    = paymentMethod === "partial" || paymentMethod === "partial_online" || paymentMethod === "split" || paymentMethod === "partially online" || paymentMethod === "partially_online";
 
     const totalPrice       = txn.price ?? 0;
-    const onlineAmountPaid = txn.onlineAmountPaid ?? 0;
-    const shortfall        = isFullyOnline
-        ? 0
-        : isPartialCard
-            ? Math.max(0, totalPrice - onlineAmountPaid)
-            : (txn.cashShortfall ?? totalPrice);
+const onlineAmountPaid = txn.onlineAmountPaid ?? 0;
+const shortfall        = isFullyOnline
+    ? 0
+    : isPartialCard
+        ? Math.max(0, totalPrice - onlineAmountPaid)
+        : (txn.cashShortfall ?? totalPrice);
 
     const hasShortfall = shortfall > 0;
     const isPaid       = isFullyOnline || txn.paymentStatus === "Fully Paid" || shortfall === 0;

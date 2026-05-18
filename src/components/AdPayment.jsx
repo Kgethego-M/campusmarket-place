@@ -1,7 +1,6 @@
 // src/components/AdPayment.jsx
 //
 // Payment page for promoting a listing via real Stripe checkout.
-// Uses Vite proxy to forward /api requests to FastAPI backend on port 8000.
 //
 // Route: /promote-payment
 // State: { listing, adType, adPrice }
@@ -16,6 +15,9 @@ const AD_LABELS = {
   banner: "Banner ad",
   "premium-popup": "Premium popup",
 };
+
+// Backend API URL - change this to your actual backend URL
+const API_BASE_URL = import.meta.env.VITE_API_URL || "https://campus-marketplace-api-gwgxand7f7aggha5.southafricanorth-01.azurewebsites.net";
 
 export default function AdPayment() {
   const { state } = useLocation();
@@ -94,8 +96,8 @@ export default function AdPayment() {
     };
 
     try {
-      // ✅ Use relative URL – Vite proxy forwards /api to http://localhost:8000
-      const res = await fetch("/api/stripe/create-checkout-session", {
+      // Use full backend URL - works in both development and production
+      const res = await fetch(`${API_BASE_URL}/api/stripe/create-checkout-session`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),

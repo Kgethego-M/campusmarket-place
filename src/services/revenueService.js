@@ -114,7 +114,6 @@ export async function recordCashCollected(transactionId, amount) {
     const currentPending = currentData?.pendingCashRevenue || 0;
     
     // Only update pendingCashRevenue if there is a positive pending amount
-    // For cash-on-delivery, pendingCashRevenue might be 0, so we don't decrement
     const updateData = {
       collectedCashRevenue: increment(amount),
       totalRevenue: increment(amount),
@@ -125,10 +124,8 @@ export async function recordCashCollected(transactionId, amount) {
     if (currentPending > 0 && amount <= currentPending) {
       updateData.pendingCashRevenue = increment(-amount);
     } else if (currentPending > 0 && amount > currentPending) {
-      // If collecting more than pending, set pending to 0
       updateData.pendingCashRevenue = increment(-currentPending);
     }
-    // If currentPending is 0, don't modify pendingCashRevenue at all
     
     await updateDoc(analyticsRef, updateData);
     

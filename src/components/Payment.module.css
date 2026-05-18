@@ -673,3 +673,80 @@
     font-size: 0.68rem;
   }
 }
+
+/* ── PromoteSuccess additional styles ── */
+
+.successMessage {
+  font-size: 0.9rem;
+  line-height: 1.5;
+  color: #374151;
+  margin: 8px 0 16px 0;
+  text-align: center;
+}
+
+.successImage {
+  display: flex;
+  justify-content: center;
+  margin: 16px 0;
+}
+
+.successImage img {
+  max-width: 180px;
+  max-height: 180px;
+  border-radius: 12px;
+  object-fit: cover;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+/* Payment Reference Box - Contains the Stripe reference */
+.paymentRefBox {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 12px 16px;
+  margin: 16px 0;
+  max-width: 100%;
+  overflow: hidden;
+  word-break: break-all;
+}
+
+.paymentRefIcon {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  background: #e8f4fd;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #6AA6DA;
+  font-size: 1rem;
+}
+
+.paymentRefContent {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.paymentRefLabel {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.paymentRefValue {
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: #1e293b;
+  font-family: monospace;
+  word-break: break-all;
+  overflow-wrap: break-word;
+}
