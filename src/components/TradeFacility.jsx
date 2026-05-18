@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { auth, db } from "../firebase.js";
-import { collection, query, where, getDocs, doc, getDoc, onSnapshot } from "firebase/firestore";
+import { collection, query, where, getDocs, doc, getDoc, onSnapshot, updateDoc, serverTimestamp } from "firebase/firestore";
 import NavBar from "./NavBarTemp.jsx";
 import styles from "./TradeFacility.module.css";
 
@@ -14,7 +14,7 @@ function formatPrice(value) {
 function getPipelineStage(txn) {
   const status        = txn.status;
   const dropOffStatus = txn.dropOffStatus;
-  if (status === "completed")          return 5;
+  if (status === "completed")           return 5;
   if (status === "awaiting_collection") return 4;
   if (dropOffStatus === "scheduled")    return 2;
   return 1;
@@ -253,20 +253,20 @@ function BuyerTrackerCard({ txn, idx, isHighlighted, highlightRef }) {
 }
 
 function getSellerStatusBadge(txn) {
-    const s = txn.dropOffStatus;
-    const paymentMethod = (txn.paymentMethod || txn.paymentType || "").toLowerCase();
-    const isCashOnly = paymentMethod === "cash" || paymentMethod === "cod" || paymentMethod === "fully_cash";
-    
-    if (s === "inspection_pass")       return { label: "Inspection passed", color: "#166534", bg: "#dcfce7" };
-    if (s === "inspection_fail")       return { label: "Inspection failed",  color: "#791F1F", bg: "#FCEBEB" };
-    if (s === "dropped_off")           return { label: "Item dropped off",   color: "#166534", bg: "#dcfce7" };
-    if (s === "scheduled")             return { label: "Drop-off scheduled", color: "#92400e", bg: "#fef3c7" };
-    
-    if (!isCashOnly && !txn.paymentConfirmed && txn.status === "accepted") {
-        return { label: "Awaiting payment", color: "#92400e", bg: "#fef3c7" };
-    }
-    
-    return { label: "Awaiting drop-off",  color: "#1e40af", bg: "#dbeafe" };
+  const s = txn.dropOffStatus;
+  const paymentMethod = (txn.paymentMethod || txn.paymentType || "").toLowerCase();
+  const isCashOnly = paymentMethod === "cash" || paymentMethod === "cod" || paymentMethod === "fully_cash";
+
+  if (s === "inspection_pass")       return { label: "Inspection passed", color: "#166534", bg: "#dcfce7" };
+  if (s === "inspection_fail")       return { label: "Inspection failed",  color: "#791F1F", bg: "#FCEBEB" };
+  if (s === "dropped_off")           return { label: "Item dropped off",   color: "#166534", bg: "#dcfce7" };
+  if (s === "scheduled")             return { label: "Drop-off scheduled", color: "#92400e", bg: "#fef3c7" };
+
+  if (!isCashOnly && !txn.paymentConfirmed && txn.status === "accepted") {
+    return { label: "Awaiting payment", color: "#92400e", bg: "#fef3c7" };
+  }
+
+  return { label: "Awaiting drop-off", color: "#1e40af", bg: "#dbeafe" };
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────────
@@ -277,7 +277,6 @@ export default function TradeFacility() {
   const [buyerTransactions,  setBuyerTransactions]  = useState([]);
   const [activeTab,          setActiveTab]          = useState("seller");
 
-  // ── Highlight / scroll state ───────────────────────────────────────────────
   const [highlightId, setHighlightId] = useState(null);
   const highlightRef                  = useRef(null);
 
@@ -289,7 +288,6 @@ export default function TradeFacility() {
     return () => { document.body.style.background = ""; };
   }, []);
 
-  // ── Read ?tab= and ?highlight= from URL ───────────────────────────────────
   useEffect(() => {
     const params    = new URLSearchParams(location.search);
     const tabParam  = params.get('tab');
@@ -298,7 +296,6 @@ export default function TradeFacility() {
     if (highlight) setHighlightId(highlight);
   }, [location.search]);
 
-  // ── Scroll to highlighted card once data is ready ─────────────────────────
   useEffect(() => {
     if (highlightId && highlightRef.current) {
       setTimeout(() => {
@@ -307,7 +304,6 @@ export default function TradeFacility() {
     }
   }, [highlightId, sellerTransactions, buyerTransactions]);
 
-  // ── Auth and initial data fetch ───────────────────────────────────────────
   useEffect(() => {
     const unsubscribe = auth.onAuthStateChanged((currentUser) => {
       if (currentUser) {
@@ -323,44 +319,43 @@ export default function TradeFacility() {
     return () => unsubscribe();
   }, [navigate]);
 
-  // ── Real-time listener for buyer transactions (auto-refresh when status changes)
   useEffect(() => {
     if (!user) return;
-    
+
     const q = query(
       collection(db, "transactions"),
       where("buyerId", "==", user.uid),
       where("status", "in", ["waiting", "accepted", "pending_payment", "awaiting_collection"])
     );
-    
+
     const unsubscribe = onSnapshot(q, () => {
       fetchTransactions(user.uid);
     });
-    
+
     return () => unsubscribe();
   }, [user]);
 
   async function fetchTransactions(uid) {
     setLoading(true);
     try {
-      // Only fetch active transactions - exclude completed from the query
       const ACTIVE_STATUSES = [
-        "waiting", 
-        "accepted", 
+        "waiting",
+        "accepted",
         "pending_payment",
         "awaiting_collection",
+        "in_facility",
       ];
 
       const [sellerResults, buyerResults] = await Promise.all([
         Promise.all(ACTIVE_STATUSES.map(status =>
-          getDocs(query(collection(db, "transactions"), 
-            where("sellerId", "==", uid), 
+          getDocs(query(collection(db, "transactions"),
+            where("sellerId", "==", uid),
             where("status", "==", status)
           ))
         )),
         Promise.all(ACTIVE_STATUSES.map(status =>
-          getDocs(query(collection(db, "transactions"), 
-            where("buyerId", "==", uid), 
+          getDocs(query(collection(db, "transactions"),
+            where("buyerId", "==", uid),
             where("status", "==", status)
           ))
         )),
@@ -389,6 +384,28 @@ export default function TradeFacility() {
           }
           txn.tradeItem = txn.tradeItemDetails ?? txn.tradeItem ?? null;
           txn.isSeller = true;
+
+          // ── Auto-heal: Stripe settled but paymentConfirmed not yet flipped ──
+          // paymentSettled:true or paymentStatus:"paid" means money is in — heal
+          // the flag so all downstream logic (other pages, staff panel) works too.
+          const pm = (txn.paymentMethod || txn.paymentType || "").toLowerCase();
+          const isOnline = pm !== "cash" && pm !== "cod" && pm !== "fully_cash" && txn.type !== "trade";
+          if (isOnline && !txn.paymentConfirmed) {
+            const ps = (txn.paymentStatus || "").toLowerCase();
+            const settled = txn.paymentSettled === true || ps === "paid" || ps === "fully paid";
+            if (settled) {
+              try {
+                await updateDoc(doc(db, "transactions", txn.id), {
+                  paymentConfirmed:   true,
+                  paymentConfirmedAt: serverTimestamp(),
+                });
+                txn.paymentConfirmed = true; // update local copy too
+              } catch (healErr) {
+                console.warn("Auto-heal paymentConfirmed failed:", healErr.message);
+              }
+            }
+          }
+
           return txn;
         })),
 
@@ -414,6 +431,10 @@ export default function TradeFacility() {
 
       const ORDER = { waiting: 0, accepted: 1, awaiting_collection: 2 };
 
+      // Hide seller cards only when staff have physically confirmed the item
+      // was received (dropOffConfirmed/sellerDropOffConfirmed both written by
+      // staff at the same time as droppedOffAt). A bookingId alone just means
+      // a slot was scheduled — card must still show.
       const filteredSeller = enrichedSeller.filter(
         (txn) => !txn.dropOffConfirmed && !txn.sellerDropOffConfirmed
       );
@@ -430,38 +451,77 @@ export default function TradeFacility() {
     }
   }
 
+  // ── Payment settled helper ────────────────────────────────────────────────
+  // Covers every combination seen in real transactions:
+  //   • paymentConfirmed: true          (manually/webhook confirmed)
+  //   • paymentSettled: true            (Stripe webhook wrote this)
+  //   • paymentStatus: "paid" | "Fully Paid"
+  //   • cash / cod / fully_cash        (collected at facility — no online step)
+  //   • trade                          (no money, always ok)
+  function isPaymentSatisfied(txn) {
+    if (txn.type === 'trade') return true;
+
+    const pm = (txn.paymentMethod || txn.paymentType || "").toLowerCase();
+    const isCash = pm === "cash" || pm === "cod" || pm === "fully_cash";
+    if (isCash) return true;
+
+    if (txn.paymentConfirmed === true) return true;
+    if (txn.paymentSettled   === true) return true;
+
+    const ps = (txn.paymentStatus || "").toLowerCase();
+    if (ps === "paid" || ps === "fully paid") return true;
+
+    return false;
+  }
+
+  // ── Button logic — all keyed off real Firestore fields ───────────────────
+  //
+  // Seller "Book drop-off" shows when:
+  //   1. No bookingId yet (slot not yet reserved)
+  //   2. Staff haven't confirmed physical receipt (dropOffConfirmed / sellerDropOffConfirmed)
+  //   3. Status is still active
+  //   4. Payment is satisfied (see isPaymentSatisfied above)
   const canBookDropOff = (txn) => {
     if (!txn.isSeller) return false;
-    if (!["waiting", "accepted"].includes(txn.status)) return false;
     if (txn.bookingId) return false;
-    const isTrade = txn.type === 'trade';
-    if (isTrade) return true;
-    const paymentMethod = (txn.paymentMethod || txn.paymentType || "").toLowerCase();
-    const isCashOnly = paymentMethod === "cash" || paymentMethod === "cod" || paymentMethod === "fully_cash";
-    if (isCashOnly) return txn.paymentConfirmed === true;
-    return txn.paymentConfirmed === true;
+    if (txn.dropOffConfirmed || txn.sellerDropOffConfirmed) return false;
+    if (!["waiting", "accepted", "awaiting_collection", "in_facility"].includes(txn.status)) return false;
+    return isPaymentSatisfied(txn);
   };
 
+  // Seller drop-off slot is booked but item not yet physically received
   const hasDropOffBooked = (txn) =>
-    txn.isSeller && (txn.dropOffStatus === "scheduled" || !!txn.bookingId);
+    txn.isSeller &&
+    !!txn.bookingId &&
+    !txn.dropOffConfirmed &&
+    !txn.sellerDropOffConfirmed;
 
+  // Buyer "Book your trade drop-off" button:
+  //   Show when this is a trade, buyer has no slot yet (no buyerBookingId),
+  //   and the transaction is still active
   const canBookBuyerDropOff = (txn) =>
-    !txn.isSeller && txn.type === 'trade' && !txn.buyerBookingId &&
-    ["waiting", "accepted", "awaiting_collection"].includes(txn.status);
+    !txn.isSeller &&
+    txn.type === 'trade' &&
+    !txn.buyerBookingId &&
+    ["waiting", "accepted", "awaiting_collection", "in_facility"].includes(txn.status);
 
   const hasBuyerDropOffBooked = (txn) =>
     !txn.isSeller && txn.type === 'trade' && !!txn.buyerBookingId;
 
+  // Buyer "Book collection" button:
+  //   Show when item is at facility (awaiting_collection) and collection not yet booked.
+  //   For trades, seller also gets a collection button.
   const canBookCollection = (txn) => {
-    const itemAtFacility = txn.status === "awaiting_collection";
-    if (!itemAtFacility || txn.collectionBookingId) return false;
-    if (!txn.isSeller) return true;
-    return txn.type === "trade";
+    if (txn.status !== "awaiting_collection") return false;
+    if (txn.collectionConfirmed) return false;         // already collected
+    if (txn.collectionBookingId) return false;         // slot already booked
+    if (!txn.isSeller) return true;                    // buyer always can
+    return txn.type === "trade";                       // seller only for trades
   };
 
+  // FIX: Include all active statuses for buyer trade cards shown in seller tab
   const buyerTradeTxns = buyerTransactions.filter(t => t.type === 'trade');
 
-  // Buyer transactions for the Track Pick-up tab (all active transactions)
   const activeBuyerTransactions = buyerTransactions;
 
   if (loading) {
@@ -594,7 +654,7 @@ export default function TradeFacility() {
         ) : (
           <div className={styles.list}>
 
-            {/* Seller tab */}
+            {/* ── Seller tab ──────────────────────────────────────────────────── */}
             {activeTab === "seller" && (
               <>
                 {sellerTransactions.map((txn, idx) => {
@@ -602,6 +662,11 @@ export default function TradeFacility() {
                   const imageUrl    = txn.listing?.photos?.[0] ?? null;
                   const isTrade     = txn.type === 'trade';
                   const isHighlighted = highlightId === txn.id;
+
+                  // Derive button/status states
+                  const showBookBtn   = canBookDropOff(txn);
+                  const showBooked    = hasDropOffBooked(txn);
+                  const showCollect   = canBookCollection(txn);
 
                   return (
                     <div
@@ -682,8 +747,12 @@ export default function TradeFacility() {
                           </p>
                         )}
 
-                        {canBookDropOff(txn) && (
-                          <button className={styles.dropOffBtn} onClick={() => navigate(`/book-dropoff/${txn.id}`)}>
+                        {/* PRIMARY: Book drop-off slot */}
+                        {showBookBtn && (
+                          <button
+                            className={styles.dropOffBtn}
+                            onClick={() => navigate(`/book-dropoff/${txn.id}`)}
+                          >
                             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                               <rect x="3" y="4" width="18" height="18" rx="2"/>
                               <line x1="16" y1="2" x2="16" y2="6"/>
@@ -694,11 +763,44 @@ export default function TradeFacility() {
                           </button>
                         )}
 
-                        {hasDropOffBooked(txn) && (
-                          <p style={{ fontSize: "0.75rem", color: "#166534", marginTop: 4 }}>
-                            <i className="fas fa-calendar-check" style={{ marginRight: 4 }} />
+                        {/* Awaiting payment notice for non-cash, non-trade */}
+                        {!showBookBtn && !showBooked && !isTrade && (
+                          (() => {
+                            const pm = (txn.paymentMethod || txn.paymentType || "").toLowerCase();
+                            const isCash = pm === "cash" || pm === "cod" || pm === "fully_cash";
+                            if (!isCash && !txn.paymentConfirmed) {
+                              return (
+                                <p style={{ fontSize: "0.72rem", color: "#92400e", marginTop: 5, background: '#fef3c7', borderRadius: 6, padding: '3px 8px', display: 'inline-block' }}>
+                                  Waiting for buyer payment confirmation
+                                </p>
+                              );
+                            }
+                            return null;
+                          })()
+                        )}
+
+                        {/* Slot already booked confirmation */}
+                        {showBooked && !showBookBtn && (
+                          <p style={{ fontSize: "0.75rem", color: "#166534", marginTop: 4, display: 'flex', alignItems: 'center', gap: 5 }}>
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                              <polyline points="20 6 9 17 4 12"/>
+                            </svg>
                             Drop-off slot booked
                           </p>
+                        )}
+
+                        {/* Book collection slot (item at facility, awaiting collection) */}
+                        {showCollect && (
+                          <button
+                            className={styles.dropOffBtn}
+                            style={{ background: '#7c3aed', marginTop: 6 }}
+                            onClick={() => navigate(`/book-collection/${txn.id}`)}
+                          >
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                              <path d="M5 12h14"/><path d="M12 5l7 7-7 7"/>
+                            </svg>
+                            Book collection
+                          </button>
                         )}
                       </div>
 
@@ -711,7 +813,7 @@ export default function TradeFacility() {
                   );
                 })}
 
-                {/* Buyer trade drop-off cards — purple, shown in seller tab */}
+                {/* ── Buyer trade drop-off cards (purple, in seller tab) ── */}
                 {buyerTradeTxns.length > 0 && (
                   <>
                     {sellerTransactions.length > 0 && (
@@ -721,6 +823,7 @@ export default function TradeFacility() {
                     )}
                     {buyerTradeTxns.map((txn, idx) => {
                       const hasBooked     = !!txn.buyerBookingId;
+                      const needsBooking  = canBookBuyerDropOff(txn);
                       const tradeItem     = txn.tradeItem;
                       const tradeItemObj  = tradeItem && typeof tradeItem === 'object' ? tradeItem : null;
                       const tradeItemName = tradeItemObj?.name ?? (typeof tradeItem === 'string' ? tradeItem : 'Trade item');
@@ -813,7 +916,7 @@ export default function TradeFacility() {
                                   </svg>
                                   {txn.buyerDropOffDate} · {txn.buyerDropOffTimeSlot}
                                 </div>
-                              ) : (
+                              ) : needsBooking ? (
                                 <button
                                   className={styles.buyerDropOffBtn}
                                   onClick={() => navigate(`/book-dropoff/${txn.id}`)}
@@ -826,6 +929,10 @@ export default function TradeFacility() {
                                   </svg>
                                   Book drop-off
                                 </button>
+                              ) : (
+                                <p className={styles.buyerDropOffPending}>
+                                  Pending — waiting for transaction to progress
+                                </p>
                               )}
                             </div>
                           </div>
@@ -837,7 +944,7 @@ export default function TradeFacility() {
               </>
             )}
 
-            {/* Buyer tab — tracker cards only, active transactions only */}
+            {/* ── Buyer tab — tracker cards ───────────────────────────────── */}
             {activeTab === "buyer" && activeBuyerTransactions.map((txn, idx) => (
               <BuyerTrackerCard
                 key={txn.id}
