@@ -3,30 +3,42 @@ import json
 import stripe
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
-from firebase_admin import firestore, credentials
+from firebase_admin import firestore, credentials, initialize_app
 import firebase_admin
 
 router = APIRouter(prefix="/api/stripe", tags=["stripe"])
 
 # ─── Firebase Admin (singleton) ───────────────────────────────────────────────
 
+_firestore_client = None
+
 def get_firestore():
-    if not firebase_admin._apps:
+    global _firestore_client
+    
+    if _firestore_client is not None:
+        return _firestore_client
+    
+    try:
         service_account_json = os.getenv("FIREBASE_SERVICE_ACCOUNT_JSON")
         if not service_account_json:
             print("⚠️ Firebase credentials not available - running in test mode")
             return None
-        try:
-            cred = credentials.Certificate(json.loads(service_account_json))
-            firebase_admin.initialize_app(cred)
+        
+        # Parse the service account JSON
+        cred_dict = json.loads(service_account_json)
+        cred = credentials.Certificate(cred_dict)
+        
+        # Initialize Firebase app if not already initialized
+        if not firebase_admin._apps:
+            initialize_app(cred)
             print("✅ Firebase initialized successfully")
-        except Exception as e:
-            print(f"⚠️ Failed to initialize Firebase: {e}")
-            return None
-    try:
-        return firestore.client()
+        
+        _firestore_client = firestore.client()
+        print("✅ Firestore client obtained")
+        return _firestore_client
+        
     except Exception as e:
-        print(f"⚠️ Failed to get Firestore client: {e}")
+        print(f"⚠️ Failed to initialize Firebase: {e}")
         return None
 
 
@@ -72,9 +84,10 @@ class VerifySessionRequest(BaseModel):
 
 @router.get("/health")
 def health():
+    fs = get_firestore()
     return {
         "stripe_configured":   bool(os.getenv("STRIPE_SECRET_KEY")),
-        "firebase_configured": get_firestore() is not None,
+        "firebase_configured": fs is not None,
     }
 
 
@@ -99,7 +112,6 @@ async def create_checkout_session(payload: CheckoutSessionRequest):
     for key, value in payload.metadata.items():
         metadata[key] = safe_meta(value)
 
-    # Fix URL separator to avoid double question marks
     separator = "&" if "?" in payload.successUrl else "?"
     success_url = payload.successUrl + f"{separator}session_id={{CHECKOUT_SESSION_ID}}"
 
@@ -149,35 +161,34 @@ async def verify_session(payload: VerifySessionRequest):
     if not transaction_id:
         raise HTTPException(400, "Cannot resolve transactionId from session or payload.")
 
-    # Firestore not available (test/CI environment)
+    # Firestore not available
     fs = get_firestore()
     if fs is None:
         print("⚠️ Firestore not available — skipping DB update")
         return {"paid": True, "status": "paid", "warning": "Firestore not configured"}
 
     try:
-        ref = fs.collection("transactions").document(transaction_id)
-        tx_snap = ref.get()
+        # Get transaction document
+        tx_ref = fs.collection("transactions").document(transaction_id)
+        tx_snap = tx_ref.get()
 
-        # Transaction not found — return warning instead of 404
         if not tx_snap.exists:
             print(f"❌ Transaction {transaction_id} not found in Firestore")
             return {
                 "paid": True,
                 "status": "paid",
-                "warning": f"Transaction '{transaction_id}' not found in database",
+                "warning": f"Transaction '{transaction_id}' not found",
             }
 
         tx_data = tx_snap.to_dict()
 
-        # Idempotency — already updated
+        # Already updated - skip
         if tx_data.get("paymentStatus") == "paid":
             print(f"ℹ️ tx={transaction_id} already paid — skipping")
             return {"paid": True, "alreadyUpdated": True}
 
-        # Calculate amount paid (in Rands, not cents)
+        # Calculate amount paid
         amount_paid = (session.get("amount_total") or 0) / 100
-        payment_type = tx_data.get("paymentType", "full_online")
 
         # Update analytics
         try:
@@ -197,21 +208,18 @@ async def verify_session(payload: VerifySessionRequest):
                     "lastUpdated": firestore.SERVER_TIMESTAMP,
                 })
 
-            # All online payments go to onlineRevenue and totalRevenue
             analytics_ref.update({
                 "totalRevenue": firestore.Increment(amount_paid),
                 "onlineRevenue": firestore.Increment(amount_paid),
                 "lastUpdated": firestore.SERVER_TIMESTAMP,
             })
-            
-            print(f"💰 Revenue recorded: R{amount_paid} added to onlineRevenue and totalRevenue")
+            print(f"💰 Revenue recorded: R{amount_paid}")
 
         except Exception as analytics_err:
-            # Analytics failure must never block the transaction update
             print(f"⚠️ Analytics update failed (non-fatal): {analytics_err}")
 
-        # Update transaction
-        ref.update({
+        # ✅ CRITICAL: Update transaction status to "waiting"
+        tx_ref.update({
             "status": "waiting",
             "paymentStatus": "paid",
             "paymentProvider": "stripe",
@@ -225,31 +233,15 @@ async def verify_session(payload: VerifySessionRequest):
             "updatedAt": firestore.SERVER_TIMESTAMP,
         })
 
-        # Record revenue event in subcollection
-        try:
-            events_ref = ref.collection("revenueEvents")
-            events_ref.add({
-                "type": "payment_received",
-                "amount": amount_paid,
-                "paymentMethod": "stripe",
-                "stripeSessionId": payload.sessionId,
-                "paymentType": payment_type,
-                "timestamp": firestore.SERVER_TIMESTAMP,
-            })
-        except Exception as event_err:
-            print(f"⚠️ Failed to record revenue event: {event_err}")
-
         print(f"✅ tx={transaction_id} → status=waiting, paymentStatus=paid")
         return {"paid": True, "alreadyUpdated": False, "transactionId": transaction_id}
 
-    except HTTPException:
-        raise
     except Exception as e:
-        print(f"❌ verify-session Firestore error: {e}")
+        print(f"❌ verify-session error: {e}")
         raise HTTPException(500, f"Firestore update failed: {str(e)}")
 
 
-# ─── Webhook (redundancy fallback) ────────────────────────────────────────────
+# ─── Webhook ────────────────────────────────────────────────────────────
 
 @router.post("/webhook")
 async def stripe_webhook(request: Request):
@@ -260,7 +252,7 @@ async def stripe_webhook(request: Request):
 
     if not webhook_secret:
         print("⚠️ STRIPE_WEBHOOK_SECRET missing — webhook disabled")
-        return {"received": True, "warning": "Webhook secret not configured"}
+        return {"received": True}
 
     try:
         event = stripe_client.Webhook.construct_event(payload, signature, webhook_secret)
@@ -275,71 +267,35 @@ async def stripe_webhook(request: Request):
         meta = session.get("metadata") or {}
         transaction_id = meta.get("transactionId") or session.get("client_reference_id", "")
 
-        print(f"[Webhook] checkout.session.completed — session={session_id}, tx={transaction_id}")
-
         if not transaction_id:
             print("[Webhook] No transactionId found — skipping")
             return {"received": True}
 
         fs = get_firestore()
         if fs is None:
-            return {"received": True, "warning": "Firestore not configured"}
+            return {"received": True}
 
         try:
-            ref = fs.collection("transactions").document(transaction_id)
-            tx_snap = ref.get()
+            tx_ref = fs.collection("transactions").document(transaction_id)
+            tx_snap = tx_ref.get()
 
             if tx_snap.exists and tx_snap.to_dict().get("paymentStatus") == "paid":
-                print(f"[Webhook] tx={transaction_id} already paid — skipping")
                 return {"received": True}
 
-            # Calculate amount paid
             amount_paid = (session.get("amount_total") or 0) / 100
 
-            # Update analytics
-            try:
-                analytics_ref = fs.collection("analytics").document("platform")
-                analytics_snap = analytics_ref.get()
-
-                if not analytics_snap.exists:
-                    analytics_ref.set({
-                        "totalRevenue": 0,
-                        "onlineRevenue": 0,
-                        "pendingCashRevenue": 0,
-                        "collectedCashRevenue": 0,
-                        "totalPayouts": 0,
-                        "totalRefunds": 0,
-                        "availableBalance": 0,
-                        "createdAt": firestore.SERVER_TIMESTAMP,
-                        "lastUpdated": firestore.SERVER_TIMESTAMP,
-                    })
-
-                analytics_ref.update({
-                    "totalRevenue": firestore.Increment(amount_paid),
-                    "onlineRevenue": firestore.Increment(amount_paid),
-                    "lastUpdated": firestore.SERVER_TIMESTAMP,
-                })
-            except Exception as analytics_err:
-                print(f"⚠️ Webhook analytics update failed: {analytics_err}")
-
-            # Update transaction
-            ref.update({
+            tx_ref.update({
                 "status": "waiting",
                 "paymentStatus": "paid",
                 "paymentProvider": "stripe",
                 "paymentSettled": True,
                 "stripeRef": meta.get("stripeRef", session_id),
                 "stripeCheckoutSessionId": session_id,
-                "revenueRecorded": True,
-                "revenueAmount": amount_paid,
-                "revenueRecordedAt": firestore.SERVER_TIMESTAMP,
                 "updatedAt": firestore.SERVER_TIMESTAMP,
             })
             print(f"[Webhook] tx={transaction_id} → waiting/paid")
 
         except Exception as e:
-            print(f"[Webhook] ERROR for tx={transaction_id}: {e}")
-            # Don't raise HTTPException - just log and return
-            return {"received": True, "warning": f"Firestore update failed: {str(e)}"}
+            print(f"[Webhook] ERROR: {e}")
 
     return {"received": True}
