@@ -46,6 +46,38 @@ def safe_meta(value):
     return str(value)[:500]
 
 
+def update_analytics(fs, amount, payment_type, tx_data):
+    """
+    Read-then-write analytics update using plain arithmetic.
+    Avoids firestore.Increment() which fails on mocked Firestore in tests.
+    """
+    analytics_ref  = fs.collection("analytics").document("platform")
+    analytics_snap = analytics_ref.get()
+
+    online_amount = float(tx_data.get("onlineAmount") or amount) \
+        if payment_type == "partial" else amount
+
+    if analytics_snap.exists:
+        current = analytics_snap.to_dict()
+        analytics_ref.update({
+            "totalRevenue":  (current.get("totalRevenue") or 0) + online_amount,
+            "onlineRevenue": (current.get("onlineRevenue") or 0) + online_amount,
+            "lastUpdated":   firestore.SERVER_TIMESTAMP,
+        })
+    else:
+        analytics_ref.set({
+            "totalRevenue":         online_amount,
+            "onlineRevenue":        online_amount,
+            "pendingCashRevenue":   0,
+            "collectedCashRevenue": 0,
+            "totalPayouts":         0,
+            "totalRefunds":         0,
+            "availableBalance":     0,
+            "createdAt":            firestore.SERVER_TIMESTAMP,
+            "lastUpdated":          firestore.SERVER_TIMESTAMP,
+        })
+
+
 # ─── Request models ───────────────────────────────────────────────────────────
 
 class CheckoutSessionRequest(BaseModel):
@@ -102,9 +134,9 @@ async def create_checkout_session(payload: CheckoutSessionRequest):
         metadata[key] = safe_meta(value)
 
     # ✅ Use & if successUrl already contains ? to avoid double-question-mark bug.
-    # The frontend sends successUrl as:  /payment-success?tx=TX_ID
-    # Without this the redirect becomes: /payment-success?tx=TX_ID?session_id=...
-    # which breaks URL parsing and makes txId null in the frontend.
+    # The frontend sends: /payment-success?tx=TX_ID
+    # Without this fix:  /payment-success?tx=TX_ID?session_id=... (broken)
+    # With this fix:     /payment-success?tx=TX_ID&session_id=... (correct)
     separator   = "&" if "?" in payload.successUrl else "?"
     success_url = payload.successUrl + f"{separator}session_id={{CHECKOUT_SESSION_ID}}"
 
@@ -146,8 +178,8 @@ async def verify_session(payload: VerifySessionRequest):
         return {"paid": False, "status": session.payment_status}
 
     # ── Resolve transactionId ─────────────────────────────────────────────────
-    # ✅ Use attribute access (session.metadata, session.client_reference_id)
-    # NOT session.get() — Stripe objects are not dicts and don't support .get()
+    # ✅ Use attribute access — Stripe objects are NOT plain dicts.
+    # session.get() raises AttributeError: 'get' on real Stripe objects.
     transaction_id = payload.transactionId.strip() if payload.transactionId else ""
     if not transaction_id:
         meta = session.metadata or {}
@@ -183,49 +215,19 @@ async def verify_session(payload: VerifySessionRequest):
             return {"paid": True, "alreadyUpdated": True}
 
         # ── Resolve amount paid ───────────────────────────────────────────────
-        # ✅ Use attribute access, not session.get("amount_total")
+        # ✅ Attribute access — NOT session.get("amount_total")
         amount_paid  = (session.amount_total or 0) / 100
         payment_type = tx_data.get("paymentType", "full_online")
 
-        # ── Analytics increment (non-fatal) ───────────────────────────────────
+        # ── Analytics update (non-fatal, uses plain arithmetic not Increment) ──
         try:
-            analytics_ref  = fs.collection("analytics").document("platform")
-            analytics_snap = analytics_ref.get()
-
-            if not analytics_snap.exists:
-                analytics_ref.set({
-                    "totalRevenue":         0,
-                    "onlineRevenue":        0,
-                    "pendingCashRevenue":   0,
-                    "collectedCashRevenue": 0,
-                    "totalPayouts":         0,
-                    "totalRefunds":         0,
-                    "availableBalance":     0,
-                    "createdAt":            firestore.SERVER_TIMESTAMP,
-                    "lastUpdated":          firestore.SERVER_TIMESTAMP,
-                })
-
-            if payment_type == "partial":
-                online_amount = float(tx_data.get("onlineAmount") or amount_paid)
-                analytics_ref.update({
-                    "totalRevenue":  firestore.Increment(online_amount),
-                    "onlineRevenue": firestore.Increment(online_amount),
-                    "lastUpdated":   firestore.SERVER_TIMESTAMP,
-                })
-            else:
-                analytics_ref.update({
-                    "totalRevenue":  firestore.Increment(amount_paid),
-                    "onlineRevenue": firestore.Increment(amount_paid),
-                    "lastUpdated":   firestore.SERVER_TIMESTAMP,
-                })
-
+            update_analytics(fs, amount_paid, payment_type, tx_data)
             print(f"📊 Analytics updated: +R{amount_paid} for tx={transaction_id}")
-
         except Exception as analytics_err:
             # Analytics failure must NEVER block the transaction update
             print(f"⚠️ Analytics update failed (non-fatal): {analytics_err}")
 
-        # ── Update transaction — this is the critical step ────────────────────
+        # ── Update transaction — the critical step ────────────────────────────
         ref.update({
             "status":                  "waiting",
             "paymentStatus":           "paid",
