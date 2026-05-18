@@ -69,7 +69,7 @@ def test_404_response_structure():
 
 
 # =============================================================================
-# HEALTH ENDPOINT (NEW)
+# HEALTH ENDPOINT
 # =============================================================================
 
 def test_health_endpoint():
@@ -239,12 +239,15 @@ def test_verify_session_payment_paid_transaction_not_found():
 
 
 def test_verify_session_payment_paid_updates_transaction():
+    """Test that verify-session updates both analytics and transaction"""
     payload = {
         "sessionId": "cs_test_123",
         "transactionId": "tx123",
     }
     fake_session = MagicMock()
     fake_session.payment_status = "paid"
+    fake_session.get = MagicMock()
+    fake_session.get.side_effect = lambda key, default=None: 10000 if key == "amount_total" else default
     fake_stripe = MagicMock()
     fake_stripe.checkout.Session.retrieve.return_value = fake_session
 
@@ -267,11 +270,15 @@ def test_verify_session_payment_paid_updates_transaction():
 
     assert response.status_code == 200
     assert response.json()["paid"] == True
-    mock_doc.update.assert_called_once()
-    update_data = mock_doc.update.call_args[0][0]
-    assert update_data["status"] == "waiting"
-    assert update_data["paymentStatus"] == "paid"
-    assert update_data["paymentProvider"] == "stripe"
+    
+    # Expect 2 updates: analytics update + transaction update
+    assert mock_doc.update.call_count == 2
+    
+    # Get the transaction update (second call)
+    tx_update_data = mock_doc.update.call_args_list[1][0][0]
+    assert tx_update_data["status"] == "waiting"
+    assert tx_update_data["paymentStatus"] == "paid"
+    assert tx_update_data["paymentProvider"] == "stripe"
 
 
 def test_verify_session_already_updated_does_nothing():
@@ -303,7 +310,8 @@ def test_verify_session_already_updated_does_nothing():
 
     assert response.status_code == 200
     assert response.json()["paid"] == True
-    mock_doc.update.assert_not_called()
+    # No updates should be called since already paid
+    assert mock_doc.update.call_count == 0
 
 
 def test_verify_session_stripe_error():
