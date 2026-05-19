@@ -45,6 +45,73 @@ def safe_meta(value):
         return ""
     return str(value)[:500]
 
+def test_stripe_checkout_ad_promotion_uses_prefix():
+    """Ad promotion listings should prepend [AD PROMOTION] to product name."""
+    payload = {
+        "transactionId": "tx123",
+        "buyerEmail": "student@example.com",
+        "amount": 5000,
+        "amountRand": 50,
+        "cashAmount": 0,
+        "totalAmount": 50,
+        "currency": "zar",
+        "stripeRef": "CM-AD123",
+        "paymentType": "ad_promotion",
+        "listingId": "listing123",
+        "listingTitle": "My Listing",
+        "successUrl": "http://localhost:5173/promote-success?lid=listing123",
+        "cancelUrl": "http://localhost:5173/promote-cancelled",
+        "metadata": {},
+    }
+    fake_session = MagicMock()
+    fake_session.id  = "cs_test_ad"
+    fake_session.url = "https://checkout.stripe.com/c/pay/cs_test_ad"
+    fake_stripe = MagicMock()
+    fake_stripe.checkout.Session.create.return_value = fake_session
+
+    with patch("routes.stripe_payments.get_stripe", return_value=fake_stripe):
+        response = client.post("/api/stripe/create-checkout-session", json=payload)
+
+    assert response.status_code == 200
+    create_args = fake_stripe.checkout.Session.create.call_args.kwargs
+    product_name = create_args["line_items"][0]["price_data"]["product_data"]["name"]
+    assert product_name == "[AD PROMOTION] My Listing"
+
+
+def test_stripe_checkout_ad_promotion_success_url_has_ampersand():
+    """Ad promotion successUrl already has query params so session_id needs &."""
+    payload = {
+        "transactionId": "tx123",
+        "buyerEmail": "student@example.com",
+        "amount": 5000,
+        "amountRand": 50,
+        "cashAmount": 0,
+        "totalAmount": 50,
+        "currency": "zar",
+        "stripeRef": "CM-AD123",
+        "paymentType": "ad_promotion",
+        "listingId": "listing123",
+        "listingTitle": "My Listing",
+        "successUrl": "http://localhost:5173/promote-success?lid=listing123&type=banner&amount=50",
+        "cancelUrl": "http://localhost:5173/promote-cancelled",
+        "metadata": {},
+    }
+    fake_session = MagicMock()
+    fake_session.id  = "cs_test_ad"
+    fake_session.url = "https://checkout.stripe.com/c/pay/cs_test_ad"
+    fake_stripe = MagicMock()
+    fake_stripe.checkout.Session.create.return_value = fake_session
+
+    with patch("routes.stripe_payments.get_stripe", return_value=fake_stripe):
+        response = client.post("/api/stripe/create-checkout-session", json=payload)
+
+    assert response.status_code == 200
+    create_args = fake_stripe.checkout.Session.create.call_args.kwargs
+    success_url = create_args["success_url"]
+    # Must use & not ? since successUrl already has query params
+    assert "&session_id=" in success_url
+    assert "?session_id=" not in success_url
+
 
 def update_analytics(fs, amount, payment_type, tx_data):
     """

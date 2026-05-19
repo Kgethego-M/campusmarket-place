@@ -2,10 +2,54 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { auth, db } from "../firebase";
 import { onAuthStateChanged } from "firebase/auth";
-import { doc, getDoc, collection, getDocs } from "firebase/firestore";
+import { doc, getDoc, collection, getDocs, updateDoc, increment, onSnapshot, setDoc } from "firebase/firestore";
 import { getRevenueAnalytics } from "../services/revenueService";
 import styles from "./AdminAnalytics.module.css";
 import AdminNavbar from "./AdminNavbar";
+
+// Helper: show toast notifications (inline, matches dashboard)
+function Toast({ message, type = "success", onDismiss }) {
+  useEffect(() => {
+    const t = setTimeout(onDismiss, 3500);
+    return () => clearTimeout(t);
+  }, [onDismiss]);
+
+  const bg = type === "error" ? "#dc2626" : type === "warning" ? "#d97706" : "#16a34a";
+  return (
+    <div style={{
+      position: "fixed", bottom: 24, right: 24, zIndex: 99999,
+      background: bg, color: "#fff", padding: "12px 20px",
+      borderRadius: 10, fontSize: "0.85rem", fontWeight: 600,
+      boxShadow: "0 8px 24px rgba(0,0,0,0.18)",
+      maxWidth: 320,
+    }}>
+      {message}
+    </div>
+  );
+}
+
+// Helper: Ensure revenue analytics document exists
+async function ensureRevenueDocument() {
+  const revenueDocRef = doc(db, "revenueAnalytics", "global");
+  const docSnap = await getDoc(revenueDocRef);
+  
+  if (!docSnap.exists()) {
+    // Create the document with default values
+    await setDoc(revenueDocRef, {
+      totalRevenue: 0,
+      onlineRevenue: 0,
+      collectedCashRevenue: 0,
+      pendingCashRevenue: 0,
+      totalPayouts: 0,
+      totalRefunds: 0,
+      availableBalance: 0,
+      promotionRevenue: 0,
+      adPayments: 0,
+      lastUpdated: new Date()
+    });
+  }
+  return revenueDocRef;
+}
 
 export default function AdminAnalytics() {
     const navigate = useNavigate();
@@ -14,9 +58,10 @@ export default function AdminAnalytics() {
     const [revenueData, setRevenueData] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
-    const [adminUser, setAdminUser] = useState({ name: "Admin", email: "", initials: "A" });
+    const [toast, setToast] = useState(null);
+    const [adminUser, setAdminUser] = useState({ name: "Admin", email: "", initials: "A", photoURL: "" });
 
-    // ── Auth guard ────────────────────────────────────────────────
+    // ── Auth guard + realtime profile listener (matches dashboard UI) ──
     useEffect(() => {
         const unsub = onAuthStateChanged(auth, async (user) => {
             if (!user) { navigate("/login"); return; }
@@ -29,6 +74,7 @@ export default function AdminAnalytics() {
                 setAdminUser({
                     name: `${fn} ${ln}`.trim(),
                     email: d.email || user.email,
+                    photoURL: d.photoURL || user.photoURL || "",
                     initials: `${fn[0] || "A"}${ln[0] || ""}`.toUpperCase(),
                 });
             } catch (e) { console.error(e); }
@@ -36,12 +82,41 @@ export default function AdminAnalytics() {
         return () => unsub();
     }, [navigate]);
 
-    // ── Load analytics data ───────────────────────────────────────
+    const showToast = (message, type = "success") => setToast({ message, type });
+    const hideToast = () => setToast(null);
+
+    // Function to update revenue with document creation if needed
+    const updateRevenueField = async (updates) => {
+      try {
+        const revenueDocRef = await ensureRevenueDocument();
+        await updateDoc(revenueDocRef, updates);
+      } catch (err) {
+        console.error("Error updating revenue:", err);
+        throw err;
+      }
+    };
+
+    // ── Load analytics + setup realtime listeners for revenue/promotions ──
     useEffect(() => {
-        (async () => {
+        let unsubscribeTransactions = null;
+        let unsubscribePromotions = null;
+        let isMounted = true;
+
+        // Initialize revenue document
+        const initRevenueDoc = async () => {
+          try {
+            await ensureRevenueDocument();
+          } catch (err) {
+            console.error("Error initializing revenue document:", err);
+          }
+        };
+        initRevenueDoc();
+
+        const loadInitialData = async () => {
             setLoading(true);
             setError("");
             try {
+                // Firestore collections
                 const [usersSnap, listSnap, bookingsSnap, txnSnap, revenueStats] = await Promise.all([
                     getDocs(collection(db, "users")),
                     getDocs(collection(db, "listings")),
@@ -50,8 +125,10 @@ export default function AdminAnalytics() {
                     getRevenueAnalytics(),
                 ]);
 
+                if (!isMounted) return;
+
                 const users = usersSnap.docs.map(d => d.data());
-                const lists = listSnap.docs.map(d => d.data());
+                const lists = listSnap.docs.map(d => ({ id: d.id, ...d.data() }));
                 const bookings = bookingsSnap.docs.map(d => d.data());
                 const txns = txnSnap.docs.map(d => d.data());
 
@@ -143,11 +220,106 @@ export default function AdminAnalytics() {
                 });
             } catch (e) {
                 console.error(e);
-                setError("Failed to load analytics: " + e.message);
+                if (isMounted) setError("Failed to load analytics: " + e.message);
             } finally {
-                setLoading(false);
+                if (isMounted) setLoading(false);
             }
-        })();
+        };
+
+        // Setup realtime listeners for transactions (to increment total revenue and ad payments)
+        const setupRealtimeListeners = () => {
+            // Listen to transactions collection for new online payments (including promotions)
+            unsubscribeTransactions = onSnapshot(collection(db, "transactions"), async (snapshot) => {
+                let onlineRev = 0;
+                let promoRev = 0;
+                
+                for (const change of snapshot.docChanges()) {
+                    if (change.type === "added") {
+                        const txn = change.doc.data();
+                        // If transaction is for promotion (promotionId exists or type = 'promotion')
+                        if (txn.type === "promotion" || txn.promotionId) {
+                            const amount = Number(txn.amount) || 0;
+                            promoRev += amount;
+                            onlineRev += amount;
+                            
+                            try {
+                                await updateRevenueField({
+                                    totalRevenue: increment(amount),
+                                    onlineRevenue: increment(amount),
+                                    promotionRevenue: increment(amount),
+                                    adPayments: increment(amount),
+                                    availableBalance: increment(amount * 0.9)
+                                });
+                                
+                                if (isMounted) showToast(`Promotion payment of R${amount} recorded!`, "success");
+                            } catch (err) {
+                                console.error("Error updating promotion revenue:", err);
+                            }
+                        } 
+                        // Regular online payment for listing
+                        else if (txn.paymentMethod === "online" && txn.status === "completed") {
+                            const amount = Number(txn.amount) || 0;
+                            onlineRev += amount;
+                            try {
+                                await updateRevenueField({
+                                    totalRevenue: increment(amount),
+                                    onlineRevenue: increment(amount),
+                                    availableBalance: increment(amount * 0.9)
+                                });
+                            } catch (err) {
+                                console.error("Error updating revenue:", err);
+                            }
+                        }
+                    }
+                }
+                
+                // Refresh revenue data after updates
+                if ((onlineRev > 0 || promoRev > 0) && isMounted) {
+                    try {
+                        const freshRevenue = await getRevenueAnalytics();
+                        if (isMounted) setRevenueData(freshRevenue);
+                    } catch (err) {
+                        console.error("Error refreshing revenue data:", err);
+                    }
+                }
+            });
+            
+            // Listen for listing promotions (when a listing gets promoted)
+            unsubscribePromotions = onSnapshot(collection(db, "promotions"), async (snapshot) => {
+                for (const change of snapshot.docChanges()) {
+                    if (change.type === "added") {
+                        const promo = change.doc.data();
+                        const amount = Number(promo.amount) || Number(promo.price) || 0;
+                        if (amount > 0) {
+                            try {
+                                await updateRevenueField({
+                                    totalRevenue: increment(amount),
+                                    onlineRevenue: increment(amount),
+                                    promotionRevenue: increment(amount),
+                                    adPayments: increment(amount)
+                                });
+                                const freshRevenue = await getRevenueAnalytics();
+                                if (isMounted) {
+                                    setRevenueData(freshRevenue);
+                                    showToast(`Ad payment of R${amount} received for promotion!`, "success");
+                                }
+                            } catch (err) {
+                                console.error("Error updating promotion revenue:", err);
+                            }
+                        }
+                    }
+                }
+            });
+        };
+
+        loadInitialData();
+        setupRealtimeListeners();
+
+        return () => {
+            isMounted = false;
+            if (unsubscribeTransactions) unsubscribeTransactions();
+            if (unsubscribePromotions) unsubscribePromotions();
+        };
     }, []);
 
     // ── Chart components ──────────────────────────────────────────
@@ -217,11 +389,13 @@ export default function AdminAnalytics() {
     function RevenueMetricsCards() {
         if (!revenueData) return null;
         
+        // Display ad payments prominently (new feature)
         const cards = [
             { label: "Total Revenue", value: `R ${(revenueData.totalRevenue || 0).toLocaleString()}`, icon: "fas fa-chart-line", color: "#10b981" },
+            { label: "Ad Payments", value: `R ${(revenueData.adPayments || 0).toLocaleString()}`, icon: "fas fa-bullhorn", color: "#8b5cf6" },
             { label: "Online Payments", value: `R ${(revenueData.onlineRevenue || 0).toLocaleString()}`, icon: "fas fa-credit-card", color: "#3b82f6" },
             { label: "Cash Collected", value: `R ${(revenueData.collectedCashRevenue || 0).toLocaleString()}`, icon: "fas fa-money-bill", color: "#f59e0b" },
-            { label: "Pending Cash", value: `R ${(revenueData.pendingCashRevenue || 0).toLocaleString()}`, icon: "fas fa-hourglass-half", color: "#8b5cf6" },
+            { label: "Pending Cash", value: `R ${(revenueData.pendingCashRevenue || 0).toLocaleString()}`, icon: "fas fa-hourglass-half", color: "#f59e0b" },
             { label: "Total Payouts", value: `R ${(revenueData.totalPayouts || 0).toLocaleString()}`, icon: "fas fa-arrow-up", color: "#ef4444" },
             { label: "Total Refunds", value: `R ${(revenueData.totalRefunds || 0).toLocaleString()}`, icon: "fas fa-undo-alt", color: "#f97316" },
             { label: "Available Balance", value: `R ${(revenueData.availableBalance || 0).toLocaleString()}`, icon: "fas fa-wallet", color: "#06b6d4" },
@@ -261,8 +435,11 @@ export default function AdminAnalytics() {
         </div>
     );
 
+    if (!data) return null;
+
     return (
         <div className={styles.shell}>
+            {toast && <Toast message={toast.message} type={toast.type} onDismiss={hideToast} />}
             <AdminNavbar activePage="analytics" adminUser={adminUser} />
 
             <main className={styles.main}>
@@ -271,7 +448,7 @@ export default function AdminAnalytics() {
                     <p>Live platform overview — revenue, users, listings, bookings &amp; more</p>
                 </div>
 
-                {/* ── Revenue Metrics Section (NEW) ── */}
+                {/* ── Revenue Metrics Section (with Ad Payments) ── */}
                 <div className={styles.section}>
                     <h2 className={styles.sectionTitle}>
                         <i className="fas fa-wallet" style={{ marginRight: 8, color: "#10b981" }} />
