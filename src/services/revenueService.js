@@ -9,61 +9,76 @@ import { doc, updateDoc, increment, serverTimestamp, collection, addDoc, getDoc,
 // ── Analytics document reference ─────────────────────────────────────────────
 const getAnalyticsRef = () => doc(db, 'analytics', 'platform');
 
-// ── Ensure analytics document exists ─────────────────────────────────────────
+// ── Default analytics shape (single source of truth) ─────────────────────────
+const DEFAULT_ANALYTICS = {
+  totalRevenue:         0,
+  onlineRevenue:        0,
+  adPayments:           0,   // ← ad/promotion payments
+  pendingCashRevenue:   0,
+  collectedCashRevenue: 0,
+  totalPayouts:         0,
+  totalRefunds:         0,
+  availableBalance:     0,
+  createdAt:            serverTimestamp(),
+  lastUpdated:          serverTimestamp(),
+};
+
+// ── Ensure analytics document exists with all fields ─────────────────────────
 async function ensureAnalyticsDocument() {
   const analyticsRef = getAnalyticsRef();
   const snap = await getDoc(analyticsRef);
-  
+
   if (!snap.exists()) {
-    await setDoc(analyticsRef, {
-      totalRevenue: 0,
-      onlineRevenue: 0,
-      pendingCashRevenue: 0,
-      collectedCashRevenue: 0,
-      totalPayouts: 0,
-      totalRefunds: 0,
-      availableBalance: 0,
-      createdAt: serverTimestamp(),
-      lastUpdated: serverTimestamp(),
+    await setDoc(analyticsRef, DEFAULT_ANALYTICS);
+  } else {
+    // Patch any missing fields (e.g. adPayments missing from older docs)
+    const data = snap.data();
+    const missing = {};
+    Object.entries(DEFAULT_ANALYTICS).forEach(([key, val]) => {
+      if (data[key] === undefined) missing[key] = val;
     });
+    if (Object.keys(missing).length > 0) {
+      await updateDoc(analyticsRef, missing);
+    }
   }
+
   return analyticsRef;
 }
 
-// ── Record online payment from Stripe ───────────────────────────────────────
+// ── Record online payment from Stripe ────────────────────────────────────────
 export async function recordOnlinePayment(transactionId, amount, paymentDetails = {}) {
   try {
     const analyticsRef = await ensureAnalyticsDocument();
     const txnRef = doc(db, 'transactions', transactionId);
-    
+
     const txnSnap = await getDoc(txnRef);
     const txn = txnSnap.exists() ? txnSnap.data() : {};
-    
+
     if (txn.revenueRecorded === true) {
       console.log(`Revenue already recorded for transaction ${transactionId}`);
       return false;
     }
-    
+
     await updateDoc(analyticsRef, {
-      totalRevenue: increment(amount),
+      totalRevenue:  increment(amount),
       onlineRevenue: increment(amount),
-      lastUpdated: serverTimestamp(),
+      lastUpdated:   serverTimestamp(),
     });
-    
+
     await addDoc(collection(db, 'transactions', transactionId, 'revenueEvents'), {
-      type: 'payment_received',
-      amount: amount,
-      paymentMethod: paymentDetails.paymentMethod || 'stripe',
+      type:            'payment_received',
+      amount:          amount,
+      paymentMethod:   paymentDetails.paymentMethod || 'stripe',
       stripeSessionId: paymentDetails.stripeSessionId || null,
-      timestamp: serverTimestamp(),
+      timestamp:       serverTimestamp(),
     });
-    
+
     await updateDoc(txnRef, {
-      revenueRecorded: true,
-      revenueAmount: amount,
+      revenueRecorded:   true,
+      revenueAmount:     amount,
       revenueRecordedAt: serverTimestamp(),
     });
-    
+
     console.log(`✅ Recorded online payment: R${amount} for tx ${transactionId}`);
     return true;
   } catch (error) {
@@ -72,28 +87,57 @@ export async function recordOnlinePayment(transactionId, amount, paymentDetails 
   }
 }
 
-// ── Record cash confirmation (when buyer commits to cash payment) ────────────
+// ── Record ad / promotion payment ─────────────────────────────────────────────
+export async function recordAdPayment(uniquePaymentId, amount, adDetails = {}) {
+  try {
+    const analyticsRef = await ensureAnalyticsDocument();
+
+    // Idempotency: skip if already recorded
+    const snap = await getDoc(analyticsRef);
+    const recorded = snap.data()?.adPaymentIds || [];
+    if (recorded.includes(uniquePaymentId)) {
+      console.log(`Ad payment already recorded for ${uniquePaymentId}`);
+      return false;
+    }
+
+    await updateDoc(analyticsRef, {
+      totalRevenue: increment(amount),
+      adPayments:   increment(amount),   // ← "Ad Payments" card on dashboard
+      lastUpdated:  serverTimestamp(),
+      // Keep a list of recorded IDs so we never double-count
+      adPaymentIds: [...recorded, uniquePaymentId],
+    });
+
+    console.log(`✅ Recorded ad payment: R${amount} for session ${uniquePaymentId}`);
+    return true;
+  } catch (error) {
+    console.error('Failed to record ad payment:', error);
+    return false;
+  }
+}
+
+// ── Record cash confirmation (when buyer commits to cash payment) ─────────────
 export async function recordCashConfirmation(transactionId, amount) {
   try {
     const analyticsRef = await ensureAnalyticsDocument();
     const txnRef = doc(db, 'transactions', transactionId);
-    
+
     await updateDoc(analyticsRef, {
       pendingCashRevenue: increment(amount),
-      lastUpdated: serverTimestamp(),
+      lastUpdated:        serverTimestamp(),
     });
-    
+
     await addDoc(collection(db, 'transactions', transactionId, 'revenueEvents'), {
-      type: 'cash_confirmed',
-      amount: amount,
+      type:      'cash_confirmed',
+      amount:    amount,
       timestamp: serverTimestamp(),
     });
-    
+
     await updateDoc(txnRef, {
       cashConfirmed: true,
-      cashAmount: amount,
+      cashAmount:    amount,
     });
-    
+
     console.log(`✅ Recorded cash confirmation: R${amount} for tx ${transactionId}`);
     return true;
   } catch (error) {
@@ -102,45 +146,41 @@ export async function recordCashConfirmation(transactionId, amount) {
   }
 }
 
-// ── Record cash collected (when staff physically receives cash) ──────────────
+// ── Record cash collected (when staff physically receives cash) ───────────────
 export async function recordCashCollected(transactionId, amount) {
   try {
     const analyticsRef = await ensureAnalyticsDocument();
     const txnRef = doc(db, 'transactions', transactionId);
-    
-    // Get current analytics to check pending amount
+
     const analyticsSnap = await getDoc(analyticsRef);
-    const currentData = analyticsSnap.data();
-    const currentPending = currentData?.pendingCashRevenue || 0;
-    
-    // Only update pendingCashRevenue if there is a positive pending amount
+    const currentPending = analyticsSnap.data()?.pendingCashRevenue || 0;
+
     const updateData = {
       collectedCashRevenue: increment(amount),
-      totalRevenue: increment(amount),
-      lastUpdated: serverTimestamp(),
+      totalRevenue:         increment(amount),
+      lastUpdated:          serverTimestamp(),
     };
-    
-    // Only decrement pending if there is pending cash to decrement
+
     if (currentPending > 0 && amount <= currentPending) {
       updateData.pendingCashRevenue = increment(-amount);
     } else if (currentPending > 0 && amount > currentPending) {
       updateData.pendingCashRevenue = increment(-currentPending);
     }
-    
+
     await updateDoc(analyticsRef, updateData);
-    
+
     await addDoc(collection(db, 'transactions', transactionId, 'revenueEvents'), {
-      type: 'cash_collected',
-      amount: amount,
-      timestamp: serverTimestamp(),
+      type:        'cash_collected',
+      amount:      amount,
+      timestamp:   serverTimestamp(),
       collectedBy: 'staff',
     });
-    
+
     await updateDoc(txnRef, {
-      cashCollected: true,
+      cashCollected:   true,
       cashCollectedAt: serverTimestamp(),
     });
-    
+
     console.log(`✅ Recorded cash collected: R${amount} for tx ${transactionId}`);
     return true;
   } catch (error) {
@@ -149,30 +189,29 @@ export async function recordCashCollected(transactionId, amount) {
   }
 }
 
-// ── Record seller payout ────────────────────────────────────────────────────
+// ── Record seller payout ──────────────────────────────────────────────────────
 export async function recordSellerPayout(transactionId, amount, sellerId) {
   try {
     const analyticsRef = await ensureAnalyticsDocument();
-    
+
     await updateDoc(analyticsRef, {
-      totalPayouts: increment(amount),
+      totalPayouts:     increment(amount),
       availableBalance: increment(-amount),
-      lastUpdated: serverTimestamp(),
+      lastUpdated:      serverTimestamp(),
     });
-    
-    const txnRef = doc(db, 'transactions', transactionId);
+
     await addDoc(collection(db, 'transactions', transactionId, 'revenueEvents'), {
-      type: 'seller_payout',
-      amount: amount,
-      sellerId: sellerId,
+      type:      'seller_payout',
+      amount:    amount,
+      sellerId:  sellerId,
       timestamp: serverTimestamp(),
     });
-    
-    await updateDoc(txnRef, {
-      sellerPaid: true,
+
+    await updateDoc(doc(db, 'transactions', transactionId), {
+      sellerPaid:   true,
       sellerPaidAt: serverTimestamp(),
     });
-    
+
     console.log(`✅ Recorded seller payout: R${amount} for tx ${transactionId}`);
     return true;
   } catch (error) {
@@ -181,32 +220,31 @@ export async function recordSellerPayout(transactionId, amount, sellerId) {
   }
 }
 
-// ── Record refund ───────────────────────────────────────────────────────────
+// ── Record refund ─────────────────────────────────────────────────────────────
 export async function recordRefund(transactionId, amount, reason) {
   try {
     const analyticsRef = await ensureAnalyticsDocument();
-    
+
     await updateDoc(analyticsRef, {
       totalRevenue: increment(-amount),
       totalRefunds: increment(amount),
-      lastUpdated: serverTimestamp(),
+      lastUpdated:  serverTimestamp(),
     });
-    
-    const txnRef = doc(db, 'transactions', transactionId);
+
     await addDoc(collection(db, 'transactions', transactionId, 'revenueEvents'), {
-      type: 'refund_issued',
-      amount: amount,
-      reason: reason,
+      type:      'refund_issued',
+      amount:    amount,
+      reason:    reason,
       timestamp: serverTimestamp(),
     });
-    
-    await updateDoc(txnRef, {
-      refunded: true,
-      refundAmount: amount,
-      refundReason: reason,
-      refundedAt: serverTimestamp(),
+
+    await updateDoc(doc(db, 'transactions', transactionId), {
+      refunded:      true,
+      refundAmount:  amount,
+      refundReason:  reason,
+      refundedAt:    serverTimestamp(),
     });
-    
+
     console.log(`✅ Recorded refund: R${amount} for tx ${transactionId} (${reason})`);
     return true;
   } catch (error) {
@@ -215,36 +253,12 @@ export async function recordRefund(transactionId, amount, reason) {
   }
 }
 
-// ── Get current analytics summary (AUTO-CREATES document if missing) ────────
+// ── Get current analytics summary ────────────────────────────────────────────
 export async function getRevenueAnalytics() {
   try {
-    const analyticsRef = getAnalyticsRef();
+    const analyticsRef = await ensureAnalyticsDocument();
     const snap = await getDoc(analyticsRef);
-    
-    if (!snap.exists()) {
-      await setDoc(analyticsRef, {
-        totalRevenue: 0,
-        onlineRevenue: 0,
-        pendingCashRevenue: 0,
-        collectedCashRevenue: 0,
-        totalPayouts: 0,
-        totalRefunds: 0,
-        availableBalance: 0,
-        createdAt: serverTimestamp(),
-        lastUpdated: serverTimestamp(),
-      });
-      return {
-        totalRevenue: 0,
-        onlineRevenue: 0,
-        pendingCashRevenue: 0,
-        collectedCashRevenue: 0,
-        totalPayouts: 0,
-        totalRefunds: 0,
-        availableBalance: 0,
-      };
-    }
-    
-    return snap.data();
+    return snap.exists() ? snap.data() : { ...DEFAULT_ANALYTICS };
   } catch (error) {
     console.error('Failed to get revenue analytics:', error);
     return null;

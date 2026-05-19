@@ -1,14 +1,8 @@
 // src/pages/PromoteSuccess.jsx
 import { useEffect, useState } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
-import {
-  getFirestore,
-  doc,
-  getDoc,
-  setDoc,
-  updateDoc,
-  increment,
-} from "firebase/firestore";
+import { getFirestore, doc, getDoc, setDoc } from "firebase/firestore";
+import { recordAdPayment } from "../services/revenueService";
 import NavBar from "../components/NavBarTemp";
 import styles from "./Payment.module.css";
 
@@ -39,7 +33,7 @@ export default function PromoteSuccess() {
     const storageKey = `ad_created_${uniquePaymentId}`;
 
     if (sessionStorage.getItem(storageKey) === "true") {
-      // Already created in this session — just fetch listing for display
+      // Already processed this session — just fetch listing for display
       const fetchListingOnly = async () => {
         const db = getFirestore();
         const snap = await getDoc(doc(db, "listings", listingId));
@@ -53,7 +47,7 @@ export default function PromoteSuccess() {
     const createAd = async () => {
       const db = getFirestore();
       try {
-        // ── Idempotency check ─────────────────────────────────────────────
+        // ── Idempotency: skip if ad already exists ────────────────────────
         const adDocRef = doc(db, "ads", uniquePaymentId);
         const existingAd = await getDoc(adDocRef);
 
@@ -87,43 +81,18 @@ export default function PromoteSuccess() {
         });
         console.log("✅ Ad created");
 
-        // ── Update analytics ──────────────────────────────────────────────
-        // AdminAnalytics reads from "revenueAnalytics/global" via getRevenueAnalytics().
-        // The "Ad Payments" card reads revenueData.adPayments from that document.
-        // Previous code wrongly wrote to "analytics/platform" — a completely
-        // different document that nothing on the dashboard reads.
+        // ── Record ad payment in analytics ────────────────────────────────
+        // recordAdPayment() writes to analytics/platform — the same document
+        // that getRevenueAnalytics() reads, incrementing adPayments and totalRevenue.
         const adAmount = amountParam ? Number(amountParam) : 0;
         if (adAmount > 0) {
-          try {
-            const analyticsRef = doc(db, "revenueAnalytics", "global");
-            const analyticsSnap = await getDoc(analyticsRef);
-
-            if (analyticsSnap.exists()) {
-              await updateDoc(analyticsRef, {
-                totalRevenue: increment(adAmount),
-                adPayments:   increment(adAmount),
-                lastUpdated:  new Date(),
-              });
-            } else {
-              // First-ever analytics doc
-              await setDoc(analyticsRef, {
-                totalRevenue:         adAmount,
-                adPayments:           adAmount,
-                onlineRevenue:        0,
-                collectedCashRevenue: 0,
-                pendingCashRevenue:   0,
-                totalPayouts:         0,
-                totalRefunds:         0,
-                availableBalance:     0,
-                promotionRevenue:     adAmount,
-                createdAt:            new Date(),
-                lastUpdated:          new Date(),
-              });
-            }
-            console.log(`📊 Analytics updated: +R${adAmount} → revenueAnalytics/global adPayments`);
-          } catch (analyticsErr) {
-            // Non-fatal — the ad was still created successfully
-            console.error("⚠️ Analytics update failed (non-fatal):", analyticsErr);
+          const recorded = await recordAdPayment(uniquePaymentId, adAmount, {
+            listingId,
+            adType: adType || "banner",
+            title: listingData.title || titleParam || "Listing",
+          });
+          if (recorded) {
+            console.log(`📊 Ad payment of R${adAmount} recorded in analytics`);
           }
         }
 
