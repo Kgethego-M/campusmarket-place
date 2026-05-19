@@ -25,7 +25,7 @@ export default function PromoteSuccess() {
   const stripeRef       = searchParams.get("ref");
   const titleParam      = searchParams.get("title");
   const sessionId       = searchParams.get("session_id");
-  const amountParam     = searchParams.get("amount"); // amount in Rand, passed from checkout
+  const amountParam     = searchParams.get("amount");
   const uniquePaymentId = sessionId || stripeRef;
 
   useEffect(() => {
@@ -42,8 +42,7 @@ export default function PromoteSuccess() {
       // Already created in this session — just fetch listing for display
       const fetchListingOnly = async () => {
         const db = getFirestore();
-        const listingRef = doc(db, "listings", listingId);
-        const snap = await getDoc(listingRef);
+        const snap = await getDoc(doc(db, "listings", listingId));
         if (isMounted && snap.exists()) setListing(snap.data());
         if (isMounted) setLoading(false);
       };
@@ -54,29 +53,27 @@ export default function PromoteSuccess() {
     const createAd = async () => {
       const db = getFirestore();
       try {
-        // ── Check if ad already exists (idempotency) ──────────────────────
+        // ── Idempotency check ─────────────────────────────────────────────
         const adDocRef = doc(db, "ads", uniquePaymentId);
         const existingAd = await getDoc(adDocRef);
 
         if (existingAd.exists()) {
           console.log("Ad already exists, skipping creation");
           setAdCreated(true);
-          const listingRef = doc(db, "listings", listingId);
-          const listingSnap = await getDoc(listingRef);
+          const listingSnap = await getDoc(doc(db, "listings", listingId));
           if (isMounted && listingSnap.exists()) setListing(listingSnap.data());
           if (isMounted) setLoading(false);
           return;
         }
 
-        // ── Fetch listing details ─────────────────────────────────────────
-        const listingRef = doc(db, "listings", listingId);
-        const listingSnap = await getDoc(listingRef);
+        // ── Fetch listing ─────────────────────────────────────────────────
+        const listingSnap = await getDoc(doc(db, "listings", listingId));
         if (!listingSnap.exists()) throw new Error("Listing not found");
         const listingData = listingSnap.data();
         if (isMounted) setListing(listingData);
 
         // ── Create ad document ────────────────────────────────────────────
-        const adData = {
+        await setDoc(adDocRef, {
           listingId,
           title:           listingData.title || titleParam || "Listing",
           imageUrl:        listingData.photos?.[0] || listingData.imageUrl || null,
@@ -87,44 +84,45 @@ export default function PromoteSuccess() {
           expiresAt:       new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
           stripeSessionId: uniquePaymentId,
           amountPaid:      amountParam ? Number(amountParam) : null,
-        };
-        await setDoc(adDocRef, adData);
+        });
         console.log("✅ Ad created");
 
-        // ── Update analytics revenue ──────────────────────────────────────
-        // Ad promotion payments are tracked under adRevenue (shown as "Ad Payments"
-        // on the dashboard) AND added to totalRevenue. They are NOT onlineRevenue,
-        // which tracks booking/purchase payments only.
+        // ── Update analytics ──────────────────────────────────────────────
+        // AdminAnalytics reads from "revenueAnalytics/global" via getRevenueAnalytics().
+        // The "Ad Payments" card reads revenueData.adPayments from that document.
+        // Previous code wrongly wrote to "analytics/platform" — a completely
+        // different document that nothing on the dashboard reads.
         const adAmount = amountParam ? Number(amountParam) : 0;
         if (adAmount > 0) {
           try {
-            const analyticsRef = doc(db, "analytics", "platform");
+            const analyticsRef = doc(db, "revenueAnalytics", "global");
             const analyticsSnap = await getDoc(analyticsRef);
 
             if (analyticsSnap.exists()) {
               await updateDoc(analyticsRef, {
                 totalRevenue: increment(adAmount),
-                adRevenue:    increment(adAmount), // ← "Ad Payments" card on dashboard
+                adPayments:   increment(adAmount),
                 lastUpdated:  new Date(),
               });
             } else {
-              // Create analytics doc if it doesn't exist yet
+              // First-ever analytics doc
               await setDoc(analyticsRef, {
                 totalRevenue:         adAmount,
-                adRevenue:            adAmount, // ← "Ad Payments" card on dashboard
+                adPayments:           adAmount,
                 onlineRevenue:        0,
-                pendingCashRevenue:   0,
                 collectedCashRevenue: 0,
+                pendingCashRevenue:   0,
                 totalPayouts:         0,
                 totalRefunds:         0,
                 availableBalance:     0,
+                promotionRevenue:     adAmount,
                 createdAt:            new Date(),
                 lastUpdated:          new Date(),
               });
             }
-            console.log(`📊 Analytics updated: +R${adAmount} ad revenue`);
+            console.log(`📊 Analytics updated: +R${adAmount} → revenueAnalytics/global adPayments`);
           } catch (analyticsErr) {
-            // Analytics failure must never block the success page
+            // Non-fatal — the ad was still created successfully
             console.error("⚠️ Analytics update failed (non-fatal):", analyticsErr);
           }
         }
