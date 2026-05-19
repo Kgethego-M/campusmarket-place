@@ -618,3 +618,394 @@
         font-size: 0.75rem;
     }
 }
+
+/* ReportsPage.module.css */
+
+.shell {
+  min-height: 100vh;
+  background: #f8fafc;
+}
+
+.main {
+  margin-left: 260px;
+  padding: 24px 32px;
+  transition: margin-left 0.3s ease;
+}
+
+@media (max-width: 768px) {
+  .main {
+    margin-left: 0;
+    padding: 16px;
+  }
+}
+
+/* Page Title */
+.pageTitle {
+  margin-bottom: 24px;
+}
+
+.pageTitle h1 {
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0 0 8px 0;
+  display: flex;
+  align-items: center;
+}
+
+.pageTitle p {
+  color: #64748b;
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+/* Tab Content */
+.tabContent {
+  width: 100%;
+}
+
+/* Report Card */
+.reportCard {
+  background: #fff;
+  border-radius: 16px;
+  border: 1px solid #e2e8f0;
+  overflow: hidden;
+  margin-bottom: 24px;
+}
+
+.cardHeader {
+  padding: 16px 20px;
+  border-bottom: 1px solid #f1f5f9;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.cardTitle {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0 0 16px 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Search */
+.searchWrap {
+  display: flex;
+  align-items: center;
+  background: #fff;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 8px 14px;
+  gap: 8px;
+  transition: all 0.2s;
+}
+
+.searchWrap:focus-within {
+  border-color: #6AA6DA;
+  box-shadow: 0 0 0 3px rgba(106, 166, 218, 0.1);
+}
+
+.searchWrap i {
+  color: #94a3b8;
+  font-size: 0.85rem;
+}
+
+.searchInput {
+  border: none;
+  outline: none;
+  font-size: 0.85rem;
+  width: 240px;
+  background: transparent;
+  font-family: inherit;
+}
+
+.searchInput::placeholder {
+  color: #cbd5e1;
+}
+
+/* Mod List Container */
+.modList {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* Report Row - FIXED OVERFLOW ISSUES */
+.modRow {
+  background: #fff;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 16px;
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  transition: all 0.2s;
+  position: relative;
+  overflow: hidden;
+}
+
+.modRow:hover {
+  border-color: #cbd5e1;
+  background: #fefefe;
+}
+
+.resolvedRow {
+  background: #fafbfc;
+  opacity: 0.85;
+}
+
+/* Report Icon */
+.reportIcon {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  background: #f1f5f9;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.2rem;
+}
+
+/* Mod Info - This is the key container that handles text overflow */
+.modInfo {
+  flex: 1;
+  min-width: 0; /* Allows flex child to shrink below content size */
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* Mod Title - handles long names/titles */
+.modTitle {
+  font-weight: 700;
+  font-size: 0.9rem;
+  color: #0f172a;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  word-break: break-word;
+  overflow-wrap: break-word;
+}
+
+/* Report Type Pill */
+.reportTypePill {
+  display: inline-block;
+  background: #f1f5f9;
+  padding: 2px 8px;
+  border-radius: 20px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: #64748b;
+  text-transform: capitalize;
+  flex-shrink: 0;
+}
+
+/* Mod Meta (reason) */
+.modMeta {
+  font-size: 0.8rem;
+  color: #374151;
+  font-weight: 500;
+  word-break: break-word;
+  overflow-wrap: break-word;
+  line-height: 1.4;
+}
+
+/* Report Details - HANDLES LONG TEXT */
+.reportDetails {
+  font-size: 0.8rem;
+  color: #475569;
+  background: #f8fafc;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border-left: 3px solid #6AA6DA;
+  font-style: italic;
+  word-break: break-word;
+  overflow-wrap: break-word;
+  white-space: normal;
+  line-height: 1.5;
+  display: block;
+}
+
+/* Report Meta (reported by, date) */
+.reportMeta {
+  font-size: 0.7rem;
+  color: #94a3b8;
+  margin-top: 4px;
+  display: block;
+  word-break: break-word;
+}
+
+/* Actions Container */
+.reportActions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+}
+
+/* Buttons */
+.btnDismiss, .btnSuspend, .btnRemove, .btnWarn {
+  padding: 6px 14px;
+  border-radius: 8px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+  border: none;
+  font-family: inherit;
+}
+
+.btnDismiss {
+  background: #f1f5f9;
+  color: #64748b;
+}
+
+.btnDismiss:hover {
+  background: #e2e8f0;
+  color: #475569;
+}
+
+.btnSuspend {
+  background: #fef2f2;
+  color: #dc2626;
+}
+
+.btnSuspend:hover {
+  background: #fee2e2;
+}
+
+.btnRemove {
+  background: #fef2f2;
+  color: #dc2626;
+}
+
+.btnRemove:hover {
+  background: #fee2e2;
+}
+
+.btnWarn {
+  background: #fffbeb;
+  color: #d97706;
+}
+
+.btnWarn:hover {
+  background: #fef3c7;
+}
+
+/* Resolved Badge */
+.resolvedBadge {
+  flex-shrink: 0;
+  background: #f0fdf4;
+  color: #16a34a;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: capitalize;
+}
+
+.pendingBadge {
+  background: #fef3c7;
+  color: #d97706;
+  padding: 2px 8px;
+  border-radius: 20px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  margin-left: 8px;
+}
+
+/* Empty State */
+.emptyState {
+  text-align: center;
+  padding: 48px 24px;
+  color: #94a3b8;
+}
+
+.emptyState i {
+  font-size: 2.5rem;
+  margin-bottom: 12px;
+  opacity: 0.5;
+}
+
+.emptyState p {
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+/* Loading Screen */
+.loadingScreen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 60vh;
+  gap: 16px;
+}
+
+.spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid #e2e8f0;
+  border-top-color: #6AA6DA;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Export Button */
+.exportBtn {
+  background: #6AA6DA;
+  color: white;
+  border: none;
+  padding: 8px 18px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.85rem;
+  transition: background 0.15s;
+  font-family: inherit;
+}
+
+.exportBtn:hover {
+  background: #5a96ca;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .modRow {
+    flex-direction: column;
+  }
+  
+  .reportActions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+  
+  .reportIcon {
+    width: 32px;
+    height: 32px;
+  }
+  
+  .searchInput {
+    width: 100%;
+  }
+  
+  .searchWrap {
+    width: 100%;
+  }
+  
+  .cardHeader {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
