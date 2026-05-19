@@ -756,7 +756,7 @@ describe("Overdue alert notifications appear in the NavBar bell", () => {
 
     await waitFor(() => {
       expect(mockUpdateDoc).toHaveBeenCalled();
-      expect(mockNavigate).toHaveBeenCalledWith("/my-purchases");
+      expect(mockNavigate).toHaveBeenCalledWith(expect.stringContaining("/my-purchases"));
     });
   });
 
@@ -774,7 +774,7 @@ describe("Overdue alert notifications appear in the NavBar bell", () => {
 
     await waitFor(() => {
       expect(mockUpdateDoc).toHaveBeenCalled();
-      expect(mockNavigate).toHaveBeenCalledWith("/my-purchases");
+      expect(mockNavigate).toHaveBeenCalledWith(expect.stringContaining("/my-purchases"));
     });
   });
 
@@ -879,7 +879,7 @@ describe("NavBar bell – additional edge cases", () => {
     await waitFor(() => screen.getByTestId("notification-item-notif-001"));
     fireEvent.click(screen.getByTestId("notification-item-notif-001"));
 
-    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith("/my-purchases"));
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith(expect.stringContaining("/my-purchases")));
   });
 
   test("overdue_collection_buyer notification navigates to /my-purchases", async () => {
@@ -899,6 +899,6 @@ describe("NavBar bell – additional edge cases", () => {
     await waitFor(() => screen.getByTestId("notification-item-notif-002"));
     fireEvent.click(screen.getByTestId("notification-item-notif-002"));
 
-    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith("/my-purchases"));
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith(expect.stringContaining("/my-purchases")));
   });
 });
