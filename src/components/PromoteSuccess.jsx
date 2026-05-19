@@ -20,12 +20,12 @@ export default function PromoteSuccess() {
   const [error, setError] = useState("");
   const [adCreated, setAdCreated] = useState(false);
 
-  const listingId      = searchParams.get("lid");
-  const adType         = searchParams.get("type");
-  const stripeRef      = searchParams.get("ref");
-  const titleParam     = searchParams.get("title");
-  const sessionId      = searchParams.get("session_id");
-  const amountParam    = searchParams.get("amount"); // amount in Rand, passed from checkout
+  const listingId       = searchParams.get("lid");
+  const adType          = searchParams.get("type");
+  const stripeRef       = searchParams.get("ref");
+  const titleParam      = searchParams.get("title");
+  const sessionId       = searchParams.get("session_id");
+  const amountParam     = searchParams.get("amount"); // amount in Rand, passed from checkout
   const uniquePaymentId = sessionId || stripeRef;
 
   useEffect(() => {
@@ -92,8 +92,9 @@ export default function PromoteSuccess() {
         console.log("✅ Ad created");
 
         // ── Update analytics revenue ──────────────────────────────────────
-        // The ad promotion payment never goes through verify-session, so
-        // we must update analytics here directly after the ad is created.
+        // Ad promotion payments are tracked under adRevenue (shown as "Ad Payments"
+        // on the dashboard) AND added to totalRevenue. They are NOT onlineRevenue,
+        // which tracks booking/purchase payments only.
         const adAmount = amountParam ? Number(amountParam) : 0;
         if (adAmount > 0) {
           try {
@@ -101,17 +102,17 @@ export default function PromoteSuccess() {
             const analyticsSnap = await getDoc(analyticsRef);
 
             if (analyticsSnap.exists()) {
-              // ✅ Use Firestore increment() for atomic update
               await updateDoc(analyticsRef, {
-                totalRevenue:  increment(adAmount),
-                onlineRevenue: increment(adAmount),
-                lastUpdated:   new Date(),
+                totalRevenue: increment(adAmount),
+                adRevenue:    increment(adAmount), // ← "Ad Payments" card on dashboard
+                lastUpdated:  new Date(),
               });
             } else {
               // Create analytics doc if it doesn't exist yet
               await setDoc(analyticsRef, {
                 totalRevenue:         adAmount,
-                onlineRevenue:        adAmount,
+                adRevenue:            adAmount, // ← "Ad Payments" card on dashboard
+                onlineRevenue:        0,
                 pendingCashRevenue:   0,
                 collectedCashRevenue: 0,
                 totalPayouts:         0,
@@ -121,7 +122,7 @@ export default function PromoteSuccess() {
                 lastUpdated:          new Date(),
               });
             }
-            console.log(`📊 Analytics updated: +R${adAmount} from ad promotion`);
+            console.log(`📊 Analytics updated: +R${adAmount} ad revenue`);
           } catch (analyticsErr) {
             // Analytics failure must never block the success page
             console.error("⚠️ Analytics update failed (non-fatal):", analyticsErr);
@@ -160,8 +161,8 @@ export default function PromoteSuccess() {
     );
   }
 
-  const displayTitle    = listing?.title || titleParam || "Your listing";
-  const displayImage    = listing?.photos?.[0] || listing?.imageUrl || null;
+  const displayTitle     = listing?.title || titleParam || "Your listing";
+  const displayImage     = listing?.photos?.[0] || listing?.imageUrl || null;
   const displayPaymentId = uniquePaymentId?.length > 30
     ? `${uniquePaymentId.substring(0, 15)}...${uniquePaymentId.substring(uniquePaymentId.length - 10)}`
     : uniquePaymentId;
