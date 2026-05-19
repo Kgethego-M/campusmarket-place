@@ -1,4 +1,3 @@
-// src/services/revenueService.js
 import { db } from '../firebase';
 import { doc, updateDoc, increment, serverTimestamp, collection, addDoc, getDoc, setDoc } from 'firebase/firestore';
 
@@ -19,6 +18,7 @@ const DEFAULT_ANALYTICS = {
   totalPayouts:         0,
   totalRefunds:         0,
   availableBalance:     0,
+  promotionRevenue:     0,   // Alias for adPayments for display
   createdAt:            serverTimestamp(),
   lastUpdated:          serverTimestamp(),
 };
@@ -101,11 +101,12 @@ export async function recordAdPayment(uniquePaymentId, amount, adDetails = {}) {
     }
 
     await updateDoc(analyticsRef, {
-      totalRevenue: increment(amount),
-      adPayments:   increment(amount),   // ← "Ad Payments" card on dashboard
-      lastUpdated:  serverTimestamp(),
+      totalRevenue:     increment(amount),
+      adPayments:       increment(amount),   // ← "Ad Payments" card on dashboard
+      promotionRevenue: increment(amount),   // Alias for consistency
+      lastUpdated:      serverTimestamp(),
       // Keep a list of recorded IDs so we never double-count
-      adPaymentIds: [...recorded, uniquePaymentId],
+      adPaymentIds:     [...recorded, uniquePaymentId],
     });
 
     console.log(`✅ Recorded ad payment: R${amount} for session ${uniquePaymentId}`);

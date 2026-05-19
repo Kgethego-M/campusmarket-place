@@ -82,8 +82,7 @@ export default function PromoteSuccess() {
         console.log("✅ Ad created");
 
         // ── Record ad payment in analytics ────────────────────────────────
-        // recordAdPayment() writes to analytics/platform — the same document
-        // that getRevenueAnalytics() reads, incrementing adPayments and totalRevenue.
+        // recordAdPayment() writes to analytics/platform which getRevenueAnalytics() reads
         const adAmount = amountParam ? Number(amountParam) : 0;
         if (adAmount > 0) {
           const recorded = await recordAdPayment(uniquePaymentId, adAmount, {
@@ -93,6 +92,8 @@ export default function PromoteSuccess() {
           });
           if (recorded) {
             console.log(`📊 Ad payment of R${adAmount} recorded in analytics`);
+          } else {
+            console.log("⚠️ Ad payment already recorded (idempotent check)");
           }
         }
 
@@ -120,7 +121,11 @@ export default function PromoteSuccess() {
         <div className={styles.page}>
           <div className={styles.container}>
             <div className={styles.successCard}>
+              <div className={styles.successIconWrap}>
+                <i className="fas fa-spinner fa-spin" />
+              </div>
               <h2>Processing your promotion...</h2>
+              <p>Please wait while we activate your ad.</p>
             </div>
           </div>
         </div>
