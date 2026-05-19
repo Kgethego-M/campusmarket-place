@@ -17,90 +17,129 @@ import AdminNavbar from "./AdminNavbar";
 // ─────────────────────────────────────────────────────────────────────────────
 function ProofLightbox({ photos, startIndex = 0, onClose }) {
   const [idx, setIdx] = React.useState(startIndex);
+
   React.useEffect(() => {
     const handler = (e) => {
-      if (e.key === 'Escape') onClose();
-      if (e.key === 'ArrowRight') setIdx(i => Math.min(i + 1, photos.length - 1));
-      if (e.key === 'ArrowLeft')  setIdx(i => Math.max(i - 1, 0));
+      if (e.key === "Escape") onClose();
+      if (e.key === "ArrowRight") setIdx(i => Math.min(i + 1, photos.length - 1));
+      if (e.key === "ArrowLeft")  setIdx(i => Math.max(i - 1, 0));
     };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
   }, [onClose, photos.length]);
 
   return (
     <div
       onClick={onClose}
       style={{
-        position: 'fixed', inset: 0, zIndex: 99999,
-        background: 'rgba(0,0,0,0.88)', backdropFilter: 'blur(6px)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        padding: 16,
+        position: "fixed", inset: 0, zIndex: 99999,
+        background: "rgba(0,0,0,0.88)", backdropFilter: "blur(6px)",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        padding: "24px 64px",   /* 64px sides = room for the ‹ › buttons */
+        boxSizing: "border-box",
       }}
     >
-      <div onClick={e => e.stopPropagation()} style={{ position: 'relative', maxWidth: 780, width: '100%' }}>
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{ position: "relative", maxWidth: 520, width: "100%" }}
+      >
+        {/* Close */}
         <button
           onClick={onClose}
           style={{
-            position: 'absolute', top: -40, right: 0,
-            background: 'none', border: 'none', color: '#fff',
-            fontSize: '1.5rem', cursor: 'pointer', lineHeight: 1,
+            position: "absolute", top: -36, right: 0,
+            background: "rgba(255,255,255,0.1)", border: "none", color: "#fff",
+            fontSize: "1.1rem", cursor: "pointer",
+            width: 30, height: 30, borderRadius: "50%",
+            display: "flex", alignItems: "center", justifyContent: "center",
           }}
-        >&times;</button>
+        >
+          &times;
+        </button>
 
+        {/* Main image */}
         <img
           src={photos[idx]}
           alt={`Proof ${idx + 1}`}
           style={{
-            width: '100%', maxHeight: '75vh', objectFit: 'contain',
-            borderRadius: 12, display: 'block',
+            width: "100%",
+            maxHeight: "58vh",
+            objectFit: "contain",
+            borderRadius: 10,
+            display: "block",
           }}
         />
 
-        <div style={{ textAlign: 'center', color: '#cbd5e1', fontSize: '0.82rem', marginTop: 10, fontFamily: 'inherit' }}>
+        {/* Counter */}
+        <div style={{
+          textAlign: "center", color: "#cbd5e1",
+          fontSize: "0.78rem", marginTop: 8, fontFamily: "inherit",
+        }}>
           {idx + 1} / {photos.length}
         </div>
 
+        {/* Prev / Next */}
         {photos.length > 1 && (
           <>
             <button
               onClick={() => setIdx(i => Math.max(i - 1, 0))}
               disabled={idx === 0}
               style={{
-                position: 'absolute', top: '50%', left: -48, transform: 'translateY(-50%)',
-                background: 'rgba(255,255,255,0.12)', border: 'none', borderRadius: '50%',
-                width: 38, height: 38, color: '#fff', fontSize: '1.1rem', cursor: 'pointer',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                opacity: idx === 0 ? 0.3 : 1,
+                position: "absolute", top: "40%", left: -48,
+                transform: "translateY(-50%)",
+                background: "rgba(255,255,255,0.12)", border: "none",
+                borderRadius: "50%", width: 34, height: 34,
+                color: "#fff", fontSize: "1rem", cursor: "pointer",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                opacity: idx === 0 ? 0.25 : 1,
+                transition: "opacity 0.15s",
               }}
-            >‹</button>
+            >
+              ‹
+            </button>
             <button
               onClick={() => setIdx(i => Math.min(i + 1, photos.length - 1))}
               disabled={idx === photos.length - 1}
               style={{
-                position: 'absolute', top: '50%', right: -48, transform: 'translateY(-50%)',
-                background: 'rgba(255,255,255,0.12)', border: 'none', borderRadius: '50%',
-                width: 38, height: 38, color: '#fff', fontSize: '1.1rem', cursor: 'pointer',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                opacity: idx === photos.length - 1 ? 0.3 : 1,
+                position: "absolute", top: "40%", right: -48,
+                transform: "translateY(-50%)",
+                background: "rgba(255,255,255,0.12)", border: "none",
+                borderRadius: "50%", width: 34, height: 34,
+                color: "#fff", fontSize: "1rem", cursor: "pointer",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                opacity: idx === photos.length - 1 ? 0.25 : 1,
+                transition: "opacity 0.15s",
               }}
-            >›</button>
+            >
+              ›
+            </button>
           </>
         )}
 
+        {/* Thumbnails */}
         {photos.length > 1 && (
-          <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginTop: 12, flexWrap: 'wrap' }}>
+          <div style={{
+            display: "flex", gap: 6, justifyContent: "center",
+            marginTop: 10, flexWrap: "wrap",
+          }}>
             {photos.map((src, i) => (
               <button
                 key={i}
                 onClick={() => setIdx(i)}
                 style={{
-                  width: 52, height: 52, borderRadius: 7, overflow: 'hidden',
-                  border: i === idx ? '2.5px solid #6AA6DA' : '2px solid rgba(255,255,255,0.2)',
-                  padding: 0, cursor: 'pointer', background: 'none', flexShrink: 0,
-                  transition: 'border-color 0.15s',
+                  width: 44, height: 44, borderRadius: 6, overflow: "hidden",
+                  border: i === idx
+                    ? "2.5px solid #6AA6DA"
+                    : "2px solid rgba(255,255,255,0.18)",
+                  padding: 0, cursor: "pointer", background: "none",
+                  flexShrink: 0, transition: "border-color 0.15s",
                 }}
               >
-                <img src={src} alt={`thumb ${i + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                <img
+                  src={src}
+                  alt={`thumb ${i + 1}`}
+                  style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+                />
               </button>
             ))}
           </div>
@@ -114,72 +153,72 @@ function ProofLightbox({ photos, startIndex = 0, onClose }) {
 // Warn User Modal
 // ─────────────────────────────────────────────────────────────────────────────
 function WarnModal({ open, reportedName, onConfirm, onCancel }) {
-  const [reason, setReason] = React.useState('');
-  const [error, setError]   = React.useState('');
+  const [reason, setReason] = React.useState("");
+  const [error, setError]   = React.useState("");
 
   React.useEffect(() => {
-    if (!open) { setReason(''); setError(''); }
+    if (!open) { setReason(""); setError(""); }
   }, [open]);
 
   if (!open) return null;
 
   const handleConfirm = () => {
-    if (!reason.trim()) { setError('Please provide a reason for the warning.'); return; }
+    if (!reason.trim()) { setError("Please provide a reason for the warning."); return; }
     onConfirm(reason.trim());
   };
 
   return (
     <div style={{
-      position: 'fixed', inset: 0, zIndex: 99998,
-      background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(3px)',
-      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
+      position: "fixed", inset: 0, zIndex: 99998,
+      background: "rgba(0,0,0,0.55)", backdropFilter: "blur(3px)",
+      display: "flex", alignItems: "center", justifyContent: "center", padding: 16,
     }}>
       <div style={{
-        background: '#fff', borderRadius: 14, width: '100%', maxWidth: 420,
-        boxShadow: '0 20px 60px rgba(0,0,0,0.18)', overflow: 'hidden',
+        background: "#fff", borderRadius: 14, width: "100%", maxWidth: 420,
+        boxShadow: "0 20px 60px rgba(0,0,0,0.18)", overflow: "hidden",
       }}>
-        <div style={{ padding: '18px 20px 14px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div style={{ width: 38, height: 38, borderRadius: 9, background: '#fffbeb', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-            <i className="fas fa-exclamation-triangle" style={{ color: '#d97706', fontSize: '1rem' }} />
+        <div style={{ padding: "18px 20px 14px", borderBottom: "1px solid #f1f5f9", display: "flex", alignItems: "center", gap: 12 }}>
+          <div style={{ width: 38, height: 38, borderRadius: 9, background: "#fffbeb", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+            <i className="fas fa-exclamation-triangle" style={{ color: "#d97706", fontSize: "1rem" }} />
           </div>
           <div>
-            <p style={{ margin: 0, fontWeight: 700, fontSize: '0.95rem', color: '#0f172a' }}>Warn User</p>
-            {reportedName && <p style={{ margin: 0, fontSize: '0.78rem', color: '#64748b' }}>{reportedName}</p>}
+            <p style={{ margin: 0, fontWeight: 700, fontSize: "0.95rem", color: "#0f172a" }}>Warn User</p>
+            {reportedName && <p style={{ margin: 0, fontSize: "0.78rem", color: "#64748b" }}>{reportedName}</p>}
           </div>
         </div>
-        <div style={{ padding: '16px 20px 12px' }}>
-          <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: '#374151', marginBottom: 6 }}>
-            Warning reason <span style={{ color: '#dc2626' }}>(required)</span>
+        <div style={{ padding: "16px 20px 12px" }}>
+          <label style={{ display: "block", fontSize: "0.82rem", fontWeight: 600, color: "#374151", marginBottom: 6 }}>
+            Warning reason <span style={{ color: "#dc2626" }}>(required)</span>
           </label>
           <textarea
             value={reason}
-            onChange={e => { setReason(e.target.value); if (error) setError(''); }}
+            onChange={e => { setReason(e.target.value); if (error) setError(""); }}
             placeholder="Describe the reason for this warning — this will be visible on the user's profile…"
             rows={3}
             maxLength={400}
             style={{
-              width: '100%', padding: '10px 12px', border: `1.5px solid ${error ? '#dc2626' : '#e2e8f0'}`,
-              borderRadius: 8, fontSize: '0.82rem', color: '#374151', resize: 'vertical',
-              outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box',
+              width: "100%", padding: "10px 12px", border: `1.5px solid ${error ? "#dc2626" : "#e2e8f0"}`,
+              borderRadius: 8, fontSize: "0.82rem", color: "#374151", resize: "vertical",
+              outline: "none", fontFamily: "inherit", boxSizing: "border-box",
             }}
           />
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 4 }}>
             {error
-              ? <span style={{ fontSize: '0.78rem', color: '#dc2626' }}>{error}</span>
+              ? <span style={{ fontSize: "0.78rem", color: "#dc2626" }}>{error}</span>
               : <span />
             }
-            <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>{reason.length}/400</span>
+            <span style={{ fontSize: "0.72rem", color: "#94a3b8" }}>{reason.length}/400</span>
           </div>
-          <p style={{ margin: '8px 0 0', fontSize: '0.75rem', color: '#94a3b8' }}>
+          <p style={{ margin: "8px 0 0", fontSize: "0.75rem", color: "#94a3b8" }}>
             <i className="fas fa-info-circle" style={{ marginRight: 4 }} />
             This warning and its reason will appear on the user's profile page.
           </p>
         </div>
-        <div style={{ padding: '12px 20px 16px', borderTop: '1px solid #f1f5f9', display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-          <button onClick={onCancel} style={{ padding: '8px 16px', borderRadius: 8, border: '1.5px solid #e2e8f0', background: '#fff', color: '#374151', fontSize: '0.85rem', fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>
+        <div style={{ padding: "12px 20px 16px", borderTop: "1px solid #f1f5f9", display: "flex", gap: 10, justifyContent: "flex-end" }}>
+          <button onClick={onCancel} style={{ padding: "8px 16px", borderRadius: 8, border: "1.5px solid #e2e8f0", background: "#fff", color: "#374151", fontSize: "0.85rem", fontWeight: 500, cursor: "pointer", fontFamily: "inherit" }}>
             Cancel
           </button>
-          <button onClick={handleConfirm} style={{ padding: '8px 18px', borderRadius: 8, border: 'none', background: '#d97706', color: '#fff', fontSize: '0.85rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
+          <button onClick={handleConfirm} style={{ padding: "8px 18px", borderRadius: 8, border: "none", background: "#d97706", color: "#fff", fontSize: "0.85rem", fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
             <i className="fas fa-exclamation-triangle" style={{ marginRight: 6 }} />Issue Warning
           </button>
         </div>
@@ -207,12 +246,12 @@ function ReportedUsersSummary({ reports, onViewProfile }) {
     }
     const u = userMap[r.reportedId];
     u.total++;
-    if (r.status === 'pending')  u.pending++;
-    if (r.resolution === 'dismiss') u.dismissed++;
-    if (r.status === 'resolved' && r.resolution !== 'dismiss') u.resolved++;
-    if (r.reportType === 'listing') u.listingReports++;
-    if (r.reportType === 'review')  u.reviewReports++;
-    if (r.reportType === 'user')    u.userReports++;
+    if (r.status === "pending")  u.pending++;
+    if (r.resolution === "dismiss") u.dismissed++;
+    if (r.status === "resolved" && r.resolution !== "dismiss") u.resolved++;
+    if (r.reportType === "listing") u.listingReports++;
+    if (r.reportType === "review")  u.reviewReports++;
+    if (r.reportType === "user")    u.userReports++;
     if (r.reason) u.reasons[r.reason] = (u.reasons[r.reason] || 0) + 1;
   });
 
@@ -224,52 +263,54 @@ function ReportedUsersSummary({ reports, onViewProfile }) {
 
   return (
     <div style={{ marginTop: 32 }}>
-      <h3 style={{ margin: '0 0 14px', fontSize: '1rem', fontWeight: 700, color: '#1a1a1a', display: 'flex', alignItems: 'center', gap: 10 }}>
-        <i className="fas fa-users" style={{ color: '#6AA6DA', fontSize: '0.9rem' }} />
+      <h3 style={{ margin: "0 0 14px", fontSize: "1rem", fontWeight: 700, color: "#1a1a1a", display: "flex", alignItems: "center", gap: 10 }}>
+        <i className="fas fa-users" style={{ color: "#6AA6DA", fontSize: "0.9rem" }} />
         Reported Users Summary
       </h3>
-      <div style={{ overflowX: 'auto', borderRadius: 12, border: '1px solid #e8eaed' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem', background: '#fff' }}>
+      <div style={{ overflowX: "auto", borderRadius: 12, border: "1px solid #e8eaed" }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.82rem", background: "#fff" }}>
           <thead>
-            <tr style={{ background: '#f8fafc', borderBottom: '2px solid #e8eaed' }}>
-              {['User', 'Total Reports', 'Pending', 'Dismissed', 'Resolved', 'Top Reason', 'Profile'].map(h => (
-                <th key={h} style={{ padding: '10px 14px', textAlign: 'left', fontWeight: 700, color: '#475569', fontSize: '0.73rem', textTransform: 'uppercase', letterSpacing: '0.05em', whiteSpace: 'nowrap' }}>{h}</th>
+            <tr style={{ background: "#f8fafc", borderBottom: "2px solid #e8eaed" }}>
+              {["User", "Total Reports", "Pending", "Dismissed", "Resolved", "Top Reason", "Profile"].map(h => (
+                <th key={h} style={{ padding: "10px 14px", textAlign: "left", fontWeight: 700, color: "#475569", fontSize: "0.73rem", textTransform: "uppercase", letterSpacing: "0.05em", whiteSpace: "nowrap" }}>{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {users.map((u, i) => {
-              const topReason = Object.entries(u.reasons).sort((a, b) => b[1] - a[1])[0]?.[0] || '—';
+              const topReason = Object.entries(u.reasons).sort((a, b) => b[1] - a[1])[0]?.[0] || "—";
               return (
-                <tr key={u.id} style={{ borderBottom: i < users.length - 1 ? '1px solid #f1f5f9' : 'none', transition: 'background 0.12s' }}
-                  onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'}
-                  onMouseLeave={e => e.currentTarget.style.background = ''}
+                <tr
+                  key={u.id}
+                  style={{ borderBottom: i < users.length - 1 ? "1px solid #f1f5f9" : "none", transition: "background 0.12s" }}
+                  onMouseEnter={e => e.currentTarget.style.background = "#f8fafc"}
+                  onMouseLeave={e => e.currentTarget.style.background = ""}
                 >
-                  <td style={{ padding: '10px 14px', fontWeight: 600, color: '#0f172a' }}>
+                  <td style={{ padding: "10px 14px", fontWeight: 600, color: "#0f172a" }}>
                     <button
                       onClick={() => onViewProfile(u.id)}
-                      style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.82rem', fontWeight: 600, color: '#2563eb', textDecoration: 'underline dotted', textUnderlineOffset: 3 }}
+                      style={{ background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: "inherit", fontSize: "0.82rem", fontWeight: 600, color: "#2563eb", textDecoration: "underline dotted", textUnderlineOffset: 3 }}
                     >
                       {u.name}
                     </button>
                   </td>
-                  <td style={{ padding: '10px 14px' }}>
-                    <span style={{ background: u.total >= 3 ? '#fef2f2' : '#f1f5f9', color: u.total >= 3 ? '#dc2626' : '#374151', padding: '2px 8px', borderRadius: 20, fontWeight: 700 }}>{u.total}</span>
+                  <td style={{ padding: "10px 14px" }}>
+                    <span style={{ background: u.total >= 3 ? "#fef2f2" : "#f1f5f9", color: u.total >= 3 ? "#dc2626" : "#374151", padding: "2px 8px", borderRadius: 20, fontWeight: 700 }}>{u.total}</span>
                   </td>
-                  <td style={{ padding: '10px 14px' }}>
-                    {u.pending > 0 ? <span style={{ background: '#fef3c7', color: '#d97706', padding: '2px 8px', borderRadius: 20, fontWeight: 600 }}>{u.pending}</span> : <span style={{ color: '#94a3b8' }}>0</span>}
+                  <td style={{ padding: "10px 14px" }}>
+                    {u.pending > 0 ? <span style={{ background: "#fef3c7", color: "#d97706", padding: "2px 8px", borderRadius: 20, fontWeight: 600 }}>{u.pending}</span> : <span style={{ color: "#94a3b8" }}>0</span>}
                   </td>
-                  <td style={{ padding: '10px 14px', color: '#64748b' }}>{u.dismissed || 0}</td>
-                  <td style={{ padding: '10px 14px' }}>
-                    {u.resolved > 0 ? <span style={{ background: '#f0fdf4', color: '#16a34a', padding: '2px 8px', borderRadius: 20, fontWeight: 600 }}>{u.resolved}</span> : <span style={{ color: '#94a3b8' }}>0</span>}
+                  <td style={{ padding: "10px 14px", color: "#64748b" }}>{u.dismissed || 0}</td>
+                  <td style={{ padding: "10px 14px" }}>
+                    {u.resolved > 0 ? <span style={{ background: "#f0fdf4", color: "#16a34a", padding: "2px 8px", borderRadius: 20, fontWeight: 600 }}>{u.resolved}</span> : <span style={{ color: "#94a3b8" }}>0</span>}
                   </td>
-                  <td style={{ padding: '10px 14px', color: '#64748b', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{topReason}</td>
-                  <td style={{ padding: '10px 14px' }}>
+                  <td style={{ padding: "10px 14px", color: "#64748b", maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{topReason}</td>
+                  <td style={{ padding: "10px 14px" }}>
                     <button
                       onClick={() => onViewProfile(u.id)}
-                      style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: '#eff6ff', border: 'none', borderRadius: 7, padding: '5px 10px', color: '#2563eb', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}
+                      style={{ display: "inline-flex", alignItems: "center", gap: 5, background: "#eff6ff", border: "none", borderRadius: 7, padding: "5px 10px", color: "#2563eb", fontSize: "0.75rem", fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}
                     >
-                      <i className="fas fa-eye" style={{ fontSize: '0.7rem' }} /> View
+                      <i className="fas fa-eye" style={{ fontSize: "0.7rem" }} /> View
                     </button>
                   </td>
                 </tr>
@@ -350,8 +391,7 @@ export default function ReportsPage() {
   const handleNavigateToReported = (report) => {
     if (report.reportType === "listing") {
       navigate(`/listing/${report.reportedId}?preview=true`);
-    } 
-    else if (report.reportType === "user") {
+    } else if (report.reportType === "user") {
       navigate(`/profile/${report.reportedId}?preview=true`);
     }
   };
@@ -388,11 +428,12 @@ export default function ReportsPage() {
     "Reports_Data", reportsHeaders, reportsExportData
   );
 
-  const pendingReports   = reports.filter(r => r.status === "pending");
-  const resolvedReports  = reports.filter(r => r.status !== "pending");
-  const removedListings  = reports.filter(r => r.resolution === "remove_listing").length;
-  const removedReviews   = reports.filter(r => r.resolution === "remove_review").length;
+  const pendingReports  = reports.filter(r => r.status === "pending");
+  const resolvedReports = reports.filter(r => r.status !== "pending");
+  const removedListings = reports.filter(r => r.resolution === "remove_listing").length;
+  const removedReviews  = reports.filter(r => r.resolution === "remove_review").length;
 
+  // Auth
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (user) => {
       if (!user) { navigate("/login"); return; }
@@ -414,6 +455,7 @@ export default function ReportsPage() {
     return () => unsub();
   }, [navigate]);
 
+  // Fetch users & listings
   useEffect(() => {
     async function fetchData() {
       try {
@@ -426,6 +468,7 @@ export default function ReportsPage() {
     fetchData();
   }, []);
 
+  // Live reports
   useEffect(() => {
     const q = query(collection(db, "reports"), orderBy("createdAt", "desc"));
     const unsub = onSnapshot(q, (snap) => {
@@ -437,6 +480,7 @@ export default function ReportsPage() {
     return () => unsub();
   }, []);
 
+  // Cache reviews
   useEffect(() => {
     if (!reports.length) return;
     const reviewReports = reports.filter(r => r.reportType === "review");
@@ -598,7 +642,13 @@ export default function ReportsPage() {
         onCancel={closeConfirm}
       />
       {toast && <Toast message={toast.message} type={toast.type} onDismiss={hideToast} />}
-      {lightbox && <ProofLightbox photos={lightbox.photos} startIndex={lightbox.startIndex} onClose={() => setLightbox(null)} />}
+      {lightbox && (
+        <ProofLightbox
+          photos={lightbox.photos}
+          startIndex={lightbox.startIndex}
+          onClose={() => setLightbox(null)}
+        />
+      )}
       <WarnModal
         open={!!warnModal}
         reportedName={warnModal?.reportedName}
@@ -606,7 +656,11 @@ export default function ReportsPage() {
         onCancel={() => setWarnModal(null)}
       />
 
-      <AdminNavbar activePage="reports" adminUser={adminUser} unreadReports={unreadReports} />
+      <AdminNavbar
+        activePage="reports"
+        adminUser={adminUser}
+        unreadReports={unreadReports}
+      />
 
       <main className={styles.main}>
         <div className={styles.pageTitle}>
@@ -624,12 +678,14 @@ export default function ReportsPage() {
 
         <div className={styles.tabContent}>
           <ReportCard title="Reports" headers={reportsHeaders} data={reportsExportData}>
+
+            {/* ── Stats ── */}
             <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 16 }}>
               {[
-                { icon: "fas fa-clock", label: "Pending", value: pendingReports.length, color: pendingReports.length > 0 ? "#d97706" : "#64748b", bg: pendingReports.length > 0 ? "#fef3c7" : "#f1f5f9" },
-                { icon: "fas fa-check-circle", label: "Resolved", value: resolvedReports.length, color: "#16a34a", bg: "#f0fdf4" },
-                { icon: "fas fa-store", label: "Listings Removed", value: removedListings, color: removedListings > 0 ? "#dc2626" : "#64748b", bg: removedListings > 0 ? "#fef2f2" : "#f1f5f9" },
-                { icon: "fas fa-star", label: "Reviews Removed", value: removedReviews, color: removedReviews > 0 ? "#dc2626" : "#64748b", bg: removedReviews > 0 ? "#fef2f2" : "#f1f5f9" },
+                { icon: "fas fa-clock",        label: "Pending",          value: pendingReports.length,  color: pendingReports.length  > 0 ? "#d97706" : "#64748b", bg: pendingReports.length  > 0 ? "#fef3c7" : "#f1f5f9" },
+                { icon: "fas fa-check-circle", label: "Resolved",         value: resolvedReports.length, color: "#16a34a",                                           bg: "#f0fdf4" },
+                { icon: "fas fa-store",        label: "Listings Removed", value: removedListings,        color: removedListings > 0 ? "#dc2626" : "#64748b",         bg: removedListings > 0 ? "#fef2f2" : "#f1f5f9" },
+                { icon: "fas fa-star",         label: "Reviews Removed",  value: removedReviews,         color: removedReviews  > 0 ? "#dc2626" : "#64748b",         bg: removedReviews  > 0 ? "#fef2f2" : "#f1f5f9" },
               ].map(({ icon, label, value, color, bg }) => (
                 <div key={label} style={{ flex: "1 1 120px", background: bg, borderRadius: 10, padding: "12px 14px", display: "flex", flexDirection: "column", gap: 4 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
@@ -641,6 +697,7 @@ export default function ReportsPage() {
               ))}
             </div>
 
+            {/* ── Search ── */}
             <div className={styles.cardHeader}>
               <div className={styles.searchWrap}>
                 <i className="fas fa-search" />
@@ -654,6 +711,7 @@ export default function ReportsPage() {
               </div>
             </div>
 
+            {/* ── Pending ── */}
             <h3 className={styles.cardTitle} style={{ marginTop: 12 }}>
               Pending Reports
               {pendingReports.length > 0 && (
@@ -683,7 +741,7 @@ export default function ReportsPage() {
                             onClick={isNavigable(r.reportType) ? () => handleNavigateToReported(r) : undefined}
                             title={
                               r.reportType === "listing" ? "View listing →" :
-                              r.reportType === "user" ? "View profile →" : undefined
+                              r.reportType === "user"    ? "View profile →" : undefined
                             }
                             style={navigableTitleStyle(r.reportType)}
                           >
@@ -691,9 +749,9 @@ export default function ReportsPage() {
                           </span>
                           <span className={styles.reportTypePill}>{r.reportType}</span>
                         </span>
+
                         <span className={styles.modMeta}>{r.reason}</span>
-                        
-                        {/* FIXED: Changed from span to div for better text containment */}
+
                         {r.details && (
                           <div className={styles.reportDetails}>
                             "{r.details}"
@@ -711,9 +769,7 @@ export default function ReportsPage() {
                               </span>
                             </div>
                             {review.comment && (
-                              <p className={styles.reviewComment}>
-                                "{review.comment}"
-                              </p>
+                              <p className={styles.reviewComment}>"{review.comment}"</p>
                             )}
                           </div>
                         )}
@@ -757,8 +813,8 @@ export default function ReportsPage() {
                               Suspend User
                             </button>
                             <button
-                              onClick={() => setWarnModal({ reportedId: r.reportedId, reportedName: r.reportedName })}
                               className={styles.btnWarn}
+                              onClick={() => setWarnModal({ reportedId: r.reportedId, reportedName: r.reportedName })}
                             >
                               <i className="fas fa-exclamation-triangle" /> Warn User
                             </button>
@@ -780,12 +836,16 @@ export default function ReportsPage() {
                 })}
               </div>
             )}
+
             {filteredReports.filter(r => r.status === "pending").length > PREVIEW_LIMIT && (
               <button onClick={() => setShowAllPending(p => !p)} className={styles.viewMoreBtn}>
-                {showAllPending ? "View less" : `View more (${filteredReports.filter(r => r.status === "pending").length - PREVIEW_LIMIT} more)`}
+                {showAllPending
+                  ? "View less"
+                  : `View more (${filteredReports.filter(r => r.status === "pending").length - PREVIEW_LIMIT} more)`}
               </button>
             )}
-            
+
+            {/* ── Resolved ── */}
             {resolvedReports.length > 0 && (
               <>
                 <h3 className={styles.cardTitle} style={{ marginTop: 24 }}>Resolved Reports</h3>
@@ -798,18 +858,20 @@ export default function ReportsPage() {
                     return (
                       <div key={r.id} className={`${styles.modRow} ${styles.resolvedRow}`}>
                         <div className={styles.reportIcon}>{reportTypeIcon(r.reportType)}</div>
+
                         <div className={styles.modInfo}>
                           <span
                             className={styles.modTitle}
                             onClick={isNavigable(r.reportType) ? () => handleNavigateToReported(r) : undefined}
                             title={
                               r.reportType === "listing" ? "View listing →" :
-                              r.reportType === "user" ? "View profile →" : undefined
+                              r.reportType === "user"    ? "View profile →" : undefined
                             }
                             style={navigableTitleStyle(r.reportType)}
                           >
                             {r.reportedName || r.reportedId}
                           </span>
+
                           <span className={styles.modMeta}>{r.reason}</span>
 
                           {r.reportType === "review" && review && (
@@ -823,9 +885,7 @@ export default function ReportsPage() {
                                 </span>
                               </div>
                               {review.comment && (
-                                <p className={styles.reviewComment}>
-                                  "{review.comment}"
-                                </p>
+                                <p className={styles.reviewComment}>"{review.comment}"</p>
                               )}
                             </div>
                           )}
@@ -857,14 +917,18 @@ export default function ReportsPage() {
                             </div>
                           )}
                         </div>
+
                         <span className={styles.resolvedBadge}>✓ {r.resolution || "resolved"}</span>
                       </div>
                     );
                   })}
                 </div>
+
                 {filteredReports.filter(r => r.status !== "pending").length > PREVIEW_LIMIT && (
                   <button onClick={() => setShowAllResolved(p => !p)} className={styles.viewMoreBtn}>
-                    {showAllResolved ? "View less" : `View more (${filteredReports.filter(r => r.status !== "pending").length - PREVIEW_LIMIT} more)`}
+                    {showAllResolved
+                      ? "View less"
+                      : `View more (${filteredReports.filter(r => r.status !== "pending").length - PREVIEW_LIMIT} more)`}
                   </button>
                 )}
               </>
