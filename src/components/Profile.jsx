@@ -777,7 +777,15 @@ function Profile() {
         {/* ── Wallet Tab ── */}
         {activeTab === 'wallet' && currentUserId && (
           <div className={styles.tabContent}>
-            <WalletTab userId={currentUserId} />
+          <WalletTab
+            userId={currentUserId}
+            onBalanceUpdate={(newBalance) => {
+              setProfileData(prev => ({ ...prev, walletBalance: newBalance }));
+              // Also update the user document to keep it in sync
+              updateDoc(doc(db, 'users', currentUserId), { walletBalance: newBalance })
+                .catch(console.error);
+            }}
+          />
           </div>
         )}
       </div>
