@@ -13,24 +13,7 @@ import {
 } from '../utils/payment.utils';
 import styles from './Payment.module.css';
 import { recordCashConfirmation } from '../services/revenueService';
-
-// ─── Helper: notify seller ────────────────────────────────────────────────────
-async function notifySellerPaymentConfirmed({ sellerId, buyerName, listingId, listingTitle, transactionId }) {
-  try {
-    await addDoc(collection(db, 'notifications'), {
-      userId:        sellerId,
-      type:          'buyer_paid',
-      read:          false,
-      buyerName,
-      listingId,
-      listingTitle:  listingTitle || 'your item',
-      transactionId,
-      createdAt:     serverTimestamp(),
-    });
-  } catch (err) {
-    console.error('[Payment] Failed to create seller notification:', err);
-  }
-}
+import { notifySellerBuyerPaid } from '../services/notificationService';
 
 export default function Payment() {
   const { txId } = useParams();
@@ -121,13 +104,16 @@ export default function Payment() {
       const cashAmount = getCashAmount(tx);
       await recordCashConfirmation(tx.id, cashAmount);
       
-      await notifySellerPaymentConfirmed({
+      // Use notification service instead of inline addDoc
+      await notifySellerBuyerPaid({
+        transactionId: tx.id,
         sellerId:      tx.sellerId,
         buyerName:     currentUser.displayName || currentUser.email || 'The buyer',
         listingId:     tx.listingId,
         listingTitle:  tx.listingTitle || listing?.title || 'your item',
-        transactionId: tx.id,
+        agreedPrice:   tx.agreedPrice,
       });
+      
       setStep('cash_waiting');
     } catch (e) {
       console.error(e);

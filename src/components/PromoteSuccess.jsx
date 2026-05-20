@@ -1,7 +1,8 @@
-// src/pages/PromoteSuccess.jsx
+// src/components/PromoteSuccess.jsx
 import { useEffect, useState } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { getFirestore, doc, getDoc, setDoc, collection } from "firebase/firestore";
+import { recordAdPayment } from "../services/revenueService";
 import NavBar from "../components/NavBarTemp";
 import styles from "./Payment.module.css";
 
@@ -18,7 +19,8 @@ export default function PromoteSuccess() {
   const stripeRef = searchParams.get("ref");
   const titleParam = searchParams.get("title");
   const sessionId = searchParams.get("session_id");
-  const amountRand = parseFloat(searchParams.get("price") || "0"); // get price from URL
+  const amountRand = parseFloat(searchParams.get("price") || "0");
+  const amountParam = searchParams.get("amount");
   const uniquePaymentId = sessionId || stripeRef;
 
   useEffect(() => {
@@ -30,11 +32,11 @@ export default function PromoteSuccess() {
 
     let isMounted = true;
     const storageKey = `ad_created_${uniquePaymentId}`;
+
     if (sessionStorage.getItem(storageKey) === "true") {
       const fetchListingOnly = async () => {
         const db = getFirestore();
-        const listingRef = doc(db, "listings", listingId);
-        const snap = await getDoc(listingRef);
+        const snap = await getDoc(doc(db, "listings", listingId));
         if (isMounted && snap.exists()) setListing(snap.data());
         if (isMounted) setLoading(false);
       };
@@ -47,19 +49,16 @@ export default function PromoteSuccess() {
     const createAdAndRevenue = async () => {
       const db = getFirestore();
       try {
-        // Use the unique payment ID as the document ID in 'ads' collection
         const adDocRef = doc(db, "ads", uniquePaymentId);
         const existingAd = await getDoc(adDocRef);
-        
+
         if (!existingAd.exists()) {
-          // Fetch listing details
           const listingRef = doc(db, "listings", listingId);
           const listingSnap = await getDoc(listingRef);
           if (!listingSnap.exists()) throw new Error("Listing not found");
           const listingData = listingSnap.data();
           if (isMounted) setListing(listingData);
 
-          // Create ad document
           const adData = {
             listingId,
             title: listingData.title || titleParam || "Listing",
@@ -72,31 +71,46 @@ export default function PromoteSuccess() {
             stripeSessionId: uniquePaymentId,
           };
           await setDoc(adDocRef, adData);
-          console.log(" Ad created with ID:", uniquePaymentId);
+          console.log("✅ Ad created with ID:", uniquePaymentId);
         } else {
-          // If ad already exists, still fetch listing for display
           const listingRef = doc(db, "listings", listingId);
           const listingSnap = await getDoc(listingRef);
           if (listingSnap.exists()) setListing(listingSnap.data());
         }
 
-        // ---- NEW: Record ad revenue (only once) ----
+        // Your ad revenue write (for admin dashboard)
         const revenueRef = doc(collection(db, "adRevenue"));
         const revenueData = {
           amount: amountRand,
           listingId,
-          adType: adType,
+          adType,
           stripeSessionId: uniquePaymentId,
           createdAt: new Date(),
         };
         await setDoc(revenueRef, revenueData);
-        console.log(" Ad revenue recorded");
-        // -------------------------------------------
+        console.log("✅ Ad revenue recorded (adRevenue collection)");
+
+        // Teammate's analytics write (for overall revenue)
+        const adAmount = amountParam ? Number(amountParam) : amountRand;
+        if (adAmount > 0) {
+          const recorded = await recordAdPayment(uniquePaymentId, adAmount, {
+            listingId,
+            adType: adType || "banner",
+            title: listing?.title || titleParam || "Listing",
+          });
+          if (recorded) {
+            console.log(`📊 Ad payment of R${adAmount} recorded in analytics`);
+          } else {
+            console.log("⚠️ Ad payment already recorded (idempotent check)");
+          }
+        }
 
         setAdCreated(true);
       } catch (err) {
         console.error("Ad creation error:", err);
-        setError("Payment succeeded but promotion could not be created. Please contact support.");
+        if (isMounted) {
+          setError("Payment succeeded but promotion could not be created. Please contact support.");
+        }
       } finally {
         if (isMounted) setLoading(false);
       }
@@ -104,7 +118,7 @@ export default function PromoteSuccess() {
 
     createAdAndRevenue();
     return () => { isMounted = false; };
-  }, [listingId, adType, titleParam, uniquePaymentId, amountRand]);
+  }, [listingId, adType, titleParam, uniquePaymentId, amountRand, amountParam, listing]);
 
   if (loading) {
     return (
@@ -113,7 +127,11 @@ export default function PromoteSuccess() {
         <div className={styles.page}>
           <div className={styles.container}>
             <div className={styles.successCard}>
+              <div className={styles.successIconWrap}>
+                <i className="fas fa-spinner fa-spin" />
+              </div>
               <h2>Processing your promotion...</h2>
+              <p>Please wait while we activate your ad.</p>
             </div>
           </div>
         </div>
@@ -123,6 +141,9 @@ export default function PromoteSuccess() {
 
   const displayTitle = listing?.title || titleParam || "Your listing";
   const displayImage = listing?.photos?.[0] || listing?.imageUrl || null;
+  const displayPaymentId = uniquePaymentId?.length > 30
+    ? `${uniquePaymentId.substring(0, 15)}...${uniquePaymentId.substring(uniquePaymentId.length - 10)}`
+    : uniquePaymentId;
 
   return (
     <>
@@ -134,23 +155,32 @@ export default function PromoteSuccess() {
               <i className="fas fa-check-circle" />
             </div>
             <h2>Your listing is now live!</h2>
-            <p>
+            <p className={styles.successMessage}>
               <strong>{displayTitle}</strong> is being promoted as a{" "}
               <strong>{adType === "banner" ? "Banner ad" : "Premium popup"}</strong>{" "}
               for the next 7 days. Buyers will start seeing it shortly.
             </p>
+
             {displayImage && (
-              <img
-                src={displayImage}
-                alt={displayTitle}
-                style={{ maxWidth: "200px", borderRadius: "8px", margin: "1rem 0" }}
-              />
+              <div className={styles.successImage}>
+                <img src={displayImage} alt={displayTitle} />
+              </div>
             )}
-            <p className={styles.refText}>
-              Payment confirmed via Stripe<br />
-              Ref: {uniquePaymentId}
-            </p>
+
+            <div className={styles.paymentRefBox}>
+              <div className={styles.paymentRefIcon}>
+                <i className="fas fa-receipt" />
+              </div>
+              <div className={styles.paymentRefContent}>
+                <span className={styles.paymentRefLabel}>Payment confirmed via Stripe</span>
+                <span className={styles.paymentRefValue} title={uniquePaymentId}>
+                  Ref: {displayPaymentId}
+                </span>
+              </div>
+            </div>
+
             {error && <div className={styles.errorMsg}>{error}</div>}
+
             <div className={styles.successActions}>
               <button
                 className={styles.primaryBtn}

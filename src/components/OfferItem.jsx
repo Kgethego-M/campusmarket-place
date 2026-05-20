@@ -6,6 +6,11 @@ import {
 } from 'firebase/firestore';
 import { auth, db } from '../firebase';
 import styles from './OfferItem.module.css';
+import {
+  notifyOfferAccepted,
+  notifyTradeAccepted,
+  notifyOfferDeclined,
+} from '../services/notificationService';
 
 const shimmerStyle = {
   background: 'linear-gradient(90deg, #f0f2f5 25%, #e8ecf0 50%, #f0f2f5 75%)',
@@ -130,13 +135,12 @@ export default function OfferItem({ offer }) {
           .map(async (txDoc) => {
             const tx = txDoc.data();
             console.log('  Notifying buyer', tx.buyerId, 'of decline');
-            await addDoc(collection(db, 'notifications'), {
-              userId:        tx.buyerId,
-              type:          'offer_declined',
+            // Use notification service for declined offers
+            await notifyOfferDeclined({
               transactionId: txDoc.id,
+              buyerId:       tx.buyerId,
               listingId:     offer.listingId,
-              read:          false,
-              createdAt:     serverTimestamp(),
+              listingTitle:  listing?.title || 'your item',
             });
             console.log('  Deleting transaction', txDoc.id);
             await deleteDoc(doc(db, 'transactions', txDoc.id));
@@ -168,6 +172,8 @@ export default function OfferItem({ offer }) {
           agreedPrice:   offer.agreedPrice   ?? null,
           partialAmount: offer.partialAmount  ?? null,
           transactionId: offer.id,
+          buyerId:       offer.buyerId,
+          sellerId:      offer.sellerId,
           listingId:     offer.listingId,
           read:          false,
           createdAt:     serverTimestamp(),
@@ -212,14 +218,12 @@ export default function OfferItem({ offer }) {
     if (working) return;
     setWorking(true);
     try {
-      await addDoc(collection(db, 'notifications'), {
-        userId:        offer.buyerId,
-        type:          'offer_declined',
+      // Use notification service for declined offer
+      await notifyOfferDeclined({
         transactionId: offer.id,
+        buyerId:       offer.buyerId,
         listingId:     offer.listingId,
-        read:          false,
-        createdAt:     serverTimestamp(),
-        redirectUrl:   `/view-listing`,
+        listingTitle:  listing?.title || 'your item',
       });
       await deleteDoc(doc(db, 'transactions', offer.id));
       setDone(true);
