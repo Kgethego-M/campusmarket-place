@@ -31,8 +31,8 @@ export const isValidWitsEmail = (email) => {
 };
 
 export const getUserType = (email) => {
-  if (email.endsWith('@wits.ac.za') || email === 'nontokozombatha797@gmail.com' || email === 's08027456@gmail.com' || email === 'tshegomaphefo48@gmail.com' || email === 'hyginusvictor11@gmail.com' || email === 'dantesebopela@gmail.com' || email === 'kgethim25.o@gmail.com') return 'staff';
-  if (email === 'mbathamathamsanqa@gmail.com' || email === 'mphelanekgethego20060325@gmail.com' || email === 'anelevanwyk49@gmail.com'|| email === "lialabelle71@gmail.com") return 'admin';
+  if (email.endsWith('@wits.ac.za') || email === 'nontokozombatha797@gmail.com' || email === 's08027456@gmail.com' || email === 'tshegomaphefo48@gmail.com' || email === 'hyginusvictor11@gmail.com' || email === 'kgethim25.o@gmail.com') return 'staff';
+  if (email === 'mbathamathamsanqa@gmail.com' || email === 'mphelanekgethego20060325@gmail.com' || email === 'anelevanwyk49@gmail.com'|| email === "lialabelle71@gmail.com" || email === 'dantesebopela@gmail.com') return 'admin';
   if (email.endsWith('@students.wits.ac.za')|| email === 'kgethie35@gmail.com') return 'student';
   return 'unknown';
 };

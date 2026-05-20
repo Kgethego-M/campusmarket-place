@@ -1,14 +1,8 @@
-// src/pages/PromoteSuccess.jsx
+// src/components/PromoteSuccess.jsx
 import { useEffect, useState } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
-import {
-  getFirestore,
-  doc,
-  getDoc,
-  setDoc,
-  updateDoc,
-  increment,
-} from "firebase/firestore";
+import { getFirestore, doc, getDoc, setDoc, collection } from "firebase/firestore";
+import { recordAdPayment } from "../services/revenueService";
 import NavBar from "../components/NavBarTemp";
 import styles from "./Payment.module.css";
 
@@ -26,6 +20,7 @@ export default function PromoteSuccess() {
   const titleParam      = searchParams.get("title");
   const sessionId       = searchParams.get("session_id");
   const amountParam     = searchParams.get("amount");
+  const amountRand = parseFloat(searchParams.get("price") || "0");
   const isWallet        = searchParams.get("wallet") === "true";
 
   // For wallet payments there is no Stripe session — use listingId + adType
@@ -52,11 +47,9 @@ export default function PromoteSuccess() {
     const storageKey = `ad_created_${uniquePaymentId}`;
 
     if (sessionStorage.getItem(storageKey) === "true") {
-      // Already created in this session — just fetch listing for display
       const fetchListingOnly = async () => {
         const db = getFirestore();
-        const listingRef = doc(db, "listings", listingId);
-        const snap = await getDoc(listingRef);
+        const snap = await getDoc(doc(db, "listings", listingId));
         if (isMounted && snap.exists()) setListing(snap.data());
         if (isMounted) setLoading(false);
       };
@@ -64,46 +57,53 @@ export default function PromoteSuccess() {
       return;
     }
 
-    const createAd = async () => {
+    sessionStorage.setItem(storageKey, "true");
+
+    const createAdAndRevenue = async () => {
       const db = getFirestore();
       try {
-        // ── Check if ad already exists (idempotency) ──────────────────────
         const adDocRef = doc(db, "ads", uniquePaymentId);
         const existingAd = await getDoc(adDocRef);
 
-        if (existingAd.exists()) {
-          console.log("Ad already exists, skipping creation");
-          setAdCreated(true);
+        if (!existingAd.exists()) {
           const listingRef = doc(db, "listings", listingId);
           const listingSnap = await getDoc(listingRef);
-          if (isMounted && listingSnap.exists()) setListing(listingSnap.data());
-          if (isMounted) setLoading(false);
-          return;
+          if (!listingSnap.exists()) throw new Error("Listing not found");
+          const listingData = listingSnap.data();
+          if (isMounted) setListing(listingData);
+
+          const adData = {
+            listingId,
+            title: listingData.title || titleParam || "Listing",
+            imageUrl: listingData.photos?.[0] || listingData.imageUrl || null,
+            price: listingData.price,
+            type: adType || "banner",
+            status: "active",
+            createdAt: new Date(),
+            expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+            stripeSessionId: uniquePaymentId,
+          };
+          await setDoc(adDocRef, adData);
+          console.log("✅ Ad created with ID:", uniquePaymentId);
+        } else {
+          const listingRef = doc(db, "listings", listingId);
+          const listingSnap = await getDoc(listingRef);
+          if (listingSnap.exists()) setListing(listingSnap.data());
         }
 
-        // ── Fetch listing details ─────────────────────────────────────────
-        const listingRef = doc(db, "listings", listingId);
-        const listingSnap = await getDoc(listingRef);
-        if (!listingSnap.exists()) throw new Error("Listing not found");
-        const listingData = listingSnap.data();
-        if (isMounted) setListing(listingData);
-
-        // ── Create ad document ────────────────────────────────────────────
-        const adData = {
+        // Your ad revenue write (for admin dashboard)
+        const revenueRef = doc(collection(db, "adRevenue"));
+        const revenueData = {
+          amount: amountRand,
           listingId,
-          title:           listingData.title || titleParam || "Listing",
-          imageUrl:        listingData.photos?.[0] || listingData.imageUrl || null,
-          price:           listingData.price,
-          type:            adType || "banner",
-          status:          "active",
-          createdAt:       new Date(),
-          expiresAt:       new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+          adType,
           paymentMethod:   isWallet ? "wallet" : "stripe",
           stripeSessionId: isWallet ? null : uniquePaymentId,
-          amountPaid:      amountParam ? Number(amountParam) : null,
+          createdAt: new Date(),
           sellerId:        listingData.sellerId ?? listingData.userId ?? null,
         };
         await setDoc(adDocRef, adData);
+        await setDoc(revenueRef, revenueData);
         console.log("✅ Ad created");
 
         // ── Update analytics revenue (Stripe payments only) ───────────────
@@ -111,11 +111,21 @@ export default function PromoteSuccess() {
         // AdPayment.jsx via deductAdFromWallet — no need to touch analytics
         // here for wallet. Only update for Stripe payments.
         if (!isWallet) {
-          const adAmount = amountParam ? Number(amountParam) : 0;
+          const adAmount = amountParam ? Number(amountParam) : amountRand;
           if (adAmount > 0) {
             try {
+              const recorded = await recordAdPayment(uniquePaymentId, adAmount, {
+                listingId,
+                adType: adType || "banner",
+                title: listing?.title || titleParam || "Listing",
+              });
+              if (recorded) {
+                console.log(`📊 Ad payment of R${adAmount} recorded in analytics`);
+              } else {
+                console.log("⚠️ Ad payment already recorded (idempotent check)");
+              }
               const analyticsRef = doc(db, "analytics", "platform");
-              const analyticsSnap = await getDoc(analyticsRef);
+              const analyticsSnap = await getDoc(analyticsRef)
 
               if (analyticsSnap.exists()) {
                 await updateDoc(analyticsRef, {
@@ -144,8 +154,6 @@ export default function PromoteSuccess() {
         }
 
         setAdCreated(true);
-        sessionStorage.setItem(storageKey, "true");
-
       } catch (err) {
         console.error("Ad creation error:", err);
         if (isMounted) {
@@ -156,9 +164,9 @@ export default function PromoteSuccess() {
       }
     };
 
-    createAd();
+    createAdAndRevenue();
     return () => { isMounted = false; };
-  }, [listingId, adType, titleParam, uniquePaymentId, amountParam, isWallet]);
+  }, [listingId, adType, titleParam, uniquePaymentId, amountRand, amountParam, isWallet, listing]);
 
   if (loading) {
     return (
@@ -167,7 +175,11 @@ export default function PromoteSuccess() {
         <div className={styles.page}>
           <div className={styles.container}>
             <div className={styles.successCard}>
+              <div className={styles.successIconWrap}>
+                <i className="fas fa-spinner fa-spin" />
+              </div>
               <h2>Processing your promotion...</h2>
+              <p>Please wait while we activate your ad.</p>
             </div>
           </div>
         </div>
@@ -175,8 +187,8 @@ export default function PromoteSuccess() {
     );
   }
 
-  const displayTitle    = listing?.title || titleParam || "Your listing";
-  const displayImage    = listing?.photos?.[0] || listing?.imageUrl || null;
+  const displayTitle = listing?.title || titleParam || "Your listing";
+  const displayImage = listing?.photos?.[0] || listing?.imageUrl || null;
   const displayPaymentId = (!isWallet && uniquePaymentId?.length > 30)
     ? `${uniquePaymentId.substring(0, 15)}...${uniquePaymentId.substring(uniquePaymentId.length - 10)}`
     : uniquePaymentId;

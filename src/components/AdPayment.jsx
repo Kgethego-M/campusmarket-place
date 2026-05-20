@@ -118,19 +118,22 @@ export default function AdPayment() {
     const stripeRef = `AD-${listing.id}-${Date.now()}`;
 
     const body = {
-      transactionId: stripeRef,
-      buyerEmail:    user.email,
-      amount:        amountCents,
-      amountRand,
-      cashAmount:    0,
-      totalAmount:   amountRand,
-      currency:      "zar",
-      stripeRef,
-      paymentType:   "ad_promotion",
-      listingId:     listing.id,
-      listingTitle:  `${AD_LABELS[adType]} — ${itemTitle}`,
-      successUrl:    `${window.location.origin}/promote-success?lid=${listing.id}&type=${adType}&ref=${stripeRef}&title=${encodeURIComponent(itemTitle)}`,
-      cancelUrl:     `${window.location.origin}/listing/${listing.id}`,
+      transactionId: stripeRef, // used as client_reference_id
+      buyerEmail: user.email,
+      amount: amountCents, // in cents (e.g. 5000 for R50)
+      amountRand: amountRand,
+      cashAmount: 0,
+      totalAmount: amountRand,
+      currency: "zar",
+      stripeRef: stripeRef,
+      paymentType: "ad_promotion",
+      listingId: listing.id,
+      listingTitle: `${AD_LABELS[adType]} — ${itemTitle}`,
+      // ✅ Added &price= parameter for ad revenue tracking
+      successUrl: `${window.location.origin}/promote-success?lid=${listing.id}&type=${adType}&ref=${stripeRef}&title=${encodeURIComponent(
+        itemTitle
+      )}&price=${amountRand}`,
+      cancelUrl: `${window.location.origin}/listing/${listing.id}`,
       metadata: {
         type:      "ad_promotion",
         adType,

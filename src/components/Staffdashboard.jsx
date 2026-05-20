@@ -27,11 +27,11 @@ async function sendNotification(userId, payload) {
 
 async function notificationAlreadyExists(txnId, type) {
     try {
+        // Query only on transactionId + type to avoid needing a composite Firestore index
         const q = query(
             collection(db, "notifications"),
             where("transactionId", "==", txnId),
-            where("type", "==", type),
-            where("createdAt", ">=", new Date(Date.now() - 24 * 60 * 60 * 1000))
+            where("type", "==", type)
         );
         const snapshot = await getDocs(q);
         return !snapshot.empty;
@@ -268,10 +268,20 @@ function isBookingTimeReached(dateStr, timeSlot) {
     return new Date() >= deadline;
 }
 
+function isSlotMissed(txn) {
+    if (!txn.dropOffDate) return false;
+    return isBookingTimeReached(txn.dropOffDate, txn.dropOffTimeSlot || txn.timeSlot);
+}
+
 function isDropOffOverdue(txn) {
     if (txn.status !== "pending" || !txn.dropOffBooked) return false;
     if (!txn.dropOffDate) return false;
-    return isBookingTimeReached(txn.dropOffDate, txn.dropOffTimeSlot || txn.timeSlot);
+    // Slot must have passed AND 24hr grace period must have elapsed
+    const GRACE_MS = 24 * 60 * 60 * 1000;
+    const slotEnd = parseSlotEnd(txn.dropOffTimeSlot || txn.timeSlot);
+    const graceStart = new Date(txn.dropOffDate + "T00:00:00");
+    if (slotEnd) graceStart.setHours(slotEnd.hour, slotEnd.minute + 1, 0, 0);
+    return Date.now() >= graceStart.getTime() + GRACE_MS;
 }
 
 function isCollectionOverdue(txn) {
@@ -345,12 +355,13 @@ function TransactionDetailPanel({ txn, onClose, onConfirmDropOff, onConfirmColle
 
     const hasShortfall = !isTrade && !isFullyOnline && (isFullyCash || isPartial);
 
-    const [cashConfirmed, setCashConfirmed] = useState(
+    const [cashConfirmed,   setCashConfirmed]   = useState(
         isFullyOnline || txn.paymentStatus === "Fully Paid"
     );
-    const [saving,        setSaving]        = useState(false);
-    const [alertSending,  setAlertSending]  = useState(false);
-    const [alertSent,     setAlertSent]     = useState(!!txn.overdueAlertSentAt);
+    const [receiptVerified, setReceiptVerified] = useState(false);
+    const [saving,          setSaving]          = useState(false);
+    const [alertSending,    setAlertSending]    = useState(false);
+    const [alertSent,       setAlertSent]       = useState(!!txn.overdueAlertSentAt);
     const [dropOffLoading,    setDropOffLoading]    = useState(false);
     const [collectionLoading, setCollectionLoading] = useState(false);
 
@@ -405,11 +416,71 @@ function TransactionDetailPanel({ txn, onClose, onConfirmDropOff, onConfirmColle
         try { await onConfirmCollection(txn.id, txn._collectionRole); onClose(); } finally { setCollectionLoading(false); }
     }
 
-    return (
-        <div className={styles.detailOverlay} onClick={onClose}>
-            <div className={styles.detailPanel} onClick={e => e.stopPropagation()}>
+    const sectionStyle = {
+        background: "#f8fafc",
+        border: "1px solid #e2e8f0",
+        borderRadius: "12px",
+        padding: "14px 16px",
+    };
+    const sectionTitleStyle = {
+        margin: "0 0 10px",
+        fontSize: "0.8rem",
+        fontWeight: 700,
+        color: "#475569",
+        textTransform: "uppercase",
+        letterSpacing: "0.06em",
+        display: "flex",
+        alignItems: "center",
+        gap: 6,
+    };
+    const infoRowStyle = {
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+        padding: "5px 0",
+        borderBottom: "1px solid #f1f5f9",
+        gap: 8,
+        fontSize: "0.85rem",
+    };
+    const infoLabelStyle = {
+        color: "#64748b",
+        fontWeight: 500,
+        flexShrink: 0,
+        minWidth: 100,
+    };
+    const infoValueStyle = {
+        color: "#1e293b",
+        fontWeight: 600,
+        textAlign: "right",
+        wordBreak: "break-word",
+    };
 
-                <div className={`${styles.detailHeader} ${isOverdue ? styles.detailHeaderOverdue : styles[`detailHeader_${meta.cls}`]}`}>
+    return (
+        <div className={styles.detailOverlay} onClick={onClose} style={{
+            position: "fixed", inset: 0, zIndex: 1000,
+            background: "rgba(15,23,42,0.55)", backdropFilter: "blur(3px)",
+            display: "flex", alignItems: "flex-start", justifyContent: "flex-end",
+            padding: "0",
+        }}>
+            <div className={styles.detailPanel} onClick={e => e.stopPropagation()} style={{
+                width: "min(680px, 100vw)",
+                height: "100dvh",
+                display: "flex",
+                flexDirection: "column",
+                background: "#fff",
+                boxShadow: "-8px 0 40px rgba(0,0,0,0.18)",
+                overflowY: "hidden",
+            }}>
+
+                <div className={`${styles.detailHeader} ${isOverdue ? styles.detailHeaderOverdue : styles[`detailHeader_${meta.cls}`]}`} style={{
+                    padding: "20px 24px 16px",
+                    flexShrink: 0,
+                    display: "flex",
+                    alignItems: "flex-start",
+                    justifyContent: "space-between",
+                    gap: 12,
+                    borderBottom: "1px solid rgba(0,0,0,0.07)",
+                }}>
                     <div className={styles.detailHeaderLeft}>
                         {isTrade && txn.tradeItem ? (
                             <div style={{ display: "flex", flexDirection: "column", gap: 8, flex: 1, minWidth: 0 }}>
@@ -506,7 +577,14 @@ function TransactionDetailPanel({ txn, onClose, onConfirmDropOff, onConfirmColle
                     </button>
                 </div>
 
-                <div className={styles.detailBody}>
+                <div className={styles.detailBody} style={{
+                    flex: 1,
+                    overflowY: "auto",
+                    padding: "20px 24px",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "16px",
+                }}>
 
                     <div className={styles.paymentInstructionBanner} style={{ background: paymentConfig.bg, borderLeftColor: paymentConfig.color }}>
                         <i className={`fa-solid ${paymentConfig.icon}`} style={{ color: paymentConfig.color }} />
@@ -535,28 +613,32 @@ function TransactionDetailPanel({ txn, onClose, onConfirmDropOff, onConfirmColle
                         </div>
                     )}
 
-                    <div className={styles.detailGrid}>
-                        <div className={styles.detailSection}>
-                            <h3 className={styles.detailSectionTitle}><i className="fa-solid fa-users" /> Parties</h3>
-                            <div className={styles.detailInfoRow}>
-                                <span className={styles.detailInfoLabel}>Seller</span>
-                                <span className={styles.detailInfoValue}>{txn.seller}</span>
+                    <div className={styles.detailGrid} style={{
+                        display: "grid",
+                        gridTemplateColumns: "1fr 1fr",
+                        gap: "16px",
+                    }}>
+                        <div className={styles.detailSection} style={sectionStyle}>
+                            <h3 className={styles.detailSectionTitle} style={sectionTitleStyle}><i className="fa-solid fa-users" /> Parties</h3>
+                            <div className={styles.detailInfoRow} style={infoRowStyle}>
+                                <span className={styles.detailInfoLabel} style={infoLabelStyle}>Seller</span>
+                                <span className={styles.detailInfoValue} style={infoValueStyle}>{txn.seller}</span>
                             </div>
-                            <div className={styles.detailInfoRow}>
-                                <span className={styles.detailInfoLabel}>Buyer</span>
-                                <span className={styles.detailInfoValue}>{txn.buyer}</span>
+                            <div className={styles.detailInfoRow} style={infoRowStyle}>
+                                <span className={styles.detailInfoLabel} style={infoLabelStyle}>Buyer</span>
+                                <span className={styles.detailInfoValue} style={infoValueStyle}>{txn.buyer}</span>
                             </div>
                         </div>
 
-                        <div className={styles.detailSection}>
-                            <h3 className={styles.detailSectionTitle}><i className="fa-solid fa-receipt" /> Transaction</h3>
-                            <div className={styles.detailInfoRow}>
-                                <span className={styles.detailInfoLabel}>Type</span>
-                                <span className={styles.detailInfoValue}>{txn.type}</span>
+                        <div className={styles.detailSection} style={sectionStyle}>
+                            <h3 className={styles.detailSectionTitle} style={sectionTitleStyle}><i className="fa-solid fa-receipt" /> Transaction</h3>
+                            <div className={styles.detailInfoRow} style={infoRowStyle}>
+                                <span className={styles.detailInfoLabel} style={infoLabelStyle}>Type</span>
+                                <span className={styles.detailInfoValue} style={infoValueStyle}>{txn.type}</span>
                             </div>
-                            <div className={styles.detailInfoRow}>
-                                <span className={styles.detailInfoLabel}>{isTrade ? "Transaction Type" : "Payment Method"}</span>
-                                <span className={styles.detailInfoValue}>
+                            <div className={styles.detailInfoRow} style={infoRowStyle}>
+                                <span className={styles.detailInfoLabel} style={infoLabelStyle}>{isTrade ? "Transaction Type" : "Payment Method"}</span>
+                                <span className={styles.detailInfoValue} style={infoValueStyle}>
                                     <span className={styles.paymentMethodChip} style={{ background: paymentConfig.bg, color: paymentConfig.color }}>
                                         <i className={`fa-solid ${paymentConfig.icon}`} />
                                         {paymentConfig.label}
@@ -565,9 +647,9 @@ function TransactionDetailPanel({ txn, onClose, onConfirmDropOff, onConfirmColle
                             </div>
                             {txn.type === "Purchase" ? (
                                 <>
-                                    <div className={styles.detailInfoRow}>
-                                        <span className={styles.detailInfoLabel}>Amount</span>
-                                        <span className={styles.detailInfoValue}>
+                                    <div className={styles.detailInfoRow} style={infoRowStyle}>
+                                        <span className={styles.detailInfoLabel} style={infoLabelStyle}>Amount</span>
+                                        <span className={styles.detailInfoValue} style={infoValueStyle}>
                                             R{totalPrice?.toLocaleString()}
                                             {isFullyOnline ? (
                                                 <span className={styles.paidChip}><i className="fa-solid fa-circle-check" /> Paid Online</span>
@@ -580,24 +662,24 @@ function TransactionDetailPanel({ txn, onClose, onConfirmDropOff, onConfirmColle
                                             )}
                                         </span>
                                     </div>
-                                    <div className={styles.detailInfoRow}>
-                                        <span className={styles.detailInfoLabel}>Payment</span>
-                                        <span className={styles.detailInfoValue}>
+                                    <div className={styles.detailInfoRow} style={infoRowStyle}>
+                                        <span className={styles.detailInfoLabel} style={infoLabelStyle}>Payment</span>
+                                        <span className={styles.detailInfoValue} style={infoValueStyle}>
                                             {isFullyOnline ? "Fully Online" : isFullyCash ? "Fully Cash" : isPartial ? "Partial (Online + Cash)" : txn.paymentMethod}
                                         </span>
                                     </div>
                                     {isPartial && (
                                         <>
-                                            <div className={styles.detailInfoRow}>
-                                                <span className={styles.detailInfoLabel}>Paid Online</span>
+                                            <div className={styles.detailInfoRow} style={infoRowStyle}>
+                                                <span className={styles.detailInfoLabel} style={infoLabelStyle}>Paid Online</span>
                                                 <span className={styles.detailInfoValue} style={{ color: "#10b981", fontWeight: 600 }}>
                                                     R{onlineAmountPaid.toLocaleString()}
                                                     <span className={styles.paidChip}><i className="fa-solid fa-circle-check" /> Confirmed</span>
                                                 </span>
                                             </div>
-                                            <div className={styles.detailInfoRow}>
-                                                <span className={styles.detailInfoLabel}>Cash Due</span>
-                                                <span className={styles.detailInfoValue}>
+                                            <div className={styles.detailInfoRow} style={infoRowStyle}>
+                                                <span className={styles.detailInfoLabel} style={infoLabelStyle}>Cash Due</span>
+                                                <span className={styles.detailInfoValue} style={infoValueStyle}>
                                                     R{shortfall.toLocaleString()}
                                                     {cashConfirmed
                                                         ? <span className={styles.paidChip}><i className="fa-solid fa-circle-check" /> Received</span>
@@ -610,9 +692,9 @@ function TransactionDetailPanel({ txn, onClose, onConfirmDropOff, onConfirmColle
                                 </>
                             ) : (
                                 <>
-                                    <div className={styles.detailInfoRow}>
-                                        <span className={styles.detailInfoLabel}>Trade For</span>
-                                        <span className={styles.detailInfoValue}>{txn.tradeFor || "—"}</span>
+                                    <div className={styles.detailInfoRow} style={infoRowStyle}>
+                                        <span className={styles.detailInfoLabel} style={infoLabelStyle}>Trade For</span>
+                                        <span className={styles.detailInfoValue} style={infoValueStyle}>{txn.tradeFor || "—"}</span>
                                     </div>
                                     {txn.tradeItem && (
                                         <div style={{ marginTop: 10 }}>
@@ -646,71 +728,71 @@ function TransactionDetailPanel({ txn, onClose, onConfirmDropOff, onConfirmColle
                             )}
                         </div>
 
-                        <div className={styles.detailSection}>
-                            <h3 className={styles.detailSectionTitle}>
+                        <div className={styles.detailSection} style={sectionStyle}>
+                            <h3 className={styles.detailSectionTitle} style={sectionTitleStyle}>
                                 <i className="fa-solid fa-truck-arrow-right" />
                                 {isTrade && txn._dropOffRole === "buyer" ? " Buyer Drop-off" : " Drop-off"}
                             </h3>
                             {isTrade && (
-                                <div className={styles.detailInfoRow}>
-                                    <span className={styles.detailInfoLabel}>Confirming</span>
+                                <div className={styles.detailInfoRow} style={infoRowStyle}>
+                                    <span className={styles.detailInfoLabel} style={infoLabelStyle}>Confirming</span>
                                     <span className={styles.detailInfoValue} style={{ fontWeight: 700, color: txn._dropOffRole === "buyer" ? "#0891b2" : "#7c3aed" }}>
                                         {txn._dropOffRole === "buyer" ? "Buyer's trade item" : "Seller's item"}
                                     </span>
                                 </div>
                             )}
-                            <div className={styles.detailInfoRow}>
-                                <span className={styles.detailInfoLabel}>
+                            <div className={styles.detailInfoRow} style={infoRowStyle}>
+                                <span className={styles.detailInfoLabel} style={infoLabelStyle}>
                                     {isTrade && txn._dropOffRole === "buyer" ? "Buyer Drop-off Date" : "Date"}
                                 </span>
-                                <span className={styles.detailInfoValue}>
+                                <span className={styles.detailInfoValue} style={infoValueStyle}>
                                     {(txn._dropOffRole === "buyer" ? txn.buyerDropOffDate : txn.dropOffDate) || "—"}
                                 </span>
                             </div>
-                            <div className={styles.detailInfoRow}>
-                                <span className={styles.detailInfoLabel}>Time Slot</span>
-                                <span className={styles.detailInfoValue}>
+                            <div className={styles.detailInfoRow} style={infoRowStyle}>
+                                <span className={styles.detailInfoLabel} style={infoLabelStyle}>Time Slot</span>
+                                <span className={styles.detailInfoValue} style={infoValueStyle}>
                                     {(txn._dropOffRole === "buyer" ? txn.buyerDropOffTimeSlot : txn.dropOffTimeSlot) || txn.timeSlot || "—"}
                                 </span>
                             </div>
-                            <div className={styles.detailInfoRow}>
-                                <span className={styles.detailInfoLabel}>Seller drop-off</span>
-                                <span className={styles.detailInfoValue}>
+                            <div className={styles.detailInfoRow} style={infoRowStyle}>
+                                <span className={styles.detailInfoLabel} style={infoLabelStyle}>Seller drop-off</span>
+                                <span className={styles.detailInfoValue} style={infoValueStyle}>
                                     {txn.sellerDropOffConfirmed
                                         ? <span className={styles.paidChip}><i className="fa-solid fa-circle-check" /> Done</span>
                                         : "Pending"}
                                 </span>
                             </div>
                             {isTrade && (
-                                <div className={styles.detailInfoRow}>
-                                    <span className={styles.detailInfoLabel}>Buyer drop-off</span>
-                                    <span className={styles.detailInfoValue}>
+                                <div className={styles.detailInfoRow} style={infoRowStyle}>
+                                    <span className={styles.detailInfoLabel} style={infoLabelStyle}>Buyer drop-off</span>
+                                    <span className={styles.detailInfoValue} style={infoValueStyle}>
                                         {txn.buyerDropOffConfirmed
                                             ? <span className={styles.paidChip}><i className="fa-solid fa-circle-check" /> Done</span>
                                             : "Pending"}
                                     </span>
                                 </div>
                             )}
-                            <div className={styles.detailInfoRow}>
-                                <span className={styles.detailInfoLabel}>Booked</span>
-                                <span className={styles.detailInfoValue}>{txn.dropOffBooked ? "Yes" : "Not yet"}</span>
+                            <div className={styles.detailInfoRow} style={infoRowStyle}>
+                                <span className={styles.detailInfoLabel} style={infoLabelStyle}>Booked</span>
+                                <span className={styles.detailInfoValue} style={infoValueStyle}>{txn.dropOffBooked ? "Yes" : "Not yet"}</span>
                             </div>
                         </div>
 
-                        <div className={styles.detailSection}>
-                            <h3 className={styles.detailSectionTitle}><i className="fa-solid fa-person-walking" /> Collection</h3>
-                            <div className={styles.detailInfoRow}>
-                                <span className={styles.detailInfoLabel}>Receipt ID</span>
-                                <span className={styles.detailInfoValue}>
+                        <div className={styles.detailSection} style={sectionStyle}>
+                            <h3 className={styles.detailSectionTitle} style={sectionTitleStyle}><i className="fa-solid fa-person-walking" /> Collection</h3>
+                            <div className={styles.detailInfoRow} style={infoRowStyle}>
+                                <span className={styles.detailInfoLabel} style={infoLabelStyle}>Receipt ID</span>
+                                <span className={styles.detailInfoValue} style={infoValueStyle}>
                                     <span style={{ fontFamily: "monospace", fontWeight: 700, fontSize: "0.9rem", letterSpacing: "0.05em", background: "#faf5ff", border: "1.5px dashed #a78bfa", borderRadius: 6, padding: "2px 10px", color: "#1e293b", display: "inline-flex", alignItems: "center", gap: 5 }}>
                                         <i className="fa-solid fa-receipt" style={{ color: "#7c3aed", fontSize: "0.78rem" }} />
                                         {getReceiptRef(txn)}
                                     </span>
                                 </span>
                             </div>
-                            <div className={styles.detailInfoRow}>
-                                <span className={styles.detailInfoLabel}>Collect By</span>
-                                <span className={styles.detailInfoValue}>
+                            <div className={styles.detailInfoRow} style={infoRowStyle}>
+                                <span className={styles.detailInfoLabel} style={infoLabelStyle}>Collect By</span>
+                                <span className={styles.detailInfoValue} style={infoValueStyle}>
                                     {(() => {
                                         if (txn.collectionDeadline) {
                                             return new Date(txn.collectionDeadline).toLocaleDateString("en-ZA", { day: "numeric", month: "short", year: "numeric" });
@@ -725,9 +807,9 @@ function TransactionDetailPanel({ txn, onClose, onConfirmDropOff, onConfirmColle
                                     })()}
                                 </span>
                             </div>
-                            <div className={styles.detailInfoRow}>
-                                <span className={styles.detailInfoLabel}>Status</span>
-                                <span className={styles.detailInfoValue}>
+                            <div className={styles.detailInfoRow} style={infoRowStyle}>
+                                <span className={styles.detailInfoLabel} style={infoLabelStyle}>Status</span>
+                                <span className={styles.detailInfoValue} style={infoValueStyle}>
                                     {txn.status === "completed"
                                         ? <span className={styles.paidChip}><i className="fa-solid fa-circle-check" /> Collected</span>
                                         : txn.status === "awaiting_collection"
@@ -812,8 +894,8 @@ function TransactionDetailPanel({ txn, onClose, onConfirmDropOff, onConfirmColle
                     )}
 
                     {((txn.status === "pending" && txn.dropOffBooked) || txn.status === "awaiting_collection") && (
-                        <div className={styles.detailSection} style={{ marginTop: 8 }}>
-                            <h3 className={styles.detailSectionTitle}><i className="fa-solid fa-clipboard-check" /> Inspection Checklist</h3>
+                        <div className={styles.detailSection} style={{ ...sectionStyle, marginTop: 8, gridColumn: "1 / -1" }}>
+                            <h3 className={styles.detailSectionTitle} style={sectionTitleStyle}><i className="fa-solid fa-clipboard-check" /> Inspection Checklist</h3>
                             {txn.status === "pending" && !allChecked && dropOffTimeReached && (
                                 <div className={styles.timeGateBanner} style={{ marginBottom: 8, background: "rgba(245,158,11,0.1)", borderColor: "#f59e0b", color: "#b45309" }}>
                                     <i className="fa-solid fa-triangle-exclamation" />
@@ -826,7 +908,7 @@ function TransactionDetailPanel({ txn, onClose, onConfirmDropOff, onConfirmColle
                                     <span>Inspection available from <strong>{txn.dropOffDate}</strong>{txn.dropOffTimeSlot && <> at <strong>{txn.dropOffTimeSlot}</strong></>}.</span>
                                 </div>
                             )}
-                            <div className={styles.checklist}>
+                            <div className={styles.checklist} style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 4 }}>
                                 {txn.checklist.map((step, i) => (
                                     <button
                                         key={i}
@@ -834,8 +916,19 @@ function TransactionDetailPanel({ txn, onClose, onConfirmDropOff, onConfirmColle
                                         onClick={() => dropOffTimeReached && onMarkStep && onMarkStep(txn.id, i, txn._dropOffRole || "seller")}
                                         disabled={step.done || !dropOffTimeReached}
                                         title={!dropOffTimeReached ? `Locked until ${txn.dropOffDate}${txn.dropOffTimeSlot ? ` at ${txn.dropOffTimeSlot}` : ""}` : undefined}
+                                        style={{
+                                            display: "flex", alignItems: "center", gap: 10,
+                                            padding: "10px 14px", borderRadius: 10,
+                                            border: step.done ? "1.5px solid #86efac" : "1.5px solid #e2e8f0",
+                                            background: step.done ? "#f0fdf4" : !dropOffTimeReached ? "#f8fafc" : "#fff",
+                                            cursor: step.done || !dropOffTimeReached ? "not-allowed" : "pointer",
+                                            fontSize: "0.88rem", fontWeight: 600,
+                                            color: step.done ? "#16a34a" : !dropOffTimeReached ? "#94a3b8" : "#374151",
+                                            textAlign: "left", width: "100%",
+                                        }}
                                     >
-                                        <i className={`fa-solid ${!dropOffTimeReached ? "fa-lock" : step.done ? "fa-circle-check" : "fa-circle"}`} />
+                                        <i className={`fa-solid ${!dropOffTimeReached ? "fa-lock" : step.done ? "fa-circle-check" : "fa-circle"}`}
+                                           style={{ fontSize: "1rem", flexShrink: 0 }} />
                                         {step.label}
                                     </button>
                                 ))}
@@ -844,7 +937,15 @@ function TransactionDetailPanel({ txn, onClose, onConfirmDropOff, onConfirmColle
                     )}
                 </div>
 
-                <div className={styles.detailFooter}>
+                <div className={styles.detailFooter} style={{
+                    flexShrink: 0,
+                    padding: "16px 24px",
+                    borderTop: "1px solid #e2e8f0",
+                    background: "#f8fafc",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 8,
+                }}>
                     {showConfirmDropOff && (
                         <>
                             {!dropOffTimeReached && (
@@ -863,7 +964,15 @@ function TransactionDetailPanel({ txn, onClose, onConfirmDropOff, onConfirmColle
                                 className={styles.dropOffBtn}
                                 onClick={handleDropOff}
                                 disabled={dropOffLoading || !dropOffTimeReached || !allChecked}
-                                style={(!dropOffTimeReached || !allChecked) ? { opacity: 0.45, cursor: "not-allowed" } : undefined}
+                                style={{
+                                    width: "100%", padding: "13px 20px",
+                                    borderRadius: 10, border: "none",
+                                    background: (!dropOffTimeReached || !allChecked) ? "#e2e8f0" : "#6AA6DA",
+                                    color: (!dropOffTimeReached || !allChecked) ? "#94a3b8" : "#fff",
+                                    fontWeight: 700, fontSize: "0.95rem",
+                                    cursor: (dropOffLoading || !dropOffTimeReached || !allChecked) ? "not-allowed" : "pointer",
+                                    display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+                                }}
                             >
                                 <i className={`fa-solid ${dropOffLoading ? "fa-spinner fa-spin" : !dropOffTimeReached ? "fa-lock" : !allChecked ? "fa-clipboard-list" : "fa-box-archive"}`} />
                                 {dropOffLoading ? "Confirming…" : !dropOffTimeReached ? "Confirm Drop-Off (Locked)" : !allChecked ? "Complete Inspection First" : "Confirm Drop-Off"}
@@ -922,19 +1031,35 @@ function TransactionDetailPanel({ txn, onClose, onConfirmDropOff, onConfirmColle
                                     Collection Checklist
                                 </div>
 
-                                <div style={{ padding: "10px 14px", borderBottom: "1px solid #f1f5f9", display: "flex", alignItems: "center", gap: 10 }}>
-                                    <i className="fa-solid fa-circle-check" style={{ color: "#10b981", fontSize: "1rem", flexShrink: 0 }} />
+                                <button
+                                    onClick={() => setReceiptVerified(v => !v)}
+                                    style={{
+                                        padding: "10px 14px", borderBottom: "1px solid #f1f5f9",
+                                        display: "flex", alignItems: "center", gap: 10,
+                                        background: receiptVerified ? "#f0fdf4" : "#fff",
+                                        border: "none", borderRadius: 0,
+                                        cursor: "pointer", textAlign: "left", width: "100%",
+                                    }}
+                                >
+                                    <i
+                                        className={`fa-solid ${receiptVerified ? "fa-circle-check" : "fa-circle"}`}
+                                        style={{ color: receiptVerified ? "#10b981" : "#cbd5e1", fontSize: "1rem", flexShrink: 0 }}
+                                    />
                                     <div style={{ flex: 1 }}>
-                                        <p style={{ margin: 0, fontSize: "0.8rem", fontWeight: 600, color: "#1e293b" }}>Verify buyer's receipt</p>
+                                        <p style={{ margin: 0, fontSize: "0.8rem", fontWeight: 600, color: receiptVerified ? "#16a34a" : "#1e293b" }}>
+                                            Verify buyer's receipt
+                                        </p>
                                         {txn.receiptId ? (
                                             <p style={{ margin: "2px 0 0", fontSize: "0.73rem", color: "#64748b" }}>
                                                 Receipt ID: <span style={{ fontFamily: "monospace", fontWeight: 700, color: "#1e293b", background: "#e2e8f0", borderRadius: 4, padding: "0 5px" }}>{txn.receiptId}</span>
                                             </p>
                                         ) : (
-                                            <p style={{ margin: "2px 0 0", fontSize: "0.73rem", color: "#94a3b8" }}>Ask buyer to show receipt from their My Purchases page</p>
+                                            <p style={{ margin: "2px 0 0", fontSize: "0.73rem", color: receiptVerified ? "#10b981" : "#94a3b8" }}>
+                                                {receiptVerified ? "✓ Receipt confirmed" : "Ask buyer to show receipt from their My Purchases page"}
+                                            </p>
                                         )}
                                     </div>
-                                </div>
+                                </button>
 
                                 {!isFullyOnline && hasShortfall && (
                                     <div style={{ padding: "10px 14px", borderBottom: "1px solid #f1f5f9", display: "flex", alignItems: "center", gap: 10 }}>
@@ -979,7 +1104,15 @@ function TransactionDetailPanel({ txn, onClose, onConfirmDropOff, onConfirmColle
                                 className={styles.confirmCollectionBtn}
                                 onClick={handleCollection}
                                 disabled={collectionLoading || (!isFullyOnline && !isTrade && hasShortfall && !cashConfirmed) || tradeCollectionBlocked}
-                                style={((!isFullyOnline && !isTrade && hasShortfall && !cashConfirmed) || tradeCollectionBlocked) ? { opacity: 0.45, cursor: "not-allowed" } : undefined}
+                                style={{
+                                    width: "100%", padding: "13px 20px",
+                                    borderRadius: 10, border: "none",
+                                    background: ((!isFullyOnline && !isTrade && hasShortfall && !cashConfirmed) || tradeCollectionBlocked) ? "#e2e8f0" : "#10b981",
+                                    color: ((!isFullyOnline && !isTrade && hasShortfall && !cashConfirmed) || tradeCollectionBlocked) ? "#94a3b8" : "#fff",
+                                    fontWeight: 700, fontSize: "0.95rem",
+                                    cursor: ((collectionLoading || (!isFullyOnline && !isTrade && hasShortfall && !cashConfirmed) || tradeCollectionBlocked)) ? "not-allowed" : "pointer",
+                                    display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+                                }}
                             >
                                 <i className={`fa-solid ${collectionLoading ? "fa-spinner fa-spin" : tradeCollectionBlocked ? "fa-lock" : "fa-handshake"}`} />
                                 {collectionLoading ? "Confirming…"
@@ -989,7 +1122,33 @@ function TransactionDetailPanel({ txn, onClose, onConfirmDropOff, onConfirmColle
                             </button>
                         </>
                     )}
-                    <button className={styles.detailCloseFooterBtn} onClick={onClose}>
+                    {isOverdue && alertSent && (
+                        <button
+                            onClick={() => {
+                                const overdueType = isOverdueDropOff ? "drop_off" : "collection";
+                                onCancelOverdue && onCancelOverdue(txn, overdueType);
+                            }}
+                            style={{
+                                width: "100%", padding: "12px 20px",
+                                borderRadius: 10, border: "1.5px solid #dc2626",
+                                background: "#fff", color: "#dc2626",
+                                fontWeight: 700, fontSize: "0.95rem",
+                                cursor: "pointer", display: "flex",
+                                alignItems: "center", justifyContent: "center", gap: 8,
+                            }}
+                        >
+                            <i className="fa-solid fa-ban" />
+                            Cancel Transaction
+                        </button>
+                    )}
+                    <button className={styles.detailCloseFooterBtn} onClick={onClose} style={{
+                        width: "100%", padding: "10px",
+                        background: "transparent", border: "1.5px solid #e2e8f0",
+                        borderRadius: 10, color: "#64748b",
+                        fontWeight: 600, fontSize: "0.88rem",
+                        cursor: "pointer", display: "flex",
+                        alignItems: "center", justifyContent: "center", gap: 6,
+                    }}>
                         <i className="fa-solid fa-chevron-left" /> Back to List
                     </button>
                 </div>
@@ -1420,6 +1579,7 @@ export default function StaffDashboard() {
         message: '', 
         onConfirm: null,
         confirmText: 'Yes, Cancel',
+        showCancel: true,
         type: 'warning'
     });
     const sellerCacheRef  = useRef({});
@@ -1431,11 +1591,9 @@ export default function StaffDashboard() {
             open: true,
             title,
             message,
-            onConfirm: () => {
-                onConfirm();
-                setConfirmModal(prev => ({ ...prev, open: false }));
-            },
+            onConfirm,
             confirmText,
+            showCancel: true,
             type: 'warning'
         });
     };
@@ -1606,7 +1764,7 @@ export default function StaffDashboard() {
                     collectionDate: data.collectionDate || null,
                     collectionTimeSlot: data.collectionTimeSlot || null,
                     receiptId: data.receiptId || null,
-                    overdueAlertSentAt: data.overdueAlertSentAt || null,
+                    overdueAlertSentAt: data.overdueAlertSentAt?.toDate ? data.overdueAlertSentAt.toDate().toISOString() : data.overdueAlertSentAt || null,
                     droppedOffAt: data.droppedOffAt?.toDate ? data.droppedOffAt.toDate().toISOString() : data.droppedOffAt || null,
                     collectionDeadline: data.collectionDeadline?.toDate ? data.collectionDeadline.toDate().toISOString() : data.collectionDeadline || null,
                     onlineAmountPaid: data.onlineAmount ?? data.onlineAmountPaid ?? data.depositAmount ?? 0,
@@ -1617,8 +1775,8 @@ export default function StaffDashboard() {
                     checklist: data.checklist
                         ? data.checklist.filter(c => c.label !== "Confirmed Payment")
                         : [
-                            { label: "Confirmed Drop-off", done: data.sellerDropOffConfirmed || data.dropOffConfirmed || false },
-                            { label: "Inspected Item", done: data.itemInspected || false },
+                            { label: "Confirmed Drop-off", done: false },
+                            { label: "Inspected Item",     done: false },
                         ],
                     buyerChecklist: data.buyerChecklist || null,
                     date: data.createdAt?.toDate ? data.createdAt.toDate() : new Date(),
@@ -1718,7 +1876,7 @@ export default function StaffDashboard() {
                 collectionDate: data.collectionDate || null,
                 collectionTimeSlot: data.collectionTimeSlot || null,
                 receiptId: data.receiptId || null,
-                overdueAlertSentAt: data.overdueAlertSentAt || null,
+                overdueAlertSentAt: data.overdueAlertSentAt?.toDate ? data.overdueAlertSentAt.toDate().toISOString() : data.overdueAlertSentAt || null,
                 droppedOffAt: data.droppedOffAt?.toDate ? data.droppedOffAt.toDate().toISOString() : data.droppedOffAt || null,
                 collectionDeadline: data.collectionDeadline?.toDate ? data.collectionDeadline.toDate().toISOString() : data.collectionDeadline || null,
                 onlineAmountPaid: data.onlineAmount ?? data.onlineAmountPaid ?? data.depositAmount ?? 0,
@@ -1729,8 +1887,8 @@ export default function StaffDashboard() {
                 checklist: data.checklist
                     ? data.checklist.filter(c => c.label !== "Confirmed Payment")
                     : [
-                        { label: "Confirmed Drop-off", done: data.sellerDropOffConfirmed || data.dropOffConfirmed || false },
-                        { label: "Inspected Item", done: data.itemInspected || false },
+                        { label: "Confirmed Drop-off", done: false },
+                        { label: "Inspected Item",     done: false },
                     ],
                 buyerChecklist: data.buyerChecklist || null,
                 date: data.createdAt?.toDate ? data.createdAt.toDate() : new Date(),
@@ -1787,20 +1945,20 @@ export default function StaffDashboard() {
                     (txn.paymentType || txn.paymentMethod || '').toLowerCase()
                 );
                 await notifyCancelledDropOff({
-                    transactionId: txn.id,
-                    sellerId:      txn.sellerId,
-                    buyerId:       txn.buyerId,
-                    listingId:     txn.listingId,
-                    listingTitle:  txn.listingTitle || txn.item,
+                    id:           txn.id,
+                    sellerId:     txn.sellerId,
+                    buyerId:      txn.buyerId,
+                    listingId:    txn.listingId,
+                    listingTitle: txn.listingTitle || txn.item,
                     wasOnlinePayment,
                 });
             } else {
                 await notifyCancelledCollection({
-                    transactionId: txn.id,
-                    sellerId:      txn.sellerId,
-                    buyerId:       txn.buyerId,
-                    listingId:     txn.listingId,
-                    listingTitle:  txn.listingTitle || txn.item,
+                    id:           txn.id,
+                    sellerId:     txn.sellerId,
+                    buyerId:      txn.buyerId,
+                    listingId:    txn.listingId,
+                    listingTitle: txn.listingTitle || txn.item,
                 });
             }
 
@@ -1820,13 +1978,13 @@ export default function StaffDashboard() {
                 if (txn.status === "overdue_cancelled") continue;
                 if (txn.overdueAlertSentAt) continue;
                 
-                const overdueDropOff = isDropOffOverdue(txn);
+                const slotMissed = isSlotMissed(txn);
                 const overdueCollection = isCollectionOverdue(txn);
                 
-                if (!overdueDropOff && !overdueCollection) continue;
+                if (!slotMissed && !overdueCollection) continue;
                 
                 try {
-                    await handleAlertOverdue(txn, overdueDropOff ? "drop_off" : "collection");
+                    await handleAlertOverdue(txn, slotMissed ? "drop_off" : "collection");
                     setTransactions(prev => prev.map(t =>
                         t.id === txn.id ? { ...t, overdueAlertSentAt: new Date().toISOString() } : t
                     ));
@@ -1844,7 +2002,12 @@ export default function StaffDashboard() {
     function getCancelCountdown(txn) {
         const CANCEL_DELAY_MS = 24 * 60 * 60 * 1000;
         if (!txn.overdueAlertSentAt) return null;
-        const alertMs = new Date(txn.overdueAlertSentAt).getTime();
+        // overdueAlertSentAt can be a Firestore Timestamp, an ISO string, or a Date
+        const raw = txn.overdueAlertSentAt;
+        const alertMs = raw?.toDate
+            ? raw.toDate().getTime()
+            : new Date(raw).getTime();
+        if (isNaN(alertMs)) return null;
         const cancelAt = alertMs + CANCEL_DELAY_MS;
         const remaining = cancelAt - Date.now();
         if (remaining <= 0) return "Cancelling now…";
@@ -1862,7 +2025,7 @@ export default function StaffDashboard() {
         try {
             for (const txn of txns) {
                 if (txn.overdueAlertSentAt) continue;
-                const type = isDropOffOverdue(txn) ? "drop_off" : "collection";
+                const type = isSlotMissed(txn) ? "drop_off" : "collection";
                 await handleAlertOverdue(txn, type);
                 setTransactions(prev => prev.map(t =>
                     t.id === txn.id ? { ...t, overdueAlertSentAt: new Date().toISOString() } : t
@@ -2107,8 +2270,8 @@ export default function StaffDashboard() {
             if (t.id !== txnId) return t;
             if (isBuyerRole) {
                 const current = t.buyerChecklist || [
-                    { label: "Confirmed Drop-off", done: t.buyerDropOffConfirmed || false },
-                    { label: "Inspected Item", done: t.buyerDropOffConfirmed || false },
+                    { label: "Confirmed Drop-off", done: false },
+                    { label: "Inspected Item",     done: false },
                 ];
                 const updated = current.map((s, i) => i === stepIdx ? { ...s, done: true } : s);
                 return { ...t, buyerChecklist: updated };
@@ -2123,8 +2286,8 @@ export default function StaffDashboard() {
 
             if (isBuyerRole) {
                 const current = txn.buyerChecklist || [
-                    { label: "Confirmed Drop-off", done: txn.buyerDropOffConfirmed || false },
-                    { label: "Inspected Item", done: txn.buyerDropOffConfirmed || false },
+                    { label: "Confirmed Drop-off", done: false },
+                    { label: "Inspected Item",     done: false },
                 ];
                 const updated = current.map((s, i) => i === stepIdx ? { ...s, done: true } : s);
                 await updateDoc(doc(db, "transactions", txnId), { buyerChecklist: updated });
@@ -2548,7 +2711,6 @@ export default function StaffDashboard() {
                                         <div className={styles.txnList}>
                                             {subList.map(txn => {
                                                 const alertSent = !!txn.overdueAlertSentAt;
-                                                const countdown = getCancelCountdown(txn);
                                                 const isSelected = selectedOverdue.has(txn.id);
                                                 const payConfig = getPaymentConfig(txn);
 
@@ -2598,16 +2760,9 @@ export default function StaffDashboard() {
                                                                 <i className={`fa-solid ${payConfig.icon}`} style={{ marginRight: 3 }} />{payConfig.label}
                                                             </span>
                                                             {alertSent ? (
-                                                                <>
-                                                                    <span style={{ padding: "2px 9px", background: "#dcfce7", color: "#16a34a", borderRadius: 99, fontSize: "0.72rem", fontWeight: 700 }}>
-                                                                        <i className="fa-solid fa-bell" style={{ marginRight: 3 }} />Alert Sent
-                                                                    </span>
-                                                                    {countdown && (
-                                                                        <span style={{ padding: "2px 9px", background: "#fef2f2", color: "#dc2626", borderRadius: 99, fontSize: "0.72rem", fontWeight: 700 }}>
-                                                                            <i className="fa-solid fa-clock" style={{ marginRight: 3 }} />{countdown}
-                                                                        </span>
-                                                                    )}
-                                                                </>
+                                                                <span style={{ padding: "2px 9px", background: "#dcfce7", color: "#16a34a", borderRadius: 99, fontSize: "0.72rem", fontWeight: 700 }}>
+                                                                    <i className="fa-solid fa-bell" style={{ marginRight: 3 }} />Alert Sent
+                                                                </span>
                                                             ) : (
                                                                 <span style={{ padding: "2px 9px", background: "#fef3c7", color: "#92400e", borderRadius: 99, fontSize: "0.72rem", fontWeight: 700 }}>
                                                                     <i className="fa-solid fa-triangle-exclamation" style={{ marginRight: 3 }} />Alert Pending
@@ -2678,7 +2833,14 @@ export default function StaffDashboard() {
                                     onRelease={handleRelease}
                                     onMarkStep={handleMarkStep}
                                     onAlertOverdue={handleAlertOverdue}
-                                    onCancelOverdue={handleCancelOverdue}
+                                    onCancelOverdue={(t, overdueType) => {
+                                        showConfirmModal(
+                                            'Cancel Transaction',
+                                            `Are you sure you want to cancel the transaction for "${t.item}"? This action cannot be undone.`,
+                                            () => handleCancelOverdue(t, overdueType),
+                                            'Yes, Cancel'
+                                        );
+                                    }}
                                 />
                             ))}
                         </div>
@@ -2717,6 +2879,10 @@ export default function StaffDashboard() {
                 title={confirmModal.title}
                 message={confirmModal.message}
                 type={confirmModal.type}
+                onConfirm={confirmModal.onConfirm}
+                confirmText={confirmModal.confirmText}
+                showCancel={confirmModal.showCancel}
+                cancelText="Go Back"
             />
         </div>
     );
