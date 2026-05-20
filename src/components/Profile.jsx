@@ -1,5 +1,5 @@
 import { onAuthStateChanged } from 'firebase/auth';
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { auth, db } from '../firebase';
 import {
@@ -11,6 +11,7 @@ import ProfileListingCard from './ProfileListingCard';
 import OfferItem from './OfferItem';
 import styles from './Profile.module.css';
 import ProfileRating from './ProfileRating';
+import WalletTab from './WalletTab';
 
 const toRawListingType = (displayType) => {
   if (!displayType) return displayType;
@@ -22,11 +23,13 @@ const toRawListingType = (displayType) => {
   return displayType;
 };
 
-const HISTORY_STATUSES  = new Set(['sold', 'completed', 'traded']);
-const READONLY_STATUSES = new Set(['accepted']);
+const HISTORY_STATUSES   = new Set(['sold', 'completed', 'traded']);
+const READONLY_STATUSES  = new Set(['accepted']);
 const ACTIVE_TX_STATUSES = ['completed', 'accepted', 'sold', 'traded'];
 
-// ── Trade item detail card (shown in Offers tab) ──
+const safeNumber = (v) => { const n = Number(v); return isNaN(n) ? 0 : n; };
+
+// ── Trade item detail card (shown in Offers tab) ──────────────────────────────
 function TradeItemCard({ tradeItem }) {
   if (!tradeItem) return null;
 
@@ -65,11 +68,7 @@ function TradeItemCard({ tradeItem }) {
       </div>
       <div className={styles.tradeItemBody}>
         {tradeItem.imageUrl && (
-          <img
-            src={tradeItem.imageUrl}
-            alt={tradeItem.name}
-            className={styles.tradeItemImage}
-          />
+          <img src={tradeItem.imageUrl} alt={tradeItem.name} className={styles.tradeItemImage} />
         )}
         <div className={styles.tradeItemInfo}>
           <p className={styles.tradeItemName}>{tradeItem.name}</p>
@@ -91,7 +90,7 @@ function TradeItemCard({ tradeItem }) {
   );
 }
 
-// ── Offer card wrapper that shows trade item details ──
+// ── Offer card wrapper ────────────────────────────────────────────────────────
 function EnrichedOfferCard({ offer, highlighted }) {
   const isTrade = offer.type === 'trade';
   return (
@@ -106,6 +105,7 @@ function EnrichedOfferCard({ offer, highlighted }) {
   );
 }
 
+// ── Main Profile component ────────────────────────────────────────────────────
 function Profile() {
   const navigate     = useNavigate();
   const location     = useLocation();
@@ -116,11 +116,16 @@ function Profile() {
   const [isEditing, setIsEditing]           = useState(false);
   const [incomingOffers, setIncomingOffers] = useState([]);
   const [highlightedOfferId, setHighlightedOfferId] = useState(null);
+  const [currentUserId, setCurrentUserId]   = useState(null);
+
+  // Track which completed history items already have a review from this user
+  const [reviewedListingIds, setReviewedListingIds] = useState(new Set());
 
   const [profileData, setProfileData] = useState({
     firstName: '', lastName: '', email: '', bio: '',
     photoURL: '', memberSince: '',
     totalSales: 0, totalTrades: 0, totalBought: 0, rating: 0, totalRatings: 0,
+    walletBalance: 0,
   });
   const [editFormData, setEditFormData] = useState({ firstName: '', lastName: '', bio: '' });
   const [history, setHistory]   = useState([]);
@@ -133,35 +138,44 @@ function Profile() {
     const params    = new URLSearchParams(location.search);
     const tab       = params.get('tab');
     const highlight = params.get('highlight');
-    if (tab && ['history', 'listings', 'offers'].includes(tab)) setActiveTab(tab);
+    if (tab && ['history', 'listings', 'offers', 'wallet'].includes(tab)) setActiveTab(tab);
     if (highlight) {
       setHighlightedOfferId(highlight);
       setTimeout(() => setHighlightedOfferId(null), 3000);
     }
   }, [location.search]);
 
-  const safeNumber = (v) => { const n = Number(v); return isNaN(n) ? 0 : n; };
-
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (user) => {
       if (!user) { navigate('/login'); return; }
+      setCurrentUserId(user.uid);
       fetchUserData(user);
 
       const unsubOffers = onSnapshot(
         query(collection(db, 'transactions'), where('sellerId', '==', user.uid), where('status', '==', 'pending')),
         (snap) => setIncomingOffers(snap.docs.map(d => {
           const data = d.data();
-          return {
-            id: d.id,
-            ...data,
-            tradeItem: data.tradeItemDetails ?? data.tradeItem ?? null,
-          };
+          return { id: d.id, ...data, tradeItem: data.tradeItemDetails ?? data.tradeItem ?? null };
         }))
       );
       return () => unsubOffers();
     });
     return () => unsub();
   }, [navigate]);
+
+  // ── Fetch which listings the current user has already reviewed ────────────
+  const fetchReviewedListings = async (uid) => {
+    try {
+      const snap = await getDocs(query(
+        collection(db, 'reviews'),
+        where('reviewerUserId', '==', uid),
+      ));
+      const ids = new Set(snap.docs.map(d => d.data().listingId).filter(Boolean));
+      setReviewedListingIds(ids);
+    } catch (err) {
+      console.warn('fetchReviewedListings:', err);
+    }
+  };
 
   const fetchUserData = async (user) => {
     try {
@@ -171,64 +185,33 @@ function Profile() {
       const d = docSnap.data();
       setHistory(d.history || []);
 
-      // ── Fetch all stats from transactions directly ──────────────────────
       const COMPLETED_STATUSES = ['completed', 'sold', 'traded'];
-
       const [reviewSnap, completedAsSellerSnap, completedAsBuyerSnap] = await Promise.all([
         getDocs(query(collection(db, 'reviews'), where('reviewedUserId', '==', user.uid))),
-        // All completed transactions where user is seller
-        getDocs(query(
-          collection(db, 'transactions'),
-          where('sellerId', '==', user.uid),
-          where('status', 'in', COMPLETED_STATUSES),
-        )),
-        // All completed transactions where user is buyer
-        getDocs(query(
-          collection(db, 'transactions'),
-          where('buyerId', '==', user.uid),
-          where('status', 'in', COMPLETED_STATUSES),
-        )),
+        getDocs(query(collection(db, 'transactions'), where('sellerId', '==', user.uid), where('status', 'in', COMPLETED_STATUSES))),
+        getDocs(query(collection(db, 'transactions'), where('buyerId',  '==', user.uid), where('status', 'in', COMPLETED_STATUSES))),
       ]);
 
-      // ── Ratings ──────────────────────────────────────────────────────────
-      let liveRating = 0;
-      let liveTotalRatings = 0;
+      let liveRating = 0, liveTotalRatings = 0;
       if (!reviewSnap.empty) {
-        const ratings = reviewSnap.docs
-          .map(r => safeNumber(r.data().rating))
-          .filter(r => r > 0);
+        const ratings = reviewSnap.docs.map(r => safeNumber(r.data().rating)).filter(r => r > 0);
         liveTotalRatings = ratings.length;
         liveRating = liveTotalRatings > 0
           ? Math.round((ratings.reduce((a, b) => a + b, 0) / liveTotalRatings) * 10) / 10
           : 0;
       }
 
-      // ── Sales: completed seller transactions that are NOT trades ─────────
-      const liveTotalSales = completedAsSellerSnap.docs.filter(txDoc => {
-        const type = (txDoc.data().type ?? '').toLowerCase();
-        return type !== 'trade';
-      }).length;
-
-      // ── Trades: completed seller transactions that ARE trades ────────────
-      const liveTotalTrades = completedAsSellerSnap.docs.filter(txDoc => {
-        const type = (txDoc.data().type ?? '').toLowerCase();
-        return type === 'trade';
-      }).length;
-
-      // ── Bought: completed transactions where user is the buyer ───────────
+      const liveTotalSales  = completedAsSellerSnap.docs.filter(tx => (tx.data().type ?? '').toLowerCase() !== 'trade').length;
+      const liveTotalTrades = completedAsSellerSnap.docs.filter(tx => (tx.data().type ?? '').toLowerCase() === 'trade').length;
       const liveTotalBought = completedAsBuyerSnap.docs.length;
 
-      // ── Persist any changed values back to Firestore ─────────────────────
       const updates = {};
       if (liveRating       !== safeNumber(d.rating))       updates.rating       = liveRating;
       if (liveTotalRatings !== safeNumber(d.totalRatings)) updates.totalRatings = liveTotalRatings;
       if (liveTotalSales   !== safeNumber(d.totalSales))   updates.totalSales   = liveTotalSales;
       if (liveTotalTrades  !== safeNumber(d.totalTrades))  updates.totalTrades  = liveTotalTrades;
       if (liveTotalBought  !== safeNumber(d.totalBought))  updates.totalBought  = liveTotalBought;
-
-      if (Object.keys(updates).length > 0) {
-        updateDoc(doc(db, 'users', user.uid), updates).catch(() => {});
-      }
+      if (Object.keys(updates).length > 0) updateDoc(doc(db, 'users', user.uid), updates).catch(() => {});
 
       setProfileData({
         ...d,
@@ -242,12 +225,12 @@ function Profile() {
         totalBought:  liveTotalBought,
         rating:       liveRating,
         totalRatings: liveTotalRatings,
+        walletBalance: safeNumber(d.walletBalance ?? 0),
       });
       setEditFormData({ firstName: d.firstName || '', lastName: d.lastName || '', bio: d.bio || '' });
-
-      // Kick off listing + purchase fetches (for History tab)
       fetchUserListings(user.uid);
       fetchUserPurchases(user.uid);
+      fetchReviewedListings(user.uid);
     } catch (err) {
       console.error('fetchUserData error:', err);
     } finally {
@@ -275,14 +258,9 @@ function Profile() {
         views: d.data().views || 0,
         likes: d.data().likes || 0,
       }));
-
       setListings(all);
 
-      const doneItems = all.filter(l => {
-        const s = l.status?.toLowerCase();
-        return HISTORY_STATUSES.has(s);
-      });
-
+      const doneItems = all.filter(l => HISTORY_STATUSES.has(l.status?.toLowerCase()));
       if (doneItems.length) {
         const coveredByTx = await Promise.all(
           doneItems.map(async (l) => {
@@ -311,12 +289,9 @@ function Profile() {
         });
 
         Promise.all(doneItems.map(async (l) => {
-          let buyerName = null;
-          let date = l.date;
+          let buyerName = null, date = l.date;
           try {
-            const txSnap = await getDocs(
-              query(collection(db, 'Purchases'), where('listingId', '==', l.id))
-            );
+            const txSnap = await getDocs(query(collection(db, 'Purchases'), where('listingId', '==', l.id)));
             if (!txSnap.empty) {
               const tx = txSnap.docs[0].data();
               buyerName = tx.buyerName || null;
@@ -324,7 +299,7 @@ function Profile() {
               const rawDate = tx.updatedAt || tx.createdAt;
               if (rawDate) date = rawDate?.toDate ? rawDate.toDate() : new Date(rawDate);
             }
-          } catch { /* non-fatal */ }
+          } catch { }
           return { id: l.id, buyerName, date };
         })).then(enriched => {
           setHistory(prev => prev.map(h => {
@@ -340,20 +315,19 @@ function Profile() {
   const fetchUserPurchases = async (uid) => {
     try {
       const [asBuyerSnap, asSellerSnap] = await Promise.all([
-        getDocs(query(collection(db, 'transactions'), where('buyerId', '==', uid), where('status', 'in', ['completed', 'overdue_cancelled']))),
+        getDocs(query(collection(db, 'transactions'), where('buyerId',  '==', uid), where('status', 'in', ['completed', 'overdue_cancelled']))),
         getDocs(query(collection(db, 'transactions'), where('sellerId', '==', uid), where('status', '==', 'completed'))),
       ]);
 
       const seen = new Set();
       const allDocs = [
-        ...asBuyerSnap.docs.map(d  => ({ d, side: 'buyer'  })),
+        ...asBuyerSnap.docs.map(d  => ({ d, side: 'buyer' })),
         ...asSellerSnap.docs.map(d => ({ d, side: 'seller' })),
       ].filter(({ d }) => {
         if (seen.has(d.id)) return false;
         seen.add(d.id);
         return true;
       });
-
       if (allDocs.length === 0) return;
 
       const enriched = await Promise.all(
@@ -361,43 +335,51 @@ function Profile() {
           const p      = txDoc.data();
           const type   = p.type?.toLowerCase?.() ?? 'sale';
           const isTrade = type === 'trade';
-
-          let itemTitle    = p.listingTitle || null;
-          let listingImage = p.listingImage || p.productImage || null;
-          let price        = p.price ?? p.amount ?? p.agreedPrice ?? null;
+          let itemTitle = p.listingTitle || null, listingImage = p.listingImage || p.productImage || null;
+          let price = p.price ?? p.amount ?? p.agreedPrice ?? null;
 
           if (p.listingId && (!itemTitle || !listingImage)) {
             try {
               const ls = await getDoc(doc(db, 'listings', p.listingId));
               if (ls.exists()) {
-                const ld  = ls.data();
+                const ld = ls.data();
                 itemTitle    = itemTitle    || ld.title       || null;
                 listingImage = listingImage || ld.photos?.[0] || ld.imageUrl || null;
                 price        = price        ?? ld.price;
               }
-            } catch { /* non-fatal */ }
+            } catch { }
           }
           itemTitle = itemTitle || (side === 'buyer' ? 'Purchase' : 'Sale');
 
-          let otherName = null;
+          let otherName = null, otherUserId = null;
           if (side === 'buyer') {
-            otherName = p.sellerName || await getUserName(p.sellerId);
+            otherUserId = p.sellerId || null;
+            otherName   = p.sellerName || await getUserName(p.sellerId);
           } else {
-            otherName = p.buyerName  || await getUserName(p.buyerId);
+            otherUserId = p.buyerId || null;
+            otherName   = p.buyerName  || await getUserName(p.buyerId);
           }
 
           const rawDate = p.completedAt || p.updatedAt || p.createdAt;
           const date    = rawDate?.toDate ? rawDate.toDate() : rawDate ? new Date(rawDate) : new Date();
-
           const tradeItem = p.tradeItemDetails ?? p.tradeItem ?? null;
-          const historyType = isTrade ? 'trade' : side === 'buyer' ? 'purchase' : 'sale';
 
           return {
-            id: txDoc.id, item: itemTitle, type: historyType, side, date,
-            price: price != null ? `R${Number(price).toLocaleString()}` : null,
-            seller: side === 'buyer'  ? otherName : null,
-            buyer:  side === 'seller' ? otherName : null,
-            tradeItem, listingImage,
+            id:           txDoc.id,
+            listingId:    p.listingId || null,
+            item:         itemTitle,
+            type:         isTrade ? 'trade' : side === 'buyer' ? 'purchase' : 'sale',
+            side,
+            date,
+            price:        price != null ? `R${Number(price).toLocaleString()}` : null,
+            seller:       side === 'buyer'  ? otherName   : null,
+            sellerId:     side === 'buyer'  ? otherUserId : null,
+            sellerName:   side === 'buyer'  ? otherName   : null,
+            buyer:        side === 'seller' ? otherName   : null,
+            buyerId:      side === 'seller' ? otherUserId : null,
+            buyerName:    side === 'seller' ? otherName   : null,
+            tradeItem,
+            listingImage,
             status:       p.status       || null,
             cancelReason: p.cancelReason || null,
           };
@@ -409,15 +391,10 @@ function Profile() {
         const newItems    = enriched.filter(e => !existingIds.has(e.id));
         return newItems.length ? [...prev, ...newItems] : prev;
       });
-    } catch (err) {
-      console.warn('fetchUserPurchases:', err);
-    }
+    } catch (err) { console.warn('fetchUserPurchases:', err); }
   };
 
-  const handleInputChange = (e) => {
-    const { name, value } = e.target;
-    setEditFormData(prev => ({ ...prev, [name]: value }));
-  };
+  const handleInputChange  = (e) => { const { name, value } = e.target; setEditFormData(prev => ({ ...prev, [name]: value })); };
 
   const handlePhotoUpload = async (e) => {
     const file = e.target.files[0];
@@ -488,6 +465,26 @@ function Profile() {
     } catch { alert('Failed to update.'); }
   };
 
+  // ── Navigate to ReviewForm ────────────────────────────────────────────────
+  const handleRate = (item) => {
+    // The current user is reviewing the OTHER party.
+    // If I'm the buyer → I review the seller. If I'm the seller → I review the buyer.
+    const isBuyer       = item.side === 'buyer' || item.type === 'purchase';
+    const reviewedId    = isBuyer ? item.sellerId   : item.buyerId;
+    const reviewedName  = isBuyer ? item.sellerName : item.buyerName;
+    const role          = isBuyer ? 'seller' : 'buyer';
+
+    if (!reviewedId || !item.listingId) return;
+
+    const params = new URLSearchParams({
+      reviewedUserId: reviewedId,
+      name:           reviewedName || '',
+      role,
+      purchaseId:     item.id,
+    });
+    navigate(`/review/${item.listingId}?${params.toString()}`);
+  };
+
   const renderStars = (rating) => {
     const full = Math.floor(rating);
     const half = rating % 1 >= 0.5;
@@ -511,6 +508,7 @@ function Profile() {
   const totalSales   = safeNumber(profileData.totalSales);
   const totalTrades  = safeNumber(profileData.totalTrades);
   const totalBought  = safeNumber(profileData.totalBought);
+  const walletBal    = safeNumber(profileData.walletBalance);
 
   const activeListings   = listings.filter(l => !HISTORY_STATUSES.has(l.status?.toLowerCase?.()) && !READONLY_STATUSES.has(l.status?.toLowerCase?.()));
   const acceptedListings = listings.filter(l => READONLY_STATUSES.has(l.status?.toLowerCase?.()));
@@ -523,18 +521,8 @@ function Profile() {
         <h1>My Profile</h1>
       </div>
 
-      {/* ── Warning banner ── */}
       {profileData.warnings && profileData.warnings.length > 0 && (
-        <div style={{
-          margin: '0 0 16px',
-          padding: '14px 18px',
-          background: '#fffbeb',
-          border: '1.5px solid #fcd34d',
-          borderRadius: 10,
-          display: 'flex',
-          alignItems: 'flex-start',
-          gap: 12,
-        }}>
+        <div style={{ margin: '0 0 16px', padding: '14px 18px', background: '#fffbeb', border: '1.5px solid #fcd34d', borderRadius: 10, display: 'flex', alignItems: 'flex-start', gap: 12 }}>
           <i className="fas fa-exclamation-triangle" style={{ color: '#d97706', marginTop: 2, flexShrink: 0 }} />
           <div>
             <p style={{ margin: '0 0 4px', fontWeight: 700, fontSize: '0.9rem', color: '#92400e' }}>
@@ -591,25 +579,29 @@ function Profile() {
             </button>
           </div>
           <div className={styles.statsGrid}>
-            <div className={styles.statItem}>
-              <i className="fas fa-tag" />
-              <div className={styles.statInfo}>
-                <span className={styles.statValue}>{totalSales}</span>
-                <span className={styles.statLabel}>Sales</span>
-              </div>
-            </div>
-            <div className={styles.statItem}>
-              <i className="fas fa-exchange-alt" />
-              <div className={styles.statInfo}>
-                <span className={styles.statValue}>{totalTrades}</span>
-                <span className={styles.statLabel}>Trades</span>
-              </div>
-            </div>
-            <div className={styles.statItem}>
-              <i className="fas fa-shopping-bag" />
-              <div className={styles.statInfo}>
-                <span className={styles.statValue}>{totalBought}</span>
-                <span className={styles.statLabel}>Bought</span>
+            <div className={styles.statItem}><i className="fas fa-tag" /><div className={styles.statInfo}><span className={styles.statValue}>{totalSales}</span><span className={styles.statLabel}>Sales</span></div></div>
+            <div className={styles.statItem}><i className="fas fa-exchange-alt" /><div className={styles.statInfo}><span className={styles.statValue}>{totalTrades}</span><span className={styles.statLabel}>Trades</span></div></div>
+            <div className={styles.statItem}><i className="fas fa-shopping-bag" /><div className={styles.statInfo}><span className={styles.statValue}>{totalBought}</span><span className={styles.statLabel}>Bought</span></div></div>
+
+            {/* ── Wallet balance mini-card ── */}
+            <div className={styles.statItem} style={{ gridColumn: 'span 3' }}>
+              <div className={styles.walletStatCard}>
+                <div className={styles.walletStatLeft}>
+                  <i className="fas fa-wallet" />
+                  <div className={styles.statInfo}>
+                    <span className={styles.statValue}>
+                      R{walletBal.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
+                    <span className={styles.statLabel}>Wallet Balance</span>
+                  </div>
+                </div>
+                <button
+                  className={styles.walletStatHint}
+                  onClick={() => setActiveTab('wallet')}
+                >
+                  Top up or withdraw in the <strong>Wallet</strong> tab
+                  <i className="fas fa-arrow-right" />
+                </button>
               </div>
             </div>
           </div>
@@ -624,11 +616,13 @@ function Profile() {
         </div>
       </div>
 
+      {/* ── Tabs ── */}
       <div className={styles.tabsSection}>
         <div className={styles.tabs}>
           <button className={`${styles.tab} ${activeTab === 'history'  ? styles.activeTab : ''}`} onClick={() => setActiveTab('history')}><i className="fas fa-history" /> History</button>
           <button className={`${styles.tab} ${activeTab === 'listings' ? styles.activeTab : ''}`} onClick={() => setActiveTab('listings')}><i className="fas fa-list" /> My Listings ({activeListings.length + acceptedListings.length})</button>
           <button className={`${styles.tab} ${activeTab === 'offers'   ? styles.activeTab : ''}`} onClick={() => setActiveTab('offers')}><i className="fas fa-hand-holding-usd" /> Offers ({incomingOffers.length})</button>
+          <button className={`${styles.tab} ${activeTab === 'wallet'   ? styles.activeTab : ''}`} onClick={() => setActiveTab('wallet')}><i className="fas fa-wallet" /> Wallet</button>
         </div>
 
         {/* ── History Tab ── */}
@@ -641,6 +635,19 @@ function Profile() {
                 {sortedHistory.map(item => {
                   const isBuyer    = item.side === 'buyer' || item.type === 'purchase';
                   const isTrade    = item.type === 'trade';
+                  const isCompleted = item.status === 'completed' || item.status === 'sold' || item.status === 'traded';
+                  const isCancelled = item.status === 'overdue_cancelled';
+
+                  // Show Rate button only for completed (non-cancelled, non-trade) transactions
+                  // where the current user hasn't reviewed the listing yet,
+                  // and we know who the other party is.
+                  const canRate = isCompleted
+                    && !isCancelled
+                    && !isTrade
+                    && item.listingId
+                    && !reviewedListingIds.has(item.listingId)
+                    && (isBuyer ? !!item.sellerId : !!item.buyerId);
+
                   const otherParty = isBuyer ? item.seller : item.buyer;
                   const dateStr    = item.date
                     ? new Date(item.date).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric' })
@@ -648,74 +655,54 @@ function Profile() {
 
                   let tradeItemDisplay = null;
                   if (isTrade && item.tradeItem) {
-                    if (typeof item.tradeItem === 'string') {
-                      tradeItemDisplay = item.tradeItem;
-                    } else if (item.tradeItem && typeof item.tradeItem === 'object') {
-                      tradeItemDisplay = item.tradeItem.name || null;
-                    }
+                    tradeItemDisplay = typeof item.tradeItem === 'string' ? item.tradeItem : item.tradeItem?.name || null;
                   }
 
                   return (
                     <div key={item.id} className={styles.historyItem}
-                      style={item.status === 'overdue_cancelled' ? { filter: 'grayscale(1)', opacity: 0.75 } : undefined}
+                      style={isCancelled ? { filter: 'grayscale(1)', opacity: 0.75 } : undefined}
                     >
                       <div className={styles.historyImg}>
                         {item.listingImage
                           ? <img src={item.listingImage} alt={item.item} />
-                          : <div className={styles.historyImgPlaceholder}><i className="fas fa-image" /></div>
-                        }
+                          : <div className={styles.historyImgPlaceholder}><i className="fas fa-image" /></div>}
                         <span className={`${styles.historyTypeDot} ${
-                          item.status === 'overdue_cancelled' ? styles.historyTypeDotCancelled
+                          isCancelled              ? styles.historyTypeDotCancelled
                           : item.type === 'purchase' ? styles.historyTypeDotBought
-                          : isTrade               ? styles.historyTypeDotTrade
-                          : styles.historyTypeDotSold
-                        }`}>
-                          {item.status === 'overdue_cancelled' && <i className="fas fa-clock-rotate-left" />}
-                          {item.status !== 'overdue_cancelled' && item.type === 'purchase' && <i className="fas fa-shopping-cart" />}
-                          {item.status !== 'overdue_cancelled' && item.type === 'sale'     && <i className="fas fa-tag" />}
-                          {item.status !== 'overdue_cancelled' && isTrade                  && <i className="fas fa-exchange-alt" />}
+                          : isTrade                  ? styles.historyTypeDotTrade
+                          : styles.historyTypeDotSold}`}>
+                          {isCancelled                                            && <i className="fas fa-clock-rotate-left" />}
+                          {!isCancelled && item.type === 'purchase'               && <i className="fas fa-shopping-cart" />}
+                          {!isCancelled && item.type === 'sale'                   && <i className="fas fa-tag" />}
+                          {!isCancelled && isTrade                                && <i className="fas fa-exchange-alt" />}
                         </span>
                       </div>
                       <div className={styles.historyDetails}>
                         <h4 className={styles.historyItemTitle}>{item.item}</h4>
                         <div className={styles.historyMeta}>
-                          {dateStr && (
-                            <span className={styles.historyMetaChip}>
-                              <i className="fas fa-calendar-alt" /> {dateStr}
-                            </span>
-                          )}
-                          {otherParty && (
-                            <span className={styles.historyMetaChip}>
-                              <i className={`fas ${isBuyer ? 'fa-store' : 'fa-user'}`} />
-                              {isBuyer ? `From: ${otherParty}` : `To: ${otherParty}`}
-                            </span>
-                          )}
-                          {item.price && !isTrade && item.status !== 'overdue_cancelled' && (
-                            <span className={styles.historyMetaPrice}>{item.price}</span>
-                          )}
-                          {tradeItemDisplay && item.status !== 'overdue_cancelled' && (
-                            <span className={styles.historyMetaChip}>
-                              <i className="fas fa-exchange-alt" /> Traded for: {tradeItemDisplay}
-                            </span>
-                          )}
-                          {item.status === 'overdue_cancelled' && (
-                            <span className={styles.historyMetaChip} style={{ color: '#6b7280' }}>
-                              <i className="fas fa-ban" /> Transaction overdue — cancelled
-                            </span>
-                          )}
+                          {dateStr && <span className={styles.historyMetaChip}><i className="fas fa-calendar-alt" /> {dateStr}</span>}
+                          {otherParty && <span className={styles.historyMetaChip}><i className={`fas ${isBuyer ? 'fa-store' : 'fa-user'}`} />{isBuyer ? `From: ${otherParty}` : `To: ${otherParty}`}</span>}
+                          {item.price && !isTrade && !isCancelled && <span className={styles.historyMetaPrice}>{item.price}</span>}
+                          {tradeItemDisplay && !isCancelled && <span className={styles.historyMetaChip}><i className="fas fa-exchange-alt" /> Traded for: {tradeItemDisplay}</span>}
+                          {isCancelled && <span className={styles.historyMetaChip} style={{ color: '#6b7280' }}><i className="fas fa-ban" /> Transaction overdue — cancelled</span>}
                         </div>
+
+                        {/* ── Rate button ── */}
+                        {canRate && (
+                          <button
+                            className={styles.rateBtn}
+                            onClick={() => handleRate(item)}
+                          >
+                            <i className="fas fa-star" />
+                            Rate {isBuyer ? 'seller' : 'buyer'}
+                          </button>
+                        )}
                       </div>
                       <div className={styles.historyBadgeWrap}>
-                        {item.status === 'overdue_cancelled' ? (
-                          <span className={styles.historyBadge} style={{ background: '#e5e7eb', color: '#6b7280', border: '1px solid #d1d5db' }}>
-                            Overdue
-                          </span>
+                        {isCancelled ? (
+                          <span className={styles.historyBadge} style={{ background: '#e5e7eb', color: '#6b7280', border: '1px solid #d1d5db' }}>Overdue</span>
                         ) : (
-                          <span className={`${styles.historyBadge} ${
-                            item.type === 'purchase' ? styles.historyBadgeBought
-                            : isTrade               ? styles.historyBadgeTrade
-                            : styles.historyBadgeSold
-                          }`}>
+                          <span className={`${styles.historyBadge} ${item.type === 'purchase' ? styles.historyBadgeBought : isTrade ? styles.historyBadgeTrade : styles.historyBadgeSold}`}>
                             {item.type === 'purchase' && 'Bought'}
                             {item.type === 'sale'     && 'Sold'}
                             {isTrade                  && 'Traded'}
@@ -743,8 +730,7 @@ function Profile() {
                 {activeListings.map(listing => (
                   <div key={listing.id} className={styles.listingCardCompact}>
                     <ProfileListingCard
-                      listing={listing}
-                      isEditing={editingListingId === listing.id}
+                      listing={listing} isEditing={editingListingId === listing.id}
                       editData={editListingData}
                       onEdit={() => handleEditListing(listing)}
                       onDelete={() => handleDeleteListing(listing.id)}
@@ -763,10 +749,7 @@ function Profile() {
                       onEditChange={() => {}} onSave={() => {}} onCancel={() => {}}
                       compact={true} readOnly={true}
                     />
-                    <div className={styles.acceptedBanner}>
-                      <i className="fas fa-handshake" />
-                      <span>Sale in progress</span>
-                    </div>
+                    <div className={styles.acceptedBanner}><i className="fas fa-handshake" /><span>Sale in progress</span></div>
                   </div>
                 ))}
               </div>
@@ -783,14 +766,18 @@ function Profile() {
               <div className={styles.offersGrid}>
                 {incomingOffers.map((offer, i) => (
                   <div key={offer.id} style={{ animationDelay: `${i * 60}ms` }}>
-                    <EnrichedOfferCard
-                      offer={offer}
-                      highlighted={highlightedOfferId === offer.id}
-                    />
+                    <EnrichedOfferCard offer={offer} highlighted={highlightedOfferId === offer.id} />
                   </div>
                 ))}
               </div>
             )}
+          </div>
+        )}
+
+        {/* ── Wallet Tab ── */}
+        {activeTab === 'wallet' && currentUserId && (
+          <div className={styles.tabContent}>
+            <WalletTab userId={currentUserId} />
           </div>
         )}
       </div>

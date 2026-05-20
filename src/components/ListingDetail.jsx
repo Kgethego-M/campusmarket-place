@@ -255,21 +255,18 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
   const [chatLoading, setChatLoading]     = useState(false);
   const [submitting, setSubmitting]       = useState(false);
   const [reportOpen, setReportOpen]       = useState(false);
-  const [inCart, setInCart]               = useState(false);
-  const [cartLoading, setCartLoading]     = useState(false);
+  // Firestore collection stays as 'carts' — only UI labels change to "favourites"
+  const [isFavourited, setIsFavourited]         = useState(false);
+  const [favouriteLoading, setFavouriteLoading] = useState(false);
   const [toast, setToast]                 = useState(null);
   const [showPromoteModal, setShowPromoteModal] = useState(false);
 
-  // ── Promotion status ───────────────────────────────────────────────────────
-  // null = still checking, false = not promoted, true = already promoted
   const [isPromoted, setIsPromoted] = useState(null);
 
-  // Cancel offer states
   const [cancelConfirming, setCancelConfirming]     = useState(false);
   const [cancelLoading, setCancelLoading]           = useState(false);
   const [createdTransactionId, setCreatedTransactionId] = useState(null);
 
-  // Alert Modal states
   const [showPriceAlert, setShowPriceAlert] = useState(false);
   const [showPartialAlert, setShowPartialAlert] = useState(false);
   const [showPartialExceedAlert, setShowPartialExceedAlert] = useState(false);
@@ -292,9 +289,7 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
   const sellerId     = listing.sellerUID || listing.sellerId;
   const isOwnListing = currentUser && currentUser.uid === sellerId;
 
-  // ── Check promotion status from ads collection ─────────────────────────────
   useEffect(() => {
-    // Only owners see the promote button — skip the check for everyone else
     if (!listing.id || !isOwnListing) {
       setIsPromoted(false);
       return;
@@ -319,7 +314,6 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
     return () => { cancelled = true; };
   }, [listing.id, isOwnListing]);
 
-  // ── Reset trade fields when modal closes ──────────────────────────────────
   const closeModal = () => {
     setIsModalOpen(false);
     setTradeItemName('');
@@ -334,54 +328,53 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
     setAlertMessage('');
   };
 
-  // ── Check if already in cart ───────────────────────────────────────────────
+  // ── Check if listing is already favourited (reads from 'carts' collection) ──
   useEffect(() => {
     if (!currentUser || !listing.id) return;
-    const checkCart = async () => {
+    const checkFavourite = async () => {
       try {
         const snap = await getDoc(doc(db, 'carts', currentUser.uid));
         if (snap.exists()) {
           const items = snap.data().items || [];
-          setInCart(items.includes(listing.id));
+          setIsFavourited(items.includes(listing.id));
         }
       } catch (_) {}
     };
-    checkCart();
+    checkFavourite();
   }, [currentUser, listing.id]);
 
-  // ── Cart toggle ────────────────────────────────────────────────────────────
-  const handleCartToggle = async () => {
-    if (!currentUser) { showToast('Please log in to save items', 'warn'); return; }
-    if (isOwnListing)  { showToast('You cannot add your own listing to cart', 'warn'); return; }
-    setCartLoading(true);
+  // ── Toggle favourite (reads/writes 'carts' collection) ────────────────────
+  const handleFavouriteToggle = async () => {
+    if (!currentUser) { showToast('Please log in to save favourites', 'warn'); return; }
+    if (isOwnListing)  { showToast('You cannot favourite your own listing', 'warn'); return; }
+    setFavouriteLoading(true);
     try {
       const cartRef = doc(db, 'carts', currentUser.uid);
       const snap    = await getDoc(cartRef);
 
-      if (inCart) {
+      if (isFavourited) {
         await updateDoc(cartRef, { items: arrayRemove(listing.id) });
-        setInCart(false);
-        showToast('Removed from cart');
+        setIsFavourited(false);
+        showToast('Removed from favourites');
       } else {
         const items = snap.exists() ? (snap.data().items || []) : [];
-        if (items.length >= 50) { showToast('Cart is full (max 50 items)', 'warn'); return; }
+        if (items.length >= 50) { showToast('Favourites list is full (max 50 items)', 'warn'); return; }
         if (snap.exists()) {
           await updateDoc(cartRef, { items: arrayUnion(listing.id) });
         } else {
           await setDoc(cartRef, { items: [listing.id], createdAt: serverTimestamp() });
         }
-        setInCart(true);
-        showToast('Added to cart');
+        setIsFavourited(true);
+        showToast('Added to favourites');
       }
     } catch (err) {
-      console.error('Cart error:', err);
+      console.error('Favourites error:', err);
       showToast('Something went wrong', 'error');
     } finally {
-      setCartLoading(false);
+      setFavouriteLoading(false);
     }
   };
 
-  // ── Chat ───────────────────────────────────────────────────────────────────
   async function findOrCreateChat() {
     const buyerId = currentUser.uid;
     if (!sellerId) throw new Error('Seller information is missing from this listing');
@@ -428,7 +421,6 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
     navigate(isOwnListing ? '/profile' : `/profile/${sellerId}`);
   }
 
-  // ── Cancel offer ──────────────────────────────────────────────────────────
   const handleCancelOffer = async () => {
     const txId = existingTransaction?.id ?? createdTransactionId;
     if (!txId) {
@@ -438,7 +430,6 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
     setCancelLoading(true);
     try {
       await deleteDoc(doc(db, 'transactions', txId));
-      // Delete the seller's new_offer notification for this transaction
       await deleteNewOfferNotification(txId);
       setCancelConfirming(false);
       showToast('Offer withdrawn successfully');
@@ -451,7 +442,6 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
     }
   };
 
-  // ── Partial payment validation ─────────────────────────────────────────────
   const validatePartialAmount = (amount, totalPrice) => {
     if (!amount) return true;
     const amountNum = Number(amount);
@@ -540,6 +530,7 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
       else if (paymentType === 'partial') paymentMethod = 'partial';
     }
 
+    // ── Upload trade image to Cloudinary ──────────────────────────────────────
     let tradeImageUrl = null;
     if (purchaseType === 'trade' && tradeImageFile) {
       setTradeImageUploading(true);
@@ -558,9 +549,9 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
 
     const tradeItemPayload = purchaseType === 'trade' ? {
       name:        tradeItemName,
-      category:    tradeItemCategory,
-      condition:   tradeItemCondition,
-      description: tradeItemDesc || null,
+      category:    tradeItemCategory  || null,
+      condition:   tradeItemCondition || null,
+      description: tradeItemDesc      || null,
       imageUrl:    tradeImageUrl,
     } : null;
 
@@ -576,8 +567,7 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
       paymentType:   purchaseType === 'sale' ? paymentType : null,
       paymentMethod,
       partialAmount: paymentType === 'partial' ? Number(partialAmount) : null,
-      tradeItem:     purchaseType === 'trade' ? tradeItemName : null,
-      tradeItemDetails: tradeItemPayload,
+      tradeItem:     tradeItemPayload,
       terms:         terms || null,
       createdAt:     new Date().toISOString(),
       paymentConfirmed: (paymentType === 'cash' || paymentType === 'cod') ? true : false,
@@ -585,7 +575,6 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
 
     try {
       const transactionId = await createTransaction(transactionData);
-      // Use notification service (already imported)
       await notifySellerOfOffer({
         transactionId, sellerId,
         buyerId:      currentUser.uid,
@@ -753,7 +742,6 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
           listing={listing}
           onClose={() => {
             setShowPromoteModal(false);
-            // Re-check promotion status after modal closes (user may have just promoted)
             getDocs(query(collection(db, 'ads'), where('listingId', '==', listing.id)))
               .then(snap => setIsPromoted(!snap.empty))
               .catch(() => {});
@@ -833,25 +821,25 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
 
           {!isAdminPreview && renderButton()}
 
-          {/* ── Add to Cart ── */}
+          {/* ── Add to Favourites ── */}
           {!isAdminPreview && currentUser && !isOwnListing && (
             <button
               style={{
-                ...styles.cartBtn,
-                backgroundColor: inCart ? '#f0fdf4' : '#f8fafc',
-                borderColor:     inCart ? '#86efac' : '#d1d5db',
-                color:           inCart ? '#15803d' : '#374151',
+                ...styles.favouriteBtn,
+                backgroundColor: isFavourited ? '#fff7ed' : '#f8fafc',
+                borderColor:     isFavourited ? '#fdba74' : '#d1d5db',
+                color:           isFavourited ? '#ea580c' : '#374151',
               }}
-              onClick={handleCartToggle}
-              disabled={cartLoading}
+              onClick={handleFavouriteToggle}
+              disabled={favouriteLoading}
             >
-              {cartLoading
+              {favouriteLoading
                 ? <IconLoader />
                 : <svg
                     width="16"
                     height="16"
                     viewBox="0 0 24 24"
-                    fill={inCart ? "currentColor" : "none"}
+                    fill={isFavourited ? 'currentColor' : 'none'}
                     stroke="currentColor"
                     strokeWidth="2"
                     strokeLinecap="round"
@@ -861,7 +849,7 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
                     <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
                   </svg>
               }
-              <span>{inCart ? 'Remove from cart' : 'Add to favorites'}</span>
+              <span>{isFavourited ? 'Remove from favourites' : 'Add to favourites'}</span>
             </button>
           )}
 
@@ -905,7 +893,6 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
           {/* ── Promote listing (owner only) ── */}
           {!isAdminPreview && isOwnListing && (
             isPromoted === true ? (
-              /* Already promoted — show a non-interactive status pill */
               <div style={styles.promotedBadge}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
                   <polyline points="20 6 9 17 4 12"/>
@@ -913,7 +900,6 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
                 <span>Listing already promoted</span>
               </div>
             ) : (
-              /* Not yet promoted — show the button (skeleton while checking) */
               <button
                 onClick={() => isPromoted !== null && setShowPromoteModal(true)}
                 disabled={isPromoted === null}
@@ -994,20 +980,20 @@ export function ListingDetailView({ listing, currentUser, existingTransaction = 
                   <label htmlFor="agreed-price" style={modalStyles.label}>
                     Agreed Price (R) <span style={{ color: '#dc2626' }}>* (Minimum R10)</span>
                   </label>
-                  <input 
-                    id="agreed-price" 
+                  <input
+                    id="agreed-price"
                     aria-label="Agreed price"
-                    type="number" 
+                    type="number"
                     value={agreedPrice}
-                    onChange={(e) => setAgreedPrice(e.target.value)} 
+                    onChange={(e) => setAgreedPrice(e.target.value)}
                     style={modalStyles.input}
                   />
                   <label htmlFor="payment-method" style={modalStyles.label}>Payment Method</label>
-                  <select 
-                    id="payment-method" 
+                  <select
+                    id="payment-method"
                     aria-label="Payment method"
                     value={paymentType}
-                    onChange={(e) => setPaymentType(e.target.value)} 
+                    onChange={(e) => setPaymentType(e.target.value)}
                     style={modalStyles.input}
                   >
                     <option value="full_online">Fully Online</option>
@@ -1344,7 +1330,7 @@ const styles = {
   title:            { fontSize: '1.5rem', fontWeight: '700', color: '#1a1a1a', margin: '0', fontFamily: 'Segoe UI, system-ui, sans-serif' },
   price:            { fontSize: '1.4rem', fontWeight: '700', color: '#6AA6DA', margin: '0', fontFamily: 'Segoe UI, system-ui, sans-serif' },
   buyBtn:           { width: '100%', padding: '14px', backgroundColor: '#6AA6DA', color: '#fff', border: 'none', borderRadius: '10px', fontSize: '0.95rem', fontWeight: '700', cursor: 'pointer', fontFamily: 'Segoe UI, system-ui, sans-serif' },
-  cartBtn:          { width: '100%', padding: '12px', border: '1.5px solid', borderRadius: '10px', fontSize: '0.9rem', fontWeight: '600', cursor: 'pointer', fontFamily: 'Segoe UI, system-ui, sans-serif', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', transition: 'all 0.18s' },
+  favouriteBtn:     { width: '100%', padding: '12px', border: '1.5px solid', borderRadius: '10px', fontSize: '0.9rem', fontWeight: '600', cursor: 'pointer', fontFamily: 'Segoe UI, system-ui, sans-serif', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', transition: 'all 0.18s' },
   messageBtn:       { width: '100%', padding: '11px', backgroundColor: 'transparent', color: '#444', border: '1px solid #6aa6da57', borderRadius: '10px', fontSize: '0.875rem', fontWeight: '500', cursor: 'pointer', fontFamily: 'Segoe UI, system-ui, sans-serif', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' },
   reportBtn:        { width: '100%', padding: '10px', backgroundColor: 'transparent', color: '#dc2626', border: '1.5px solid #fca5a5', borderRadius: '10px', fontSize: '0.82rem', fontWeight: '500', cursor: 'pointer', fontFamily: 'Segoe UI, system-ui, sans-serif', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '7px' },
   pendingBanner:       { display: 'flex', alignItems: 'flex-start', gap: '12px', padding: '16px', backgroundColor: '#fff8e1', border: '1px solid #ffe082', borderRadius: '10px', fontFamily: 'Segoe UI, system-ui, sans-serif' },

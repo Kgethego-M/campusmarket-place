@@ -1,0 +1,188 @@
+/* WalletTab.module.css */
+
+.root { display:flex; flex-direction:column; gap:20px; animation:fadeIn 0.3s ease; position:relative; }
+
+.loading { text-align:center; padding:3rem 1rem; color:#6b7280; }
+.loading i { font-size:2rem; color:#6AA6DA; display:block; margin-bottom:0.75rem; }
+.loading p { margin:0; font-size:0.9rem; }
+
+.toast {
+    position:fixed; bottom:28px; left:50%; transform:translateX(-50%);
+    background:#1f2937; color:#fff; padding:10px 22px; border-radius:99px;
+    font-size:0.85rem; font-weight:600; display:flex; align-items:center;
+    gap:8px; z-index:9999; box-shadow:0 4px 20px rgba(0,0,0,0.22);
+    white-space:nowrap; animation:toastPop 0.3s cubic-bezier(0.34,1.56,0.64,1);
+}
+.toast i { color:#4ade80; }
+@keyframes toastPop {
+    from { opacity:0; transform:translateX(-50%) translateY(12px) scale(0.95); }
+    to   { opacity:1; transform:translateX(-50%) translateY(0) scale(1); }
+}
+
+/* ── Hero ── */
+.hero {
+    background:linear-gradient(135deg,#1e3a5f 0%,#2563a8 55%,#6AA6DA 100%);
+    border-radius:20px; padding:26px 26px 18px; color:white;
+    box-shadow:0 8px 32px rgba(37,99,168,0.3); position:relative; overflow:hidden;
+}
+.heroNeg {
+    background:linear-gradient(135deg,#7f1d1d 0%,#b91c1c 55%,#ef4444 100%);
+    box-shadow:0 8px 32px rgba(185,28,28,0.3);
+}
+.blob1,.blob2 { position:absolute; border-radius:50%; background:rgba(255,255,255,0.06); pointer-events:none; }
+.blob1 { width:180px; height:180px; top:-60px; right:-40px; }
+.blob2 { width:120px; height:120px; bottom:-30px; left:20px; }
+
+.heroTop { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:18px; position:relative; }
+.heroLabel { margin:0 0 4px; font-size:0.72rem; font-weight:700; text-transform:uppercase; letter-spacing:0.12em; opacity:0.7; }
+.heroAmt { margin:0; font-size:2.6rem; font-weight:800; letter-spacing:-0.03em; line-height:1; }
+.negNote { margin:6px 0 0; font-size:0.75rem; opacity:0.85; font-weight:600; display:flex; align-items:center; gap:5px; }
+.heroWalletIcon { width:50px; height:50px; border-radius:14px; background:rgba(255,255,255,0.14); display:flex; align-items:center; justify-content:center; font-size:1.35rem; backdrop-filter:blur(4px); flex-shrink:0; }
+
+.summaryRow { display:flex; align-items:center; background:rgba(255,255,255,0.1); border-radius:12px; padding:10px 14px; margin-bottom:16px; position:relative; }
+.summaryChip { flex:1; display:flex; flex-direction:column; align-items:center; gap:2px; font-size:0.7rem; }
+.summaryChip span { opacity:0.65; font-weight:500; }
+.summaryChip strong { font-size:0.82rem; font-weight:700; }
+.summaryChip i { font-size:0.7rem; margin-bottom:1px; }
+.summaryDivider { width:1px; height:28px; background:rgba(255,255,255,0.2); flex-shrink:0; }
+
+.heroActions { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:14px; position:relative; }
+.heroTopupBtn,.heroWithdrawBtn { border:none; border-radius:12px; padding:11px 14px; font-size:0.85rem; font-weight:700; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:7px; transition:all 0.18s; font-family:inherit; }
+.heroTopupBtn { background:rgba(255,255,255,0.95); color:#1e3a5f; }
+.heroTopupBtn:hover { background:#fff; transform:translateY(-1px); box-shadow:0 4px 14px rgba(0,0,0,0.15); }
+.heroWithdrawBtn { background:rgba(255,255,255,0.12); color:white; border:1.5px solid rgba(255,255,255,0.28); }
+.heroWithdrawBtn:hover:not(:disabled) { background:rgba(255,255,255,0.22); transform:translateY(-1px); }
+.heroWithdrawBtn:disabled { opacity:0.4; cursor:not-allowed; }
+
+.adInfo { display:flex; align-items:center; gap:6px; font-size:0.7rem; opacity:0.65; padding-top:12px; border-top:1px solid rgba(255,255,255,0.15); position:relative; }
+
+/* ── Ledger card ── */
+.ledgerCard { background:white; border-radius:16px; border:1px solid #e8eaed; overflow:hidden; }
+.ledgerHead { display:flex; align-items:center; justify-content:space-between; padding:13px 18px; border-bottom:1px solid #f1f3f5; background:#f9fafb; gap:10px; flex-wrap:wrap; }
+.ledgerTitle { margin:0; font-size:0.78rem; font-weight:700; color:#374151; text-transform:uppercase; letter-spacing:0.07em; }
+.filters { display:flex; gap:4px; }
+.filterBtn { background:none; border:1.5px solid #e5e7eb; border-radius:8px; padding:4px 10px; font-size:0.72rem; font-weight:600; color:#6b7280; cursor:pointer; transition:all 0.15s; font-family:inherit; }
+.filterBtn:hover { border-color:#6AA6DA; color:#6AA6DA; }
+.filterActive { background:#6AA6DA; border-color:#6AA6DA; color:white; }
+
+.empty { text-align:center; padding:2.5rem 1rem; color:#6b7280; }
+.empty i { font-size:2.2rem; color:#d1d5db; display:block; margin-bottom:10px; }
+.empty p { margin:4px 0; font-size:0.88rem; }
+.emptyHint { font-size:0.75rem !important; color:#9ca3af !important; }
+
+.ledgerList { display:flex; flex-direction:column; }
+.ledgerRow { display:flex; align-items:center; gap:12px; padding:13px 18px; border-bottom:1px solid #f1f3f5; opacity:0; animation:rowIn 0.3s ease forwards; transition:background 0.15s; }
+.ledgerRow:last-child { border-bottom:none; }
+.ledgerRow:hover { background:#fafbfc; }
+@keyframes rowIn { from { opacity:0; transform:translateY(5px); } to { opacity:1; transform:translateY(0); } }
+
+.ledgerDot { width:36px; height:36px; border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:0.82rem; flex-shrink:0; }
+.dotCredit { background:#f0fdf4; color:#15803d; }
+.dotDebit  { background:#fef2f2; color:#dc2626; }
+
+.ledgerInfo { flex:1; min-width:0; }
+.ledgerDesc { margin:0 0 4px; font-size:0.85rem; font-weight:600; color:#1f2937; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.ledgerMeta { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+.badge { font-size:0.64rem; font-weight:700; padding:2px 7px; border-radius:99px; text-transform:uppercase; letter-spacing:0.05em; }
+.badgeCredit { background:#dcfce7; color:#15803d; }
+.badgeDebit  { background:#fef2f2; color:#dc2626; }
+.ledgerDate  { font-size:0.7rem; color:#9ca3af; }
+.ledgerBank  { font-size:0.7rem; color:#6b7280; display:inline-flex; align-items:center; gap:3px; }
+.pendingBadge { font-size:0.62rem; font-weight:700; padding:2px 6px; border-radius:99px; background:#fef3c7; color:#92400e; text-transform:uppercase; letter-spacing:0.05em; }
+
+.ledgerAmt  { font-size:0.92rem; font-weight:800; flex-shrink:0; }
+.amtCredit  { color:#15803d; }
+.amtDebit   { color:#dc2626; }
+
+/* ── Modal ── */
+.overlay { position:fixed; inset:0; background:rgba(15,23,42,0.52); display:flex; align-items:center; justify-content:center; z-index:9000; padding:1rem; backdrop-filter:blur(3px); animation:fadeIn 0.18s ease; }
+.modal { background:white; border-radius:20px; width:100%; max-width:420px; box-shadow:0 24px 60px rgba(0,0,0,0.2); overflow:hidden; animation:modalUp 0.28s cubic-bezier(0.34,1.56,0.64,1); max-height:90vh; overflow-y:auto; }
+@keyframes modalUp { from { opacity:0; transform:translateY(22px) scale(0.97); } to { opacity:1; transform:translateY(0) scale(1); } }
+
+.modalHead { display:flex; align-items:center; gap:13px; padding:18px 18px 0; position:sticky; top:0; background:white; z-index:1; }
+.mIcon { width:42px; height:42px; border-radius:12px; display:flex; align-items:center; justify-content:center; font-size:1rem; flex-shrink:0; }
+.mIconTopup    { background:#ecfdf5; color:#059669; }
+.mIconWithdraw { background:#fef2f2; color:#dc2626; }
+.mTitle { margin:0 0 2px; font-size:0.98rem; font-weight:700; color:#1f2937; }
+.mSub   { margin:0; font-size:0.76rem; color:#6b7280; }
+.mClose { margin-left:auto; background:#f3f4f6; border:none; width:30px; height:30px; border-radius:50%; cursor:pointer; display:flex; align-items:center; justify-content:center; color:#6b7280; font-size:0.82rem; transition:background 0.15s; flex-shrink:0; }
+.mClose:hover { background:#e5e7eb; }
+
+/* Step indicator */
+.stepRow { display:flex; align-items:center; gap:6px; padding:12px 18px 0; }
+.stepDot { width:24px; height:24px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:0.7rem; font-weight:700; flex-shrink:0; }
+.stepActive   { background:#6AA6DA; color:white; }
+.stepInactive { background:#e5e7eb; color:#9ca3af; }
+.stepLine { flex:1; height:2px; background:#e5e7eb; border-radius:2px; transition:background 0.3s; }
+.stepLineDone { background:#6AA6DA; }
+.stepLabel { font-size:0.72rem; font-weight:600; color:#6b7280; white-space:nowrap; }
+
+.modalBody { padding:16px 18px 20px; display:flex; flex-direction:column; gap:11px; }
+
+/* Amount input */
+.amtWrap { display:flex; align-items:center; border:2px solid #e5e7eb; border-radius:12px; overflow:hidden; transition:border-color 0.2s; background:#fafafa; }
+.amtWrap:focus-within { border-color:#6AA6DA; background:white; }
+.amtPrefix { padding:0 13px; font-size:1.3rem; font-weight:700; color:#9ca3af; border-right:1.5px solid #e5e7eb; user-select:none; line-height:1; }
+.amtInput { border:none; outline:none; flex:1; padding:13px; font-size:1.4rem; font-weight:700; color:#1f2937; background:transparent; font-family:inherit; }
+.amtInput::placeholder { color:#d1d5db; }
+.amtInput::-webkit-outer-spin-button,.amtInput::-webkit-inner-spin-button { -webkit-appearance:none; margin:0; }
+.amtInput[type=number] { -moz-appearance:textfield; }
+
+.presets { display:flex; gap:6px; flex-wrap:wrap; }
+.preset { border:1.5px solid #e5e7eb; background:white; border-radius:8px; padding:5px 11px; font-size:0.76rem; font-weight:600; color:#374151; cursor:pointer; transition:all 0.15s; font-family:inherit; }
+.preset:hover:not(:disabled) { border-color:#6AA6DA; color:#6AA6DA; background:#f0f8ff; }
+.preset:disabled { opacity:0.5; cursor:not-allowed; }
+
+/* Banking details */
+.bankGrid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+.bankField { display:flex; flex-direction:column; gap:4px; }
+.bankLabel { font-size:0.75rem; font-weight:600; color:#374151; }
+.optional  { font-weight:400; color:#9ca3af; }
+.bankInput { border:1.5px solid #e5e7eb; border-radius:10px; padding:9px 12px; font-size:0.85rem; font-family:inherit; color:#1f2937; background:#fafafa; outline:none; transition:border-color 0.2s; }
+.bankInput:focus { border-color:#6AA6DA; background:white; }
+.bankInput::placeholder { color:#9ca3af; }
+.bankSelect { border:1.5px solid #e5e7eb; border-radius:10px; padding:9px 12px; font-size:0.85rem; font-family:inherit; color:#1f2937; background:#fafafa; outline:none; transition:border-color 0.2s; cursor:pointer; appearance:auto; }
+.bankSelect:focus { border-color:#6AA6DA; background:white; }
+
+.withdrawSummary { background:#f9fafb; border:1px solid #e5e7eb; border-radius:10px; padding:10px 14px; display:flex; flex-direction:column; gap:5px; }
+.summaryLine { display:flex; justify-content:space-between; align-items:center; font-size:0.82rem; color:#374151; }
+.summaryLine strong { font-weight:700; color:#1f2937; }
+
+.bankActions { display:flex; gap:8px; }
+
+/* Stripe banner */
+.stripeBanner { display:flex; align-items:center; gap:12px; background:#f5f3ff; border:1px solid #e9d5ff; border-radius:12px; padding:12px 14px; }
+
+/* Error */
+.mErr { margin:0; font-size:0.78rem; color:#dc2626; display:flex; align-items:center; gap:6px; background:#fef2f2; border:1px solid #fecaca; border-radius:8px; padding:7px 11px; }
+
+/* Buttons */
+.mBtn { border:none; border-radius:12px; padding:13px; font-size:0.9rem; font-weight:700; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:8px; transition:all 0.18s; font-family:inherit; width:100%; }
+.mBtn:disabled { opacity:0.5; cursor:not-allowed; }
+.mBtnTopup    { background:linear-gradient(135deg,#059669,#10b981); color:white; }
+.mBtnTopup:hover:not(:disabled) { filter:brightness(1.08); transform:translateY(-1px); }
+.mBtnWithdraw { background:linear-gradient(135deg,#dc2626,#ef4444); color:white; }
+.mBtnWithdraw:hover:not(:disabled) { filter:brightness(1.08); transform:translateY(-1px); }
+.mBtnGhost { background:#f3f4f6; color:#374151; border:none; border-radius:12px; padding:13px 16px; font-size:0.85rem; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:7px; transition:all 0.15s; font-family:inherit; white-space:nowrap; }
+.mBtnGhost:hover:not(:disabled) { background:#e5e7eb; }
+.mBtnGhost:disabled { opacity:0.5; cursor:not-allowed; }
+
+.mNote { margin:0; font-size:0.72rem; color:#9ca3af; display:flex; align-items:flex-start; gap:5px; line-height:1.4; }
+.mNote i { margin-top:1px; flex-shrink:0; }
+
+@keyframes fadeIn { from { opacity:0; } to { opacity:1; } }
+
+/* Responsive */
+@media (max-width:480px) {
+    .hero { padding:20px 18px 16px; }
+    .heroAmt { font-size:2rem; }
+    .heroActions { gap:8px; }
+    .heroTopupBtn,.heroWithdrawBtn { font-size:0.8rem; padding:10px 12px; }
+    .ledgerRow { padding:11px 14px; gap:10px; }
+    .ledgerDesc { font-size:0.8rem; }
+    .ledgerAmt { font-size:0.84rem; }
+    .modal { border-radius:16px; max-width:100%; }
+    .amtInput { font-size:1.2rem; }
+    .summaryChip strong { font-size:0.75rem; }
+    .bankGrid { grid-template-columns:1fr; }
+}

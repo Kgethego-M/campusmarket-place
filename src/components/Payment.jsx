@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { doc, getDoc, onSnapshot, collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, onSnapshot, collection, addDoc, serverTimestamp, updateDoc } from 'firebase/firestore';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth, db } from '../firebase';
 import NavBar from './NavBarTemp';
@@ -14,23 +14,26 @@ import {
 import styles from './Payment.module.css';
 import { recordCashConfirmation } from '../services/revenueService';
 import { notifySellerBuyerPaid } from '../services/notificationService';
+import { deductBuyerWallet, getWalletBalance } from '../services/walletService';
 
 export default function Payment() {
   const { txId } = useParams();
   const navigate = useNavigate();
 
-  const [currentUser, setCurrentUser]     = useState(null);
-  const [tx, setTx]                       = useState(null);
-  const [listing, setListing]             = useState(null);
-  const [loading, setLoading]             = useState(true);
-  const [error, setError]                 = useState('');
-  const [processing, setProcessing]       = useState(false);
-  const [step, setStep]                   = useState('summary');
-  const [stripeRef, setStripeRef]         = useState('');
-  const [cashConfirmed, setCashConfirmed] = useState(false);
-  const [sellerName, setSellerName]       = useState('');
+  const [currentUser, setCurrentUser]         = useState(null);
+  const [tx, setTx]                           = useState(null);
+  const [listing, setListing]                 = useState(null);
+  const [loading, setLoading]                 = useState(true);
+  const [error, setError]                     = useState('');
+  const [processing, setProcessing]           = useState(false);
+  const [step, setStep]                       = useState('summary');
+  const [stripeRef, setStripeRef]             = useState('');
+  const [cashConfirmed, setCashConfirmed]     = useState(false);
+  const [sellerName, setSellerName]           = useState('');
+  const [walletBalance, setWalletBalance]     = useState(null);
+  const [payWith, setPayWith]                 = useState('stripe'); // 'stripe' | 'wallet'
 
-  // ── Auth ──────────────────────────────────────────────────────────────────────
+  // ── Auth ──────────────────────────────────────────────────────────────────
   useEffect(() => {
     return onAuthStateChanged(auth, (user) => {
       if (!user) { navigate('/login'); return; }
@@ -38,7 +41,15 @@ export default function Payment() {
     });
   }, [navigate]);
 
-  // ── Load transaction (real-time) ──────────────────────────────────────────────
+  // ── Load wallet balance ───────────────────────────────────────────────────
+  useEffect(() => {
+    if (!currentUser) return;
+    getWalletBalance(currentUser.uid)
+      .then(setWalletBalance)
+      .catch(() => setWalletBalance(0));
+  }, [currentUser]);
+
+  // ── Load transaction (real-time) ──────────────────────────────────────────
   useEffect(() => {
     if (!txId) return;
     const unsub = onSnapshot(doc(db, 'transactions', txId), async (snap) => {
@@ -77,6 +88,12 @@ export default function Payment() {
         return;
       }
 
+      if (data.paymentProvider === 'wallet' && data.paymentStatus === 'wallet_paid') {
+        setStep('success');
+        setLoading(false);
+        return;
+      }
+
       if (data.status === 'waiting' && data.paymentProvider === 'cash' && data.paymentStatus === 'cash_pending') {
         setStep('cash_waiting');
       }
@@ -86,7 +103,7 @@ export default function Payment() {
     return () => unsub();
   }, [txId]);
 
-  // ── Cash payment ──────────────────────────────────────────────────────────────
+  // ── Cash payment ──────────────────────────────────────────────────────────
   const handleCashPayment = useCallback(async () => {
     if (!tx || !currentUser) return;
     setProcessing(true);
@@ -99,12 +116,8 @@ export default function Payment() {
         onlineAmount:    0,
         cashAmount:      getCashAmount(tx),
       });
-      
-      // Record cash confirmation for revenue tracking
       const cashAmount = getCashAmount(tx);
       await recordCashConfirmation(tx.id, cashAmount);
-      
-      // Use notification service instead of inline addDoc
       await notifySellerBuyerPaid({
         transactionId: tx.id,
         sellerId:      tx.sellerId,
@@ -113,7 +126,6 @@ export default function Payment() {
         listingTitle:  tx.listingTitle || listing?.title || 'your item',
         agreedPrice:   tx.agreedPrice,
       });
-      
       setStep('cash_waiting');
     } catch (e) {
       console.error(e);
@@ -123,7 +135,59 @@ export default function Payment() {
     }
   }, [tx, currentUser, listing]);
 
-  // ── Stripe payment ────────────────────────────────────────────────────────────
+  // ── Wallet payment ────────────────────────────────────────────────────────
+  const handleWalletPayment = useCallback(async () => {
+    if (!tx || !currentUser) return;
+    setProcessing(true);
+    setError('');
+
+    const amountToPay = getOnlineAmount(tx);
+    if (amountToPay <= 0) {
+      setError('No payment amount found.');
+      setProcessing(false);
+      return;
+    }
+
+    try {
+      // Deduct from buyer wallet
+      await deductBuyerWallet(
+        currentUser.uid,
+        amountToPay,
+        tx.id,
+        tx.listingTitle || listing?.title || 'Item',
+      );
+
+      // Update transaction — same flow as cash: moves to waiting
+      await updateTransactionStatus(tx.id, 'waiting', {
+        paymentProvider: 'wallet',
+        paymentStatus:   'wallet_paid',
+        paymentSettled:  true,
+        onlineAmount:    amountToPay,
+        cashAmount:      getCashAmount(tx),
+      });
+
+      // Notify seller
+      await notifySellerBuyerPaid({
+        transactionId: tx.id,
+        sellerId:      tx.sellerId,
+        buyerName:     currentUser.displayName || currentUser.email || 'The buyer',
+        listingId:     tx.listingId,
+        listingTitle:  tx.listingTitle || listing?.title || 'your item',
+        agreedPrice:   tx.agreedPrice,
+      });
+
+      // Refresh local wallet balance display
+      setWalletBalance(prev => (prev ?? 0) - amountToPay);
+      setStep('success');
+    } catch (e) {
+      console.error('Wallet payment failed:', e);
+      setError(e.message || 'Wallet payment failed. Please try again.');
+    } finally {
+      setProcessing(false);
+    }
+  }, [tx, currentUser, listing]);
+
+  // ── Stripe payment ────────────────────────────────────────────────────────
   const handleOnlinePayment = useCallback(async () => {
     if (!tx || !currentUser) return;
     setProcessing(true);
@@ -157,7 +221,7 @@ export default function Payment() {
     }
   }, [tx, currentUser, listing]);
 
-  // ── Derived values ────────────────────────────────────────────────────────────
+  // ── Derived values ────────────────────────────────────────────────────────
   const paymentType  = tx ? (tx.paymentType || tx.paymentMethod || 'cash') : null;
   const onlineAmount = tx ? getOnlineAmount(tx) : 0;
   const cashAmount   = tx ? getCashAmount(tx) : 0;
@@ -166,15 +230,16 @@ export default function Payment() {
   const isPartial    = paymentType === 'partial';
   const itemImage    = listing?.photos?.[0] || listing?.imageUrl || null;
   const itemTitle    = tx?.listingTitle || listing?.title || 'Campus Item';
+  const hasOnline    = !isCashOnly; // has an online/wallet portion
+  const walletSufficient = walletBalance !== null && walletBalance >= onlineAmount;
 
-  // ── Loading ───────────────────────────────────────────────────────────────────
+  // ── Loading ───────────────────────────────────────────────────────────────
   if (loading) return (
     <><NavBar /><div className={styles.page}><div className={styles.loadingState}>
       <i className="fas fa-spinner fa-spin" /><p>Loading payment details...</p>
     </div></div></>
   );
 
-  // ── Missing transaction ───────────────────────────────────────────────────────
   if (error && !tx) return (
     <><NavBar /><div className={styles.page}><div className={styles.errorState}>
       <i className="fas fa-circle-exclamation" /><p>{error}</p>
@@ -182,7 +247,7 @@ export default function Payment() {
     </div></div></>
   );
 
-  // ── Success screen ───────────────────────────────────────────────────────────
+  // ── Success screen ────────────────────────────────────────────────────────
   if (step === 'success') return (
     <>
       <NavBar />
@@ -217,7 +282,7 @@ export default function Payment() {
     </>
   );
 
-  // ── Cash waiting screen ───────────────────────────────────────────────────────
+  // ── Cash waiting screen ───────────────────────────────────────────────────
   if (step === 'cash_waiting') return (
     <>
       <NavBar />
@@ -246,7 +311,7 @@ export default function Payment() {
     </>
   );
 
-  // ── Redirecting to Stripe screen ──────────────────────────────────────────────
+  // ── Redirecting to Stripe screen ──────────────────────────────────────────
   if (step === 'redirecting') return (
     <>
       <NavBar />
@@ -273,9 +338,10 @@ export default function Payment() {
     </>
   );
 
-  // ── Already processed guard ───────────────────────────────────────────────────
+  // ── Already processed guard ───────────────────────────────────────────────
   if (tx && (
     tx.paymentStatus === 'paid' ||
+    tx.paymentStatus === 'wallet_paid' ||
     tx.paymentStatus === 'cash_pending' ||
     (tx.status !== 'accepted' && tx.status !== 'pending_payment')
   )) return (
@@ -285,6 +351,8 @@ export default function Payment() {
         <p>
           {tx.paymentStatus === 'paid'
             ? 'This payment has already been completed.'
+            : tx.paymentStatus === 'wallet_paid'
+            ? 'This payment was already completed via your wallet.'
             : tx.paymentStatus === 'cash_pending'
             ? 'You have already confirmed this cash transaction.'
             : `This transaction has already been processed (status: ${tx.status}).`}
@@ -294,7 +362,7 @@ export default function Payment() {
     </div></div></>
   );
 
-  // ── Main summary page ─────────────────────────────────────────────────────────
+  // ── Main summary page ─────────────────────────────────────────────────────
   return (
     <>
       <NavBar />
@@ -369,11 +437,83 @@ export default function Payment() {
               <div className={styles.card} style={{ overflow: 'hidden' }}>
                 <p className={styles.cardLabel}>{isCashOnly ? 'Confirm & proceed' : 'Pay online'}</p>
 
-                {!isCashOnly && (
-                  <div className={styles.amountDisplay}>
-                    <span className={styles.amountLabel}>{isPartial ? 'Online portion' : 'Amount due'}</span>
-                    <span className={styles.amountValue}>R {onlineAmount.toLocaleString('en-ZA')}</span>
-                  </div>
+                {/* ── Payment method toggle (only for non-cash payments) ── */}
+                {hasOnline && (
+                  <>
+                    <div className={styles.amountDisplay}>
+                      <span className={styles.amountLabel}>{isPartial ? 'Online portion' : 'Amount due'}</span>
+                      <span className={styles.amountValue}>R {onlineAmount.toLocaleString('en-ZA')}</span>
+                    </div>
+
+                    {/* Toggle */}
+                    <div style={{
+                      display: 'flex', gap: 8, marginBottom: 16,
+                      background: '#f1f5f9', borderRadius: 10, padding: 4,
+                    }}>
+                      <button
+                        onClick={() => setPayWith('stripe')}
+                        style={{
+                          flex: 1, padding: '8px 0', borderRadius: 8, border: 'none',
+                          cursor: 'pointer', fontWeight: 600, fontSize: '0.82rem',
+                          background: payWith === 'stripe' ? '#fff' : 'transparent',
+                          color:      payWith === 'stripe' ? '#6772e5' : '#64748b',
+                          boxShadow:  payWith === 'stripe' ? '0 1px 4px rgba(0,0,0,0.1)' : 'none',
+                          transition: 'all 0.15s',
+                        }}
+                      >
+                        <i className="fab fa-stripe" style={{ marginRight: 6 }} />
+                        Pay with Stripe
+                      </button>
+                      <button
+                        onClick={() => setPayWith('wallet')}
+                        style={{
+                          flex: 1, padding: '8px 0', borderRadius: 8, border: 'none',
+                          cursor: 'pointer', fontWeight: 600, fontSize: '0.82rem',
+                          background: payWith === 'wallet' ? '#fff' : 'transparent',
+                          color:      payWith === 'wallet' ? '#0ea5e9' : '#64748b',
+                          boxShadow:  payWith === 'wallet' ? '0 1px 4px rgba(0,0,0,0.1)' : 'none',
+                          transition: 'all 0.15s',
+                        }}
+                      >
+                        <i className="fas fa-wallet" style={{ marginRight: 6 }} />
+                        Pay with Wallet
+                      </button>
+                    </div>
+
+                    {/* Wallet balance info */}
+                    {payWith === 'wallet' && (
+                      <div style={{
+                        background: walletSufficient ? '#f0fdf4' : '#fef2f2',
+                        border: `1px solid ${walletSufficient ? '#bbf7d0' : '#fecaca'}`,
+                        borderRadius: 8, padding: '10px 14px', marginBottom: 14,
+                        display: 'flex', alignItems: 'center', gap: 10,
+                        fontSize: '0.83rem',
+                      }}>
+                        <i
+                          className={`fas ${walletSufficient ? 'fa-circle-check' : 'fa-circle-exclamation'}`}
+                          style={{ color: walletSufficient ? '#16a34a' : '#dc2626', flexShrink: 0 }}
+                        />
+                        <div>
+                          <p style={{ margin: 0, fontWeight: 600, color: walletSufficient ? '#15803d' : '#dc2626' }}>
+                            {walletBalance !== null
+                              ? `Wallet balance: R${walletBalance.toLocaleString('en-ZA', { minimumFractionDigits: 2 })}`
+                              : 'Loading balance...'}
+                          </p>
+                          {!walletSufficient && walletBalance !== null && (
+                            <p style={{ margin: '2px 0 0', color: '#dc2626' }}>
+                              Insufficient — need R{onlineAmount.toLocaleString('en-ZA', { minimumFractionDigits: 2 })}.{' '}
+                              <button
+                                style={{ background: 'none', border: 'none', color: '#2563eb', cursor: 'pointer', padding: 0, fontWeight: 600, fontSize: '0.83rem' }}
+                                onClick={() => navigate('/profile?tab=wallet')}
+                              >
+                                Top up wallet
+                              </button>
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </>
                 )}
 
                 {isCashOnly && (
@@ -387,7 +527,8 @@ export default function Payment() {
                   <div className={styles.errorMsg}><i className="fas fa-circle-exclamation" /> {error}</div>
                 )}
 
-                {isCashOnly ? (
+                {/* ── Cash only ── */}
+                {isCashOnly && (
                   <>
                     <label className={styles.confirmCheck}>
                       <input
@@ -410,7 +551,10 @@ export default function Payment() {
                         : <><i className="fas fa-check" /> Confirm &amp; mark as waiting</>}
                     </button>
                   </>
-                ) : (
+                )}
+
+                {/* ── Stripe payment ── */}
+                {hasOnline && payWith === 'stripe' && (
                   <>
                     <div className={styles.stripeInfoBox}>
                       <i className="fab fa-stripe" style={{ fontSize: '1.5rem', color: '#6772e5', flexShrink: 0 }} />
@@ -423,14 +567,7 @@ export default function Payment() {
                       className={styles.primaryBtn}
                       onClick={handleOnlinePayment}
                       disabled={processing}
-                      style={{
-                        background:  '#6772e5',
-                        width:       '100%',
-                        boxSizing:   'border-box',
-                        whiteSpace:  'nowrap',
-                        overflow:    'hidden',
-                        textOverflow:'ellipsis',
-                      }}
+                      style={{ background: '#6772e5', width: '100%', boxSizing: 'border-box' }}
                     >
                       {processing
                         ? <><i className="fas fa-spinner fa-spin" /> Redirecting...</>
@@ -439,10 +576,29 @@ export default function Payment() {
                   </>
                 )}
 
+                {/* ── Wallet payment ── */}
+                {hasOnline && payWith === 'wallet' && (
+                  <button
+                    className={styles.primaryBtn}
+                    onClick={handleWalletPayment}
+                    disabled={processing || !walletSufficient}
+                    style={{
+                      background: walletSufficient ? '#0ea5e9' : '#94a3b8',
+                      width: '100%', boxSizing: 'border-box',
+                    }}
+                  >
+                    {processing
+                      ? <><i className="fas fa-spinner fa-spin" /> Processing...</>
+                      : <><i className="fas fa-wallet" /> Pay R {onlineAmount.toLocaleString('en-ZA')} from Wallet</>}
+                  </button>
+                )}
+
                 <p className={styles.secureNote}>
                   <i className="fas fa-shield-halved" />
                   {isCashOnly
                     ? 'Your transaction is tracked and protected by Campus Marketplace.'
+                    : payWith === 'wallet'
+                    ? 'Funds are deducted from your wallet instantly and held until collection is confirmed.'
                     : 'Payments are processed securely by Stripe. Funds are held in escrow until collection is confirmed.'}
                 </p>
               </div>

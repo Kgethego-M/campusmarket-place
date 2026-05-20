@@ -16,11 +16,7 @@
 ## 3. Individual Updates
 
 ### Kgethego
-<<<<<<< HEAD
-**Work done:** Completed implementations for both US20 and US12 as well as their use case diagrams.  
-=======
 **Work done:** Completed implementations for both US20 and US12.  
->>>>>>> 6c537711de7924d97c60e551d9e4ae606e9026f4
 **Work to be done:** Since all assigned work is complete, will focus on minutes documentation and assisting the team.  
 **Blockers:** None.
 

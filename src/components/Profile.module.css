@@ -366,7 +366,6 @@
 }
 
 /* ── Listing cards ───────────────────────────────────────────────────────── */
-/* Default: always 2 columns on small screens, auto-fill on larger */
 .listingsGridCompact {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
@@ -777,7 +776,6 @@
     .statValue  { font-size: 1rem; }
     .statLabel  { font-size: 0.65rem; }
 
-    /* Tabs: scrollable, each tab fixed width so all 3 fit */
     .tabs { justify-content: flex-start; }
 
     .tab {
@@ -790,13 +788,11 @@
 
     .tabContent { padding: 0.75rem; }
 
-    /* Listings: 2 columns, tighter gap */
     .listingsGridCompact {
         grid-template-columns: repeat(2, 1fr);
         gap: 8px;
     }
 
-    /* History */
     .historyImg          { width: 68px; min-width: 68px; }
     .historyImgPlaceholder { min-height: 68px; }
     .historyDetails      { padding: 10px; }
@@ -808,7 +804,6 @@
 @media (max-width: 360px) {
     .profileContainer { padding: 0.5rem; }
 
-    /* Still 2 columns even on very small phones */
     .listingsGridCompact {
         grid-template-columns: repeat(2, 1fr);
         gap: 6px;
@@ -816,9 +811,603 @@
 
     .statsGrid { grid-template-columns: repeat(3, 1fr); }
 
-    /* Tab labels: icons only */
     .tab { padding: 0.65rem 0.6rem; flex: 1; min-width: 0; font-size: 0; }
     .tab i { font-size: 0.9rem; }
 
     .tabContent { padding: 0.5rem; }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   WALLET TAB
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.walletContainer {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    animation: fadeIn 0.3s ease;
+    position: relative;
+}
+
+/* ── Toast ── */
+.walletToast {
+    position: fixed;
+    bottom: 28px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #1f2937;
+    color: #fff;
+    padding: 10px 20px;
+    border-radius: 99px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    z-index: 9999;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+    animation: toastIn 0.3s ease;
+    white-space: nowrap;
+}
+
+.walletToast i { color: #4ade80; }
+
+@keyframes toastIn {
+    from { opacity: 0; transform: translateX(-50%) translateY(10px); }
+    to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+/* ── Loading ── */
+.walletLoading {
+    text-align: center;
+    padding: 3rem;
+    color: #6b7280;
+}
+.walletLoading i { font-size: 2rem; color: #6AA6DA; margin-bottom: 0.75rem; display: block; }
+.walletLoading p { margin: 0; font-size: 0.9rem; }
+
+/* ── Balance card ── */
+.walletBalanceCard {
+    background: linear-gradient(135deg, #1e3a5f 0%, #2d6fad 60%, #6AA6DA 100%);
+    border-radius: 20px;
+    padding: 28px 28px 20px;
+    color: white;
+    box-shadow: 0 8px 32px rgba(106, 166, 218, 0.35);
+    position: relative;
+    overflow: hidden;
+}
+
+/* subtle texture */
+.walletBalanceCard::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.04'%3E%3Ccircle cx='30' cy='30' r='28'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E") repeat;
+    pointer-events: none;
+}
+
+.walletBalanceNeg {
+    background: linear-gradient(135deg, #7f1d1d 0%, #b91c1c 60%, #ef4444 100%);
+    box-shadow: 0 8px 32px rgba(239, 68, 68, 0.35);
+}
+
+.walletBalanceTop {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 20px;
+}
+
+.walletBalanceLabel {
+    margin: 0 0 4px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    opacity: 0.75;
+}
+
+.walletBalanceAmount {
+    margin: 0;
+    font-size: 2.6rem;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    line-height: 1;
+}
+
+.walletBadge {
+    width: 52px;
+    height: 52px;
+    border-radius: 14px;
+    background: rgba(255,255,255,0.15);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.4rem;
+    backdrop-filter: blur(4px);
+    flex-shrink: 0;
+}
+
+.walletNegWarning {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(255,255,255,0.15);
+    border-radius: 10px;
+    padding: 8px 12px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    margin-bottom: 16px;
+}
+
+.walletActions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-bottom: 16px;
+}
+
+.walletTopupBtn,
+.walletWithdrawBtn {
+    border: none;
+    border-radius: 12px;
+    padding: 11px 16px;
+    font-size: 0.85rem;
+    font-weight: 700;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    transition: all 0.18s;
+    font-family: inherit;
+}
+
+.walletTopupBtn {
+    background: rgba(255,255,255,0.95);
+    color: #1e3a5f;
+}
+.walletTopupBtn:hover { background: #fff; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
+
+.walletWithdrawBtn {
+    background: rgba(255,255,255,0.15);
+    color: white;
+    border: 1px solid rgba(255,255,255,0.3);
+}
+.walletWithdrawBtn:hover:not(:disabled) { background: rgba(255,255,255,0.25); transform: translateY(-1px); }
+.walletWithdrawBtn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.walletAdPrices {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.72rem;
+    opacity: 0.7;
+    padding-top: 12px;
+    border-top: 1px solid rgba(255,255,255,0.15);
+}
+
+/* ── Ledger ── */
+.walletLedger {
+    background: white;
+    border-radius: 16px;
+    border: 1px solid #e8eaed;
+    overflow: hidden;
+}
+
+.walletLedgerTitle {
+    margin: 0;
+    padding: 14px 18px;
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: #374151;
+    border-bottom: 1px solid #f1f3f5;
+    background: #f9fafb;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+}
+
+.walletEmpty {
+    text-align: center;
+    padding: 2.5rem 1rem;
+    color: #6b7280;
+}
+.walletEmpty i { font-size: 2.2rem; color: #d1d5db; display: block; margin-bottom: 10px; }
+.walletEmpty p { margin: 4px 0; font-size: 0.88rem; }
+
+.walletLedgerList {
+    display: flex;
+    flex-direction: column;
+}
+
+.ledgerRow {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 13px 18px;
+    border-bottom: 1px solid #f1f3f5;
+    transition: background 0.15s;
+}
+.ledgerRow:last-child { border-bottom: none; }
+.ledgerRow:hover { background: #fafbfc; }
+
+.ledgerIcon {
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.85rem;
+    flex-shrink: 0;
+}
+
+.ledgerInfo {
+    flex: 1;
+    min-width: 0;
+}
+
+.ledgerDesc {
+    margin: 0 0 4px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #1f2937;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.ledgerMeta {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.ledgerTypeBadge {
+    font-size: 0.65rem;
+    font-weight: 700;
+    padding: 2px 7px;
+    border-radius: 99px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.ledgerDate {
+    font-size: 0.7rem;
+    color: #9ca3af;
+}
+
+.ledgerAmountWrap {
+    text-align: right;
+    flex-shrink: 0;
+}
+
+.ledgerAmount {
+    display: block;
+    font-size: 0.9rem;
+    font-weight: 800;
+    line-height: 1.2;
+}
+
+.ledgerCredit { color: #15803d; }
+.ledgerDebit  { color: #dc2626; }
+
+.ledgerBalance {
+    display: block;
+    font-size: 0.68rem;
+    color: #9ca3af;
+    margin-top: 2px;
+}
+
+/* ── Modal ── */
+.modalOverlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.55);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9000;
+    padding: 1rem;
+    backdrop-filter: blur(3px);
+    animation: fadeIn 0.2s ease;
+}
+
+.modalCard {
+    background: white;
+    border-radius: 20px;
+    width: 100%;
+    max-width: 420px;
+    box-shadow: 0 24px 60px rgba(0,0,0,0.2);
+    overflow: hidden;
+    animation: modalSlideUp 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes modalSlideUp {
+    from { opacity: 0; transform: translateY(24px) scale(0.97); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.modalHeader {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 20px 20px 0;
+}
+
+.modalIcon {
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.1rem;
+    flex-shrink: 0;
+}
+.modalIconTopup    { background: #ecfdf5; color: #059669; }
+.modalIconWithdraw { background: #fef2f2; color: #dc2626; }
+
+.modalTitle {
+    margin: 0 0 2px;
+    font-size: 1rem;
+    font-weight: 700;
+    color: #1f2937;
+}
+
+.modalSub {
+    margin: 0;
+    font-size: 0.78rem;
+    color: #6b7280;
+}
+
+.modalClose {
+    margin-left: auto;
+    background: #f3f4f6;
+    border: none;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #6b7280;
+    font-size: 0.85rem;
+    transition: background 0.15s;
+    flex-shrink: 0;
+}
+.modalClose:hover { background: #e5e7eb; }
+
+.modalBody {
+    padding: 18px 20px 22px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.amountInputWrap {
+    display: flex;
+    align-items: center;
+    border: 2px solid #e5e7eb;
+    border-radius: 12px;
+    overflow: hidden;
+    transition: border-color 0.2s;
+    background: #fafafa;
+}
+.amountInputWrap:focus-within { border-color: #6AA6DA; background: white; }
+
+.amountPrefix {
+    padding: 0 14px;
+    font-size: 1.3rem;
+    font-weight: 700;
+    color: #6b7280;
+    border-right: 1px solid #e5e7eb;
+    line-height: 1;
+    user-select: none;
+}
+
+.amountInput {
+    border: none;
+    outline: none;
+    flex: 1;
+    padding: 14px 14px;
+    font-size: 1.4rem;
+    font-weight: 700;
+    color: #1f2937;
+    background: transparent;
+    font-family: inherit;
+}
+.amountInput::placeholder { color: #d1d5db; }
+
+/* hide number spinners */
+.amountInput::-webkit-outer-spin-button,
+.amountInput::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.amountInput[type=number]               { -moz-appearance: textfield; }
+
+.quickAmounts {
+    display: flex;
+    gap: 7px;
+    flex-wrap: wrap;
+}
+
+.quickChip {
+    border: 1.5px solid #e5e7eb;
+    background: white;
+    border-radius: 8px;
+    padding: 5px 12px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: #374151;
+    cursor: pointer;
+    transition: all 0.15s;
+    font-family: inherit;
+}
+.quickChip:hover { border-color: #6AA6DA; color: #6AA6DA; background: #f0f8ff; }
+
+.noteInput {
+    border: 1.5px solid #e5e7eb;
+    border-radius: 10px;
+    padding: 10px 14px;
+    font-size: 0.85rem;
+    font-family: inherit;
+    color: #374151;
+    background: #fafafa;
+    outline: none;
+    transition: border-color 0.2s;
+}
+.noteInput:focus { border-color: #6AA6DA; background: white; }
+.noteInput::placeholder { color: #9ca3af; }
+
+.modalError {
+    margin: 0;
+    font-size: 0.8rem;
+    color: #dc2626;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: #fef2f2;
+    border: 1px solid #fecaca;
+    border-radius: 8px;
+    padding: 8px 12px;
+}
+
+.modalBtn {
+    border: none;
+    border-radius: 12px;
+    padding: 13px;
+    font-size: 0.9rem;
+    font-weight: 700;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    transition: all 0.18s;
+    font-family: inherit;
+}
+.modalBtn:disabled { opacity: 0.55; cursor: not-allowed; }
+.modalBtnTopup    { background: linear-gradient(135deg, #059669, #10b981); color: white; }
+.modalBtnTopup:hover:not(:disabled)    { filter: brightness(1.08); transform: translateY(-1px); }
+.modalBtnWithdraw { background: linear-gradient(135deg, #dc2626, #ef4444); color: white; }
+.modalBtnWithdraw:hover:not(:disabled) { filter: brightness(1.08); transform: translateY(-1px); }
+
+/* ── Wallet responsive ── */
+@media (max-width: 480px) {
+    .walletBalanceCard { padding: 20px 18px 16px; }
+    .walletBalanceAmount { font-size: 2rem; }
+    .walletActions { gap: 8px; }
+    .walletTopupBtn, .walletWithdrawBtn { font-size: 0.8rem; padding: 10px 12px; }
+    .ledgerRow { padding: 11px 14px; gap: 10px; }
+    .ledgerDesc { font-size: 0.8rem; }
+    .ledgerAmount { font-size: 0.82rem; }
+    .modalCard { border-radius: 16px; }
+    .amountInput { font-size: 1.2rem; }
+}
+/* ─────────────────────────────────────────────────────────────────────────────
+   ADD THESE RULES TO THE BOTTOM OF Profile.module.css
+   ───────────────────────────────────────────────────────────────────────────── */
+
+/* ── Wallet balance stat card (spans all 3 columns in statsGrid) ── */
+.walletStatCard {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    width: 100%;
+    flex-wrap: wrap;
+}
+
+.walletStatLeft {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.walletStatLeft i {
+    font-size: 1.5rem;
+    color: #6AA6DA;
+}
+
+/* hint / CTA button inside the wallet stat row */
+.walletStatHint {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: #f0f8ff;
+    border: 1px solid #bdd6f0;
+    border-radius: 8px;
+    padding: 6px 12px;
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: #4094d4;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+    font-family: inherit;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.walletStatHint strong {
+    font-weight: 700;
+}
+
+.walletStatHint i {
+    font-size: 0.65rem;
+    color: #6AA6DA;
+}
+
+.walletStatHint:hover {
+    background: #e0f0ff;
+    border-color: #6AA6DA;
+}
+
+/* On very small screens stack the hint below the balance */
+@media (max-width: 480px) {
+    .walletStatCard {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 8px;
+    }
+
+    .walletStatHint {
+        font-size: 0.7rem;
+        padding: 5px 10px;
+    }
+}
+
+/* ── Rate button shown on completed history items ── */
+.rateBtn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    margin-top: 6px;
+    padding: 4px 12px;
+    background: #fffbeb;
+    border: 1.5px solid #fcd34d;
+    border-radius: 99px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: #92400e;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s, transform 0.12s;
+    font-family: inherit;
+}
+
+.rateBtn i {
+    font-size: 0.65rem;
+    color: #f59e0b;
+}
+
+.rateBtn:hover {
+    background: #fef3c7;
+    border-color: #f59e0b;
+    transform: translateY(-1px);
+}
+
+/* ── Cancelled dot colour (was missing from original) ── */
+.historyTypeDotCancelled {
+    background: #f3f4f6;
+    color: #6b7280;
 }

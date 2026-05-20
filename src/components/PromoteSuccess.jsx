@@ -20,16 +20,29 @@ export default function PromoteSuccess() {
   const [error, setError] = useState("");
   const [adCreated, setAdCreated] = useState(false);
 
-  const listingId      = searchParams.get("lid");
-  const adType         = searchParams.get("type");
-  const stripeRef      = searchParams.get("ref");
-  const titleParam     = searchParams.get("title");
-  const sessionId      = searchParams.get("session_id");
-  const amountParam    = searchParams.get("amount"); // amount in Rand, passed from checkout
-  const uniquePaymentId = sessionId || stripeRef;
+  const listingId       = searchParams.get("lid");
+  const adType          = searchParams.get("type");
+  const stripeRef       = searchParams.get("ref");
+  const titleParam      = searchParams.get("title");
+  const sessionId       = searchParams.get("session_id");
+  const amountParam     = searchParams.get("amount");
+  const isWallet        = searchParams.get("wallet") === "true";
+
+  // For wallet payments there is no Stripe session — use listingId + adType
+  // as the idempotency key so the ad is never double-created.
+  const uniquePaymentId = isWallet
+    ? `wallet_${listingId}_${adType}`
+    : (sessionId || stripeRef);
 
   useEffect(() => {
-    if (!listingId || !uniquePaymentId) {
+    if (!listingId) {
+      setLoading(false);
+      setError("Missing listing information.");
+      return;
+    }
+
+    // Wallet payments don't need a payment reference — listingId is enough
+    if (!isWallet && !uniquePaymentId) {
       setLoading(false);
       setError("Missing payment information.");
       return;
@@ -85,46 +98,48 @@ export default function PromoteSuccess() {
           status:          "active",
           createdAt:       new Date(),
           expiresAt:       new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-          stripeSessionId: uniquePaymentId,
+          paymentMethod:   isWallet ? "wallet" : "stripe",
+          stripeSessionId: isWallet ? null : uniquePaymentId,
           amountPaid:      amountParam ? Number(amountParam) : null,
+          sellerId:        listingData.sellerId ?? listingData.userId ?? null,
         };
         await setDoc(adDocRef, adData);
         console.log("✅ Ad created");
 
-        // ── Update analytics revenue ──────────────────────────────────────
-        // The ad promotion payment never goes through verify-session, so
-        // we must update analytics here directly after the ad is created.
-        const adAmount = amountParam ? Number(amountParam) : 0;
-        if (adAmount > 0) {
-          try {
-            const analyticsRef = doc(db, "analytics", "platform");
-            const analyticsSnap = await getDoc(analyticsRef);
+        // ── Update analytics revenue (Stripe payments only) ───────────────
+        // Wallet payments already deducted from the user's balance in
+        // AdPayment.jsx via deductAdFromWallet — no need to touch analytics
+        // here for wallet. Only update for Stripe payments.
+        if (!isWallet) {
+          const adAmount = amountParam ? Number(amountParam) : 0;
+          if (adAmount > 0) {
+            try {
+              const analyticsRef = doc(db, "analytics", "platform");
+              const analyticsSnap = await getDoc(analyticsRef);
 
-            if (analyticsSnap.exists()) {
-              // ✅ Use Firestore increment() for atomic update
-              await updateDoc(analyticsRef, {
-                totalRevenue:  increment(adAmount),
-                onlineRevenue: increment(adAmount),
-                lastUpdated:   new Date(),
-              });
-            } else {
-              // Create analytics doc if it doesn't exist yet
-              await setDoc(analyticsRef, {
-                totalRevenue:         adAmount,
-                onlineRevenue:        adAmount,
-                pendingCashRevenue:   0,
-                collectedCashRevenue: 0,
-                totalPayouts:         0,
-                totalRefunds:         0,
-                availableBalance:     0,
-                createdAt:            new Date(),
-                lastUpdated:          new Date(),
-              });
+              if (analyticsSnap.exists()) {
+                await updateDoc(analyticsRef, {
+                  totalRevenue:  increment(adAmount),
+                  onlineRevenue: increment(adAmount),
+                  lastUpdated:   new Date(),
+                });
+              } else {
+                await setDoc(analyticsRef, {
+                  totalRevenue:         adAmount,
+                  onlineRevenue:        adAmount,
+                  pendingCashRevenue:   0,
+                  collectedCashRevenue: 0,
+                  totalPayouts:         0,
+                  totalRefunds:         0,
+                  availableBalance:     0,
+                  createdAt:            new Date(),
+                  lastUpdated:          new Date(),
+                });
+              }
+              console.log(`📊 Analytics updated: +R${adAmount} from ad promotion`);
+            } catch (analyticsErr) {
+              console.error("⚠️ Analytics update failed (non-fatal):", analyticsErr);
             }
-            console.log(`📊 Analytics updated: +R${adAmount} from ad promotion`);
-          } catch (analyticsErr) {
-            // Analytics failure must never block the success page
-            console.error("⚠️ Analytics update failed (non-fatal):", analyticsErr);
           }
         }
 
@@ -143,7 +158,7 @@ export default function PromoteSuccess() {
 
     createAd();
     return () => { isMounted = false; };
-  }, [listingId, adType, titleParam, uniquePaymentId, amountParam]);
+  }, [listingId, adType, titleParam, uniquePaymentId, amountParam, isWallet]);
 
   if (loading) {
     return (
@@ -162,7 +177,7 @@ export default function PromoteSuccess() {
 
   const displayTitle    = listing?.title || titleParam || "Your listing";
   const displayImage    = listing?.photos?.[0] || listing?.imageUrl || null;
-  const displayPaymentId = uniquePaymentId?.length > 30
+  const displayPaymentId = (!isWallet && uniquePaymentId?.length > 30)
     ? `${uniquePaymentId.substring(0, 15)}...${uniquePaymentId.substring(uniquePaymentId.length - 10)}`
     : uniquePaymentId;
 
@@ -188,15 +203,27 @@ export default function PromoteSuccess() {
               </div>
             )}
 
+            {/* Payment confirmation — wallet vs Stripe */}
             <div className={styles.paymentRefBox}>
               <div className={styles.paymentRefIcon}>
-                <i className="fas fa-receipt" />
+                <i className={isWallet ? "fas fa-wallet" : "fas fa-receipt"} />
               </div>
               <div className={styles.paymentRefContent}>
-                <span className={styles.paymentRefLabel}>Payment confirmed via Stripe</span>
-                <span className={styles.paymentRefValue} title={uniquePaymentId}>
-                  Ref: {displayPaymentId}
-                </span>
+                {isWallet ? (
+                  <>
+                    <span className={styles.paymentRefLabel}>Paid from wallet balance</span>
+                    <span className={styles.paymentRefValue}>
+                      R{amountParam ? Number(amountParam).toFixed(2) : "—"} deducted
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <span className={styles.paymentRefLabel}>Payment confirmed via Stripe</span>
+                    <span className={styles.paymentRefValue} title={uniquePaymentId}>
+                      Ref: {displayPaymentId}
+                    </span>
+                  </>
+                )}
               </div>
             </div>
 
