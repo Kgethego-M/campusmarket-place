@@ -39,13 +39,13 @@ export default function NotificationsPage() {
       setLoading(true);
       try {
         const buyerQ = query(
-          collection(db, 'Purchases'),
+          collection(db, 'transactions'),
           where('buyerId', '==', currentUser.uid),
           where('status', '==', 'completed')
         );
 
         const sellerQ = query(
-          collection(db, 'Purchases'),
+          collection(db, 'transactions'),
           where('sellerId', '==', currentUser.uid),
           where('status', '==', 'completed')
         );

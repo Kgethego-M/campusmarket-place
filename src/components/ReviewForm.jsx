@@ -1,83 +1,68 @@
+// src/pages/ReviewForm.jsx
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { auth, db } from '../firebase';
 import { doc, getDoc } from 'firebase/firestore';
 import { submitReview } from '../utils/review.utils';
-import styles from "../pages/ReviewForm.module.css";
+import styles from "./ReviewForm.module.css";
 
 const LABELS = ['', 'Poor', 'Fair', 'Good', 'Very Good', 'Excellent'];
 
 const ReviewForm = () => {
-  const { transactionId } = useParams();
+  const { transactionId: listingId } = useParams();
   const navigate = useNavigate();
 
-  const [rating, setRating]           = useState(0);
-  const [hovered, setHovered]         = useState(0);
-  const [comment, setComment]         = useState('');
-  const [submitting, setSubmitting]   = useState(false);
-  const [submitted, setSubmitted]     = useState(false);
-  const [error, setError]             = useState('');
-  const [purchase, setPurchase]       = useState(null);
-  const [loading, setLoading]         = useState(true);
+  const [rating, setRating] = useState(0);
+  const [comment, setComment] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
+  const [error, setError] = useState('');
+  const [listingTitle, setListingTitle] = useState('');
+  const [listingPrice, setListingPrice] = useState('');
 
-  const currentUser = auth.currentUser;
+  const params = new URLSearchParams(window.location.search);
+  const reviewedUserId   = params.get('reviewedUserId') || '';
+  const reviewedUserName = params.get('name') || 'this user';
+  const role             = params.get('role') || 'seller';
+  const purchaseId       = params.get('purchaseId') || '';
 
+  // Fetch listing details to show item info
   useEffect(() => {
-    const fetchPurchase = async () => {
+    if (!listingId) return;
+    (async () => {
       try {
-        const purchaseDoc = await getDoc(doc(db, 'Purchases', transactionId));
-        if (!purchaseDoc.exists()) {
-          setError('Purchase not found.');
-          return;
+        const snap = await getDoc(doc(db, 'listings', listingId));
+        if (snap.exists()) {
+          const d = snap.data();
+          setListingTitle(d.title || d.Title || '');
+          const price = d.price || d.Price || null;
+          if (price) setListingPrice(`R${Number(price).toLocaleString('en-ZA')}`);
         }
-        setPurchase({ id: purchaseDoc.id, ...purchaseDoc.data() });
       } catch (err) {
-        console.error(err);
-        setError('Failed to load purchase.');
-      } finally {
-        setLoading(false);
+        console.warn('ReviewForm: could not load listing', err);
       }
-    };
-
-    if (transactionId) fetchPurchase();
-  }, [transactionId]);
-
-  const getReviewTarget = () => {
-    if (!purchase || !currentUser) return null;
-
-    const isBuyer  = currentUser.uid === purchase.buyerId;
-    const isSeller = currentUser.uid === purchase.sellerId;
-
-    if (isBuyer) {
-      return { reviewedUserId: purchase.sellerId, role: 'seller' };
-    } else if (isSeller) {
-      return { reviewedUserId: purchase.buyerId, role: 'buyer' };
-    }
-    return null;
-  };
+    })();
+  }, [listingId]);
 
   const handleSubmit = async () => {
     if (rating === 0) {
       setError('Please select a star rating before submitting.');
       return;
     }
-
-    const target = getReviewTarget();
-    if (!target) {
-      setError('You are not part of this purchase.');
+    if (!listingId) {
+      setError('Missing listing information. Please go back and try again.');
       return;
     }
-
     setError('');
     setSubmitting(true);
 
     try {
       await submitReview({
-        reviewedUserId: target.reviewedUserId,
-        reviewerUserId: currentUser.uid,
-        reviewerName:   currentUser.displayName || 'Anonymous',
-        listingId:      purchase.listingId || '',
-        purchaseId:     transactionId,
+        reviewedUserId,
+        reviewerUserId: user?.uid || '',
+        reviewerName:   user?.displayName || 'Anonymous',
+        listingId,
+        purchaseId,
         rating,
         comment,
         role:           target.role,
@@ -89,6 +74,11 @@ const ReviewForm = () => {
     } finally {
       setSubmitting(false);
     }
+  };
+
+  // Handle star click - just set the rating directly
+  const handleStarClick = (starValue) => {
+    setRating(starValue);
   };
 
   if (loading) return (
@@ -141,6 +131,16 @@ const ReviewForm = () => {
             <p className={styles.sub}>
               You are reviewing the <strong>{target.role}</strong> of this purchase
             </p>
+            {/* Item details */}
+            {listingTitle && (
+              <div className={styles.itemChip}>
+                <i className="fa-solid fa-tag" style={{ fontSize: '0.75rem' }} />
+                <span>{listingTitle}</span>
+                {listingPrice && (
+                  <span className={styles.itemPrice}>{listingPrice}</span>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
@@ -150,18 +150,16 @@ const ReviewForm = () => {
             {[1, 2, 3, 4, 5].map((star) => (
               <button
                 key={star}
-                className={`${styles.star} ${star <= (hovered || rating) ? styles.starFilled : ''}`}
-                onMouseEnter={() => setHovered(star)}
-                onMouseLeave={() => setHovered(0)}
-                onClick={() => setRating(star)}
+                className={`${styles.star} ${star <= rating ? styles.starFilled : ''}`}
+                onClick={() => handleStarClick(star)}
                 aria-label={`${star} star`}
               >
                 ★
               </button>
             ))}
           </div>
-          {(hovered || rating) > 0 && (
-            <p className={styles.ratingLabel}>{LABELS[hovered || rating]}</p>
+          {rating > 0 && (
+            <p className={styles.ratingLabel}>{LABELS[rating]}</p>
           )}
         </div>
 

@@ -1,4 +1,4 @@
-//Chat.jsx
+// Chat.jsx
 import { useState, useRef, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import styles from "./Chat.module.css";
@@ -9,18 +9,16 @@ import {
   doc, updateDoc, serverTimestamp, where, getDoc,
 } from "firebase/firestore";
 import { uploadToCloudinary } from "../utils/cloudinaryUpload";
+import ReportModal from "./ReportModal";
 
-// ── Avatar ───────────────────────────────────────────────────────
+// ── Avatar ────────────────────────────────────────────────────────────────────
 function Avatar({ name = "?", photoURL = null, size = 40, online = false }) {
-  const initials = name
-    .split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase();
+  const initials = name.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase();
   return (
     <div className={styles.avatarWrap} style={{ width: size, height: size }}>
       {photoURL ? (
         <img
-          src={photoURL}
-          alt={name}
-          className={styles.avatarImg}
+          src={photoURL} alt={name} className={styles.avatarImg}
           style={{ width: size, height: size }}
           onError={(e) => { e.currentTarget.style.display = "none"; }}
         />
@@ -54,13 +52,27 @@ export default function Chat() {
   const [isUploading, setIsUploading]     = useState(false);
   const [userProfiles, setUserProfiles]   = useState({});
   const [convsLoading, setConvsLoading]   = useState(true);
+  const [lightboxSrc, setLightboxSrc]     = useState(null);
+
+  // 3-dot menu
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef                 = useRef(null);
+
+  // Report modal
+  const [reportOpen, setReportOpen] = useState(false);
 
   const fileInputRef    = useRef(null);
   const messagesEndRef  = useRef(null);
   const resolvedUidsRef = useRef(new Set());
 
-  const activeConv = conversations.find((c) => c.id === activeId);
-  const mediaItems = messages.filter((m) => m.type === "image" || m.type === "video");
+  const activeConv        = conversations.find((c) => c.id === activeId);
+  const mediaItems        = messages.filter((m) => m.type === "image" || m.type === "video");
+  const otherUidActive    = activeConv
+    ? (activeConv.participants || []).find((p) => p !== me?.uid)
+    : null;
+  const otherProfileActive = otherUidActive
+    ? (userProfiles[otherUidActive] || { name: "Unknown", photoURL: null })
+    : null;
 
   // Auto-open from ?open= param
   useEffect(() => {
@@ -73,6 +85,22 @@ export default function Chat() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  // Close 3-dot menu on outside click
+  useEffect(() => {
+    const handler = (e) => {
+      if (menuRef.current && !menuRef.current.contains(e.target)) setMenuOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  // Close lightbox on Escape
+  useEffect(() => {
+    const handler = (e) => { if (e.key === "Escape") setLightboxSrc(null); };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, []);
+
   // Resolve user profile
   async function resolveUserProfile(uid) {
     if (!uid || resolvedUidsRef.current.has(uid)) return;
@@ -84,10 +112,7 @@ export default function Chat() {
         const name =
           `${d.firstName || ""} ${d.lastName || ""}`.trim() ||
           d.displayName || d.name || d.email || uid;
-        setUserProfiles((prev) => ({
-          ...prev,
-          [uid]: { name, photoURL: d.photoURL || null },
-        }));
+        setUserProfiles((prev) => ({ ...prev, [uid]: { name, photoURL: d.photoURL || null } }));
       }
     } catch {}
   }
@@ -113,14 +138,17 @@ export default function Chat() {
   // Subscribe to messages
   useEffect(() => {
     if (!activeId) return;
-    const q = query(collection(db, "chats", activeId, "messages"), orderBy("timestamp", "asc"));
+    const q = query(
+      collection(db, "chats", activeId, "messages"),
+      orderBy("timestamp", "asc")
+    );
     const unsub = onSnapshot(q, (snap) => {
       setMessages(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
     });
     return () => unsub();
   }, [activeId]);
 
-  // Mark unread as 0 when opening a chat
+  // Mark unread as 0 when opening
   useEffect(() => {
     if (!activeId || !me) return;
     updateDoc(doc(db, "chats", activeId), { [`unread_${me.uid}`]: 0 }).catch(() => {});
@@ -129,12 +157,10 @@ export default function Chat() {
   function getOtherUid(conv) {
     return (conv?.participants || []).find((p) => p !== me?.uid);
   }
-
   function getOtherProfile(conv) {
     const uid = getOtherUid(conv);
     return userProfiles[uid] || { name: uid || "Unknown", photoURL: null };
   }
-
   function getUnread(conv) {
     return conv?.[`unread_${me?.uid}`] || 0;
   }
@@ -150,14 +176,8 @@ export default function Chat() {
     })
     .sort((a, b) => (b.updatedAt?.seconds || 0) - (a.updatedAt?.seconds || 0));
 
-  function openConv(id) {
-    setActiveId(id);
-    setMessages([]);
-  }
-
-  function goBackToList() {
-    setActiveId(null);
-  }
+  function openConv(id) { setActiveId(id); setMessages([]); }
+  function goBackToList() { setActiveId(null); setMenuOpen(false); }
 
   function sendText() {
     const content = inputText.trim();
@@ -165,12 +185,8 @@ export default function Chat() {
     sendMessageToFirebase("text", content);
     setInputText("");
   }
-
   function handleKeyDown(e) {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      sendText();
-    }
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendText(); }
   }
 
   async function handleFileSelect(e) {
@@ -183,7 +199,6 @@ export default function Chat() {
       await sendMessageToFirebase(resourceType, url);
     } catch (err) {
       console.error(err);
-      alert("Upload failed. Please try again.");
     } finally {
       setIsUploading(false);
       e.target.value = "";
@@ -198,12 +213,20 @@ export default function Chat() {
     await addDoc(collection(db, "chats", activeId, "messages"), {
       senderId: me.uid, type, content, timestamp: serverTimestamp(),
     });
-
     await updateDoc(doc(db, "chats", activeId), {
       lastMessage: type === "text" ? content : "📎 Attachment",
       updatedAt:   serverTimestamp(),
       ...(otherUid ? { [`unread_${otherUid}`]: currentOtherUnread + 1 } : {}),
     });
+  }
+
+  function handleViewProfile() {
+    setMenuOpen(false);
+    if (otherUidActive) navigate(`/profile/${otherUidActive}`);
+  }
+  function handleReportUser() {
+    setMenuOpen(false);
+    setReportOpen(true);
   }
 
   if (!me) return (
@@ -254,7 +277,6 @@ export default function Chat() {
             </button>
           </div>
 
-          {/* ── Chats tab ── */}
           {sidebarTab === "chats" && (
             convsLoading ? (
               <ul className={styles.convList}>
@@ -283,16 +305,10 @@ export default function Chat() {
                       <Avatar name={profile.name} photoURL={profile.photoURL} size={46} />
                       <div className={styles.convInfo}>
                         <span className={styles.convName}>{profile.name}</span>
-                        {conv.listingTitle && (
-                          <span className={styles.convSub}>{conv.listingTitle}</span>
-                        )}
-                        {conv.lastMessage && (
-                          <span className={styles.convLast}>{conv.lastMessage}</span>
-                        )}
+                        {conv.listingTitle && <span className={styles.convSub}>{conv.listingTitle}</span>}
+                        {conv.lastMessage  && <span className={styles.convLast}>{conv.lastMessage}</span>}
                       </div>
-                      {unread > 0 && (
-                        <span className={styles.unreadBadge}>{unread}</span>
-                      )}
+                      {unread > 0 && <span className={styles.unreadBadge}>{unread}</span>}
                     </li>
                   );
                 })}
@@ -309,25 +325,20 @@ export default function Chat() {
             )
           )}
 
-          {/* ── Media tab ── */}
           {sidebarTab === "media" && (
             <div className={styles.mediaSidePanel}>
               {mediaItems.length === 0 ? (
                 <div className={styles.noMedia}>
-                  <div className={styles.noMediaIcon}>
-                    <i className="fa-solid fa-photo-film" />
-                  </div>
+                  <div className={styles.noMediaIcon}><i className="fa-solid fa-photo-film" /></div>
                   <p className={styles.noMediaTitle}>No shared media</p>
-                  <p className={styles.noMediaSub}>
-                    Images and videos sent in this conversation will appear here
-                  </p>
+                  <p className={styles.noMediaSub}>Images and videos sent in this conversation will appear here</p>
                 </div>
               ) : (
                 <div className={styles.mediaGrid}>
                   {mediaItems.map((item) => (
                     <div key={item.id} className={styles.mediaItem}>
                       {item.type === "image"
-                        ? <img src={item.content} alt="Shared" />
+                        ? <img src={item.content} alt="Shared" onClick={() => setLightboxSrc(item.content)} />
                         : <video src={item.content} controls />}
                     </div>
                   ))}
@@ -339,6 +350,8 @@ export default function Chat() {
 
         {/* ═══ CHAT PANEL ═══ */}
         <main className={`${styles.chatPanel} ${!activeId ? styles.chatPanelMobileHidden : ""}`}>
+
+          {/* Empty state — only shown on desktop when no chat is open */}
           {!activeId && (
             <div className={styles.noChat}>
               <i className="fa-solid fa-comments" />
@@ -351,17 +364,15 @@ export default function Chat() {
             const otherProfile = getOtherProfile(activeConv);
             return (
               <>
-                {/* Header */}
+                {/* ── Header ── */}
                 <header className={styles.chatHeader}>
-                  <button className={styles.chatBackBtn} onClick={goBackToList}>
+                  <button className={styles.chatBackBtn} onClick={goBackToList} aria-label="Back">
                     <i className="fa-solid fa-arrow-left" />
                   </button>
+
                   <button
                     className={styles.headerProfile}
-                    onClick={() => {
-                      const uid = getOtherUid(activeConv);
-                      if (uid) navigate(`/profile/${uid}`);
-                    }}
+                    onClick={() => { if (otherUidActive) navigate(`/profile/${otherUidActive}`); }}
                   >
                     <Avatar name={otherProfile.name} photoURL={otherProfile.photoURL} size={38} />
                     <div className={styles.headerMeta}>
@@ -371,9 +382,35 @@ export default function Chat() {
                       )}
                     </div>
                   </button>
+
+                  {/* 3-dot menu */}
+                  <div className={styles.chatMenuWrap} ref={menuRef}>
+                    <button
+                      className={styles.chatMenuBtn}
+                      onClick={() => setMenuOpen(v => !v)}
+                      aria-label="More options"
+                    >
+                      <span className={styles.dotMenu}>⋮</span>
+                    </button>
+                    {menuOpen && (
+                      <div className={styles.chatDropdown}>
+                        <button className={styles.chatDropdownItem} onClick={handleViewProfile}>
+                          <i className="fas fa-user" style={{ width: 16 }} />
+                          View Profile
+                        </button>
+                        <button
+                          className={`${styles.chatDropdownItem} ${styles.chatDropdownDanger}`}
+                          onClick={handleReportUser}
+                        >
+                          <i className="fas fa-flag" style={{ width: 16 }} />
+                          Report User
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </header>
 
-                {/* Messages */}
+                {/* ── Messages ── */}
                 <div className={styles.messagesWrap}>
                   <div className={styles.messages}>
                     {messages.map((msg) => {
@@ -385,11 +422,7 @@ export default function Chat() {
                           className={`${styles.msgRow} ${isMe ? styles.msgRowMe : styles.msgRowThem}`}
                         >
                           {!isMe && (
-                            <Avatar
-                              name={otherProfile.name}
-                              photoURL={otherProfile.photoURL}
-                              size={28}
-                            />
+                            <Avatar name={otherProfile.name} photoURL={otherProfile.photoURL} size={28} />
                           )}
                           <div className={`${styles.bubble} ${isMe ? styles.bubbleMe : styles.bubbleThem}`}>
                             {msg.type === "text" && (
@@ -400,18 +433,13 @@ export default function Chat() {
                                 src={msg.content}
                                 alt="attachment"
                                 className={styles.bubbleImg}
+                                onClick={() => setLightboxSrc(msg.content)}
                               />
                             )}
                             {msg.type === "video" && (
-                              <video
-                                src={msg.content}
-                                controls
-                                className={styles.bubbleVideo}
-                              />
+                              <video src={msg.content} controls className={styles.bubbleVideo} />
                             )}
-                            {time && (
-                              <span className={styles.msgTime}>{time}</span>
-                            )}
+                            {time && <span className={styles.msgTime}>{time}</span>}
                           </div>
                         </div>
                       );
@@ -420,7 +448,7 @@ export default function Chat() {
                   </div>
                 </div>
 
-                {/* Input bar */}
+                {/* ── Input bar ── */}
                 <div className={styles.inputBar}>
                   <input
                     type="file"
@@ -454,11 +482,33 @@ export default function Chat() {
                     <i className="fa-solid fa-paper-plane" />
                   </button>
                 </div>
+
+                {/* ── Lightbox ── */}
+                {lightboxSrc && (
+                  <div className={styles.lightboxOverlay} onClick={() => setLightboxSrc(null)}>
+                    <img
+                      src={lightboxSrc}
+                      alt="full size"
+                      className={styles.lightboxImg}
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                    <button className={styles.lightboxClose} onClick={() => setLightboxSrc(null)}>✕</button>
+                  </div>
+                )}
               </>
             );
           })()}
         </main>
       </div>
+
+      {/* Report user modal */}
+      <ReportModal
+        open={reportOpen}
+        onClose={() => setReportOpen(false)}
+        reportType="user"
+        reportedId={otherUidActive || ""}
+        reportedName={otherProfileActive?.name || ""}
+      />
     </>
   );
 }

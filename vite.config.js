@@ -8,6 +8,15 @@ export default defineConfig(({ mode }) => ({
     include: ["firebase/app", "firebase/auth", "firebase/firestore"],
   },
 
+  server: {
+    proxy: {
+      '/api': {
+        target: 'http://localhost:8000',
+        changeOrigin: true,
+      }
+    }
+  },
+
   test: {
     globals: true,
     environment: "jsdom",
@@ -15,9 +24,13 @@ export default defineConfig(({ mode }) => ({
     deps: {
       inline: ["firebase"],
     },
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'lcov'],
+    },
     // Mocks only apply when running tests
     alias: {
-      "@firebase/auth":      new URL("src/__mocks__/firebase.js", import.meta.url).pathname,
+      "@firebase/auth": new URL("src/__mocks__/firebase.js", import.meta.url).pathname,
       "@firebase/firestore": new URL("src/__mocks__/firebase.js", import.meta.url).pathname,
     },
   },

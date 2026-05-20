@@ -10,6 +10,7 @@ import { updateProfile } from 'firebase/auth';
 import ProfileListingCard from './ProfileListingCard';
 import OfferItem from './OfferItem'; 
 import styles from './Profile.module.css';
+import ProfileRating from './ProfileRating';
 
 const toRawListingType = (displayType) => {
   if (!displayType) return displayType;
@@ -23,35 +24,110 @@ const toRawListingType = (displayType) => {
 
 const HISTORY_STATUSES  = new Set(['sold', 'completed', 'traded']);
 const READONLY_STATUSES = new Set(['accepted']);
+const ACTIVE_TX_STATUSES = ['completed', 'accepted', 'sold', 'traded'];
 
-const Profile = () => {
-    const navigate = useNavigate();
-    const location = useLocation();
-    const fileInputRef = useRef(null);
-    
-    const [loading, setLoading] = useState(true);
-    const [isEditing, setIsEditing] = useState(false);
-    const [incomingOffers, setIncomingOffers] = useState([]);
-    const [highlightedOfferId, setHighlightedOfferId] = useState(null);
-    const [profileData, setProfileData] = useState({
-        firstName: '',
-        lastName: '',
-        email: '',
-        bio: '',
-        photoURL: '',
-        memberSince: '',
-        totalSales: 0,
-        totalTrades: 0,
-        rating: 0,
-        totalRatings: 0
-    });
-    
-    const [editFormData, setEditFormData] = useState({ firstName: '', lastName: '', bio: '' });
-    const [history, setHistory] = useState([]);
-    const [listings, setListings] = useState([]);
-    const [activeTab, setActiveTab] = useState('history');
-    const [editingListingId, setEditingListingId] = useState(null);
-    const [editListingData, setEditListingData] = useState({});
+// ── Trade item detail card (shown in Offers tab) ──
+function TradeItemCard({ tradeItem }) {
+  if (!tradeItem) return null;
+
+  if (typeof tradeItem === 'string') {
+    return (
+      <div className={styles.tradeItemCard}>
+        <div className={styles.tradeItemHeader}>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+            <path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/>
+            <path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>
+          </svg>
+          <span>Buyer's Trade Item</span>
+        </div>
+        <p className={styles.tradeItemLegacyText}>{tradeItem}</p>
+      </div>
+    );
+  }
+
+  const conditionColors = {
+    'New':      { color: '#0369a1', bg: '#e0f2fe' },
+    'Like New': { color: '#0284c7', bg: '#f0f9ff' },
+    'Good':     { color: '#0e7490', bg: '#ecfeff' },
+    'Fair':     { color: '#d97706', bg: '#fffbeb' },
+    'Poor':     { color: '#dc2626', bg: '#fef2f2' },
+  };
+  const condStyle = conditionColors[tradeItem.condition] || { color: '#6b7280', bg: '#f3f4f6' };
+
+  return (
+    <div className={styles.tradeItemCard}>
+      <div className={styles.tradeItemHeader}>
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+          <path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/>
+          <path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>
+        </svg>
+        <span>Buyer's Trade Item</span>
+      </div>
+      <div className={styles.tradeItemBody}>
+        {tradeItem.imageUrl && (
+          <img
+            src={tradeItem.imageUrl}
+            alt={tradeItem.name}
+            className={styles.tradeItemImage}
+          />
+        )}
+        <div className={styles.tradeItemInfo}>
+          <p className={styles.tradeItemName}>{tradeItem.name}</p>
+          <div className={styles.tradeItemMeta}>
+            {tradeItem.category && (
+              <span className={styles.tradeItemChip} style={{ background: '#f0f9ff', color: '#0369a1' }}>
+                {tradeItem.category}
+              </span>
+            )}
+            {tradeItem.condition && (
+              <span className={styles.tradeItemChip} style={{ background: condStyle.bg, color: condStyle.color }}>
+                {tradeItem.condition}
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Offer card wrapper that shows trade item details ──
+function EnrichedOfferCard({ offer, highlighted }) {
+  const isTrade = offer.type === 'trade';
+  return (
+    <div className={`${styles.offerCard} ${highlighted ? styles.highlightedOffer : ''}`}>
+      <OfferItem offer={offer} />
+      {isTrade && offer.tradeItem && (
+        <div style={{ padding: '0 14px 14px' }}>
+          <TradeItemCard tradeItem={offer.tradeItem} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Profile() {
+  const navigate     = useNavigate();
+  const location     = useLocation();
+  const fileInputRef = useRef(null);
+
+  const [loading, setLoading]               = useState(true);
+  const [showRatings, setShowRatings]       = useState(false);
+  const [isEditing, setIsEditing]           = useState(false);
+  const [incomingOffers, setIncomingOffers] = useState([]);
+  const [highlightedOfferId, setHighlightedOfferId] = useState(null);
+
+  const [profileData, setProfileData] = useState({
+    firstName: '', lastName: '', email: '', bio: '',
+    photoURL: '', memberSince: '',
+    totalSales: 0, totalTrades: 0, totalBought: 0, rating: 0, totalRatings: 0,
+  });
+  const [editFormData, setEditFormData] = useState({ firstName: '', lastName: '', bio: '' });
+  const [history, setHistory]   = useState([]);
+  const [listings, setListings] = useState([]);
+  const [activeTab, setActiveTab] = useState('history');
+  const [editingListingId, setEditingListingId] = useState(null);
+  const [editListingData, setEditListingData]   = useState({});
 
     // Parse URL parameters for tab and highlight
     useEffect(() => {
@@ -83,69 +159,270 @@ const Profile = () => {
 
       const unsubOffers = onSnapshot(
         query(collection(db, 'transactions'), where('sellerId', '==', user.uid), where('status', '==', 'pending')),
-        (snap) => setIncomingOffers(snap.docs.map(d => ({ id: d.id, ...d.data() })))
+        (snap) => setIncomingOffers(snap.docs.map(d => {
+          const data = d.data();
+          return {
+            id: d.id,
+            ...data,
+            tradeItem: data.tradeItemDetails ?? data.tradeItem ?? null,
+          };
+        }))
       );
       return () => unsubOffers();
     });
     return () => unsub();
   }, [navigate]);
 
-    const fetchUserData = async (user) => {
-        try {
-            const userId = user.uid;
-            const docRef = doc(db, 'users', userId);
-            const docSnap = await getDoc(docRef);
-            await fetchUserListings(userId);
+  const fetchUserData = async (user) => {
+    try {
+      const docSnap = await getDoc(doc(db, 'users', user.uid));
+      if (!docSnap.exists()) return;
 
-            if (docSnap.exists()) {
-                const userData = docSnap.data();
-                setProfileData({
-                    ...userData,
-                    email: userData.email || user.email,
-                    photoURL: userData.photoURL || user.photoURL || '',
-                    memberSince: user.metadata.creationTime
-                        ? new Date(user.metadata.creationTime).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
-                        : 'Unknown',
-                    // Ensure these are numbers
-                    totalSales: safeNumber(userData.totalSales),
-                    totalTrades: safeNumber(userData.totalTrades),
-                    rating: safeNumber(userData.rating),
-                    totalRatings: safeNumber(userData.totalRatings)
-                });
-                setEditFormData({
-                    firstName: userData.firstName || '',
-                    lastName: userData.lastName || '',
-                    bio: userData.bio || '',
-                });
-                setHistory(userData.history || []);
-            }
-        } catch (error) {
-            console.error('Error:', error);
-        } finally {
-            setLoading(false);
-        }
-    };
+      const d = docSnap.data();
+      setHistory(d.history || []);
 
-    const fetchUserListings = async (userId) => {
-        try {
-            const listingsRef = collection(db, "listings");
-            const q = query(listingsRef, where("sellerUID", "==", userId));
-            const querySnapshot = await getDocs(q);
-            
-            const userListings = querySnapshot.docs.map(doc => ({
-                id: doc.id,
-                ...doc.data(),
-                specification: doc.data().specification || '',
-                date: doc.data().timestamp?.toDate?.() || new Date(doc.data().timestamp),
-                views: doc.data().views || 0,
-                likes: doc.data().likes || 0
+      // ── Fetch all stats from transactions directly ──────────────────────
+      const COMPLETED_STATUSES = ['completed', 'sold', 'traded'];
+
+      const [reviewSnap, completedAsSellerSnap, completedAsBuyerSnap] = await Promise.all([
+        getDocs(query(collection(db, 'reviews'), where('reviewedUserId', '==', user.uid))),
+        // All completed transactions where user is seller
+        getDocs(query(
+          collection(db, 'transactions'),
+          where('sellerId', '==', user.uid),
+          where('status', 'in', COMPLETED_STATUSES),
+        )),
+        // All completed transactions where user is buyer
+        getDocs(query(
+          collection(db, 'transactions'),
+          where('buyerId', '==', user.uid),
+          where('status', 'in', COMPLETED_STATUSES),
+        )),
+      ]);
+
+      // ── Ratings ──────────────────────────────────────────────────────────
+      let liveRating = 0;
+      let liveTotalRatings = 0;
+      if (!reviewSnap.empty) {
+        const ratings = reviewSnap.docs
+          .map(r => safeNumber(r.data().rating))
+          .filter(r => r > 0);
+        liveTotalRatings = ratings.length;
+        liveRating = liveTotalRatings > 0
+          ? Math.round((ratings.reduce((a, b) => a + b, 0) / liveTotalRatings) * 10) / 10
+          : 0;
+      }
+
+      // ── Sales: completed seller transactions that are NOT trades ─────────
+      const liveTotalSales = completedAsSellerSnap.docs.filter(txDoc => {
+        const type = (txDoc.data().type ?? '').toLowerCase();
+        return type !== 'trade';
+      }).length;
+
+      // ── Trades: completed seller transactions that ARE trades ────────────
+      const liveTotalTrades = completedAsSellerSnap.docs.filter(txDoc => {
+        const type = (txDoc.data().type ?? '').toLowerCase();
+        return type === 'trade';
+      }).length;
+
+      // ── Bought: completed transactions where user is the buyer ───────────
+      const liveTotalBought = completedAsBuyerSnap.docs.length;
+
+      // ── Persist any changed values back to Firestore ─────────────────────
+      const updates = {};
+      if (liveRating       !== safeNumber(d.rating))       updates.rating       = liveRating;
+      if (liveTotalRatings !== safeNumber(d.totalRatings)) updates.totalRatings = liveTotalRatings;
+      if (liveTotalSales   !== safeNumber(d.totalSales))   updates.totalSales   = liveTotalSales;
+      if (liveTotalTrades  !== safeNumber(d.totalTrades))  updates.totalTrades  = liveTotalTrades;
+      if (liveTotalBought  !== safeNumber(d.totalBought))  updates.totalBought  = liveTotalBought;
+
+      if (Object.keys(updates).length > 0) {
+        updateDoc(doc(db, 'users', user.uid), updates).catch(() => {});
+      }
+
+      setProfileData({
+        ...d,
+        email:        d.email    || user.email,
+        photoURL:     d.photoURL || user.photoURL || '',
+        memberSince:  user.metadata.creationTime
+          ? new Date(user.metadata.creationTime).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+          : 'Unknown',
+        totalSales:   liveTotalSales,
+        totalTrades:  liveTotalTrades,
+        totalBought:  liveTotalBought,
+        rating:       liveRating,
+        totalRatings: liveTotalRatings,
+      });
+      setEditFormData({ firstName: d.firstName || '', lastName: d.lastName || '', bio: d.bio || '' });
+
+      // Kick off listing + purchase fetches (for History tab)
+      fetchUserListings(user.uid);
+      fetchUserPurchases(user.uid);
+    } catch (err) {
+      console.error('fetchUserData error:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  async function getUserName(uid) {
+    if (!uid) return null;
+    try {
+      const s = await getDoc(doc(db, 'users', uid));
+      if (!s.exists()) return null;
+      const sd = s.data();
+      return `${sd.firstName || ''} ${sd.lastName || ''}`.trim() || sd.displayName || null;
+    } catch { return null; }
+  }
+
+  const fetchUserListings = async (uid) => {
+    try {
+      const snap = await getDocs(query(collection(db, 'listings'), where('sellerUID', '==', uid)));
+      const all = snap.docs.map(d => ({
+        id: d.id, ...d.data(),
+        specification: d.data().specification || '',
+        date:  d.data().timestamp?.toDate?.() || new Date(d.data().timestamp),
+        views: d.data().views || 0,
+        likes: d.data().likes || 0,
+      }));
+
+      setListings(all);
+
+      const doneItems = all.filter(l => {
+        const s = l.status?.toLowerCase();
+        return HISTORY_STATUSES.has(s);
+      });
+
+      if (doneItems.length) {
+        const coveredByTx = await Promise.all(
+          doneItems.map(async (l) => {
+            try {
+              const txSnap = await getDocs(query(
+                collection(db, 'transactions'),
+                where('listingId', '==', l.id),
+                where('status', 'in', ACTIVE_TX_STATUSES),
+              ));
+              return txSnap.empty ? null : l.id;
+            } catch { return null; }
+          })
+        );
+        const coveredIds = new Set(coveredByTx.filter(Boolean));
+
+        setHistory(prev => {
+          const existingIds = new Set(prev.map(h => h.id));
+          const newItems = doneItems
+            .filter(l => !existingIds.has(l.id) && !coveredIds.has(l.id))
+            .map(l => ({
+              id: l.id, item: l.title, type: 'sale', side: 'seller',
+              date: l.date, price: l.price != null ? `R${Number(l.price).toLocaleString()}` : null,
+              buyer: null, status: 'sold', listingImage: l.photos?.[0] || l.imageUrl || null,
             }));
-            
-            setListings(userListings);
-        } catch (error) {
-            console.error("Error fetching user listings:", error);
-        }
-    };
+          return newItems.length ? [...prev, ...newItems] : prev;
+        });
+
+        Promise.all(doneItems.map(async (l) => {
+          let buyerName = null;
+          let date = l.date;
+          try {
+            const txSnap = await getDocs(
+              query(collection(db, 'Purchases'), where('listingId', '==', l.id))
+            );
+            if (!txSnap.empty) {
+              const tx = txSnap.docs[0].data();
+              buyerName = tx.buyerName || null;
+              if (!buyerName && tx.buyerId) buyerName = await getUserName(tx.buyerId);
+              const rawDate = tx.updatedAt || tx.createdAt;
+              if (rawDate) date = rawDate?.toDate ? rawDate.toDate() : new Date(rawDate);
+            }
+          } catch { /* non-fatal */ }
+          return { id: l.id, buyerName, date };
+        })).then(enriched => {
+          setHistory(prev => prev.map(h => {
+            const match = enriched.find(e => e.id === h.id);
+            if (!match) return h;
+            return { ...h, buyer: match.buyerName || h.buyer, date: match.date || h.date };
+          }));
+        });
+      }
+    } catch (err) { console.error('fetchUserListings:', err); }
+  };
+
+  const fetchUserPurchases = async (uid) => {
+    try {
+      const [asBuyerSnap, asSellerSnap] = await Promise.all([
+        getDocs(query(collection(db, 'transactions'), where('buyerId', '==', uid), where('status', 'in', ['completed', 'overdue_cancelled']))),
+        getDocs(query(collection(db, 'transactions'), where('sellerId', '==', uid), where('status', '==', 'completed'))),
+      ]);
+
+      const seen = new Set();
+      const allDocs = [
+        ...asBuyerSnap.docs.map(d  => ({ d, side: 'buyer'  })),
+        ...asSellerSnap.docs.map(d => ({ d, side: 'seller' })),
+      ].filter(({ d }) => {
+        if (seen.has(d.id)) return false;
+        seen.add(d.id);
+        return true;
+      });
+
+      if (allDocs.length === 0) return;
+
+      const enriched = await Promise.all(
+        allDocs.map(async ({ d: txDoc, side }) => {
+          const p      = txDoc.data();
+          const type   = p.type?.toLowerCase?.() ?? 'sale';
+          const isTrade = type === 'trade';
+
+          let itemTitle    = p.listingTitle || null;
+          let listingImage = p.listingImage || p.productImage || null;
+          let price        = p.price ?? p.amount ?? p.agreedPrice ?? null;
+
+          if (p.listingId && (!itemTitle || !listingImage)) {
+            try {
+              const ls = await getDoc(doc(db, 'listings', p.listingId));
+              if (ls.exists()) {
+                const ld  = ls.data();
+                itemTitle    = itemTitle    || ld.title       || null;
+                listingImage = listingImage || ld.photos?.[0] || ld.imageUrl || null;
+                price        = price        ?? ld.price;
+              }
+            } catch { /* non-fatal */ }
+          }
+          itemTitle = itemTitle || (side === 'buyer' ? 'Purchase' : 'Sale');
+
+          let otherName = null;
+          if (side === 'buyer') {
+            otherName = p.sellerName || await getUserName(p.sellerId);
+          } else {
+            otherName = p.buyerName  || await getUserName(p.buyerId);
+          }
+
+          const rawDate = p.completedAt || p.updatedAt || p.createdAt;
+          const date    = rawDate?.toDate ? rawDate.toDate() : rawDate ? new Date(rawDate) : new Date();
+
+          const tradeItem = p.tradeItemDetails ?? p.tradeItem ?? null;
+          const historyType = isTrade ? 'trade' : side === 'buyer' ? 'purchase' : 'sale';
+
+          return {
+            id: txDoc.id, item: itemTitle, type: historyType, side, date,
+            price: price != null ? `R${Number(price).toLocaleString()}` : null,
+            seller: side === 'buyer'  ? otherName : null,
+            buyer:  side === 'seller' ? otherName : null,
+            tradeItem, listingImage,
+            status:       p.status       || null,
+            cancelReason: p.cancelReason || null,
+          };
+        })
+      );
+
+      setHistory(prev => {
+        const existingIds = new Set(prev.map(h => h.id));
+        const newItems    = enriched.filter(e => !existingIds.has(e.id));
+        return newItems.length ? [...prev, ...newItems] : prev;
+      });
+    } catch (err) {
+      console.warn('fetchUserPurchases:', err);
+    }
+  };
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -276,10 +553,15 @@ const Profile = () => {
             </div>
         );
 
-    // Calculate safe values for display
-    const totalSales = safeNumber(profileData.totalSales);
-    const totalTrades = safeNumber(profileData.totalTrades);
-    const totalTransactions = totalSales + totalTrades;
+  if (showRatings) return <ProfileRating onClose={() => setShowRatings(false)} />;
+
+  const totalSales   = safeNumber(profileData.totalSales);
+  const totalTrades  = safeNumber(profileData.totalTrades);
+  const totalBought  = safeNumber(profileData.totalBought);
+
+  const activeListings   = listings.filter(l => !HISTORY_STATUSES.has(l.status?.toLowerCase?.()) && !READONLY_STATUSES.has(l.status?.toLowerCase?.()));
+  const acceptedListings = listings.filter(l => READONLY_STATUSES.has(l.status?.toLowerCase?.()));
+  const sortedHistory    = [...history].sort((a, b) => new Date(b.date) - new Date(a.date));
 
   return (
     <div className={styles.profileContainer}>
@@ -288,11 +570,43 @@ const Profile = () => {
         <h1>My Profile</h1>
       </div>
 
+      {/* ── Warning banner ── */}
+      {profileData.warnings && profileData.warnings.length > 0 && (
+        <div style={{
+          margin: '0 0 16px',
+          padding: '14px 18px',
+          background: '#fffbeb',
+          border: '1.5px solid #fcd34d',
+          borderRadius: 10,
+          display: 'flex',
+          alignItems: 'flex-start',
+          gap: 12,
+        }}>
+          <i className="fas fa-exclamation-triangle" style={{ color: '#d97706', marginTop: 2, flexShrink: 0 }} />
+          <div>
+            <p style={{ margin: '0 0 4px', fontWeight: 700, fontSize: '0.9rem', color: '#92400e' }}>
+              Account Warning{profileData.warnings.length > 1 ? `s (${profileData.warnings.length})` : ''}
+            </p>
+            {profileData.warnings.map((w, i) => (
+              <p key={i} style={{ margin: '2px 0', fontSize: '0.82rem', color: '#78350f' }}>
+                {profileData.warnings.length > 1 ? `${i + 1}. ` : ''}{w.reason}
+                {w.warnedAt && (
+                  <span style={{ color: '#a16207', marginLeft: 6, fontSize: '0.75rem' }}>
+                    · {new Date(w.warnedAt?.toDate ? w.warnedAt.toDate() : w.warnedAt).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric' })}
+                  </span>
+                )}
+              </p>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className={styles.profileCard}>
         <div className={styles.profileLeft}>
           <div className={styles.profilePictureSection}>
             <div className={styles.profilePictureWrapper}>
-              <img src={profileData.photoURL || '/default-avatar.png'} alt="Profile" className={styles.profilePicture} onError={e => { e.target.src = '/default-avatar.png'; }} />
+              <img src={profileData.photoURL || '/default-avatar.png'} alt="Profile" className={styles.profilePicture}
+                onError={e => { e.target.src = '/default-avatar.png'; }} />
               {isEditing && <button className={styles.editPhotoButton} onClick={() => fileInputRef.current?.click()}><i className="fas fa-camera" /></button>}
               <input ref={fileInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handlePhotoUpload} />
             </div>
@@ -302,13 +616,11 @@ const Profile = () => {
               <div className={styles.editForm}>
                 <div className={styles.formGroup}><label>First Name</label><input type="text" name="firstName" value={editFormData.firstName} disabled className={styles.disabledInput} /></div>
                 <div className={styles.formGroup}><label>Surname</label><input type="text" name="lastName" value={editFormData.lastName} disabled className={styles.disabledInput} /></div>
-                <div className={styles.formGroup}><label>Email</label><input type="email" value={profileData.email} disabled className={styles.disabledInput} /></div>
                 <div className={styles.formGroup}><label>Bio</label><textarea name="bio" value={editFormData.bio} onChange={handleInputChange} placeholder="Tell us about yourself..." rows="3" /></div>
               </div>
             ) : (
               <>
                 <h2>{profileData.firstName} {profileData.lastName}</h2>
-                <p className={styles.email}>{profileData.email}</p>
                 <p className={styles.bio}>{profileData.bio || 'No bio yet. Click edit to add one!'}</p>
                 <div className={styles.memberSince}><i className="fas fa-calendar-alt" /><span>Member since {profileData.memberSince}</span></div>
               </>
@@ -321,11 +633,32 @@ const Profile = () => {
             <div className={styles.ratingStars}>{renderStars(profileData.rating)}</div>
             <span className={styles.ratingValue}>{safeNumber(profileData.rating).toFixed(1)}</span>
             <span className={styles.totalRatings}>({safeNumber(profileData.totalRatings)} ratings)</span>
+            <button className={styles.viewRatingsLink} onClick={() => setShowRatings(true)} title="View all your ratings and reviews">
+              <i className="fas fa-chevron-right" /> View reviews
+            </button>
           </div>
           <div className={styles.statsGrid}>
-            <div className={styles.statItem}><i className="fas fa-tag" /><div className={styles.statInfo}><span className={styles.statValue}>{totalSales}</span><span className={styles.statLabel}>Sales</span></div></div>
-            <div className={styles.statItem}><i className="fas fa-exchange-alt" /><div className={styles.statInfo}><span className={styles.statValue}>{totalTrades}</span><span className={styles.statLabel}>Trades</span></div></div>
-            <div className={styles.statItem}><i className="fas fa-chart-line" /><div className={styles.statInfo}><span className={styles.statValue}>{totalTransactions}</span><span className={styles.statLabel}>Total</span></div></div>
+            <div className={styles.statItem}>
+              <i className="fas fa-tag" />
+              <div className={styles.statInfo}>
+                <span className={styles.statValue}>{totalSales}</span>
+                <span className={styles.statLabel}>Sales</span>
+              </div>
+            </div>
+            <div className={styles.statItem}>
+              <i className="fas fa-exchange-alt" />
+              <div className={styles.statInfo}>
+                <span className={styles.statValue}>{totalTrades}</span>
+                <span className={styles.statLabel}>Trades</span>
+              </div>
+            </div>
+            <div className={styles.statItem}>
+              <i className="fas fa-shopping-bag" />
+              <div className={styles.statInfo}>
+                <span className={styles.statValue}>{totalBought}</span>
+                <span className={styles.statLabel}>Bought</span>
+              </div>
+            </div>
           </div>
           {isEditing ? (
             <div className={styles.editActions}>
@@ -351,99 +684,171 @@ const Profile = () => {
                     </button>
                 </div>
 
-                {/* History Tab */}
-                {activeTab === 'history' && (
-                    <div className={styles.tabContent}>
-                        {history.length === 0 ? (
-                            <div className={styles.emptyState}>
-                                <i className="fas fa-shopping-bag"></i>
-                                <p>No transaction history yet</p>
-                            </div>
-                        ) : (
-                            <div className={styles.historyList}>
-                                {history.map(item => (
-                                    <div key={item.id} className={styles.historyItem}>
-                                        <div className={styles.historyIcon}>
-                                            {item.type === 'purchase' && <i className="fas fa-shopping-cart"></i>}
-                                            {item.type === 'sale'     && <i className="fas fa-tag"></i>}
-                                            {item.type === 'trade'    && <i className="fas fa-exchange-alt"></i>}
-                                        </div>
-                                        <div className={styles.historyDetails}>
-                                            <h4>{item.item}</h4>
-                                            <div className={styles.historyMeta}>
-                                                <span><i className="fas fa-calendar"></i> {new Date(item.date).toLocaleDateString()}</span>
-                                                {item.type === 'purchase' && <span><i className="fas fa-user"></i> From: {item.seller}</span>}
-                                                {item.type === 'sale'     && <span><i className="fas fa-user"></i> To: {item.buyer}</span>}
-                                                {item.type === 'trade'    && <span><i className="fas fa-user"></i> With: {item.tradedWith}</span>}
-                                                {item.price && <span><i className="fas fa-dollar-sign"></i> {item.price}</span>}
-                                            </div>
-                                        </div>
-                                        <div className={`${styles.historyStatus} ${styles[item.status]}`}>
-                                            {item.status}
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        )}
-                    </div>
-                )}
+        {/* ── History Tab ── */}
+        {activeTab === 'history' && (
+          <div className={styles.tabContent}>
+            {sortedHistory.length === 0 ? (
+              <div className={styles.emptyState}><i className="fas fa-shopping-bag" /><p>No transaction history yet</p></div>
+            ) : (
+              <div className={styles.historyList}>
+                {sortedHistory.map(item => {
+                  const isBuyer    = item.side === 'buyer' || item.type === 'purchase';
+                  const isTrade    = item.type === 'trade';
+                  const otherParty = isBuyer ? item.seller : item.buyer;
+                  const dateStr    = item.date
+                    ? new Date(item.date).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric' })
+                    : null;
 
-                {/* Listings Tab */}
-                {activeTab === 'listings' && (
-                    <div className={styles.tabContent}>
-                        {listings.length === 0 ? (
-                            <div className={styles.emptyState}>
-                                <i className="fas fa-box-open"></i>
-                                <p>You haven't listed any items yet</p>
-                                <button 
-                                    className={styles.createListingButton}
-                                    onClick={() => navigate('/create-listing')}
-                                >
-                                    <i className="fas fa-plus"></i> Create Your First Listing
-                                </button>
-                            </div>
-                        ) : (
-                            <div className={styles.listingsGridCompact}>
-                                {listings.map(listing => (
-                                    <div key={listing.id} className={styles.listingCardCompact}>
-                                        <ProfileListingCard
-                                            listing={listing}
-                                            isEditing={editingListingId === listing.id}
-                                            editData={editListingData}
-                                            onEdit={() => handleEditListing(listing)}
-                                            onDelete={() => handleDeleteListing(listing.id)}
-                                            onEditChange={(field, value) => 
-                                                setEditListingData(prev => ({ ...prev, [field]: value }))
-                                            }
-                                            onSave={() => handleSaveListing(listing.id)}
-                                            onCancel={() => {
-                                                setEditingListingId(null);
-                                                setEditListingData({});
-                                            }}
-                                            compact={true}
-                                        />
-                                    </div>
-                                ))}
-                            </div>
-                        )}
-                    </div>
-                )}
-                                    {activeTab === 'offers' && (
-                        <div className={styles.historyList}>
-                            {incomingOffers.length === 0 ? (
-                                <p className={styles.emptyState}>No pending offers</p>
-                            ) : (
-                                incomingOffers.map(offer => (
-                                    <div key={offer.id} className={`${styles.offerWrapper} ${highlightedOfferId === offer.id ? styles.highlightedOffer : ''}`}>
-                                        <OfferItem offer={offer} />
-                                    </div>
-                                ))
-                            )}
+                  let tradeItemDisplay = null;
+                  if (isTrade && item.tradeItem) {
+                    if (typeof item.tradeItem === 'string') {
+                      tradeItemDisplay = item.tradeItem;
+                    } else if (item.tradeItem && typeof item.tradeItem === 'object') {
+                      tradeItemDisplay = item.tradeItem.name || null;
+                    }
+                  }
+
+                  return (
+                    <div key={item.id} className={styles.historyItem}
+                      style={item.status === 'overdue_cancelled' ? { filter: 'grayscale(1)', opacity: 0.75 } : undefined}
+                    >
+                      <div className={styles.historyImg}>
+                        {item.listingImage
+                          ? <img src={item.listingImage} alt={item.item} />
+                          : <div className={styles.historyImgPlaceholder}><i className="fas fa-image" /></div>
+                        }
+                        <span className={`${styles.historyTypeDot} ${
+                          item.status === 'overdue_cancelled' ? styles.historyTypeDotCancelled
+                          : item.type === 'purchase' ? styles.historyTypeDotBought
+                          : isTrade               ? styles.historyTypeDotTrade
+                          : styles.historyTypeDotSold
+                        }`}>
+                          {item.status === 'overdue_cancelled' && <i className="fas fa-clock-rotate-left" />}
+                          {item.status !== 'overdue_cancelled' && item.type === 'purchase' && <i className="fas fa-shopping-cart" />}
+                          {item.status !== 'overdue_cancelled' && item.type === 'sale'     && <i className="fas fa-tag" />}
+                          {item.status !== 'overdue_cancelled' && isTrade                  && <i className="fas fa-exchange-alt" />}
+                        </span>
+                      </div>
+                      <div className={styles.historyDetails}>
+                        <h4 className={styles.historyItemTitle}>{item.item}</h4>
+                        <div className={styles.historyMeta}>
+                          {dateStr && (
+                            <span className={styles.historyMetaChip}>
+                              <i className="fas fa-calendar-alt" /> {dateStr}
+                            </span>
+                          )}
+                          {otherParty && (
+                            <span className={styles.historyMetaChip}>
+                              <i className={`fas ${isBuyer ? 'fa-store' : 'fa-user'}`} />
+                              {isBuyer ? `From: ${otherParty}` : `To: ${otherParty}`}
+                            </span>
+                          )}
+                          {item.price && !isTrade && item.status !== 'overdue_cancelled' && (
+                            <span className={styles.historyMetaPrice}>{item.price}</span>
+                          )}
+                          {tradeItemDisplay && item.status !== 'overdue_cancelled' && (
+                            <span className={styles.historyMetaChip}>
+                              <i className="fas fa-exchange-alt" /> Traded for: {tradeItemDisplay}
+                            </span>
+                          )}
+                          {item.status === 'overdue_cancelled' && (
+                            <span className={styles.historyMetaChip} style={{ color: '#6b7280' }}>
+                              <i className="fas fa-ban" /> Transaction overdue — cancelled
+                            </span>
+                          )}
                         </div>
-                    )}
-            </div>
-        </div>
-    );
-};
+                      </div>
+                      <div className={styles.historyBadgeWrap}>
+                        {item.status === 'overdue_cancelled' ? (
+                          <span className={styles.historyBadge} style={{ background: '#e5e7eb', color: '#6b7280', border: '1px solid #d1d5db' }}>
+                            Overdue
+                          </span>
+                        ) : (
+                          <span className={`${styles.historyBadge} ${
+                            item.type === 'purchase' ? styles.historyBadgeBought
+                            : isTrade               ? styles.historyBadgeTrade
+                            : styles.historyBadgeSold
+                          }`}>
+                            {item.type === 'purchase' && 'Bought'}
+                            {item.type === 'sale'     && 'Sold'}
+                            {isTrade                  && 'Traded'}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── Listings Tab ── */}
+        {activeTab === 'listings' && (
+          <div className={styles.tabContent}>
+            {activeListings.length === 0 && acceptedListings.length === 0 ? (
+              <div className={styles.emptyState}>
+                <i className="fas fa-box-open" /><p>No listings yet</p>
+                <button className={styles.createListingButton} onClick={() => navigate('/create-listing')}><i className="fas fa-plus" /> Create Your First Listing</button>
+              </div>
+            ) : (
+              <div className={styles.listingsGridCompact}>
+                {activeListings.map(listing => (
+                  <div key={listing.id} className={styles.listingCardCompact}>
+                    <ProfileListingCard
+                      listing={listing}
+                      isEditing={editingListingId === listing.id}
+                      editData={editListingData}
+                      onEdit={() => handleEditListing(listing)}
+                      onDelete={() => handleDeleteListing(listing.id)}
+                      onEditChange={(field, value) => setEditListingData(prev => ({ ...prev, [field]: value }))}
+                      onSave={() => handleSaveListing(listing.id)}
+                      onCancel={() => { setEditingListingId(null); setEditListingData({}); }}
+                      compact={true}
+                    />
+                  </div>
+                ))}
+                {acceptedListings.map(listing => (
+                  <div key={listing.id} className={`${styles.listingCardCompact} ${styles.listingCardAccepted}`}>
+                    <ProfileListingCard
+                      listing={listing} isEditing={false} editData={{}}
+                      onEdit={null} onDelete={() => handleDeleteListing(listing.id)}
+                      onEditChange={() => {}} onSave={() => {}} onCancel={() => {}}
+                      compact={true} readOnly={true}
+                    />
+                    <div className={styles.acceptedBanner}>
+                      <i className="fas fa-handshake" />
+                      <span>Sale in progress</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── Offers Tab ── */}
+        {activeTab === 'offers' && (
+          <div className={styles.tabContent}>
+            {incomingOffers.length === 0 ? (
+              <div className={styles.emptyState}><i className="fas fa-inbox" /><p>No pending offers</p></div>
+            ) : (
+              <div className={styles.offersGrid}>
+                {incomingOffers.map((offer, i) => (
+                  <div key={offer.id} style={{ animationDelay: `${i * 60}ms` }}>
+                    <EnrichedOfferCard
+                      offer={offer}
+                      highlighted={highlightedOfferId === offer.id}
+                    />
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 export default Profile;

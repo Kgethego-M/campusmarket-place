@@ -1,0 +1,293 @@
+/* ════════════════════════════════════════════
+   REVIEW FORM PAGE
+   Matches project style: Franklin Gothic, #6AA6DA accent, #1a1a2e text
+════════════════════════════════════════════ */
+
+.page {
+  min-height: 100vh;
+  background: #efeae2;
+  font-family: 'Franklin Gothic Medium', 'Arial Narrow', Arial, sans-serif;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 16px;
+}
+
+/* ── Card ─────────────────────────────────── */
+.card {
+  background: #fff;
+  border-radius: 16px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.09);
+  padding: 32px 28px;
+  width: 100%;
+  max-width: 480px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+/* ── Back button ──────────────────────────── */
+.backBtn {
+  background: none;
+  border: none;
+  color: #6AA6DA;
+  font-family: inherit;
+  font-size: 0.84rem;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 0;
+  text-align: left;
+  width: fit-content;
+  transition: color 0.15s;
+}
+
+.backBtn:hover { color: #3d7cbf; }
+
+/* ── Heading ──────────────────────────────── */
+.heading {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.avatar {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #6AA6DA 0%, #3d7cbf 100%);
+  color: #fff;
+  font-size: 1.4rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.title {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #1a1a2e;
+  margin: 0 0 2px;
+}
+
+.sub {
+  font-size: 0.82rem;
+  color: #64748b;
+  margin: 0;
+}
+
+.sub strong { color: #1a1a2e; }
+
+/* ── Item chip ────────────────────────────── */
+.itemChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #f1f5f9;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 0.72rem;
+  color: #475569;
+  margin-top: 8px;
+}
+
+.itemPrice {
+  font-weight: 700;
+  color: #6AA6DA;
+  margin-left: 4px;
+}
+
+/* ── Section ──────────────────────────────── */
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.label {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #1a1a2e;
+  letter-spacing: 0.2px;
+}
+
+.optional {
+  font-weight: 400;
+  color: #94a3b8;
+  font-size: 0.76rem;
+}
+
+/* ── Stars ────────────────────────────────── */
+/* Stars container - centered */
+.stars {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  padding: 8px 0;
+}
+
+/* Individual star button */
+.star {
+  background: none;
+  border: none;
+  font-size: 2.2rem;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+  transition: transform 0.1s ease;
+  color: #e2e8f0;
+}
+
+/* Only filled stars get the gold color - NO hover fill effect */
+.starFilled {
+  color: #f5a623;
+}
+
+/* Subtle scale effect when clicked (not on hover) */
+.star:active {
+  transform: scale(0.9);
+}
+
+/* Focus ring for accessibility */
+.star:focus-visible {
+  outline: 2px solid #6AA6DA;
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Rating label that appears after selection */
+.ratingLabel {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #6AA6DA;
+  margin: 0;
+  text-align: center;
+  letter-spacing: 0.3px;
+}
+
+/* ── Textarea ─────────────────────────────── */
+.textarea {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-family: 'Franklin Gothic Medium', 'Arial Narrow', Arial, sans-serif;
+  font-size: 0.86rem;
+  color: #1a1a2e;
+  resize: vertical;
+  outline: none;
+  transition: border-color 0.15s;
+  background: #f8fafc;
+}
+
+.textarea:focus {
+  border-color: #6AA6DA;
+  background: #fff;
+}
+
+.textarea::placeholder { color: #94a3b8; }
+
+.charCount {
+  font-size: 0.72rem;
+  color: #94a3b8;
+  text-align: right;
+  margin: 0;
+}
+
+/* ── Error ────────────────────────────────── */
+.error {
+  font-size: 0.8rem;
+  color: #ef4444;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  padding: 8px 12px;
+  margin: 0;
+}
+
+/* ── Submit button ────────────────────────── */
+.submitBtn {
+  width: 100%;
+  padding: 13px;
+  background: #6AA6DA;
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  font-family: 'Franklin Gothic Medium', 'Arial Narrow', Arial, sans-serif;
+  font-size: 0.92rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s, transform 0.1s;
+}
+
+.submitBtn:hover:not(:disabled) {
+  background: #3d7cbf;
+  transform: translateY(-1px);
+}
+
+.submitBtn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* ── Success state ────────────────────────── */
+.successIcon {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #6AA6DA 0%, #3d7cbf 100%);
+  color: #fff;
+  font-size: 1.8rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto;
+}
+
+.successTitle {
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: #1a1a2e;
+  text-align: center;
+  margin: 0;
+}
+
+.successSub {
+  font-size: 0.84rem;
+  color: #64748b;
+  text-align: center;
+  margin: 0;
+}
+
+.doneBtn {
+  width: 100%;
+  padding: 13px;
+  background: #6AA6DA;
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  font-family: 'Franklin Gothic Medium', 'Arial Narrow', Arial, sans-serif;
+  font-size: 0.92rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.doneBtn:hover { background: #3d7cbf; }
+
+/* ── Responsive ───────────────────────────── */
+@media (max-width: 520px) {
+  .card {
+    padding: 24px 18px;
+  }
+
+  .star {
+    font-size: 1.9rem;
+  }
+  
+  .stars {
+    gap: 6px;
+  }
+}

@@ -1,0 +1,248 @@
+/* PriceSuggestion.module.css */
+
+.widget {
+  background: #f0f9ff;
+  border: 1px solid #bae6fd;
+  border-left: 4px solid #0ea5e9;
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin-top: 10px;
+  font-family: inherit;
+  font-size: 0.85rem;
+  color: #0c4a6e;
+}
+
+/* ── Header ─────────────────────────────────────────────────────── */
+.header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.icon {
+  font-size: 0.95rem;
+}
+
+.title {
+  font-weight: 700;
+  font-size: 0.85rem;
+  flex: 1;
+  color: #0c4a6e;
+}
+
+.badge {
+  font-size: 0.68rem;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 999px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.live {
+  background: #dcfce7;
+  color: #14532d;
+}
+
+.cached {
+  background: #fef9c3;
+  color: #713f12;
+}
+
+/* ── Price range row ─────────────────────────────────────────────── */
+.rangeRow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.rangeLabel {
+  font-size: 0.8rem;
+  color: #0369a1;
+}
+
+.range {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #0c4a6e;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Visual bar ──────────────────────────────────────────────────── */
+.barWrapper {
+  display: flex;
+  gap: 3px;
+  height: 5px;
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 10px;
+}
+
+.barSegment {
+  flex: 1;
+  background: #bae6fd;
+}
+
+.barFill {
+  flex: 3;
+  background: #0ea5e9;
+}
+
+/* ── Footnote ────────────────────────────────────────────────────── */
+.footnote {
+  margin: 0;
+  font-size: 0.72rem;
+  color: #0369a1;
+  line-height: 1.5;
+}
+
+/* ── Loading ─────────────────────────────────────────────────────── */
+.loadingRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.loadingText {
+  color: #0369a1;
+  font-size: 0.82rem;
+}
+
+.spinner {
+  display: inline-block;
+  width: 13px;
+  height: 13px;
+  border: 2px solid #bae6fd;
+  border-top-color: #0ea5e9;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ── Error ───────────────────────────────────────────────────────── */
+.errorWidget {
+  background: #fff7ed;
+  border-color: #fed7aa;
+  border-left-color: #f97316;
+  color: #7c2d12;
+}
+
+/* Condition row */
+.conditionRow {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    margin-bottom: 10px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #f0f0f0;
+}
+
+.conditionLabel {
+    font-size: 11px;
+    font-weight: 600;
+    color: #6b7280;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.conditionValue {
+    font-size: 13px;
+    font-weight: 600;
+    color: #111827;
+    background: #f3f4f6;
+    padding: 2px 8px;
+    border-radius: 20px;
+}
+
+.multiplierHint {
+    font-size: 10px;
+    color: #9ca3af;
+    margin-left: auto;
+}
+
+/* Improved bar fill */
+.barFill {
+    flex: 2;
+    height: 100%;
+    background: #10b981;
+    border-radius: 2px;
+    transition: width 0.2s ease;
+}
+
+/* Mid price row */
+.midPriceRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-top: 8px;
+  margin-bottom: 8px;
+  padding-top: 6px;
+  border-top: 1px dashed #e5e7eb;
+}
+
+.midPriceLabel {
+  font-size: 11px;
+  font-weight: 600;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  display: flex;
+  align-items: center;
+}
+
+.midPrice {
+  font-size: 16px;
+  font-weight: 700;
+  color: #10b981;
+}
+
+/* Condition row */
+.conditionRow {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.conditionLabel {
+  font-size: 11px;
+  font-weight: 600;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  display: flex;
+  align-items: center;
+}
+
+.conditionValue {
+  font-size: 13px;
+  font-weight: 600;
+  color: #111827;
+  background: #f3f4f6;
+  padding: 2px 8px;
+  border-radius: 20px;
+}
+
+.multiplierHint {
+  font-size: 10px;
+  color: #9ca3af;
+  margin-left: auto;
+}
+
+/* Bar fill */
+.barFill {
+  flex: 2;
+  height: 100%;
+  background: #10b981;
+  border-radius: 2px;
+  transition: width 0.2s ease;
+}

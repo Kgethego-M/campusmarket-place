@@ -1,7 +1,7 @@
 # Sprint 2 — Planning Document
 
 **Campus Marketplace** | Software Design 2026  
-**Prepared:** April 2026 | **Duration:** 2 Weeks
+**Prepared:** April 2026 | **Duration:** 1 Week
 
 ---
 
@@ -21,9 +21,9 @@
 
 | Story ID | Title | Priority | Status |
 |---|---|---|---|
-| US-D1 | Student Dashboard & Profile | 🔴 High | 📋 To Do |
-| US-D2 | Staff Dashboard & Profile | 🔴 High | 📋 To Do |
-| US-D3 | Admin Dashboard & Profile | 🔴 High | 📋 To Do |
+| US23-D1 | Student Dashboard & Profile | 🔴 High | 📋 To Do |
+| US23-D2 | Staff Dashboard & Profile | 🔴 High | 📋 To Do |
+| US23-D3 | Admin Dashboard & Profile | 🔴 High | 📋 To Do |
 | US-S1 | Sprint 1 Gap Fix: Wire up CreateListing, AdminUsers, AccessDenied | 🔴 High | 📋 To Do |
 | US7 | View Seller Rating | 🟡 Medium | 📋 To Do |
 | US8 | Initiate Purchase or Trade Offer | 🔴 High | 📋 To Do |
@@ -48,7 +48,7 @@
 
 ---
 
-## US-D1 — Student Dashboard & Profile
+## US23-D1 — Student Dashboard & Profile
 
 > As a student, I want a personalised dashboard showing my listings, active transactions, and messages so that I can manage my marketplace activity in one place.
 
@@ -73,7 +73,7 @@
 
 ---
 
-## US-D2 — Staff Dashboard & Profile
+## US23-D2 — Staff Dashboard & Profile
 
 > As trade facility staff, I want a dashboard showing upcoming drop-offs, collections, and pending confirmations so that I can efficiently manage facility operations.
 
@@ -97,7 +97,7 @@
 
 ---
 
-## US-D3 — Admin Dashboard & Profile
+## US23-D3 — Admin Dashboard & Profile
 
 > As an admin, I want a comprehensive dashboard showing platform statistics, user management, and moderation tools so that I can oversee the entire marketplace.
 

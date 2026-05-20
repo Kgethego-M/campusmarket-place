@@ -22,7 +22,7 @@ export async function submitReview({
 }) {
   const duplicateCheck = query(
     collection(db, 'reviews'),
-    where('PurchaseId', '==', purchaseId),
+    where('purchaseId', '==', purchaseId),
     where('reviewerUserId', '==', reviewerUserId)
   );
   const existing = await getDocs(duplicateCheck);
@@ -35,7 +35,7 @@ export async function submitReview({
     reviewerUserId,
     reviewerName,
     listingId,
-    PurchaseId: purchaseId,
+    purchaseId: purchaseId,
     rating,
     comment,
     role,

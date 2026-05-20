@@ -388,6 +388,13 @@
     border-radius: 20px;
     line-height: 1;
 }
+.tabDot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #ef4444;
+    flex-shrink: 0;
+}
 
 /* ── Transaction list ── */
 .txnList { display: flex; flex-direction: column; gap: 12px; }
@@ -398,11 +405,18 @@
     border-radius: 14px;
     padding: 18px 20px;
     display: flex;
-    gap: 16px;
-    align-items: flex-start;
+    flex-direction: column;
+    gap: 12px;
     transition: border-color 0.15s, box-shadow 0.15s;
 }
 .txnCard:hover { border-color: #c8d8e8; box-shadow: 0 2px 12px rgba(0,0,0,0.06); }
+
+/* Inner row: always thumb-left + content-right, regardless of banner */
+.txnInnerRow {
+    display: flex;
+    gap: 16px;
+    align-items: flex-start;
+}
 
 /* Left color accent based on status */
 .txnCard_ready    { border-left: 4px solid #10b981; }
@@ -413,8 +427,8 @@
 
 /* Thumbnail */
 .txnThumb {
-    width: 52px;
-    height: 52px;
+    width: 72px;
+    height: 72px;
     border-radius: 10px;
     background: #f0f2f5;
     overflow: hidden;
@@ -423,7 +437,7 @@
     align-items: center;
     justify-content: center;
     color: #bbb;
-    font-size: 1.3rem;
+    font-size: 1.6rem;
 }
 .txnThumb img { width: 100%; height: 100%; object-fit: cover; }
 
@@ -870,4 +884,699 @@
     .navbar { padding: 0 16px; gap: 8px; }
     .navLinks { display: none; }
     .staffPill { display: none; }
+}
+
+/* ─────────────────────────────────────────────────────────────────
+    US15 ADDITIONS 
+   ───────────────────────────────────────────────────────────────── */
+
+/* Orange "Cash owed" chip — shown instead of green "Paid" chip */
+.shortfallChip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: #fff7ed;
+    color: #c2410c;
+    border: 1px solid #fed7aa;
+    border-radius: 999px;
+    padding: 2px 8px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    margin-left: 6px;
+    white-space: nowrap;
+}
+
+/* Orange warning banner inside the transaction card */
+.shortfallBanner {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: #fff7ed;
+    border: 1px solid #fed7aa;
+    border-left: 3px solid #f97316;
+    border-radius: 6px;
+    padding: 8px 12px;
+    margin-top: 10px;
+    font-size: 0.8rem;
+    color: #7c2d12;
+}
+
+.shortfallBanner i {
+    color: #f97316;
+    flex-shrink: 0;
+}
+
+/* Green confirmation banner after cash is confirmed */
+.cashConfirmedBanner {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: #f0fdf4;
+    border: 1px solid #bbf7d0;
+    border-left: 3px solid #22c55e;
+    border-radius: 6px;
+    padding: 8px 12px;
+    margin-top: 10px;
+    font-size: 0.8rem;
+    color: #14532d;
+}
+
+.cashConfirmedBanner i {
+    color: #22c55e;
+    flex-shrink: 0;
+}
+
+/* "Confirm Cash Received" button — orange, sits above Release button */
+.confirmCashBtn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    width: 100%;
+    padding: 9px 14px;
+    margin-bottom: 8px;
+    background: #f97316;
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: opacity 0.15s, transform 0.1s;
+    font-family: inherit;
+    white-space: nowrap;
+}
+
+.confirmCashBtn:not(.confirmCashBtnDisabled):hover {
+    opacity: 0.88;
+}
+
+.confirmCashBtn:not(.confirmCashBtnDisabled):active {
+    transform: scale(0.97);
+}
+
+.confirmCashBtnDisabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+/* Confirm Drop-Off button — amber/orange, signals "action needed" */
+.dropOffBtn {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    padding: 0.55rem 1rem;
+    border: none;
+    border-radius: 8px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.18s, transform 0.12s, opacity 0.18s;
+    background: #f59e0b;
+    color: #fff;
+    width: 100%;
+    justify-content: center;
+}
+.dropOffBtn:hover:not(:disabled) {
+    background: #d97706;
+    transform: translateY(-1px);
+}
+.dropOffBtn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+/* Confirm Collection button — green, signals successful handoff */
+.confirmCollectionBtn {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    padding: 0.55rem 1rem;
+    border: none;
+    border-radius: 8px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.18s, transform 0.12s, opacity 0.18s;
+    background: #10b981;
+    color: #fff;
+    width: 100%;
+    justify-content: center;
+    margin-top: 0.4rem;
+}
+.confirmCollectionBtn:hover:not(:disabled) {
+    background: #059669;
+    transform: translateY(-1px);
+}
+.confirmCollectionBtn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+/* Drop-off banner — shown while status is "pending" */
+.dropOffBanner {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.5rem;
+    background: #fef3c7;
+    border: 1px solid #fcd34d;
+    border-radius: 8px;
+    padding: 0.55rem 0.75rem;
+    font-size: 0.8rem;
+    color: #92400e;
+    margin-top: 0.5rem;
+    line-height: 1.4;
+}
+.dropOffBanner i {
+    color: #f59e0b;
+    flex-shrink: 0;
+    margin-top: 1px;
+}
+
+/* Status badge variant for "pending" */
+.status_pending {
+    background: #fef9c3;
+    color: #854d0e;
+    border: 1px solid #fde047;
+}
+
+/* Card left-border accent for pending status */
+.txnCard_pending {
+    border-left: 4px solid #f59e0b;
+}
+
+/* Confirm dialog overlay */
+.dialogOverlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.45);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+    backdrop-filter: blur(2px);
+}
+.dialogBox {
+    background: #fff;
+    border-radius: 14px;
+    padding: 2rem 1.75rem 1.5rem;
+    max-width: 380px;
+    width: 90%;
+    text-align: center;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.18);
+}
+.dialogIcon {
+    font-size: 2.2rem;
+    color: #6AA6DA;
+    margin-bottom: 0.75rem;
+}
+.dialogTitle {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: #1e293b;
+    margin: 0 0 0.5rem;
+}
+.dialogMessage {
+    font-size: 0.875rem;
+    color: #64748b;
+    margin: 0 0 1.25rem;
+    line-height: 1.5;
+}
+.dialogActions {
+    display: flex;
+    gap: 0.75rem;
+    justify-content: center;
+}
+.dialogCancel {
+    padding: 0.5rem 1.25rem;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    background: #fff;
+    color: #64748b;
+    font-size: 0.875rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+.dialogCancel:hover { background: #f1f5f9; }
+.dialogConfirm {
+    padding: 0.5rem 1.25rem;
+    border: none;
+    border-radius: 8px;
+    background: #10b981;
+    color: #fff;
+    font-size: 0.875rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+.dialogConfirm:hover { background: #059669; }
+.dialogConfirm.dialogConfirmAmber { background: #f59e0b; }
+.dialogConfirm.dialogConfirmAmber:hover { background: #d97706; }
+
+/* ── Refresh button ── */
+.refreshBtn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 9px 14px;
+    border: 1.5px solid #e2e6ea;
+    border-radius: 8px;
+    background: #fff;
+    color: #666;
+    font-family: inherit;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: border-color 0.15s, color 0.15s, background 0.15s;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+.refreshBtn:hover:not(:disabled) {
+    border-color: #6AA6DA;
+    color: #3d87c8;
+    background: #f0f6fb;
+}
+.refreshBtn:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+.refreshBtn i { font-size: 0.85rem; }
+.refreshTime {
+    font-size: 0.78rem;
+    color: #999;
+    font-variant-numeric: tabular-nums;
+}
+
+/* ── Due Today sub-tabs ── */
+.subTabs {
+    display: flex;
+    gap: 2px;
+    background: #f4f6f8;
+    border: 1px solid #e8eaed;
+    border-radius: 9px;
+    padding: 4px;
+    margin-bottom: 16px;
+    width: fit-content;
+}
+.subTab {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 6px 15px;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    font-family: inherit;
+    font-size: 0.83rem;
+    color: #666;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+    white-space: nowrap;
+}
+.subTab:hover { background: #fff; color: #333; }
+.subTabActive {
+    background: #fff;
+    color: #333;
+    font-weight: 600;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.10);
+}
+.subTab i { font-size: 0.78rem; }
+.subTabBadge {
+    background: #ef4444;
+    color: #fff;
+    font-size: 0.63rem;
+    font-weight: 700;
+    padding: 2px 6px;
+    border-radius: 20px;
+    line-height: 1;
+}
+
+/* ── Time-gate banner (shown before a booked slot's time is reached) ── */
+.timeGateBanner {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.5rem;
+    background: #eff6ff;
+    border: 1px solid #93c5fd;
+    border-radius: 8px;
+    padding: 0.55rem 0.75rem;
+    font-size: 0.8rem;
+    color: #1e40af;
+    margin-top: 0.5rem;
+    margin-bottom: 0.35rem;
+    line-height: 1.4;
+}
+.timeGateBanner i {
+    color: #3b82f6;
+    flex-shrink: 0;
+    margin-top: 1px;
+}
+
+/* ── Locked checklist item ── */
+.checkLocked {
+    opacity: 0.5;
+    cursor: not-allowed !important;
+    filter: grayscale(0.4);
+}
+.checkLocked i {
+    color: #94a3b8 !important;
+}
+
+/* ── Compact card clickable ── */
+.txnCard {
+    cursor: pointer;
+}
+.txnCard:focus-visible {
+    outline: 2px solid #6AA6DA;
+    outline-offset: 2px;
+}
+.txnChevron {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    align-self: center;
+    color: #c8cfd6;
+    font-size: 0.8rem;
+    padding-left: 4px;
+    transition: color 0.15s, transform 0.15s;
+}
+.txnCard:hover .txnChevron {
+    color: #6AA6DA;
+    transform: translateX(3px);
+}
+
+/* ── Full-page detail overlay ── */
+.detailOverlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.55);
+    backdrop-filter: blur(3px);
+    z-index: 200;
+    display: flex;
+    align-items: stretch;
+    justify-content: flex-end;
+    animation: overlayFadeIn 0.2s ease;
+}
+@keyframes overlayFadeIn {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+}
+
+.detailPanel {
+    width: 100%;
+    max-width: 680px;
+    height: 100%;
+    background: #fff;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    animation: panelSlideIn 0.25s cubic-bezier(0.32, 0.72, 0, 1);
+    box-shadow: -8px 0 40px rgba(0,0,0,0.14);
+}
+@keyframes panelSlideIn {
+    from { transform: translateX(100%); }
+    to   { transform: translateX(0); }
+}
+
+/* ── Detail panel header ── */
+.detailHeader {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 20px 24px;
+    border-bottom: 1.5px solid #e8eaed;
+    flex-shrink: 0;
+    border-left: 5px solid transparent;
+}
+.detailHeader_ready    { border-left-color: #10b981; background: #f0fdf4; }
+.detailHeader_facility { border-left-color: #6AA6DA; background: #eff6ff; }
+.detailHeader_awaiting { border-left-color: #8b5cf6; background: #faf5ff; }
+.detailHeader_done     { border-left-color: #d1d5db; background: #f9fafb; }
+.detailHeader_pending  { border-left-color: #f59e0b; background: #fffbeb; }
+.detailHeaderOverdue   { border-left-color: #ef4444; background: #fff5f5; }
+
+.detailHeaderLeft {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex: 1;
+    min-width: 0;
+}
+
+.detailThumb {
+    width: 64px;
+    height: 64px;
+    border-radius: 12px;
+    background: #f0f2f5;
+    overflow: hidden;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #bbb;
+    font-size: 1.5rem;
+    border: 1.5px solid #e8eaed;
+}
+.detailThumb img { width: 100%; height: 100%; object-fit: cover; }
+
+.detailHeaderInfo {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+.detailTitle {
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: #111827;
+    margin: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.detailHeaderBadges {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+.detailClose {
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    border: 1.5px solid #e8eaed;
+    background: #fff;
+    color: #555;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1rem;
+    flex-shrink: 0;
+    transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+.detailClose:hover { background: #fee2e2; border-color: #fca5a5; color: #dc2626; }
+
+/* ── Scrollable body ── */
+.detailBody {
+    flex: 1;
+    overflow-y: auto;
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+/* ── Info grid ── */
+.detailGrid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+}
+@media (max-width: 520px) {
+    .detailGrid { grid-template-columns: 1fr; }
+}
+
+.detailSection {
+    background: #f8fafc;
+    border: 1.5px solid #e8eaed;
+    border-radius: 12px;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.detailSectionTitle {
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #6b7280;
+    margin: 0 0 4px 0;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+.detailSectionTitle i { color: #9ca3af; }
+
+.detailInfoRow {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    font-size: 0.83rem;
+}
+.detailInfoLabel {
+    color: #6b7280;
+    flex-shrink: 0;
+}
+.detailInfoValue {
+    font-weight: 600;
+    color: #111827;
+    text-align: right;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+}
+
+/* ── Sticky footer ── */
+.detailFooter {
+    flex-shrink: 0;
+    padding: 16px 24px;
+    border-top: 1.5px solid #e8eaed;
+    background: #f8fafc;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.detailCloseFooterBtn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 9px 18px;
+    border: 1.5px solid #e2e6ea;
+    border-radius: 8px;
+    background: #fff;
+    color: #555;
+    font-family: inherit;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.12s, border-color 0.12s;
+    align-self: flex-start;
+}
+.detailCloseFooterBtn:hover { background: #f1f5f9; border-color: #c8cfd6; }
+
+/* ── Alert button in overdue banner ── */
+.alertBtn {
+    margin-left: auto;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 12px;
+    border: 1px solid #fca5a5;
+    border-radius: 6px;
+    background: #fff;
+    color: #dc2626;
+    font-family: inherit;
+    font-size: 0.78rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.12s;
+}
+.alertBtn:hover { background: #fee2e2; }
+.alertSentChip {
+    margin-left: auto;
+    flex-shrink: 0;
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: #16a34a;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+/* Payment badge on card */
+.paymentBadgeSmall {
+    font-size: 10px;
+    font-weight: 600;
+    padding: 3px 8px;
+    border-radius: 20px;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    white-space: nowrap;
+}
+
+/* Payment badge in header */
+.paymentBadge {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 4px 10px;
+    border-radius: 20px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
+}
+
+/* Payment method chip in details */
+.paymentMethodChip {
+    font-size: 12px;
+    font-weight: 600;
+    padding: 4px 10px;
+    border-radius: 20px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+/* Staff instruction banner */
+.paymentInstructionBanner {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    border-radius: 10px;
+    border-left: 4px solid;
+    margin-bottom: 16px;
+}
+
+.paymentInstructionBanner i {
+    font-size: 20px;
+    flex-shrink: 0;
+}
+
+.paymentInstructionBanner p {
+    margin: 0;
+    font-size: 12px;
+    opacity: 0.85;
+}
+
+.paymentInstructionBanner strong {
+    font-size: 13px;
+    display: block;
+    margin-bottom: 2px;
+}
+
+/* Add to Staffdashboard.module.css */
+.slotEmpty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 20px;
+  color: #94a3b8;
+  font-size: 0.8rem;
+  background: #f8fafc;
+  border-radius: 8px;
+  margin-top: 8px;
 }

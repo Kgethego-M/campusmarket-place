@@ -4,7 +4,8 @@ import {
   Routes,
   Route,
   Navigate,
-  useNavigate
+  useNavigate,
+  useLocation,
 } from 'react-router-dom';
 import { onAuthStateChanged } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
@@ -17,6 +18,7 @@ import LandingPage from './components/LandingPage';
 import LoginForm from './components/LoginForm';
 import SignupForm from './components/SignupForm';
 import AdminDashboard from './components/Admindashboard';
+import SuspendedPage from './components/SuspendedPage';
 import Dashboard from './components/Dashboard';
 import CreateListing from './components/CreateListing';
 import ViewRating from './components/ViewRating';
@@ -24,25 +26,48 @@ import ReviewOffer from './components/ReviewOffer';
 import ListingDetail from './components/ListingDetail';
 import ReviewForm from './components/ReviewForm.jsx';
 import Notificationspage from './components/Notificationspage.jsx';
+import MyPurchases from './components/MyPurchases.jsx';
+import Payment from './components/Payment.jsx';
+import AdminProfile from "./components/adminProfile";
+import PaymentSuccess from './components/PaymentSuccess.jsx';
+import PaymentCancelled from './components/PaymentCancelled.jsx';
+import ReportsPage from './components/ReportsPage';
+import ModerationSummaryPage from './components/ModerationSummaryPage';
+
 import CreateListingAzure from './components/CreateListingAzure';
+
 import Chat from './components/Chat';
 import Profile from './components/Profile';
 import StaffDashboard from './components/Staffdashboard.jsx';
 import ProfileListingCard from './components/ProfileListingCard';
+
 // SPRINT 2 IMPORTS
 import TradeFacility from './components/TradeFacility';
 import BookDropOff from './components/BookDropOff';
+import BookCollection from './components/BookCollection';
 
+// SPRINT 3 IMPORTS
+import AdminAnalytics from './components/AdminAnalytics';
+import ViewCart from './components/ViewCart';
+import AdPayment from "./components/AdPayment";
+import PromoteSuccess from "./components/PromoteSuccess";
+
+// -------------------------
+// Protected Route (with return-to URL)
+// -------------------------
 function ProtectedRoute({ children, allowedRoles }) {
   const [loading, setLoading] = useState(true);
   const [firebaseUser, setFirebaseUser] = useState(null);
   const [roleAllowed, setRoleAllowed] = useState(false);
+  const [isSuspended, setIsSuspended] = useState(false);
+  const location = useLocation();
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (!user) {
         setFirebaseUser(null);
         setRoleAllowed(false);
+        setIsSuspended(false);
         setLoading(false);
         return;
       }
@@ -50,9 +75,26 @@ function ProtectedRoute({ children, allowedRoles }) {
       try {
         const userRef = doc(db, 'users', user.uid);
         const userSnap = await getDoc(userRef);
-        if (!userSnap.exists()) { setRoleAllowed(false); setLoading(false); return; }
+
+        if (!userSnap.exists()) {
+          setRoleAllowed(false);
+          setIsSuspended(false);
+          setLoading(false);
+          return;
+        }
+
         const userData = userSnap.data();
-        setRoleAllowed(allowedRoles.includes(userData.role));
+
+        if (userData.suspended) {
+          setIsSuspended(true);
+          setRoleAllowed(false);
+          setLoading(false);
+          return;
+        }
+
+        const userRole = userData.role || userData.userType;
+        setIsSuspended(false);
+        setRoleAllowed(allowedRoles.includes(userRole));
       } catch (err) {
         console.error('Role check failed:', err);
         setRoleAllowed(false);
@@ -62,8 +104,16 @@ function ProtectedRoute({ children, allowedRoles }) {
     return () => unsubscribe();
   }, [allowedRoles]);
 
-  if (loading) return <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh' }}>Loading...</div>;
-  if (!firebaseUser) return <Navigate to="/login" />;
+  if (loading) {
+    return (
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh' }}>
+        Loading...
+      </div>
+    );
+  }
+
+  if (!firebaseUser) return <Navigate to="/login" state={{ from: location }} replace />;
+  if (isSuspended) return <Navigate to="/suspended" replace />;
   if (!roleAllowed) return <AccessDenied />;
   return children;
 }
@@ -75,15 +125,28 @@ function LandingPageWrapper() {
 
 function LoginWrapper() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const from = location.state?.from?.pathname || '/view-listing';
+
   return (
     <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh' }}>
       <LoginForm
         onSwitchToSignup={() => navigate('/signup')}
         onLoginSuccess={(userData) => {
+          if (userData.suspended) {
+            navigate('/suspended');
+            return;
+          }
+
           const role = userData.role || userData.userType;
-          if (role === 'admin') navigate('/admin');
-          else if (role === 'staff') navigate('/staff');
-          else navigate('/view-listing');
+
+          if (role === 'admin') {
+            navigate('/admin');
+          } else if (role === 'staff') {
+            navigate('/staff');
+          } else {
+            navigate(from);
+          }
         }}
       />
     </div>
@@ -105,25 +168,205 @@ function SignupWrapper() {
 export function AppRoutes() {
   return (
     <Routes>
+      {/* Public Routes */}
       <Route path="/" element={<LandingPageWrapper />} />
       <Route path="/login" element={<LoginWrapper />} />
       <Route path="/signup" element={<SignupWrapper />} />
+      <Route path="/suspended" element={<SuspendedPage />} />
+      <Route path="/access-denied" element={<AccessDenied />} />
+
+      {/* Ad promotion routes */}
+      <Route
+        path="/promote-payment"
+        element={
+          <ProtectedRoute allowedRoles={['student']}>
+            <AdPayment />
+          </ProtectedRoute>
+        }
+      />
+      <Route path="/promote-success" element={<PromoteSuccess />} />
+
+      {/* General */}
       <Route path="/dashboard" element={<Dashboard />} />
       <Route path="/profile" element={<Profile />} />
-      <Route path="/view-listing" element={<ProtectedRoute allowedRoles={['student']}><ViewListing /></ProtectedRoute>} />
-      <Route path="/create-listing" element={<ProtectedRoute allowedRoles={['student']}><CreateListing /></ProtectedRoute>} />
+      <Route path="/profile/:userId" element={<ViewRating />} />
       <Route path="/view-rating" element={<ViewRating userId="sampleUserId" />} />
       <Route path="/chat" element={<ProtectedRoute allowedRoles={['student']}><Chat /></ProtectedRoute>} />
       <Route path="/chat/:transactionId" element={<Chat />} />
       <Route path="/edit-listing/:id" element={<EditListing />} />
-      <Route path="/access-denied" element={<AccessDenied />} />
       <Route path="/staff" element={<ProtectedRoute allowedRoles={['staff']}><StaffDashboard /></ProtectedRoute>} />
-      <Route path="/admin" element={<ProtectedRoute allowedRoles={['admin']}><AdminDashboard /></ProtectedRoute>}/>
+      <Route path="/admin" element={<ProtectedRoute allowedRoles={['admin']}><AdminDashboard /></ProtectedRoute>} />
+      
+      {/* SPRINT 2 ROUTES */}
+      <Route path="/trade-facility" element={<ProtectedRoute allowedRoles={['student']}><TradeFacility /></ProtectedRoute>} />
+      <Route path="/book-dropoff/:transactionId" element={<ProtectedRoute allowedRoles={['student']}><BookDropOff /></ProtectedRoute>} />
+      <Route path="/payment/:txId" element={<ProtectedRoute allowedRoles={['student']}><Payment /></ProtectedRoute>} />
+
       <Route path="/azure/create-listing" element={<CreateListingAzure/>} />
       <Route path="/listing/:id" element={<ListingDetail />} />
-
       <Route path="/review/:transactionId" element={<ReviewForm />} />
-      <Route path="/notifications" element={<ProtectedRoute allowedRoles={['student']}><Notificationspage /></ProtectedRoute>} />
+      <Route path="/edit-listing/:id" element={<EditListing />} />
+      <Route path="/azure/create-listing" element={<CreateListingAzure />} />
+
+      <Route path="/admin/profile" element={<ProtectedRoute allowedRoles={['admin']}><AdminProfile /></ProtectedRoute>} />
+
+      {/* Student Routes */}
+      <Route
+        path="/view-listing"
+        element={
+          <ProtectedRoute allowedRoles={['student']}>
+            <ViewListing />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/create-listing"
+        element={
+          <ProtectedRoute allowedRoles={['student']}>
+            <CreateListing />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/favourites"
+        element={
+          <ProtectedRoute allowedRoles={['student']}>
+            <ViewCart />
+          </ProtectedRoute>
+        }
+      />
+      <Route path="/cart" element={<Navigate to="/favourites" replace />} />
+
+      <Route
+        path="/chat"
+        element={
+          <ProtectedRoute allowedRoles={['student']}>
+            <Chat />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/chat/:transactionId"
+        element={
+          <ProtectedRoute allowedRoles={['student']}>
+            <Chat />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/trade-facility"
+        element={
+          <ProtectedRoute allowedRoles={['student']}>
+            <TradeFacility />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/book-dropoff/:transactionId"
+        element={
+          <ProtectedRoute allowedRoles={['student']}>
+            <BookDropOff />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/book-collection/:transactionId"
+        element={
+          <ProtectedRoute allowedRoles={['student']}>
+            <BookCollection />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/payment/:txId"
+        element={
+          <ProtectedRoute allowedRoles={['student']}>
+            <Payment />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Stripe return routes */}
+      <Route
+        path="/payment-success"
+        element={
+          <ProtectedRoute allowedRoles={['student']}>
+            <PaymentSuccess />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/payment-cancelled"
+        element={
+          <ProtectedRoute allowedRoles={['student']}>
+            <PaymentCancelled />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/notifications"
+        element={
+          <ProtectedRoute allowedRoles={['student']}>
+            <Notificationspage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/my-purchases"
+        element={
+          <ProtectedRoute allowedRoles={['student']}>
+            <MyPurchases />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Staff Routes */}
+      <Route
+        path="/staff"
+        element={
+          <ProtectedRoute allowedRoles={['staff']}>
+            <StaffDashboard />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Admin Routes */}
+      <Route
+        path="/admin"
+        element={
+          <ProtectedRoute allowedRoles={['admin']}>
+            <AdminDashboard />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/admin/analytics"
+        element={
+          <ProtectedRoute allowedRoles={['admin']}>
+            <AdminAnalytics />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/admin/reports"
+        element={
+          <ProtectedRoute allowedRoles={['admin']}>
+            <ReportsPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/admin/moderation-summary"
+        element={
+          <ProtectedRoute allowedRoles={['admin']}>
+            <ModerationSummaryPage />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Fallback */}
+      <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
 }
