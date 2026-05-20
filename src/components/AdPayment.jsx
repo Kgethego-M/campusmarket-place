@@ -80,9 +80,10 @@ export default function AdPayment() {
       paymentType: "ad_promotion",
       listingId: listing.id,
       listingTitle: `${AD_LABELS[adType]} — ${itemTitle}`,
+      // ✅ Added &price= parameter for ad revenue tracking
       successUrl: `${window.location.origin}/promote-success?lid=${listing.id}&type=${adType}&ref=${stripeRef}&title=${encodeURIComponent(
         itemTitle
-      )}`,
+      )}&price=${amountRand}`,
       cancelUrl: `${window.location.origin}/listing/${listing.id}`,
       metadata: {
         type: "ad_promotion",

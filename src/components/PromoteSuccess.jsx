@@ -1,7 +1,7 @@
 // src/pages/PromoteSuccess.jsx
 import { useEffect, useState } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
-import { getFirestore, doc, getDoc, setDoc } from "firebase/firestore";
+import { getFirestore, doc, getDoc, setDoc, collection } from "firebase/firestore";
 import NavBar from "../components/NavBarTemp";
 import styles from "./Payment.module.css";
 
@@ -18,6 +18,7 @@ export default function PromoteSuccess() {
   const stripeRef = searchParams.get("ref");
   const titleParam = searchParams.get("title");
   const sessionId = searchParams.get("session_id");
+  const amountRand = parseFloat(searchParams.get("price") || "0"); // get price from URL
   const uniquePaymentId = sessionId || stripeRef;
 
   useEffect(() => {
@@ -30,7 +31,6 @@ export default function PromoteSuccess() {
     let isMounted = true;
     const storageKey = `ad_created_${uniquePaymentId}`;
     if (sessionStorage.getItem(storageKey) === "true") {
-      // Already created in this session
       const fetchListingOnly = async () => {
         const db = getFirestore();
         const listingRef = doc(db, "listings", listingId);
@@ -42,46 +42,58 @@ export default function PromoteSuccess() {
       return;
     }
 
-    const createAd = async () => {
+    sessionStorage.setItem(storageKey, "true");
+
+    const createAdAndRevenue = async () => {
       const db = getFirestore();
       try {
-        // Check if ad already exists using the uniquePaymentId as doc ID
+        // Use the unique payment ID as the document ID in 'ads' collection
         const adDocRef = doc(db, "ads", uniquePaymentId);
         const existingAd = await getDoc(adDocRef);
-        if (existingAd.exists()) {
-          console.log("Ad already exists, skipping creation");
-          setAdCreated(true);
-          // Fetch listing for display
+        
+        if (!existingAd.exists()) {
+          // Fetch listing details
+          const listingRef = doc(db, "listings", listingId);
+          const listingSnap = await getDoc(listingRef);
+          if (!listingSnap.exists()) throw new Error("Listing not found");
+          const listingData = listingSnap.data();
+          if (isMounted) setListing(listingData);
+
+          // Create ad document
+          const adData = {
+            listingId,
+            title: listingData.title || titleParam || "Listing",
+            imageUrl: listingData.photos?.[0] || listingData.imageUrl || null,
+            price: listingData.price,
+            type: adType || "banner",
+            status: "active",
+            createdAt: new Date(),
+            expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+            stripeSessionId: uniquePaymentId,
+          };
+          await setDoc(adDocRef, adData);
+          console.log(" Ad created with ID:", uniquePaymentId);
+        } else {
+          // If ad already exists, still fetch listing for display
           const listingRef = doc(db, "listings", listingId);
           const listingSnap = await getDoc(listingRef);
           if (listingSnap.exists()) setListing(listingSnap.data());
-          setLoading(false);
-          return;
         }
 
-        // Fetch listing details
-        const listingRef = doc(db, "listings", listingId);
-        const listingSnap = await getDoc(listingRef);
-        if (!listingSnap.exists()) throw new Error("Listing not found");
-        const listingData = listingSnap.data();
-        setListing(listingData);
-
-        // Create ad document directly
-        const adData = {
+        // ---- NEW: Record ad revenue (only once) ----
+        const revenueRef = doc(collection(db, "adRevenue"));
+        const revenueData = {
+          amount: amountRand,
           listingId,
-          title: listingData.title || titleParam || "Listing",
-          imageUrl: listingData.photos?.[0] || listingData.imageUrl || null,
-          price: listingData.price,
-          type: adType || "banner",
-          status: "active",
-          createdAt: new Date(),
-          expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+          adType: adType,
           stripeSessionId: uniquePaymentId,
+          createdAt: new Date(),
         };
-        await setDoc(adDocRef, adData);
-        console.log("✅ Ad created directly from success page");
+        await setDoc(revenueRef, revenueData);
+        console.log(" Ad revenue recorded");
+        // -------------------------------------------
+
         setAdCreated(true);
-        sessionStorage.setItem(storageKey, "true");
       } catch (err) {
         console.error("Ad creation error:", err);
         setError("Payment succeeded but promotion could not be created. Please contact support.");
@@ -90,9 +102,9 @@ export default function PromoteSuccess() {
       }
     };
 
-    createAd();
+    createAdAndRevenue();
     return () => { isMounted = false; };
-  }, [listingId, adType, titleParam, uniquePaymentId]);
+  }, [listingId, adType, titleParam, uniquePaymentId, amountRand]);
 
   if (loading) {
     return (
