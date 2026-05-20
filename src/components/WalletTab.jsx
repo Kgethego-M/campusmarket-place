@@ -13,12 +13,12 @@ import {
 import styles from './WalletTab.module.css';
 
 const TX_META = {
-  sale_credit: { label: 'Sale',       icon: 'fa-tag',               dir: 'credit' },
-  topup:       { label: 'Top-up',     icon: 'fa-circle-arrow-down', dir: 'credit' },
-  refund:      { label: 'Refund',     icon: 'fa-rotate-left',       dir: 'credit' },
-  wallet_debit:{ label: 'Purchase',   icon: 'fa-cart-shopping',     dir: 'debit'  },
-  ad_debit:    { label: 'Ad spend',   icon: 'fa-bullhorn',          dir: 'debit'  },
-  withdrawal:  { label: 'Withdrawal', icon: 'fa-circle-arrow-up',   dir: 'debit'  },
+  sale_credit:  { label: 'Sale',       icon: 'fa-tag',               dir: 'credit' },
+  topup:        { label: 'Top-up',     icon: 'fa-circle-arrow-down', dir: 'credit' },
+  refund:       { label: 'Refund',     icon: 'fa-rotate-left',       dir: 'credit' },
+  wallet_debit: { label: 'Purchase',   icon: 'fa-cart-shopping',     dir: 'debit'  },
+  ad_debit:     { label: 'Ad spend',   icon: 'fa-bullhorn',          dir: 'debit'  },
+  withdrawal:   { label: 'Withdrawal', icon: 'fa-circle-arrow-up',   dir: 'debit'  },
 };
 
 const SA_BANKS = [
@@ -202,7 +202,6 @@ function TopUpModal({ onConfirm, onClose }) {
     setBusy(true); setError('');
     try {
       await onConfirm(amt);
-      // browser navigates away on success — if we're still here, reset
       setBusy(false);
     } catch (e) {
       setError(e.message || 'Could not start payment. Please try again.');
@@ -268,8 +267,7 @@ function TopUpModal({ onConfirm, onClose }) {
 }
 
 // ── Main WalletTab ────────────────────────────────────────────────────────────
-console.log("URL", import.meta.env.VITE_API_URL)
-export default function WalletTab({ userId }) {
+export default function WalletTab({ userId, onBalanceUpdate }) {  // ← added onBalanceUpdate
   const [balance, setBalance] = useState(null);
   const [ledger,  setLedger]  = useState([]);
   const [loading, setLoading] = useState(true);
@@ -283,16 +281,20 @@ export default function WalletTab({ userId }) {
     setLoading(true);
     try {
       const { balance: b, ledger: l } = await recalculateWallet(userId);
-      setBalance(b); setLedger(l);
+      setBalance(b);
+      setLedger(l);
+      onBalanceUpdate?.(b);  // ← notify parent of real balance on load
     } catch (e) { console.error('WalletTab load error:', e); }
     finally     { setLoading(false); }
-  }, [userId]);
+  }, [userId, onBalanceUpdate]);
 
   useEffect(() => { load(); }, [load]);
 
   const handleWithdraw = async (amt, bankDetails) => {
     const { balance: b, ledger: l } = await withdrawFromWallet(userId, amt, bankDetails);
-    setBalance(b); setLedger(l);
+    setBalance(b);
+    setLedger(l);
+    onBalanceUpdate?.(b);  // ← notify parent after withdrawal
     showToast(`Withdrawal of R${amt.toLocaleString('en-ZA')} submitted — 1–2 business days`);
   };
 

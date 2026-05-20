@@ -494,6 +494,12 @@ function Profile() {
       return                         <i key={i} className="far fa-star" />;
     });
   };
+  const handleBalanceUpdate = useCallback((newBalance) => {
+    setProfileData(prev => ({ ...prev, walletBalance: newBalance }));
+    updateDoc(doc(db, 'users', currentUserId), { walletBalance: newBalance })
+      .catch(console.error);
+  }, [currentUserId]);
+
 
   if (loading) return (
     <div className={styles.loadingContainer}>
@@ -779,12 +785,7 @@ function Profile() {
           <div className={styles.tabContent}>
           <WalletTab
             userId={currentUserId}
-            onBalanceUpdate={(newBalance) => {
-              setProfileData(prev => ({ ...prev, walletBalance: newBalance }));
-              // Also update the user document to keep it in sync
-              updateDoc(doc(db, 'users', currentUserId), { walletBalance: newBalance })
-                .catch(console.error);
-            }}
+            onBalanceUpdate={handleBalanceUpdate}
           />
           </div>
         )}
