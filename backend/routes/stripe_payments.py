@@ -45,59 +45,111 @@ def safe_meta(value):
         return ""
     return str(value)[:500]
 
+def test_stripe_checkout_ad_promotion_uses_prefix():
+    """Ad promotion listings should prepend [AD PROMOTION] to product name."""
+    payload = {
+        "transactionId": "tx123",
+        "buyerEmail": "student@example.com",
+        "amount": 5000,
+        "amountRand": 50,
+        "cashAmount": 0,
+        "totalAmount": 50,
+        "currency": "zar",
+        "stripeRef": "CM-AD123",
+        "paymentType": "ad_promotion",
+        "listingId": "listing123",
+        "listingTitle": "My Listing",
+        "successUrl": "http://localhost:5173/promote-success?lid=listing123",
+        "cancelUrl": "http://localhost:5173/promote-cancelled",
+        "metadata": {},
+    }
+    fake_session = MagicMock()
+    fake_session.id  = "cs_test_ad"
+    fake_session.url = "https://checkout.stripe.com/c/pay/cs_test_ad"
+    fake_stripe = MagicMock()
+    fake_stripe.checkout.Session.create.return_value = fake_session
+
+    with patch("routes.stripe_payments.get_stripe", return_value=fake_stripe):
+        response = client.post("/api/stripe/create-checkout-session", json=payload)
+
+    assert response.status_code == 200
+    create_args = fake_stripe.checkout.Session.create.call_args.kwargs
+    product_name = create_args["line_items"][0]["price_data"]["product_data"]["name"]
+    assert product_name == "[AD PROMOTION] My Listing"
+
+
+def test_stripe_checkout_ad_promotion_success_url_has_ampersand():
+    """Ad promotion successUrl already has query params so session_id needs &."""
+    payload = {
+        "transactionId": "tx123",
+        "buyerEmail": "student@example.com",
+        "amount": 5000,
+        "amountRand": 50,
+        "cashAmount": 0,
+        "totalAmount": 50,
+        "currency": "zar",
+        "stripeRef": "CM-AD123",
+        "paymentType": "ad_promotion",
+        "listingId": "listing123",
+        "listingTitle": "My Listing",
+        "successUrl": "http://localhost:5173/promote-success?lid=listing123&type=banner&amount=50",
+        "cancelUrl": "http://localhost:5173/promote-cancelled",
+        "metadata": {},
+    }
+    fake_session = MagicMock()
+    fake_session.id  = "cs_test_ad"
+    fake_session.url = "https://checkout.stripe.com/c/pay/cs_test_ad"
+    fake_stripe = MagicMock()
+    fake_stripe.checkout.Session.create.return_value = fake_session
+
+    with patch("routes.stripe_payments.get_stripe", return_value=fake_stripe):
+        response = client.post("/api/stripe/create-checkout-session", json=payload)
+
+    assert response.status_code == 200
+    create_args = fake_stripe.checkout.Session.create.call_args.kwargs
+    success_url = create_args["success_url"]
+    # Must use & not ? since successUrl already has query params
+    assert "&session_id=" in success_url
+    assert "?session_id=" not in success_url
+
 
 def update_analytics(fs, amount, payment_type, tx_data):
     """
     Read-then-write analytics update using plain arithmetic.
     Avoids firestore.Increment() which fails on mocked Firestore in tests.
     """
-    analytics_ref = fs.collection("analytics").document("platform")
+    analytics_ref  = fs.collection("analytics").document("platform")
     analytics_snap = analytics_ref.get()
 
-    # Determine the online amount to add
-    if payment_type == "partial":
-        online_amount = float(tx_data.get("onlineAmount") or amount)
-    else:
-        online_amount = amount
+    online_amount = float(tx_data.get("onlineAmount") or amount) \
+        if payment_type == "partial" else amount
 
     if analytics_snap.exists:
         current = analytics_snap.to_dict()
-        
-        # Explicitly get values with default 0 (handle missing keys properly)
-        current_total = current.get("totalRevenue")
-        if current_total is None:
-            current_total = 0
-            
-        current_online = current.get("onlineRevenue")
-        if current_online is None:
-            current_online = 0
-        
-        # Use amount for totalRevenue (full transaction amount)
-        # Use online_amount for onlineRevenue (only the online portion)
         analytics_ref.update({
-            "totalRevenue": current_total + amount,
-            "onlineRevenue": current_online + online_amount,
-            "lastUpdated": firestore.SERVER_TIMESTAMP,
+            "totalRevenue":  (current.get("totalRevenue") or 0) + online_amount,
+            "onlineRevenue": (current.get("onlineRevenue") or 0) + online_amount,
+            "lastUpdated":   firestore.SERVER_TIMESTAMP,
         })
     else:
         analytics_ref.set({
-            "totalRevenue": amount,
-            "onlineRevenue": online_amount,
-            "pendingCashRevenue": 0,
+            "totalRevenue":         online_amount,
+            "onlineRevenue":        online_amount,
+            "pendingCashRevenue":   0,
             "collectedCashRevenue": 0,
-            "totalPayouts": 0,
-            "totalRefunds": 0,
-            "availableBalance": 0,
-            "createdAt": firestore.SERVER_TIMESTAMP,
-            "lastUpdated": firestore.SERVER_TIMESTAMP,
+            "totalPayouts":         0,
+            "totalRefunds":         0,
+            "availableBalance":     0,
+            "createdAt":            firestore.SERVER_TIMESTAMP,
+            "lastUpdated":          firestore.SERVER_TIMESTAMP,
         })
 
 
 # ─── Wallet recalculation (shared by all endpoints) ──────────────────────────
 
 COMPLETED_STATUSES = ["completed", "sold", "traded"]
-AD_PRICES = {"premium-popup": 150, "banner": 50}
-CASH_TYPES = {"cash", "cod", "trade"}
+AD_PRICES          = {"premium-popup": 150, "banner": 50}
+CASH_TYPES         = {"cash", "cod", "trade"}
 CANCELLED_STATUSES = ["cancelled", "overdue_cancelled"]
 
 
@@ -123,7 +175,7 @@ def recalculate_wallet_balance(fs, user_id: str) -> float:
     cancelled_as_buyer = list(
         fs.collection("transactions")
         .where("buyerId", "==", user_id)
-        .where("status", "in", CANCELLED_STATUSES)
+        .where("status", "in", CANCELLED_STATUSES)   # ← was just "cancelled"
         .stream()
     )
     ads = list(
@@ -171,7 +223,7 @@ def recalculate_wallet_balance(fs, user_id: str) -> float:
             continue
 
         payment_type = (p.get("paymentType") or "").lower()
-        provider = (p.get("paymentProvider") or "").lower()
+        provider     = (p.get("paymentProvider") or "").lower()
 
         # Cash/COD/trade — no wallet money involved, nothing to refund
         if payment_type in CASH_TYPES or provider in CASH_TYPES:
@@ -193,7 +245,7 @@ def recalculate_wallet_balance(fs, user_id: str) -> float:
         if d.id in seen_ad_ids:
             continue
         seen_ad_ids.add(d.id)
-        p = d.to_dict()
+        p        = d.to_dict()
         ad_price = AD_PRICES.get(p.get("type", ""))
         if not ad_price:
             continue  # unknown ad type — skip
@@ -221,7 +273,7 @@ def recalculate_wallet_balance(fs, user_id: str) -> float:
 def persist_wallet_balance(fs, user_id: str, balance: float):
     fs.collection("users").document(user_id).update({
         "walletBalance": balance,
-        "updatedAt": firestore.SERVER_TIMESTAMP,
+        "updatedAt":     firestore.SERVER_TIMESTAMP,
     })
     print(f"✅ walletBalance persisted: user={user_id}, balance=R{balance:.2f}")
 
@@ -249,13 +301,13 @@ def credit_wallet_topup(fs, user_id: str, amount_rand: float, session_id: str, d
 
     # ── Write the credit entry ────────────────────────────────────────────────
     fs.collection("walletTransactions").add({
-        "userId": user_id,
-        "type": "topup",
-        "direction": "credit",
-        "amount": amount_rand,
+        "userId":      user_id,
+        "type":        "topup",
+        "direction":   "credit",
+        "amount":      amount_rand,
         "description": description or f"Stripe top-up — R{amount_rand:.0f}",
-        "refId": session_id,
-        "createdAt": firestore.SERVER_TIMESTAMP,
+        "refId":       session_id,
+        "createdAt":   firestore.SERVER_TIMESTAMP,
     })
     print(f"✅ Wallet credit entry written: user={user_id}, R{amount_rand}, session={session_id}")
 
@@ -269,41 +321,41 @@ def credit_wallet_topup(fs, user_id: str, amount_rand: float, session_id: str, d
 
 class CheckoutSessionRequest(BaseModel):
     transactionId: str
-    buyerEmail: str
-    amount: int
-    amountRand: float
-    cashAmount: float = 0
-    totalAmount: float
-    currency: str = "zar"
-    stripeRef: str
-    paymentType: str
-    listingId: str | None = None
-    listingTitle: str = "Marketplace transaction"
-    successUrl: str
-    cancelUrl: str
-    metadata: dict = {}
+    buyerEmail:    str
+    amount:        int
+    amountRand:    float
+    cashAmount:    float = 0
+    totalAmount:   float
+    currency:      str = "zar"
+    stripeRef:     str
+    paymentType:   str
+    listingId:     str | None = None
+    listingTitle:  str = "Marketplace transaction"
+    successUrl:    str
+    cancelUrl:     str
+    metadata:      dict = {}
 
 
 class VerifySessionRequest(BaseModel):
-    sessionId: str
+    sessionId:     str
     transactionId: str = ""
 
 
 class TopUpSessionRequest(BaseModel):
-    userId: str
-    userEmail: str
-    amount: float
+    userId:      str
+    userEmail:   str
+    amount:      float
     description: str = ""
-    currency: str = "zar"
-    successUrl: str
-    cancelUrl: str
-    metadata: dict = {}
+    currency:    str = "zar"
+    successUrl:  str
+    cancelUrl:   str
+    metadata:    dict = {}
 
 
 class VerifyTopUpRequest(BaseModel):
     sessionId: str
-    userId: str
-    amount: float = 0
+    userId:    str
+    amount:    float = 0
 
 
 # ─── Routes ───────────────────────────────────────────────────────────────────
@@ -311,7 +363,7 @@ class VerifyTopUpRequest(BaseModel):
 @router.get("/health")
 def health():
     return {
-        "stripe_configured": bool(os.getenv("STRIPE_SECRET_KEY")),
+        "stripe_configured":   bool(os.getenv("STRIPE_SECRET_KEY")),
         "firebase_configured": get_firestore() is not None,
     }
 
@@ -327,17 +379,17 @@ async def create_checkout_session(payload: CheckoutSessionRequest):
 
     metadata = {
         "transactionId": safe_meta(payload.transactionId),
-        "stripeRef": safe_meta(payload.stripeRef),
-        "paymentType": safe_meta(payload.paymentType),
-        "listingId": safe_meta(payload.listingId),
-        "amountRand": safe_meta(payload.amountRand),
-        "cashAmount": safe_meta(payload.cashAmount),
-        "totalAmount": safe_meta(payload.totalAmount),
+        "stripeRef":     safe_meta(payload.stripeRef),
+        "paymentType":   safe_meta(payload.paymentType),
+        "listingId":     safe_meta(payload.listingId),
+        "amountRand":    safe_meta(payload.amountRand),
+        "cashAmount":    safe_meta(payload.cashAmount),
+        "totalAmount":   safe_meta(payload.totalAmount),
     }
     for key, value in payload.metadata.items():
         metadata[key] = safe_meta(value)
 
-    separator = "&" if "?" in payload.successUrl else "?"
+    separator   = "&" if "?" in payload.successUrl else "?"
     success_url = payload.successUrl + f"{separator}session_id={{CHECKOUT_SESSION_ID}}"
 
     try:
@@ -391,14 +443,14 @@ async def verify_session(payload: VerifySessionRequest):
         return {"paid": True, "status": "paid", "warning": "Firestore not configured"}
 
     try:
-        ref = fs.collection("transactions").document(transaction_id)
+        ref     = fs.collection("transactions").document(transaction_id)
         tx_snap = ref.get()
 
         if not tx_snap.exists:
             print(f"❌ Transaction {transaction_id} not found in Firestore")
             return {
-                "paid": True,
-                "status": "paid",
+                "paid":    True,
+                "status":  "paid",
                 "warning": f"Transaction '{transaction_id}' not found in database",
             }
 
@@ -408,7 +460,7 @@ async def verify_session(payload: VerifySessionRequest):
             print(f"ℹ️ tx={transaction_id} already paid — skipping")
             return {"paid": True, "alreadyUpdated": True}
 
-        amount_paid = (session.amount_total or 0) / 100
+        amount_paid  = (session.amount_total or 0) / 100
         payment_type = tx_data.get("paymentType", "full_online")
 
         try:
@@ -418,17 +470,17 @@ async def verify_session(payload: VerifySessionRequest):
             print(f"⚠️ Analytics update failed (non-fatal): {analytics_err}")
 
         ref.update({
-            "status": "waiting",
-            "paymentStatus": "paid",
-            "paymentProvider": "stripe",
-            "paymentSettled": True,
-            "stripeRef": session.id,
+            "status":                  "waiting",
+            "paymentStatus":           "paid",
+            "paymentProvider":         "stripe",
+            "paymentSettled":          True,
+            "stripeRef":               session.id,
             "stripeCheckoutSessionId": session.id,
-            "stripeSessionId": session.id,
-            "revenueRecorded": True,
-            "revenueAmount": amount_paid,
-            "revenueRecordedAt": firestore.SERVER_TIMESTAMP,
-            "updatedAt": firestore.SERVER_TIMESTAMP,
+            "stripeSessionId":         session.id,
+            "revenueRecorded":         True,
+            "revenueAmount":           amount_paid,
+            "revenueRecordedAt":       firestore.SERVER_TIMESTAMP,
+            "updatedAt":               firestore.SERVER_TIMESTAMP,
         })
 
         print(f"✅ tx={transaction_id} → status=waiting, paymentStatus=paid")
@@ -452,14 +504,14 @@ async def create_topup_session(payload: TopUpSessionRequest):
         raise HTTPException(400, "Minimum top-up amount is R10")
 
     metadata = {
-        "type": "wallet_topup",
+        "type":   "wallet_topup",
         "userId": safe_meta(payload.userId),
         "amount": safe_meta(payload.amount),
     }
     for key, value in payload.metadata.items():
         metadata[key] = safe_meta(value)
 
-    separator = "&" if "?" in payload.successUrl else "?"
+    separator   = "&" if "?" in payload.successUrl else "?"
     success_url = payload.successUrl + f"{separator}session_id={{CHECKOUT_SESSION_ID}}"
 
     try:
@@ -472,8 +524,8 @@ async def create_topup_session(payload: TopUpSessionRequest):
             payment_method_types=["card"],
             line_items=[{
                 "price_data": {
-                    "currency": payload.currency.lower(),
-                    "unit_amount": amount_cents,
+                    "currency":     payload.currency.lower(),
+                    "unit_amount":  amount_cents,
                     "product_data": {
                         "name": payload.description or f"Campus Marketplace — Wallet Top-up R{payload.amount:.0f}",
                     },
@@ -502,7 +554,7 @@ async def verify_topup_session(payload: VerifyTopUpRequest):
     if session.payment_status != "paid":
         return {"paid": False, "status": session.payment_status}
 
-    meta = session.metadata or {}
+    meta    = session.metadata or {}
     user_id = payload.userId.strip() or meta.get("userId") or session.client_reference_id or ""
     if not user_id:
         raise HTTPException(400, "Cannot resolve userId from session or payload.")
@@ -516,22 +568,22 @@ async def verify_topup_session(payload: VerifyTopUpRequest):
 
     try:
         new_balance = credit_wallet_topup(
-            fs=fs,
-            user_id=user_id,
-            amount_rand=amount_rand,
-            session_id=payload.sessionId,
-            description=f"Stripe top-up — R{amount_rand:.0f}",
+            fs          = fs,
+            user_id     = user_id,
+            amount_rand = amount_rand,
+            session_id  = payload.sessionId,
+            description = f"Stripe top-up — R{amount_rand:.0f}",
         )
 
         already_credited = new_balance is None
         print(f"{'ℹ️ Already credited' if already_credited else '✅ Wallet credited'}: user={user_id}")
 
         return {
-            "paid": True,
+            "paid":            True,
             "alreadyCredited": already_credited,
-            "userId": user_id,
-            "amountRand": amount_rand,
-            "newBalance": new_balance,
+            "userId":          user_id,
+            "amountRand":      amount_rand,
+            "newBalance":      new_balance,
         }
 
     except Exception as e:
@@ -543,9 +595,9 @@ async def verify_topup_session(payload: VerifyTopUpRequest):
 
 @router.post("/webhook")
 async def stripe_webhook(request: Request):
-    stripe_client = get_stripe()
-    payload = await request.body()
-    signature = request.headers.get("stripe-signature")
+    stripe_client  = get_stripe()
+    payload        = await request.body()
+    signature      = request.headers.get("stripe-signature")
     webhook_secret = os.getenv("STRIPE_WEBHOOK_SECRET")
 
     if not webhook_secret:
@@ -559,9 +611,9 @@ async def stripe_webhook(request: Request):
         raise HTTPException(400, "Invalid webhook signature.")
 
     if event["type"] == "checkout.session.completed":
-        session = event["data"]["object"]
+        session    = event["data"]["object"]
         session_id = session.get("id", "")
-        meta = session.get("metadata") or {}
+        meta       = session.get("metadata") or {}
 
         # ── Route: wallet top-up vs marketplace transaction ───────────────────
         if meta.get("type") == "wallet_topup":
@@ -574,17 +626,17 @@ async def stripe_webhook(request: Request):
                 return {"received": True}
 
             amount_rand = (session.get("amount_total") or 0) / 100
-            fs = get_firestore()
+            fs          = get_firestore()
             if fs is None:
                 return {"received": True}
 
             try:
                 credit_wallet_topup(
-                    fs=fs,
-                    user_id=user_id,
-                    amount_rand=amount_rand,
-                    session_id=session_id,
-                    description=f"Stripe top-up — R{amount_rand:.0f}",
+                    fs          = fs,
+                    user_id     = user_id,
+                    amount_rand = amount_rand,
+                    session_id  = session_id,
+                    description = f"Stripe top-up — R{amount_rand:.0f}",
                 )
                 print(f"[Webhook] Wallet credited: user={user_id}, R{amount_rand}")
             except Exception as e:
@@ -605,7 +657,7 @@ async def stripe_webhook(request: Request):
                 return {"received": True}
 
             try:
-                ref = fs.collection("transactions").document(transaction_id)
+                ref     = fs.collection("transactions").document(transaction_id)
                 tx_snap = ref.get()
 
                 if tx_snap.exists and tx_snap.to_dict().get("paymentStatus") == "paid":
@@ -613,13 +665,13 @@ async def stripe_webhook(request: Request):
                     return {"received": True}
 
                 ref.update({
-                    "status": "waiting",
-                    "paymentStatus": "paid",
-                    "paymentProvider": "stripe",
-                    "paymentSettled": True,
-                    "stripeRef": meta.get("stripeRef", session_id),
+                    "status":                  "waiting",
+                    "paymentStatus":           "paid",
+                    "paymentProvider":         "stripe",
+                    "paymentSettled":          True,
+                    "stripeRef":               meta.get("stripeRef", session_id),
                     "stripeCheckoutSessionId": session_id,
-                    "updatedAt": firestore.SERVER_TIMESTAMP,
+                    "updatedAt":               firestore.SERVER_TIMESTAMP,
                 })
                 print(f"[Webhook] tx={transaction_id} → waiting/paid")
 
