@@ -1,48 +1,35 @@
 name: Deploy to Azure App Service
- 
+
 on:
   push:
     branches:
       - develop
- 
+
 jobs:
   # --- JOB 1: VALIDATION ---
   test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
- 
+
       - name: Set up Node.js
         uses: actions/setup-node@v3
         with:
           node-version: '20'
- 
+
       - name: Install dependencies
         run: npm install
- 
+
       - name: Run Vitest with coverage
-        run: npx vitest run --coverage --reporter=verbose 2>&1 | tee coverage-summary.txt
- 
+        run: npm run test -- --coverage
+
       - name: Show coverage summary in GitHub Actions
         run: |
           echo "## Frontend Coverage Summary" >> $GITHUB_STEP_SUMMARY
+          npx vitest --coverage --reporter=text-summary | tee coverage-summary.txt
           cat coverage-summary.txt >> $GITHUB_STEP_SUMMARY
- 
-      - name: Verify coverage file exists
-        run: |
-          echo "Checking coverage directory:"
-          ls -la coverage/ || echo "coverage directory not found"
-          echo ""
-          echo "Checking for lcov.info:"
-          if [ -f coverage/lcov.info ]; then
-            echo "✅ lcov.info found! First 5 lines:"
-            head -5 coverage/lcov.info
-          else
-            echo "❌ lcov.info NOT found"
-            echo "Available files:"
-            ls -la coverage/ || echo "No coverage directory"
-          fi
- 
+
+
       - name: Upload frontend coverage to Codecov
         uses: codecov/codecov-action@v5
         with:
@@ -50,24 +37,22 @@ jobs:
           files: ./coverage/lcov.info
           flags: frontend
           fail_ci_if_error: true
-          verbose: true
-          override_commit: ${{ github.sha }}
- 
+
   # --- JOB 2: DEPLOYMENT ---
   deploy:
     runs-on: ubuntu-latest
-    needs: test
+    needs: test # <--- This ensures deploy only runs if tests pass
     steps:
       - uses: actions/checkout@v3
- 
+
       - name: Set up Node.js
         uses: actions/setup-node@v3
         with:
           node-version: '20'
- 
+
       - name: Install dependencies
         run: npm install
- 
+
       - name: Build
         run: npm run build
         env:
@@ -81,7 +66,7 @@ jobs:
           VITE_CLOUDINARY_CLOUD_NAME: ${{ secrets.VITE_CLOUDINARY_CLOUD_NAME }}
           VITE_CLOUDINARY_UPLOAD_PRESET: ${{ secrets.VITE_CLOUDINARY_UPLOAD_PRESET }}
           PAYSTACK_TEST_PUBLIC_KEY: ${{ secrets.PAYSTACK_TEST_PUBLIC_KEY }}
- 
+
       - name: Deploy to Azure App Service
         uses: azure/webapps-deploy@v2
         with:
