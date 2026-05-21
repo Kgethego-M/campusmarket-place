@@ -22,23 +22,13 @@ flags:
   frontend:
     paths:
       - src/
-    carryforward: false
+    carryforward: true
   backend:
     paths:
       - backend/
-    carryforward: false
+    carryforward: true
 
 comment:
   layout: "reach, diff, flags, files"
   behavior: default
   require_changes: true
-
-flags:
-  frontend:
-    carryforward: true
-    paths:
-      - src/
-  backend:
-    carryforward: true
-    paths:
-      - backend/
