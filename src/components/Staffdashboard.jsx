@@ -46,13 +46,6 @@ async function notifyBothParties(txn, stage) {
     const title = txn.listingTitle || txn.item;
 
     if (stage === "drop_off") {
-        await sendNotification(txn.sellerId, {
-            type:          "item_received_at_facility",
-            listingId:     txn.listingId || null,
-            transactionId: txn.id,
-            listingTitle:  title,
-            message:       `Your item "${title}" has been received at the trade facility.`,
-        });
         await sendNotification(txn.buyerId, {
             type:          "item_at_facility",
             listingId:     txn.listingId || null,
@@ -276,26 +269,55 @@ function isSlotMissed(txn) {
 function isDropOffOverdue(txn) {
     if (txn.status !== "pending" || !txn.dropOffBooked) return false;
     if (!txn.dropOffDate) return false;
-    // Slot must have passed AND 24hr grace period must have elapsed
-    const GRACE_MS = 24 * 60 * 60 * 1000;
+    // Slot must have passed AND 15-minute grace period must have elapsed
+    const GRACE_MS = 15 * 60 * 1000;
     const slotEnd = parseSlotEnd(txn.dropOffTimeSlot || txn.timeSlot);
     const graceStart = new Date(txn.dropOffDate + "T00:00:00");
     if (slotEnd) graceStart.setHours(slotEnd.hour, slotEnd.minute + 1, 0, 0);
     return Date.now() >= graceStart.getTime() + GRACE_MS;
 }
 
+function isDropOffInGracePeriod(txn) {
+    if (txn.status !== "pending" || !txn.dropOffBooked) return false;
+    if (!txn.dropOffDate) return false;
+    const GRACE_MS = 15 * 60 * 1000;
+    const slotEnd = parseSlotEnd(txn.dropOffTimeSlot || txn.timeSlot);
+    const graceStart = new Date(txn.dropOffDate + "T00:00:00");
+    if (slotEnd) graceStart.setHours(slotEnd.hour, slotEnd.minute + 1, 0, 0);
+    const graceStartMs = graceStart.getTime();
+    const now = Date.now();
+    return now >= graceStartMs && now < graceStartMs + GRACE_MS;
+}
+
+const COLLECTION_GRACE_MS = 15 * 60 * 1000; // 15 minutes
+
+function getCollectionDeadlineMs(txn) {
+    if (txn.collectionDeadline) return new Date(txn.collectionDeadline).getTime();
+    if (txn.droppedOffAt) return new Date(txn.droppedOffAt).getTime() + COLLECTION_GRACE_MS;
+    if (txn.dropOffDate) return new Date(txn.dropOffDate + "T00:00:00").getTime() + COLLECTION_GRACE_MS;
+    return null;
+}
+
 function isCollectionOverdue(txn) {
     if (txn.status !== "awaiting_collection") return false;
-    let deadlineMs = null;
-    if (txn.collectionDeadline) {
-        deadlineMs = new Date(txn.collectionDeadline).getTime();
-    } else if (txn.droppedOffAt) {
-        deadlineMs = new Date(txn.droppedOffAt).getTime() + 7 * 24 * 60 * 60 * 1000;
-    } else if (txn.dropOffDate) {
-        deadlineMs = new Date(txn.dropOffDate + "T00:00:00").getTime() + 7 * 24 * 60 * 60 * 1000;
-    }
+    const deadlineMs = getCollectionDeadlineMs(txn);
     if (!deadlineMs) return false;
     return Date.now() > deadlineMs;
+}
+
+function isCollectionInGracePeriod(txn) {
+    if (txn.status !== "awaiting_collection") return false;
+    const deadlineMs = getCollectionDeadlineMs(txn);
+    if (!deadlineMs) return false;
+    const now = Date.now();
+    // Grace period: from when slot ends until the 15-min overdue mark
+    // We treat "in grace period" as: slot time has passed but not yet overdue
+    const slotEnd = parseSlotEnd(txn.collectionTimeSlot || txn.timeSlot);
+    const slotEndMs = txn.collectionDate
+        ? (() => { const d = new Date(txn.collectionDate + "T00:00:00"); if (slotEnd) d.setHours(slotEnd.hour, slotEnd.minute + 1, 0, 0); return d.getTime(); })()
+        : txn.droppedOffAt ? new Date(txn.droppedOffAt).getTime() : null;
+    if (!slotEndMs) return false;
+    return now >= slotEndMs && now < deadlineMs;
 }
 
 // ─── Navbar ───────────────────────────────────────────────────────────────────
@@ -1432,12 +1454,30 @@ function TimeSlotsView({ transactions, facilityConfig }) {
 
     return (
         <div className={styles.slotsGrid}>
-            {sorted.map(([slot, txns]) => (
+            {sorted.map(([slot, txns]) => {
+                // Determine if this slot is in drop-off grace period (slot time passed, not yet overdue)
+                // We check by seeing if any txn in this slot would be in grace period
+                const slotTxnsWithDate = txns.filter(t => t.dropOffDate);
+                const isSlotInGrace = slotTxnsWithDate.length > 0 && slotTxnsWithDate.every(t => isDropOffInGracePeriod(t));
+                const isSlotPast = slotTxnsWithDate.length > 0 && isBookingTimeReached(slotTxnsWithDate[0].dropOffDate, slot);
+
+                return (
                 <div key={slot} className={styles.slotCard}>
                     <div className={styles.slotHeader}>
                         <i className="fa-regular fa-clock" />
                         <span className={styles.slotTime}>{slot}</span>
                         <span className={styles.slotCount}>{txns.length} item{txns.length > 1 ? "s" : ""}</span>
+                        {isSlotInGrace && (
+                            <span style={{
+                                marginLeft: "auto",
+                                display: "inline-flex", alignItems: "center", gap: 4,
+                                padding: "2px 8px", borderRadius: 99, fontSize: "0.7rem", fontWeight: 700,
+                                background: "#fef3c7", color: "#92400e", border: "1px solid #fcd34d",
+                                whiteSpace: "nowrap",
+                            }}>
+                                <i className="fa-solid fa-hourglass-half" style={{ fontSize: "0.65rem" }} /> Grace Period
+                            </span>
+                        )}
                     </div>
                     {txns.length === 0 ? (
                         <div className={styles.slotEmpty}>
@@ -1466,7 +1506,8 @@ function TimeSlotsView({ transactions, facilityConfig }) {
                         })
                     )}
                 </div>
-            ))}
+                );
+            })}
         </div>
     );
 }
@@ -2077,6 +2118,10 @@ export default function StaffDashboard() {
         const buyerNowDone = confirmingBuyer || txn.buyerDropOffConfirmed || !isTrade;
         const bothDone = sellerNowDone && buyerNowDone;
 
+        // For trades: move to awaiting_collection after the FIRST drop-off so both
+        // items appear independently in Collections. For non-trades: move immediately.
+        const shouldMoveToAwaiting = bothDone || isTrade;
+
         setTransactions(prev =>
             prev.map(t => {
                 if (t.id !== id) return t;
@@ -2084,7 +2129,7 @@ export default function StaffDashboard() {
                     ...t,
                     sellerDropOffConfirmed: confirmingSeller ? true : t.sellerDropOffConfirmed,
                     buyerDropOffConfirmed: confirmingBuyer ? true : t.buyerDropOffConfirmed,
-                    status: bothDone ? "awaiting_collection" : t.status,
+                    status: shouldMoveToAwaiting ? "awaiting_collection" : t.status,
                     checklist: bothDone ? t.checklist.map(s => ({ ...s, done: true })) : t.checklist,
                 };
             })
@@ -2104,7 +2149,7 @@ export default function StaffDashboard() {
                 droppedOffAt: serverTimestamp(),
             };
 
-            if (bothDone) {
+            if (shouldMoveToAwaiting) {
                 firestoreUpdate.status = "awaiting_collection";
                 firestoreUpdate.releasedAt = serverTimestamp();
                 firestoreUpdate.releasedByStaff = true;
@@ -2112,22 +2157,49 @@ export default function StaffDashboard() {
 
             await updateDoc(doc(db, "transactions", id), firestoreUpdate);
 
-            if (confirmingSeller) {
-                await notifyDropOffConfirmed({
-                    transactionId: txn.id,
-                    sellerId:      txn.sellerId,
-                    buyerId:       txn.buyerId,
-                    listingId:     txn.listingId,
-                    listingTitle:  txn.listingTitle || txn.item,
-                });
-            }
-            if (bothDone) {
-                await notifyItemReadyForCollection({
-                    transactionId: txn.id,
-                    buyerId:       txn.buyerId,
-                    listingId:     txn.listingId,
-                    listingTitle:  txn.listingTitle || txn.item,
-                });
+            if (isTrade) {
+                const sellerItemTitle = txn.listingTitle || txn.item;
+                const buyerItemTitle  = txn.tradeItem?.name || txn.tradeItem?.title || "Trade item";
+
+                if (confirmingSeller) {
+                    // Seller dropped off their item → notify buyer their item is at the facility
+                    await sendNotification(txn.buyerId, {
+                        type:          "item_at_facility",
+                        listingId:     txn.listingId || null,
+                        transactionId: txn.id,
+                        listingTitle:  sellerItemTitle,
+                        message:       `"${sellerItemTitle}" has been dropped off at the trade facility. You can come collect it once your own trade item has also been dropped off.`,
+                    });
+                }
+                // Note: seller does NOT get a notification when the buyer drops off their trade item
+                if (bothDone) {
+                    // Both items now at facility — notify both parties they can collect
+                    await sendNotification(txn.buyerId, {
+                        type:          "item_ready_for_collection",
+                        listingId:     txn.listingId || null,
+                        transactionId: txn.id,
+                        listingTitle:  sellerItemTitle,
+                        message:       `Both trade items are now at the facility. "${sellerItemTitle}" is ready for you to collect. Show your receipt to staff when collecting.`,
+                    });
+                    await sendNotification(txn.sellerId, {
+                        type:          "item_ready_for_collection",
+                        listingId:     txn.listingId || null,
+                        transactionId: txn.id,
+                        listingTitle:  buyerItemTitle,
+                        message:       `Both trade items are now at the facility. "${buyerItemTitle}" is ready for you to collect. Show your receipt to staff when collecting.`,
+                    });
+                }
+            } else {
+                // Non-trade: seller dropped off, buyer gets the single notification
+                if (confirmingSeller) {
+                    await notifyBothParties({
+                        id:           txn.id,
+                        buyerId:      txn.buyerId,
+                        sellerId:     txn.sellerId,
+                        listingId:    txn.listingId,
+                        listingTitle: txn.listingTitle || txn.item,
+                    }, "drop_off");
+                }
             }
 
         } catch (err) {
@@ -2307,6 +2379,10 @@ export default function StaffDashboard() {
         (t.collectionDate === today && t.collectionBooked);
 
     const awaitingColl = transactions.filter(t => t.status === "awaiting_collection");
+    const awaitingCollCount = awaitingColl.reduce((sum, t) => {
+        const isTrade = (t.type || "").toLowerCase() === "trade";
+        return sum + (isTrade ? 2 : 1);
+    }, 0);
     const completed = transactions.filter(t => t.status === "completed");
     const pendingDropOff = transactions.filter(t => t.status === "pending");
     const overdueCount = transactions.filter(t => isDropOffOverdue(t) || isCollectionOverdue(t)).length;
@@ -2405,7 +2481,9 @@ export default function StaffDashboard() {
                 result.push({ ...t, _collectionRole: "buyer" });
                 continue;
             }
-            if (!t.sellerCollectionConfirmed) {
+            // Seller collection card: seller comes to collect the buyer's trade item.
+            // Only show once the buyer has actually dropped off their item.
+            if (!t.sellerCollectionConfirmed && t.buyerDropOffConfirmed) {
                 result.push({
                     ...t,
                     _collectionRole: "seller",
@@ -2419,7 +2497,9 @@ export default function StaffDashboard() {
                     _originalBuyer: t.buyer,
                 });
             }
-            if (!t.buyerCollectionConfirmed) {
+            // Buyer collection card: buyer comes to collect the seller's item.
+            // Only show once the seller has actually dropped off their item.
+            if (!t.buyerCollectionConfirmed && t.sellerDropOffConfirmed) {
                 result.push({
                     ...t,
                     _collectionRole: "buyer",
@@ -2441,7 +2521,7 @@ export default function StaffDashboard() {
 
     const STATS = [
         { label: "Pending Drop-off", value: pendingDropOff.length, icon: "fa-truck-arrow-right", color: "#f59e0b" },
-        { label: "Awaiting Collection", value: awaitingColl.length, icon: "fa-person-walking", color: "#8b5cf6" },
+        { label: "Awaiting Collection", value: awaitingCollCount, icon: "fa-person-walking", color: "#8b5cf6" },
         { label: "Overdue", value: overdueCount, icon: "fa-circle-exclamation", color: "#ef4444", onClick: () => setActiveTab("overdue") },
         { label: "Completed", value: completed.length, icon: "fa-circle-check", color: "#10b981" },
     ];
