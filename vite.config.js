@@ -29,6 +29,7 @@ export default defineConfig(({ mode }) => ({
       reporter: ['text', 'lcov'],
       reportsDirectory: './coverage',
       all: true,
+      ignoreEmptyLines: true,
       include: ['src/**/*.{js,jsx,ts,tsx}'],
       exclude: [
         'src/__mocks__/**',
