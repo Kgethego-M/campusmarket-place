@@ -282,7 +282,7 @@ export default function Navbar() {
         const price = n.listingPrice ? ` · R${Number(n.listingPrice).toLocaleString('en-ZA')}` : '';
         const buyer = n.buyerName || 'A student';
         const isTrade = n.isTrade === true;
-        if (n.type === 'buyer_paid')                return `${buyer} has paid for ${title || 'your item'}. Book a drop-off slot now.`;
+        if (n.type === 'buyer_paid')                return `${buyer} has committed to pay or has paid for ${title || 'your item'}. Book a drop-off slot now.`;
         if (n.type === 'new_offer') {
             const itemLabel = title || '"your item"';
             if (isTrade) return `${buyer} made a trade offer on ${itemLabel}`;
@@ -295,7 +295,7 @@ export default function Navbar() {
             const isPartialNotif = pm === 'partial';
             if (isCashNotif) {
                 const amt = n.agreedPrice ? ` — R${Number(n.agreedPrice).toLocaleString('en-ZA')} in cash` : '';
-                return `Your offer on ${title || 'your item'} was accepted! You committed to paying${amt} in cash at collection.`;
+                return `Your offer on ${title || 'your item'} was accepted! Go commit to paying${amt} in cash at collection in My Purchases.`;
             }
             if (isPartialNotif && n.partialAmount) {
                 return `Your offer on ${title || 'your item'} was accepted! Pay R${Number(n.partialAmount).toLocaleString('en-ZA')} online now — the rest in cash at collection.`;
