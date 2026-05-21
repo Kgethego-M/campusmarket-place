@@ -1,3 +1,7 @@
+codecov:
+  require_ci_to_pass: yes
+  max_report_age: off
+
 coverage:
   status:
     project:
@@ -8,9 +12,15 @@ coverage:
         target: 50%   
 
 flags:
-  default:
+  frontend:
+    paths:
+      - src/
     carryforward: true
-    
+  backend:
+    paths:
+      - backend/
+    carryforward: true
+
 comment:
   layout: "reach, diff, flags, files"
   behavior: default
