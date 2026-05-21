@@ -117,7 +117,7 @@ async function notifyOverdueDropOff(txn) {
     const sellerExists = await notificationAlreadyExists(txn.id, "overdue_dropoff_seller");
     
     if (!sellerExists) {
-        const sellerMsg = `Your drop-off for "${title}" is overdue. You have 24 hours to drop off the item at the trade facility. If the item is not dropped off within 24 hours, this transaction will be automatically cancelled.`;
+        const sellerMsg = `Your drop-off for "${title}" is overdue. Please drop off the item at the trade facility within the next 24 hours. If the item is not dropped off within the next 24 hours, this transaction will be automatically cancelled.`;
         await sendNotification(txn.sellerId, {
             type:          "overdue_dropoff_seller",
             listingId:     txn.listingId || null,
@@ -128,7 +128,7 @@ async function notifyOverdueDropOff(txn) {
     }
 
     if (!buyerExists) {
-        const buyerMsg = `The seller has not yet dropped off "${title}" at the trade facility. They have been notified and given 24 hours to drop off. If they do not drop off within 24 hours, this transaction will be cancelled.`;
+        const buyerMsg = `The seller has not yet dropped off "${title}" at the trade facility. They have been notified and must drop off within the next 24 hours. If they do not drop off in time, this transaction will be cancelled.`;
         await sendNotification(txn.buyerId, {
             type:          "overdue_dropoff_buyer",
             listingId:     txn.listingId || null,
@@ -157,6 +157,7 @@ async function notifyCancelledDropOff(txn) {
         transactionId: txn.id,
         listingTitle:  title,
         message:       sellerMsg,
+        actionUrl:     `/profile?tab=history&highlight=${txn.id}`,
     });
 
     await sendNotification(txn.buyerId, {
@@ -165,6 +166,7 @@ async function notifyCancelledDropOff(txn) {
         transactionId: txn.id,
         listingTitle:  title,
         message:       buyerMsg,
+        actionUrl:     `/profile?tab=history&highlight=${txn.id}`,
     });
 }
 
@@ -172,8 +174,8 @@ async function notifyCancelledCollection(txn) {
     if (!txn.buyerId || !txn.sellerId) return;
     const title = txn.listingTitle || txn.item;
 
-    const buyerMsg  = `Your transaction for "${title}" was cancelled due to non-collection.`;
-    const sellerMsg = `The buyer did not collect "${title}" — the transaction has been cancelled. Please come to the trade facility to collect your item back.`;
+    const buyerMsg  = `Your transaction for "${title}" has been cancelled because you did not collect the item in time. The item is being held at the trade facility and will be returned to the seller. Please contact the facility if you believe this was an error.`;
+    const sellerMsg = `The buyer did not collect "${title}" — the transaction has been cancelled. Your item is being held at the trade facility. Please come in to collect it back at your earliest convenience. Show your original receipt to staff when collecting.`;
 
     await sendNotification(txn.buyerId, {
         type:          "cancelled_collection_buyer",
@@ -181,6 +183,7 @@ async function notifyCancelledCollection(txn) {
         transactionId: txn.id,
         listingTitle:  title,
         message:       buyerMsg,
+        actionUrl:     `/profile?tab=history&highlight=${txn.id}`,
     });
 
     await sendNotification(txn.sellerId, {
@@ -189,16 +192,18 @@ async function notifyCancelledCollection(txn) {
         transactionId: txn.id,
         listingTitle:  title,
         message:       sellerMsg,
+        actionUrl:     `/profile?tab=history&highlight=${txn.id}`,
     });
 }
 
 const TABS = [
-    { key: "drop_offs",   label: "Drop Offs",         icon: "fa-truck-arrow-right"  },
-    { key: "collections", label: "Collections",        icon: "fa-person-walking"     },
-    { key: "overdue",     label: "Overdue",            icon: "fa-triangle-exclamation" },
-    { key: "all",         label: "All Transactions",   icon: "fa-list"               },
-    { key: "history",     label: "History",            icon: "fa-clock-rotate-left"  },
-    { key: "time_slots",  label: "Time Slots",         icon: "fa-clock"              },
+    { key: "drop_offs",        label: "Drop Offs",         icon: "fa-truck-arrow-right"  },
+    { key: "collections",      label: "Collections",        icon: "fa-person-walking"     },
+    { key: "overdue",          label: "Overdue",            icon: "fa-triangle-exclamation" },
+    { key: "awaiting_returns", label: "Awaiting Returns",   icon: "fa-box-archive"        },
+    { key: "all",              label: "All Transactions",   icon: "fa-list"               },
+    { key: "history",          label: "History",            icon: "fa-clock-rotate-left"  },
+    { key: "time_slots",       label: "Time Slots",         icon: "fa-clock"              },
 ];
 
 const STATUS_META = {
@@ -1399,6 +1404,138 @@ const shortfall        = isFullyOnline
     );
 }
 
+// ─── Awaiting Returns View ────────────────────────────────────────────────────
+function AwaitingReturnsView({ transactions, onMarkCollected }) {
+    if (transactions.length === 0) {
+        return (
+            <div style={{
+                display: "flex", flexDirection: "column", alignItems: "center",
+                justifyContent: "center", gap: 12, padding: "60px 24px",
+                color: "#64748b", textAlign: "center",
+            }}>
+                <i className="fa-solid fa-box-archive" style={{ fontSize: "2.5rem", color: "#0891b2", opacity: 0.5 }} />
+                <p style={{ margin: 0, fontWeight: 600, fontSize: "1rem" }}>No items awaiting return</p>
+                <p style={{ margin: 0, fontSize: "0.85rem", color: "#94a3b8" }}>
+                    Items from cancelled overdue-collection transactions will appear here for tracking.
+                </p>
+            </div>
+        );
+    }
+
+    return (
+        <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+            {/* Info banner */}
+            <div style={{
+                margin: "0 0 16px",
+                padding: "12px 16px",
+                background: "#f0f9ff",
+                border: "1px solid #bae6fd",
+                borderRadius: 10,
+                display: "flex", alignItems: "flex-start", gap: 10,
+            }}>
+                <i className="fa-solid fa-circle-info" style={{ color: "#0891b2", marginTop: 2, flexShrink: 0 }} />
+                <div>
+                    <p style={{ margin: "0 0 2px", fontWeight: 700, fontSize: "0.85rem", color: "#0369a1" }}>
+                        Items held for seller return ({transactions.length})
+                    </p>
+                    <p style={{ margin: 0, fontSize: "0.8rem", color: "#0369a1" }}>
+                        These items were not collected by the buyer and are being held at the facility. The seller has been notified to come collect them. Press <strong>"Mark Collected"</strong> when the seller arrives and picks up their item.
+                    </p>
+                </div>
+            </div>
+
+            {/* Item list */}
+            {transactions.map(txn => {
+                const payConfig = getPaymentConfig(txn);
+                const sinceDateStr = txn.awaitingSellerReturnSince
+                    ? new Date(txn.awaitingSellerReturnSince).toLocaleDateString("en-ZA", { day: "numeric", month: "short", year: "numeric" })
+                    : null;
+                const sinceTimeStr = txn.awaitingSellerReturnSince
+                    ? new Date(txn.awaitingSellerReturnSince).toLocaleTimeString("en-ZA", { hour: "2-digit", minute: "2-digit" })
+                    : null;
+
+                return (
+                    <div key={txn.id} style={{
+                        background: "#fff",
+                        border: "1.5px solid #e2e8f0",
+                        borderLeft: "4px solid #0891b2",
+                        borderRadius: 10,
+                        padding: "14px 16px",
+                        marginBottom: 10,
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 14,
+                    }}>
+                        {/* Thumbnail */}
+                        <div style={{
+                            width: 52, height: 52, borderRadius: 8, flexShrink: 0,
+                            background: "#f1f5f9", overflow: "hidden",
+                            display: "flex", alignItems: "center", justifyContent: "center",
+                        }}>
+                            {txn.itemImage
+                                ? <img src={txn.itemImage} alt={txn.item} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                                : <i className="fa-solid fa-box-archive" style={{ color: "#94a3b8", fontSize: "1.3rem" }} />
+                            }
+                        </div>
+
+                        {/* Info */}
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontWeight: 700, fontSize: "0.92rem", color: "#1e293b", marginBottom: 3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                {txn.item}
+                            </div>
+                            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 4 }}>
+                                <span style={{ fontSize: "0.75rem", color: "#64748b" }}>
+                                    <i className="fa-solid fa-store" style={{ marginRight: 3 }} />
+                                    Seller: <strong style={{ color: "#334155" }}>{txn.seller}</strong>
+                                </span>
+                                <span style={{ fontSize: "0.75rem", color: "#64748b" }}>
+                                    <i className="fa-solid fa-user" style={{ marginRight: 3 }} />
+                                    Buyer: <strong style={{ color: "#334155" }}>{txn.buyer}</strong>
+                                </span>
+                            </div>
+                            {sinceDateStr && (
+                                <div style={{ fontSize: "0.72rem", color: "#94a3b8" }}>
+                                    <i className="fa-solid fa-clock" style={{ marginRight: 3 }} />
+                                    Held since: {sinceDateStr} at {sinceTimeStr}
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Badge + button */}
+                        <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6, flexShrink: 0 }}>
+                            <span style={{
+                                padding: "2px 9px", borderRadius: 99, fontSize: "0.71rem", fontWeight: 700,
+                                background: "#e0f2fe", color: "#0369a1", border: "1px solid #bae6fd",
+                                whiteSpace: "nowrap",
+                            }}>
+                                <i className="fa-solid fa-box-archive" style={{ marginRight: 3 }} />
+                                Held for Return
+                            </span>
+                            <span style={{ padding: "2px 8px", background: payConfig.bg, color: payConfig.color, borderRadius: 99, fontSize: "0.71rem", fontWeight: 700 }}>
+                                <i className={`fa-solid ${payConfig.icon}`} style={{ marginRight: 3 }} />{payConfig.label}
+                            </span>
+                            <button
+                                onClick={() => onMarkCollected(txn)}
+                                style={{
+                                    padding: "6px 14px",
+                                    background: "#0891b2", color: "#fff",
+                                    border: "none", borderRadius: 7,
+                                    fontSize: "0.78rem", fontWeight: 700,
+                                    cursor: "pointer", whiteSpace: "nowrap",
+                                    display: "flex", alignItems: "center", gap: 5,
+                                }}
+                            >
+                                <i className="fa-solid fa-circle-check" />
+                                Mark Collected
+                            </button>
+                        </div>
+                    </div>
+                );
+            })}
+        </div>
+    );
+}
+
 // ─── Time Slots View ──────────────────────────────────────────────────────────
 function TimeSlotsView({ transactions, facilityConfig }) {
     const generateDynamicTimeSlots = () => {
@@ -1727,6 +1864,7 @@ export default function StaffDashboard() {
                 "pending_payment",
                 "awaiting_collection",
                 "completed",
+                "overdue_cancelled",
             ])
         );
 
@@ -1820,6 +1958,11 @@ export default function StaffDashboard() {
                             { label: "Inspected Item",     done: false },
                         ],
                     buyerChecklist: data.buyerChecklist || null,
+                    awaitingSellerReturn: data.awaitingSellerReturn || false,
+                    awaitingSellerReturnSince: data.awaitingSellerReturnSince?.toDate ? data.awaitingSellerReturnSince.toDate().toISOString() : data.awaitingSellerReturnSince || null,
+                    sellerReturnCollected: data.sellerReturnCollected || false,
+                    sellerReturnCollectedAt: data.sellerReturnCollectedAt?.toDate ? data.sellerReturnCollectedAt.toDate().toISOString() : data.sellerReturnCollectedAt || null,
+                    cancelReason: data.cancelReason || null,
                     date: data.createdAt?.toDate ? data.createdAt.toDate() : new Date(),
                 }));
 
@@ -1842,7 +1985,7 @@ export default function StaffDashboard() {
                 collection(db, "transactions"),
                 where("status", "in", [
                     "waiting", "accepted", "pending_payment",
-                    "awaiting_collection", "completed",
+                    "awaiting_collection", "completed", "overdue_cancelled",
                 ])
             );
             const snapshot = await getDocs(q);
@@ -1932,6 +2075,11 @@ export default function StaffDashboard() {
                         { label: "Inspected Item",     done: false },
                     ],
                 buyerChecklist: data.buyerChecklist || null,
+                awaitingSellerReturn: data.awaitingSellerReturn || false,
+                awaitingSellerReturnSince: data.awaitingSellerReturnSince?.toDate ? data.awaitingSellerReturnSince.toDate().toISOString() : data.awaitingSellerReturnSince || null,
+                sellerReturnCollected: data.sellerReturnCollected || false,
+                sellerReturnCollectedAt: data.sellerReturnCollectedAt?.toDate ? data.sellerReturnCollectedAt.toDate().toISOString() : data.sellerReturnCollectedAt || null,
+                cancelReason: data.cancelReason || null,
                 date: data.createdAt?.toDate ? data.createdAt.toDate() : new Date(),
             }));
 
@@ -1964,24 +2112,40 @@ export default function StaffDashboard() {
 
     const handleCancelOverdue = async (txn, overdueType) => {
         try {
-            await updateDoc(doc(db, "transactions", txn.id), {
+            const isOverdueCollection = overdueType === "collection";
+
+            // Base transaction update
+            const txnUpdate = {
                 status: "overdue_cancelled",
                 cancelledAt: serverTimestamp(),
-                cancelReason: overdueType === "drop_off" ? "seller_no_dropoff" : "buyer_no_collection",
+                cancelReason: isOverdueCollection ? "buyer_no_collection" : "seller_no_dropoff",
                 cancelledByStaff: true,
-            });
+            };
 
-            if (txn.listingId) {
+            // For overdue collections: item is physically at the facility — mark it as
+            // awaiting seller return so staff can track it in the "Awaiting Returns" tab.
+            if (isOverdueCollection) {
+                txnUpdate.awaitingSellerReturn = true;
+                txnUpdate.awaitingSellerReturnSince = serverTimestamp();
+            }
+
+            await updateDoc(doc(db, "transactions", txn.id), txnUpdate);
+
+            // Listing handling:
+            // - Overdue DROP-OFF → listing never arrived so it can be relisted (mark cancelled)
+            // - Overdue COLLECTION → item IS at the facility; do NOT touch the listing
+            //   (it stays as-is — it's not relisted, it's awaiting seller return)
+            if (!isOverdueCollection && txn.listingId) {
                 await updateDoc(doc(db, "listings", txn.listingId), {
                     status: "cancelled",
-                    cancelReason: overdueType === "drop_off" ? "seller_no_dropoff" : "buyer_no_collection",
+                    cancelReason: "seller_no_dropoff",
                     cancelledAt: serverTimestamp(),
                     cancelledByStaff: true,
-                    pendingSellerAction: true,
                 });
             }
 
-            if (overdueType === "drop_off") {
+            // Send notifications
+            if (!isOverdueCollection) {
                 const wasOnlinePayment = ['online','full_online','fully_online','partial'].includes(
                     (txn.paymentType || txn.paymentMethod || '').toLowerCase()
                 );
@@ -2004,7 +2168,11 @@ export default function StaffDashboard() {
             }
 
             setTransactions(prev =>
-                prev.map(t => t.id === txn.id ? { ...t, status: "overdue_cancelled" } : t)
+                prev.map(t => t.id === txn.id ? {
+                    ...t,
+                    status: "overdue_cancelled",
+                    awaitingSellerReturn: isOverdueCollection ? true : t.awaitingSellerReturn,
+                } : t)
             );
         } catch (err) {
             console.error("Failed to cancel overdue transaction:", err);
@@ -2015,12 +2183,22 @@ export default function StaffDashboard() {
         if (transactions.length === 0) return;
         
         async function autoAlert() {
+            // TODO: change to real production values:
+            // - Drop-off grace: 24 hrs after missed slot
+            // - Collection alert: day 6 (6 days after droppedOffAt), giving buyer 24 hrs to collect before cancellation on day 7
+            const COLLECTION_ALERT_MS = 15 * 60 * 1000; // 15 min for demo; production = 6 * 24 * 60 * 60 * 1000
             for (const txn of transactions) {
                 if (txn.status === "overdue_cancelled") continue;
                 if (txn.overdueAlertSentAt) continue;
                 
                 const slotMissed = isSlotMissed(txn);
-                const overdueCollection = isCollectionOverdue(txn);
+
+                // Collection alert: fires after COLLECTION_ALERT_MS since drop-off
+                let overdueCollection = false;
+                if (isCollectionOverdue(txn)) {
+                    const droppedAt = txn.droppedOffAt ? new Date(txn.droppedOffAt).getTime() : null;
+                    overdueCollection = droppedAt ? (Date.now() - droppedAt >= COLLECTION_ALERT_MS) : true;
+                }
                 
                 if (!slotMissed && !overdueCollection) continue;
                 
@@ -2378,14 +2556,41 @@ export default function StaffDashboard() {
         (t.dropOffDate === today && t.dropOffBooked) ||
         (t.collectionDate === today && t.collectionBooked);
 
-    const awaitingColl = transactions.filter(t => t.status === "awaiting_collection");
+    const awaitingColl = transactions.filter(t => t.status === "awaiting_collection" && !isCollectionOverdue(t));
+    // Count exactly matches what expandForCollections renders — no guessing
     const awaitingCollCount = awaitingColl.reduce((sum, t) => {
         const isTrade = (t.type || "").toLowerCase() === "trade";
-        return sum + (isTrade ? 2 : 1);
+        if (!isTrade) return sum + 1;
+        let count = 0;
+        if (!t.sellerCollectionConfirmed && t.buyerDropOffConfirmed) count++;
+        if (!t.buyerCollectionConfirmed && t.sellerDropOffConfirmed) count++;
+        return sum + count;
     }, 0);
     const completed = transactions.filter(t => t.status === "completed");
     const pendingDropOff = transactions.filter(t => t.status === "pending");
     const overdueCount = transactions.filter(t => isDropOffOverdue(t) || isCollectionOverdue(t)).length;
+    const awaitingReturns = transactions.filter(t => t.status === "overdue_cancelled" && t.awaitingSellerReturn && !t.sellerReturnCollected);
+
+    const handleMarkSellerReturn = async (txn) => {
+        try {
+            await updateDoc(doc(db, "transactions", txn.id), {
+                sellerReturnCollected: true,
+                sellerReturnCollectedAt: serverTimestamp(),
+                sellerReturnCollectedBy: auth.currentUser?.uid || null,
+                awaitingSellerReturn: false,
+            });
+            setTransactions(prev =>
+                prev.map(t => t.id === txn.id ? {
+                    ...t,
+                    sellerReturnCollected: true,
+                    sellerReturnCollectedAt: new Date().toISOString(),
+                    awaitingSellerReturn: false,
+                } : t)
+            );
+        } catch (err) {
+            console.error("Failed to mark seller return:", err);
+        }
+    };
 
     const timeSlotToMinutes = (slot) => {
         if (!slot || slot === "TBD") return Infinity;
@@ -2523,6 +2728,7 @@ export default function StaffDashboard() {
         { label: "Pending Drop-off", value: pendingDropOff.length, icon: "fa-truck-arrow-right", color: "#f59e0b" },
         { label: "Awaiting Collection", value: awaitingCollCount, icon: "fa-person-walking", color: "#8b5cf6" },
         { label: "Overdue", value: overdueCount, icon: "fa-circle-exclamation", color: "#ef4444", onClick: () => setActiveTab("overdue") },
+        { label: "Awaiting Returns", value: awaitingReturns.length, icon: "fa-box-archive", color: "#0891b2", onClick: () => setActiveTab("awaiting_returns") },
         { label: "Completed", value: completed.length, icon: "fa-circle-check", color: "#10b981" },
     ];
 
@@ -2620,6 +2826,9 @@ export default function StaffDashboard() {
                                     <span className={styles.tabDot} />
                                 )}
                                 {tab.key === "overdue" && overdueCount > 0 && (
+                                    <span className={styles.tabDot} />
+                                )}
+                                {tab.key === "awaiting_returns" && awaitingReturns.length > 0 && (
                                     <span className={styles.tabDot} />
                                 )}
                             </button>
@@ -2885,7 +3094,17 @@ export default function StaffDashboard() {
                                 )}
                             </div>
                         );
-                    })() : activeTab === "time_slots" ? (
+                    })() : activeTab === "awaiting_returns" ? (
+                        <AwaitingReturnsView
+                            transactions={awaitingReturns}
+                            onMarkCollected={(txn) => showConfirmModal(
+                                'Mark as Collected by Seller',
+                                `Confirm that the seller has come in and collected "${txn.item}" back from the facility?`,
+                                () => handleMarkSellerReturn(txn),
+                                'Yes, Mark Collected'
+                            )}
+                        />
+                    ) : activeTab === "time_slots" ? (
                         <TimeSlotsView transactions={visibleTxns} facilityConfig={facilityConfig} />
                     ) : displayTxns.length === 0 ? (
                         <div className={styles.emptyState}>
