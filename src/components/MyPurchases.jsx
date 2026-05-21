@@ -357,15 +357,29 @@ export default function MyPurchases() {
   const needsTradeDropOff = (tx) =>
     tx.type === 'trade' && tx.status === 'waiting' && !tx.buyerBookingId;
 
-  const handleCardClick = (tx) => {
-    if (canCompletePayment(tx)) {
-      navigate(`/payment/${tx.id}`);
-    } else if (needsTradeDropOff(tx)) {
-      navigate(`/book-dropoff/${tx.id}`);
+  // Trade cards: only clickable when accepted (→ book-dropoff)
+  // waiting and awaiting_collection trades are not clickable
+  const isCardClickable = (tx) => {
+    if (tx.type === 'trade') {
+      return tx.status === 'accepted';
     }
+    return canCompletePayment(tx);
   };
 
-  const isCardClickable = (tx) => canCompletePayment(tx) || needsTradeDropOff(tx);
+  const handleArrowClick = (tx) => {
+    // Accepted trade → book drop-off
+    if (tx.type === 'trade' && tx.status === 'accepted') {
+      navigate(`/book-dropoff/${tx.id}`);
+      return;
+    }
+    if (canCompletePayment(tx)) {
+      navigate(`/payment/${tx.id}`);
+      return;
+    }
+    if (tx.listingId) {
+      navigate(`/listing/${tx.listingId}`);
+    }
+  };
 
   const badgeStyle = (bg) => ({
     padding: '3px 11px', borderRadius: 20, fontSize: '0.75rem',
@@ -379,14 +393,6 @@ export default function MyPurchases() {
   const normaliseListingType = (t) => ({
     sale: 'For Sale', trade: 'For Trade', either: 'For Sale or Trade',
   }[t] || t);
-
-  const handleArrowClick = (tx) => {
-    if (canCompletePayment(tx)) {
-      navigate(`/payment/${tx.id}`);
-    } else if (tx.listingId) {
-      navigate(`/listing/${tx.listingId}`);
-    }
-  };
 
   return (
     <>
@@ -458,26 +464,39 @@ export default function MyPurchases() {
           ) : (
             <div className={styles.transactionList}>
               {filtered.map((tx) => {
-                const status          = getDisplayStatus(tx);
-                const type            = TYPE_CONFIG[tx.type] || TYPE_CONFIG.sale;
-                const isActive        = ['pending', 'accepted', 'pending_payment', 'waiting', 'ready_to_release', 'awaiting_collection'].includes(tx.status);
+                const status             = getDisplayStatus(tx);
+                const type               = TYPE_CONFIG[tx.type] || TYPE_CONFIG.sale;
+                const isActive           = ['pending', 'accepted', 'pending_payment', 'waiting', 'ready_to_release', 'awaiting_collection'].includes(tx.status);
                 const isOverdueCancelled = tx.status === 'overdue_cancelled';
-                const paymentType     = getPaymentType(tx);
-                const isPartialTx     = paymentType === 'partial';
-                const isCashTx        = paymentType === 'cash' || paymentType === 'cod';
-                const total           = getTotalAmount(tx);
-                const cashDue         = getCashDue(tx);
-                const stripePaid      = hasStripePayment(tx) && tx.paymentStatus === 'paid';
-                const showPaymentButton = canCompletePayment(tx);
-                const clickable       = isCardClickable(tx);
-                const isTrade         = tx.type === 'trade';
-                const tradeItemObj    = isTrade && tx.tradeItem && typeof tx.tradeItem === 'object' ? tx.tradeItem : null;
-                const tradeItemLabel  = getTradeItemLabel(tx.tradeItem);
-                const dropOffBooked   = isTrade && !!tx.buyerBookingId;
+                const paymentType        = getPaymentType(tx);
+                const isPartialTx        = paymentType === 'partial';
+                const isCashTx           = paymentType === 'cash' || paymentType === 'cod';
+                const total              = getTotalAmount(tx);
+                const cashDue            = getCashDue(tx);
+                const stripePaid         = hasStripePayment(tx) && tx.paymentStatus === 'paid';
+                const showPaymentButton  = canCompletePayment(tx);
+                const clickable          = isCardClickable(tx);
+                const isTrade            = tx.type === 'trade';
+                const tradeItemObj       = isTrade && tx.tradeItem && typeof tx.tradeItem === 'object' ? tx.tradeItem : null;
+                const tradeItemLabel     = getTradeItemLabel(tx.tradeItem);
+                const dropOffBooked      = isTrade && !!tx.buyerBookingId;
+
+                // Trade waiting/awaiting_collection cards are never clickable
+                const isTradeStaticStatus = isTrade && (tx.status === 'waiting' || tx.status === 'awaiting_collection' || tx.status === 'pending');
 
                 const showTradePanel    = isTrade && (tx.tradeItem || tx.terms);
                 const showNonTradePanel = !isTrade && (tx.agreedPrice != null || paymentType || tx.terms);
                 const showPanel         = showTradePanel || showNonTradePanel;
+
+                const handleCardClick = () => {
+                  if (isOverdueCancelled || isTradeStaticStatus) return;
+                  // Non-trade waiting: toggle expanded
+                  if (!isTrade && tx.status === 'waiting') {
+                    setExpandedCards(prev => ({ ...prev, [tx.id]: !prev[tx.id] }));
+                    return;
+                  }
+                  handleArrowClick(tx);
+                };
 
                 return (
                   <React.Fragment key={tx.id}>
@@ -487,14 +506,17 @@ export default function MyPurchases() {
                     style={{
                       ...(openTxId === tx.id ? { boxShadow: '0 0 0 3px #8b5cf6, 0 4px 20px rgba(139,92,246,0.18)', borderColor: '#8b5cf6' } : {}),
                       ...(isOverdueCancelled ? { filter: 'grayscale(1)', opacity: 0.7, cursor: 'default', pointerEvents: 'none' } : {}),
-                      cursor: clickable && !isOverdueCancelled ? 'pointer' : 'default'
+                      cursor: (clickable && !isOverdueCancelled && !isTradeStaticStatus) ? 'pointer' : 'default',
                     }}
-                    onClick={isOverdueCancelled ? undefined : tx.status === 'waiting' ? (e) => { setExpandedCards(prev => ({ ...prev, [tx.id]: !prev[tx.id] })); } : () => handleArrowClick(tx)}
-                    role={isOverdueCancelled ? undefined : "button"}
-                    tabIndex={isOverdueCancelled ? -1 : 0}
-                    onKeyDown={isOverdueCancelled ? undefined : (e) => { if (e.key === 'Enter') { tx.status === 'waiting' ? setExpandedCards(prev => ({ ...prev, [tx.id]: !prev[tx.id] })) : handleArrowClick(tx); } }}
+                    onClick={handleCardClick}
+                    role={(!isOverdueCancelled && !isTradeStaticStatus) ? 'button' : undefined}
+                    tabIndex={(!isOverdueCancelled && !isTradeStaticStatus) ? 0 : -1}
+                    onKeyDown={(!isOverdueCancelled && !isTradeStaticStatus)
+                      ? (e) => { if (e.key === 'Enter') handleCardClick(); }
+                      : undefined
+                    }
                   >
-                    {/* Image — always show the listing (seller's item), never the buyer's trade item */}
+                    {/* Image — always show the listing (seller's item) */}
                     <div className={styles.cardImage}>
                       {tx.listingImage ? (
                         <img src={tx.listingImage} alt={tx.listingTitle} />
@@ -635,11 +657,7 @@ export default function MyPurchases() {
                           <div className={styles.statusMsg} style={{ borderColor: '#3b82f6', background: '#eff6ff' }}>
                             <i className="fas fa-circle-check" style={{ color: '#3b82f6' }} />
                             <span>
-                              Your trade offer was accepted.{' '}
-                              {dropOffBooked
-                                ? <>Drop-off booked for <strong>{tx.buyerDropOffDate}</strong> at <strong>{tx.buyerDropOffTimeSlot}</strong>.</>
-                                : 'Book your drop-off slot below to proceed.'
-                              }
+                              Your trade offer was accepted. Tap the card to book your drop-off slot.
                             </span>
                           </div>
                         ) : isCashTx ? (
@@ -699,12 +717,9 @@ export default function MyPurchases() {
                             </svg>
                           </div>
                           <div>
-                            <p className={styles.tradeDropOffCtaTitle}>Book your drop-off slot</p>
-                            <p className={styles.tradeDropOffCtaSub}>Your trade offer was accepted — tap to schedule your drop-off at the facility.</p>
+                            <p className={styles.tradeDropOffCtaTitle}>Drop-off slot needed</p>
+                            <p className={styles.tradeDropOffCtaSub}>The seller will book their drop-off slot. You will be notified when it is time to book yours.</p>
                           </div>
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" strokeWidth="2.5" strokeLinecap="round" style={{ flexShrink: 0 }}>
-                            <polyline points="9 18 15 12 9 6"/>
-                          </svg>
                         </div>
                       )}
 
@@ -808,7 +823,7 @@ export default function MyPurchases() {
                         </div>
                       )}
 
-                      {tx.status === 'waiting' && expandedCards[tx.id] && (
+                      {tx.status === 'waiting' && !isTrade && expandedCards[tx.id] && (
                         <div style={{ marginTop: 8 }}>
                           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
                             {tx.listingDetails?.condition && (
@@ -892,7 +907,19 @@ export default function MyPurchases() {
                             <i className="fas fa-credit-card" />
                           </button>
                         )}
-                        {!showPaymentButton && tx.status === 'waiting' && (
+                        {/* Accepted trade → chevron pointing to book-dropoff */}
+                        {isTrade && tx.status === 'accepted' && (
+                          <button
+                            className={styles.viewBtn}
+                            onClick={(e) => { e.stopPropagation(); navigate(`/book-dropoff/${tx.id}`); }}
+                            title="Book drop-off"
+                            style={{ color: '#7c3aed' }}
+                          >
+                            <i className="fas fa-arrow-right" />
+                          </button>
+                        )}
+                        {/* Non-trade waiting: expand toggle */}
+                        {!isTrade && !showPaymentButton && tx.status === 'waiting' && (
                           <button
                             className={styles.viewBtn}
                             onClick={(e) => { e.stopPropagation(); setExpandedCards(prev => ({ ...prev, [tx.id]: !prev[tx.id] })); }}
@@ -902,12 +929,8 @@ export default function MyPurchases() {
                             <i className={`fas fa-chevron-${expandedCards[tx.id] ? 'up' : 'down'}`} />
                           </button>
                         )}
-                        {isTrade && tx.status === 'waiting' && !dropOffBooked && (
-                          <div className={styles.viewBtn} style={{ color: '#7c3aed', borderLeftColor: '#e9d5ff' }}>
-                            <i className="fas fa-chevron-right" style={{ fontSize: '0.7rem' }} />
-                          </div>
-                        )}
-                        {!showPaymentButton && tx.status !== 'waiting' && tx.listingId && (
+                        {/* Non-trade, non-waiting: view listing */}
+                        {!isTrade && !showPaymentButton && tx.status !== 'waiting' && tx.listingId && (
                           <button
                             className={styles.viewBtn}
                             onClick={(e) => { e.stopPropagation(); navigate(`/listing/${tx.listingId}`); }}
