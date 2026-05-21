@@ -16,3 +16,5 @@ comment:
   behavior: default
   require_changes: true
 
+fixes:
+  - "::src/"
