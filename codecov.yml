@@ -1,16 +1,33 @@
+codecov:
+  require_ci_to_pass: yes
+
 coverage:
+  precision: 2
+  round: down
+  range: "70...100"
   status:
     project:
       default:
-        target: 50%   
-    patch:
-      default:
-        target: 50%   
+        enabled: no
+      frontend:
+        target: 70%
+        flags:
+          - frontend
+      backend:
+        target: 70%
+        flags:
+          - backend
 
 flags:
-  default:
-    carryforward: true
-    
+  frontend:
+    paths:
+      - src/
+    carryforward: false
+  backend:
+    paths:
+      - backend/
+    carryforward: false
+
 comment:
   layout: "reach, diff, flags, files"
   behavior: default

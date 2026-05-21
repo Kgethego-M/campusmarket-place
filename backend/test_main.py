@@ -29,7 +29,7 @@ import json
 import pytest
 from unittest.mock import MagicMock, patch, call
 from fastapi.testclient import TestClient
-from main import app
+from backend.main import app
 
 client = TestClient(app)
 
@@ -82,7 +82,7 @@ class TestUploadImage:
 
     def test_upload_image_missing_conn_str_raises_500(self):
         """If AZURE_STORAGE_CONNECTION_STRING is missing, upload raises HTTPException 500."""
-        from routes.listings import upload_image
+        from backend.routes.listings import upload_image
         from fastapi import HTTPException
 
         mock_file = MagicMock()
@@ -99,7 +99,7 @@ class TestUploadImage:
         assert "Azure config missing" in exc_info.value.detail
 
     def test_upload_image_missing_container_raises_500(self):
-        from routes.listings import upload_image
+        from backend.routes.listings import upload_image
         from fastapi import HTTPException
 
         mock_file = MagicMock()
@@ -113,7 +113,7 @@ class TestUploadImage:
         assert exc_info.value.status_code == 500
 
     def test_upload_image_happy_path_returns_url(self):
-        from routes.listings import upload_image
+        from backend.routes.listings import upload_image
 
         mock_file = MagicMock()
         mock_file.filename = "photo.jpg"
@@ -127,7 +127,7 @@ class TestUploadImage:
         with patch.dict("os.environ", {
             "AZURE_STORAGE_CONNECTION_STRING": "fake_conn",
             "AZURE_CONTAINER_NAME": "images",
-        }), patch("routes.listings.BlobServiceClient.from_connection_string", return_value=mock_blob_service):
+        }), patch("backend.routes.listings.BlobServiceClient.from_connection_string", return_value=mock_blob_service):
             url = upload_image(mock_file)
 
         assert url.startswith("https://myaccount.blob.core.windows.net/images/")
@@ -135,7 +135,7 @@ class TestUploadImage:
         mock_blob_client.upload_blob.assert_called_once()
 
     def test_upload_image_no_filename_uses_no_extension(self):
-        from routes.listings import upload_image
+        from backend.routes.listings import upload_image
 
         mock_file = MagicMock()
         mock_file.filename = None
@@ -149,7 +149,7 @@ class TestUploadImage:
         with patch.dict("os.environ", {
             "AZURE_STORAGE_CONNECTION_STRING": "fake_conn",
             "AZURE_CONTAINER_NAME": "images",
-        }), patch("routes.listings.BlobServiceClient.from_connection_string", return_value=mock_blob_service):
+        }), patch("backend.routes.listings.BlobServiceClient.from_connection_string", return_value=mock_blob_service):
             url = upload_image(mock_file)
 
         # blob_name has no extension when filename is None
@@ -171,7 +171,7 @@ class TestGetListings:
         ]
         mock_db, mock_cursor = _make_db(fetchall_return=rows)
 
-        with patch("routes.listings.get_db", return_value=mock_db):
+        with patch("backend.routes.listings.get_db", return_value=mock_db):
             response = client.get("/listings/")
 
         assert response.status_code == 200
@@ -180,7 +180,7 @@ class TestGetListings:
     def test_get_listings_db_error_returns_500(self):
         mock_db, mock_cursor = _make_db(execute_raises=Exception("DB connection lost"))
 
-        with patch("routes.listings.get_db", return_value=mock_db):
+        with patch("backend.routes.listings.get_db", return_value=mock_db):
             response = client.get("/listings/")
 
         assert response.status_code == 500
@@ -188,13 +188,13 @@ class TestGetListings:
 
     def test_get_listings_always_closes_db(self):
         mock_db, _ = _make_db(fetchall_return=[])
-        with patch("routes.listings.get_db", return_value=mock_db):
+        with patch("backend.routes.listings.get_db", return_value=mock_db):
             client.get("/listings/")
         mock_db.close.assert_called_once()
 
     def test_get_listings_closes_db_on_error(self):
         mock_db, mock_cursor = _make_db(execute_raises=Exception("err"))
-        with patch("routes.listings.get_db", return_value=mock_db):
+        with patch("backend.routes.listings.get_db", return_value=mock_db):
             client.get("/listings/")
         mock_db.close.assert_called_once()
 
@@ -233,7 +233,7 @@ class TestCreateListing:
         lastrowid_values = [42, 7]
         type(mock_cursor).lastrowid = property(lambda self: lastrowid_values[min(call_count[0] - 1, 1)])
 
-        with patch("routes.listings.get_db", return_value=mock_db):
+        with patch("backend.routes.listings.get_db", return_value=mock_db):
             response = self._post()
 
         assert response.status_code == 200
@@ -248,7 +248,7 @@ class TestCreateListing:
         mock_db.cursor.return_value = mock_cursor
         mock_cursor.lastrowid = 99
 
-        with patch("routes.listings.get_db", return_value=mock_db):
+        with patch("backend.routes.listings.get_db", return_value=mock_db):
             response = self._post(form={
                 "user_id": "u1",
                 "title": "Fancy Book",
@@ -276,7 +276,7 @@ class TestCreateListing:
             mock_db.cursor.return_value = mock_cursor
             mock_cursor.lastrowid = 1
 
-            with patch("routes.listings.get_db", return_value=mock_db):
+            with patch("backend.routes.listings.get_db", return_value=mock_db):
                 response = self._post(form=_listing_form(listing_type=lt))
             assert response.status_code == 200, f"listing_type={lt} should be valid"
 
@@ -294,7 +294,7 @@ class TestCreateListing:
             mock_db.cursor.return_value = mock_cursor
             mock_cursor.lastrowid = 1
 
-            with patch("routes.listings.get_db", return_value=mock_db):
+            with patch("backend.routes.listings.get_db", return_value=mock_db):
                 response = self._post(form=_listing_form(condition=cond))
             assert response.status_code == 200, f"condition={cond} should be valid"
 
@@ -307,7 +307,7 @@ class TestCreateListing:
         mock_db.cursor.return_value = mock_cursor
         mock_cursor.lastrowid = 5
 
-        with patch("routes.listings.get_db", return_value=mock_db):
+        with patch("backend.routes.listings.get_db", return_value=mock_db):
             response = self._post(form=_listing_form(listing_type=" SELL "))
         assert response.status_code == 200
 
@@ -317,7 +317,7 @@ class TestCreateListing:
         mock_db.cursor.return_value = mock_cursor
         mock_cursor.lastrowid = 5
 
-        with patch("routes.listings.get_db", return_value=mock_db):
+        with patch("backend.routes.listings.get_db", return_value=mock_db):
             response = self._post(form=_listing_form(condition=" GOOD "))
         assert response.status_code == 200
 
@@ -331,8 +331,8 @@ class TestCreateListing:
 
         image_bytes = io.BytesIO(b"fake image bytes")
 
-        with patch("routes.listings.get_db", return_value=mock_db), \
-             patch("routes.listings.upload_image", return_value="https://storage.example.com/img.jpg"):
+        with patch("backend.routes.listings.get_db", return_value=mock_db), \
+             patch("backend.routes.listings.upload_image", return_value="https://storage.example.com/img.jpg"):
             response = client.post(
                 "/listings/",
                 data=_listing_form(),
@@ -345,7 +345,7 @@ class TestCreateListing:
         assert "https://storage.example.com/img.jpg" in args[0][1]
 
     def test_create_listing_image_upload_failure_returns_500(self):
-        with patch("routes.listings.upload_image", side_effect=Exception("Azure unavailable")):
+        with patch("backend.routes.listings.upload_image", side_effect=Exception("Azure unavailable")):
             response = client.post(
                 "/listings/",
                 data=_listing_form(),
@@ -362,7 +362,7 @@ class TestCreateListing:
         mock_db.cursor.return_value = mock_cursor
         mock_cursor.execute.side_effect = Exception("Duplicate key")
 
-        with patch("routes.listings.get_db", return_value=mock_db):
+        with patch("backend.routes.listings.get_db", return_value=mock_db):
             response = self._post()
 
         assert response.status_code == 500
@@ -385,7 +385,7 @@ class TestCreateListing:
         # Return 0 as lastrowid (falsy) after first execute
         type(mock_cursor).lastrowid = property(lambda self: 0)
 
-        with patch("routes.listings.get_db", return_value=mock_db):
+        with patch("backend.routes.listings.get_db", return_value=mock_db):
             response = self._post()
 
         assert response.status_code == 500
@@ -397,7 +397,7 @@ class TestCreateListing:
         mock_db.cursor.return_value = mock_cursor
         mock_cursor.lastrowid = 1
 
-        with patch("routes.listings.get_db", return_value=mock_db):
+        with patch("backend.routes.listings.get_db", return_value=mock_db):
             self._post()
 
         mock_db.close.assert_called_once()
@@ -408,7 +408,7 @@ class TestCreateListing:
         mock_db.cursor.return_value = mock_cursor
         mock_cursor.execute.side_effect = Exception("crash")
 
-        with patch("routes.listings.get_db", return_value=mock_db):
+        with patch("backend.routes.listings.get_db", return_value=mock_db):
             self._post()
 
         mock_db.close.assert_called_once()
@@ -420,7 +420,7 @@ class TestCreateListing:
         mock_db.cursor.return_value = mock_cursor
         mock_cursor.lastrowid = 3
 
-        with patch("routes.listings.get_db", return_value=mock_db):
+        with patch("backend.routes.listings.get_db", return_value=mock_db):
             response = client.post("/listings/", data={
                 "user_id": "u1",
                 "title": "Minimal",
@@ -447,7 +447,7 @@ class TestGetFirestore:
 
     def test_get_firestore_no_credentials_returns_none(self):
         import firebase_admin
-        from routes.stripe_payments import get_firestore
+        from backend.routes.stripe_payments import get_firestore
 
         # Clear existing app
         if firebase_admin._apps:
@@ -462,7 +462,7 @@ class TestGetFirestore:
 
     def test_get_firestore_bad_json_returns_none(self):
         import firebase_admin
-        from routes.stripe_payments import get_firestore
+        from backend.routes.stripe_payments import get_firestore
 
         if firebase_admin._apps:
             firebase_admin.delete_app(firebase_admin.get_app())
@@ -474,19 +474,19 @@ class TestGetFirestore:
 
     def test_get_firestore_already_initialised_returns_client(self):
         """When Firebase is already initialised, should skip init and return client."""
-        from routes.stripe_payments import get_firestore
+        from backend.routes.stripe_payments import get_firestore
 
         mock_client = MagicMock()
-        with patch("routes.stripe_payments.firestore.client", return_value=mock_client), \
+        with patch("backend.routes.stripe_payments.firestore.client", return_value=mock_client), \
              patch("firebase_admin._apps", {"[DEFAULT]": MagicMock()}):
             result = get_firestore()
 
         assert result == mock_client
 
     def test_get_firestore_client_failure_returns_none(self):
-        from routes.stripe_payments import get_firestore
+        from backend.routes.stripe_payments import get_firestore
 
-        with patch("routes.stripe_payments.firestore.client", side_effect=Exception("Firestore down")), \
+        with patch("backend.routes.stripe_payments.firestore.client", side_effect=Exception("Firestore down")), \
              patch("firebase_admin._apps", {"[DEFAULT]": MagicMock()}):
             result = get_firestore()
 
@@ -498,7 +498,7 @@ class TestGetFirestore:
 class TestGetStripe:
 
     def test_get_stripe_missing_key_raises_500(self):
-        from routes.stripe_payments import get_stripe
+        from backend.routes.stripe_payments import get_stripe
         from fastapi import HTTPException
 
         with patch.dict("os.environ", {}, clear=False):
@@ -516,7 +516,7 @@ class TestStripeHealth:
 
     def test_health_both_configured(self):
         with patch.dict("os.environ", {"STRIPE_SECRET_KEY": "sk_test_123"}), \
-             patch("routes.stripe_payments.get_firestore", return_value=MagicMock()):
+             patch("backend.routes.stripe_payments.get_firestore", return_value=MagicMock()):
             response = client.get("/api/stripe/health")
         assert response.status_code == 200
         data = response.json()
@@ -526,7 +526,7 @@ class TestStripeHealth:
     def test_health_neither_configured(self):
         import os
         os.environ.pop("STRIPE_SECRET_KEY", None)
-        with patch("routes.stripe_payments.get_firestore", return_value=None):
+        with patch("backend.routes.stripe_payments.get_firestore", return_value=None):
             response = client.get("/api/stripe/health")
         assert response.status_code == 200
         data = response.json()
@@ -595,7 +595,7 @@ class TestVerifySession:
         fake_stripe = MagicMock()
         fake_stripe.checkout.Session.retrieve.return_value = fake_session
 
-        with patch("routes.stripe_payments.get_stripe", return_value=fake_stripe):
+        with patch("backend.routes.stripe_payments.get_stripe", return_value=fake_stripe):
             response = client.post("/api/stripe/verify-session", json=_make_verify_session_payload())
 
         assert response.status_code == 200
@@ -606,8 +606,8 @@ class TestVerifySession:
         fake_stripe = MagicMock()
         fake_stripe.checkout.Session.retrieve.return_value = fake_session
 
-        with patch("routes.stripe_payments.get_stripe", return_value=fake_stripe), \
-             patch("routes.stripe_payments.get_firestore", return_value=None):
+        with patch("backend.routes.stripe_payments.get_stripe", return_value=fake_stripe), \
+             patch("backend.routes.stripe_payments.get_firestore", return_value=None):
             response = client.post("/api/stripe/verify-session", json=_make_verify_session_payload())
 
         assert response.status_code == 200
@@ -620,8 +620,8 @@ class TestVerifySession:
         fake_stripe.checkout.Session.retrieve.return_value = fake_session
         mock_fs, _ = _make_tx_fs(tx_exists=False)
 
-        with patch("routes.stripe_payments.get_stripe", return_value=fake_stripe), \
-             patch("routes.stripe_payments.get_firestore", return_value=mock_fs):
+        with patch("backend.routes.stripe_payments.get_stripe", return_value=fake_stripe), \
+             patch("backend.routes.stripe_payments.get_firestore", return_value=mock_fs):
             response = client.post("/api/stripe/verify-session", json=_make_verify_session_payload())
 
         assert response.status_code == 200
@@ -634,8 +634,8 @@ class TestVerifySession:
         fake_stripe.checkout.Session.retrieve.return_value = fake_session
         mock_fs, _ = _make_tx_fs(payment_status="paid")
 
-        with patch("routes.stripe_payments.get_stripe", return_value=fake_stripe), \
-             patch("routes.stripe_payments.get_firestore", return_value=mock_fs):
+        with patch("backend.routes.stripe_payments.get_stripe", return_value=fake_stripe), \
+             patch("backend.routes.stripe_payments.get_firestore", return_value=mock_fs):
             response = client.post("/api/stripe/verify-session", json=_make_verify_session_payload())
 
         assert response.status_code == 200
@@ -647,8 +647,8 @@ class TestVerifySession:
         fake_stripe.checkout.Session.retrieve.return_value = fake_session
         mock_fs, tx_doc = _make_tx_fs(payment_status="pending")
 
-        with patch("routes.stripe_payments.get_stripe", return_value=fake_stripe), \
-             patch("routes.stripe_payments.get_firestore", return_value=mock_fs):
+        with patch("backend.routes.stripe_payments.get_stripe", return_value=fake_stripe), \
+             patch("backend.routes.stripe_payments.get_firestore", return_value=mock_fs):
             response = client.post("/api/stripe/verify-session", json=_make_verify_session_payload())
 
         assert response.status_code == 200
@@ -668,8 +668,8 @@ class TestVerifySession:
         fake_stripe.checkout.Session.retrieve.return_value = fake_session
         mock_fs, _ = _make_tx_fs(payment_status="pending")
 
-        with patch("routes.stripe_payments.get_stripe", return_value=fake_stripe), \
-             patch("routes.stripe_payments.get_firestore", return_value=mock_fs):
+        with patch("backend.routes.stripe_payments.get_stripe", return_value=fake_stripe), \
+             patch("backend.routes.stripe_payments.get_firestore", return_value=mock_fs):
             response = client.post("/api/stripe/verify-session",
                                    json={"sessionId": "cs_test_abc", "transactionId": ""})
 
@@ -680,8 +680,8 @@ class TestVerifySession:
         fake_stripe = MagicMock()
         fake_stripe.checkout.Session.retrieve.return_value = fake_session
 
-        with patch("routes.stripe_payments.get_stripe", return_value=fake_stripe), \
-             patch("routes.stripe_payments.get_firestore", return_value=MagicMock()):
+        with patch("backend.routes.stripe_payments.get_stripe", return_value=fake_stripe), \
+             patch("backend.routes.stripe_payments.get_firestore", return_value=MagicMock()):
             response = client.post("/api/stripe/verify-session",
                                    json={"sessionId": "cs_test_abc", "transactionId": ""})
 
@@ -694,9 +694,9 @@ class TestVerifySession:
         fake_stripe.checkout.Session.retrieve.return_value = fake_session
         mock_fs, tx_doc = _make_tx_fs(payment_status="pending")
 
-        with patch("routes.stripe_payments.get_stripe", return_value=fake_stripe), \
-             patch("routes.stripe_payments.get_firestore", return_value=mock_fs), \
-             patch("routes.stripe_payments.update_analytics", side_effect=Exception("analytics boom")):
+        with patch("backend.routes.stripe_payments.get_stripe", return_value=fake_stripe), \
+             patch("backend.routes.stripe_payments.get_firestore", return_value=mock_fs), \
+             patch("backend.routes.stripe_payments.update_analytics", side_effect=Exception("analytics boom")):
             response = client.post("/api/stripe/verify-session", json=_make_verify_session_payload())
 
         # Should still succeed despite analytics error
@@ -711,8 +711,8 @@ class TestVerifySession:
         mock_fs, tx_doc = _make_tx_fs(payment_status="pending")
         tx_doc.update.side_effect = Exception("write failed")
 
-        with patch("routes.stripe_payments.get_stripe", return_value=fake_stripe), \
-             patch("routes.stripe_payments.get_firestore", return_value=mock_fs):
+        with patch("backend.routes.stripe_payments.get_stripe", return_value=fake_stripe), \
+             patch("backend.routes.stripe_payments.get_firestore", return_value=mock_fs):
             response = client.post("/api/stripe/verify-session", json=_make_verify_session_payload())
 
         assert response.status_code == 500
@@ -721,7 +721,7 @@ class TestVerifySession:
         fake_stripe = MagicMock()
         fake_stripe.checkout.Session.retrieve.side_effect = Exception("Network error")
 
-        with patch("routes.stripe_payments.get_stripe", return_value=fake_stripe):
+        with patch("backend.routes.stripe_payments.get_stripe", return_value=fake_stripe):
             response = client.post("/api/stripe/verify-session", json=_make_verify_session_payload())
 
         assert response.status_code == 500
@@ -741,9 +741,9 @@ class TestVerifySession:
         def capture_analytics(fs, amount, payment_type, tx_data):
             analytics_calls.append((amount, payment_type, tx_data))
 
-        with patch("routes.stripe_payments.get_stripe", return_value=fake_stripe), \
-             patch("routes.stripe_payments.get_firestore", return_value=mock_fs), \
-             patch("routes.stripe_payments.update_analytics", side_effect=capture_analytics):
+        with patch("backend.routes.stripe_payments.get_stripe", return_value=fake_stripe), \
+             patch("backend.routes.stripe_payments.get_firestore", return_value=mock_fs), \
+             patch("backend.routes.stripe_payments.update_analytics", side_effect=capture_analytics):
             response = client.post("/api/stripe/verify-session", json=_make_verify_session_payload())
 
         assert response.status_code == 200
@@ -770,7 +770,7 @@ def _marketplace_webhook_event(tx_id="tx_wh_1", session_id="cs_mkt_1", amount_to
 class TestWebhookMarketplace:
 
     def _post_webhook(self, event, fake_stripe):
-        with patch("routes.stripe_payments.get_stripe", return_value=fake_stripe), \
+        with patch("backend.routes.stripe_payments.get_stripe", return_value=fake_stripe), \
              patch.dict("os.environ", {"STRIPE_WEBHOOK_SECRET": "whsec_test"}):
             return client.post(
                 "/api/stripe/webhook",
@@ -782,7 +782,7 @@ class TestWebhookMarketplace:
         fake_stripe = MagicMock()
         fake_stripe.Webhook.construct_event.side_effect = ValueError("bad payload")
 
-        with patch("routes.stripe_payments.get_stripe", return_value=fake_stripe), \
+        with patch("backend.routes.stripe_payments.get_stripe", return_value=fake_stripe), \
              patch.dict("os.environ", {"STRIPE_WEBHOOK_SECRET": "whsec_test"}):
             response = client.post(
                 "/api/stripe/webhook",
@@ -796,7 +796,7 @@ class TestWebhookMarketplace:
         fake_stripe = MagicMock()
         fake_stripe.Webhook.construct_event.side_effect = Exception("bad sig")
 
-        with patch("routes.stripe_payments.get_stripe", return_value=fake_stripe), \
+        with patch("backend.routes.stripe_payments.get_stripe", return_value=fake_stripe), \
              patch.dict("os.environ", {"STRIPE_WEBHOOK_SECRET": "whsec_test"}):
             response = client.post(
                 "/api/stripe/webhook",
@@ -811,7 +811,7 @@ class TestWebhookMarketplace:
         import os
         os.environ.pop("STRIPE_WEBHOOK_SECRET", None)
 
-        with patch("routes.stripe_payments.get_stripe", return_value=fake_stripe):
+        with patch("backend.routes.stripe_payments.get_stripe", return_value=fake_stripe):
             response = client.post(
                 "/api/stripe/webhook",
                 content=b"data",
@@ -830,8 +830,8 @@ class TestWebhookMarketplace:
         tx_snap.to_dict.return_value = {"paymentStatus": "pending"}
         tx_doc.get.return_value = tx_snap
 
-        with patch("routes.stripe_payments.get_stripe", return_value=fake_stripe), \
-             patch("routes.stripe_payments.get_firestore", return_value=mock_fs), \
+        with patch("backend.routes.stripe_payments.get_stripe", return_value=fake_stripe), \
+             patch("backend.routes.stripe_payments.get_firestore", return_value=mock_fs), \
              patch.dict("os.environ", {"STRIPE_WEBHOOK_SECRET": "whsec_test"}):
             response = client.post(
                 "/api/stripe/webhook",
@@ -857,8 +857,8 @@ class TestWebhookMarketplace:
         tx_snap.to_dict.return_value = {"paymentStatus": "paid"}
         tx_doc.get.return_value = tx_snap
 
-        with patch("routes.stripe_payments.get_stripe", return_value=fake_stripe), \
-             patch("routes.stripe_payments.get_firestore", return_value=mock_fs), \
+        with patch("backend.routes.stripe_payments.get_stripe", return_value=fake_stripe), \
+             patch("backend.routes.stripe_payments.get_firestore", return_value=mock_fs), \
              patch.dict("os.environ", {"STRIPE_WEBHOOK_SECRET": "whsec_test"}):
             response = client.post(
                 "/api/stripe/webhook",
@@ -885,7 +885,7 @@ class TestWebhookMarketplace:
         fake_stripe = MagicMock()
         fake_stripe.Webhook.construct_event.return_value = event
 
-        with patch("routes.stripe_payments.get_stripe", return_value=fake_stripe), \
+        with patch("backend.routes.stripe_payments.get_stripe", return_value=fake_stripe), \
              patch.dict("os.environ", {"STRIPE_WEBHOOK_SECRET": "whsec_test"}):
             response = client.post(
                 "/api/stripe/webhook",
@@ -901,8 +901,8 @@ class TestWebhookMarketplace:
         fake_stripe = MagicMock()
         fake_stripe.Webhook.construct_event.return_value = event
 
-        with patch("routes.stripe_payments.get_stripe", return_value=fake_stripe), \
-             patch("routes.stripe_payments.get_firestore", return_value=None), \
+        with patch("backend.routes.stripe_payments.get_stripe", return_value=fake_stripe), \
+             patch("backend.routes.stripe_payments.get_firestore", return_value=None), \
              patch.dict("os.environ", {"STRIPE_WEBHOOK_SECRET": "whsec_test"}):
             response = client.post(
                 "/api/stripe/webhook",
@@ -920,8 +920,8 @@ class TestWebhookMarketplace:
         mock_fs = MagicMock()
         mock_fs.collection.side_effect = Exception("Firestore crash")
 
-        with patch("routes.stripe_payments.get_stripe", return_value=fake_stripe), \
-             patch("routes.stripe_payments.get_firestore", return_value=mock_fs), \
+        with patch("backend.routes.stripe_payments.get_stripe", return_value=fake_stripe), \
+             patch("backend.routes.stripe_payments.get_firestore", return_value=mock_fs), \
              patch.dict("os.environ", {"STRIPE_WEBHOOK_SECRET": "whsec_test"}):
             response = client.post(
                 "/api/stripe/webhook",
@@ -974,7 +974,7 @@ class TestGetDb:
     def test_get_db_returns_connection(self):
         mock_conn = MagicMock()
         with patch("mysql.connector.connect", return_value=mock_conn) as mock_connect:
-            from database import get_db
+            from backend.database import get_db
             result = get_db()
         assert result == mock_conn
 
@@ -987,7 +987,7 @@ class TestGetDb:
                  "DB_PASSWORD": "mypass",
                  "DB_NAME": "mydb",
              }):
-            from database import get_db
+            from backend.database import get_db
             get_db()
 
         mock_connect.assert_called_once_with(
@@ -1002,7 +1002,7 @@ class TestGetDb:
     def test_get_db_missing_env_vars_still_calls_connect(self):
         """Missing env vars pass None to connector — it raises, not get_db itself."""
         with patch("mysql.connector.connect", side_effect=Exception("Access denied")) as mock_connect:
-            from database import get_db
+            from backend.database import get_db
             with pytest.raises(Exception, match="Access denied"):
                 get_db()
 
@@ -1010,7 +1010,7 @@ class TestGetDb:
         """ssl_disabled must always be False (never skip SSL)."""
         mock_conn = MagicMock()
         with patch("mysql.connector.connect", return_value=mock_conn) as mock_connect:
-            from database import get_db
+            from backend.database import get_db
             get_db()
 
         call_kwargs = mock_connect.call_args.kwargs
