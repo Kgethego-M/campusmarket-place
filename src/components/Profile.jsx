@@ -110,12 +110,14 @@ function Profile() {
   const navigate     = useNavigate();
   const location     = useLocation();
   const fileInputRef = useRef(null);
+  const historyItemRefs = useRef({});
 
   const [loading, setLoading]               = useState(true);
   const [showRatings, setShowRatings]       = useState(false);
   const [isEditing, setIsEditing]           = useState(false);
   const [incomingOffers, setIncomingOffers] = useState([]);
-  const [highlightedOfferId, setHighlightedOfferId] = useState(null);
+  const [highlightedOfferId, setHighlightedOfferId]   = useState(null);
+  const [highlightedHistoryId, setHighlightedHistoryId] = useState(null);
   const [currentUserId, setCurrentUserId]   = useState(null);
 
   // Track which completed history items already have a review from this user
@@ -140,8 +142,25 @@ function Profile() {
     const highlight = params.get('highlight');
     if (tab && ['history', 'listings', 'offers', 'wallet'].includes(tab)) setActiveTab(tab);
     if (highlight) {
-      setHighlightedOfferId(highlight);
-      setTimeout(() => setHighlightedOfferId(null), 3000);
+      if (tab === 'history') {
+        setHighlightedHistoryId(highlight);
+        // Scroll to the item once it renders — retry a few times in case data is still loading
+        let attempts = 0;
+        const tryScroll = () => {
+          const el = historyItemRefs.current[highlight];
+          if (el) {
+            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          } else if (attempts < 10) {
+            attempts++;
+            setTimeout(tryScroll, 400);
+          }
+        };
+        setTimeout(tryScroll, 300);
+        setTimeout(() => setHighlightedHistoryId(null), 4000);
+      } else {
+        setHighlightedOfferId(highlight);
+        setTimeout(() => setHighlightedOfferId(null), 3000);
+      }
     }
   }, [location.search]);
 
@@ -258,9 +277,40 @@ function Profile() {
         views: d.data().views || 0,
         likes: d.data().likes || 0,
       }));
-      setListings(all);
+      // Resolve listing visibility based on cancellation reason:
+      // - buyer_no_collection → listing should disappear (mark cancelled locally)
+      // - seller_no_dropoff   → listing should go back up (mark available locally)
+      const acceptedItems = all.filter(l => l.status?.toLowerCase() === 'accepted');
+      const cancelledItems = all.filter(l => l.status?.toLowerCase() === 'cancelled');
+      const needsCheck = [...acceptedItems, ...cancelledItems];
 
-      const doneItems = all.filter(l => HISTORY_STATUSES.has(l.status?.toLowerCase()));
+      let noCollectionIds = new Set();   // buyer didn't collect  → hide
+      let noDropoffIds    = new Set();   // seller didn't dropoff → show as active
+
+      if (needsCheck.length) {
+        await Promise.all(needsCheck.map(async (l) => {
+          try {
+            const txSnap = await getDocs(query(
+              collection(db, 'transactions'),
+              where('listingId', '==', l.id),
+              where('status', '==', 'overdue_cancelled'),
+            ));
+            if (txSnap.empty) return;
+            const reason = txSnap.docs[0].data().cancelReason;
+            if (reason === 'buyer_no_collection') noCollectionIds.add(l.id);
+            if (reason === 'seller_no_dropoff')   noDropoffIds.add(l.id);
+          } catch { }
+        }));
+      }
+
+      const resolved = all.map(l => {
+        if (noCollectionIds.has(l.id)) return { ...l, status: 'cancelled' };
+        if (noDropoffIds.has(l.id))    return { ...l, status: 'available' };
+        return l;
+      });
+      setListings(resolved);
+
+      const doneItems = resolved.filter(l => HISTORY_STATUSES.has(l.status?.toLowerCase()));
       if (doneItems.length) {
         const coveredByTx = await Promise.all(
           doneItems.map(async (l) => {
@@ -314,15 +364,17 @@ function Profile() {
 
   const fetchUserPurchases = async (uid) => {
     try {
-      const [asBuyerSnap, asSellerSnap] = await Promise.all([
+      const [asBuyerSnap, asSellerSnap, asSellerCancelledSnap] = await Promise.all([
         getDocs(query(collection(db, 'transactions'), where('buyerId',  '==', uid), where('status', 'in', ['completed', 'overdue_cancelled']))),
         getDocs(query(collection(db, 'transactions'), where('sellerId', '==', uid), where('status', '==', 'completed'))),
+        getDocs(query(collection(db, 'transactions'), where('sellerId', '==', uid), where('status', '==', 'overdue_cancelled'))),
       ]);
 
       const seen = new Set();
       const allDocs = [
         ...asBuyerSnap.docs.map(d  => ({ d, side: 'buyer' })),
         ...asSellerSnap.docs.map(d => ({ d, side: 'seller' })),
+        ...asSellerCancelledSnap.docs.map(d => ({ d, side: 'seller' })),
       ].filter(({ d }) => {
         if (seen.has(d.id)) return false;
         seen.add(d.id);
@@ -516,7 +568,7 @@ function Profile() {
   const totalBought  = safeNumber(profileData.totalBought);
   const walletBal    = safeNumber(profileData.walletBalance);
 
-  const activeListings   = listings.filter(l => !HISTORY_STATUSES.has(l.status?.toLowerCase?.()) && !READONLY_STATUSES.has(l.status?.toLowerCase?.()));
+  const activeListings   = listings.filter(l => !HISTORY_STATUSES.has(l.status?.toLowerCase?.()) && !READONLY_STATUSES.has(l.status?.toLowerCase?.()) && l.status?.toLowerCase?.() !== 'cancelled');
   const acceptedListings = listings.filter(l => READONLY_STATUSES.has(l.status?.toLowerCase?.()));
   const sortedHistory    = [...history].sort((a, b) => new Date(b.date) - new Date(a.date));
 
@@ -643,10 +695,29 @@ function Profile() {
                   const isTrade    = item.type === 'trade';
                   const isCompleted = item.status === 'completed' || item.status === 'sold' || item.status === 'traded';
                   const isCancelled = item.status === 'overdue_cancelled';
+                  const isHighlighted = item.id === highlightedHistoryId;
+
+                  // Derive a human-readable cancel reason
+                  let cancelReasonLabel = 'Transaction cancelled';
+                  let cancelReasonIcon  = 'fa-ban';
+                  let badgeLabel        = 'Cancelled';
+                  if (isCancelled) {
+                    if (item.cancelReason === 'buyer_no_collection') {
+                      cancelReasonLabel = isBuyer
+                        ? 'Cancelled — you did not collect in time'
+                        : 'Cancelled — buyer did not collect · item held at facility for your return';
+                      cancelReasonIcon = 'fa-clock-rotate-left';
+                      badgeLabel       = 'Non-Collection';
+                    } else if (item.cancelReason === 'seller_no_dropoff') {
+                      cancelReasonLabel = isBuyer
+                        ? 'Cancelled — seller did not drop off in time'
+                        : 'Cancelled — you did not drop off in time';
+                      cancelReasonIcon = 'fa-clock-rotate-left';
+                      badgeLabel       = 'No Drop-off';
+                    }
+                  }
 
                   // Show Rate button only for completed (non-cancelled, non-trade) transactions
-                  // where the current user hasn't reviewed the listing yet,
-                  // and we know who the other party is.
                   const canRate = isCompleted
                     && !isCancelled
                     && !isTrade
@@ -665,8 +736,21 @@ function Profile() {
                   }
 
                   return (
-                    <div key={item.id} className={styles.historyItem}
-                      style={isCancelled ? { filter: 'grayscale(1)', opacity: 0.75 } : undefined}
+                    <div
+                      key={item.id}
+                      ref={el => { historyItemRefs.current[item.id] = el; }}
+                      className={styles.historyItem}
+                      style={{
+                        ...(isCancelled ? { filter: 'grayscale(1)', opacity: 0.75 } : {}),
+                        ...(isHighlighted ? {
+                          outline: '2.5px solid #6366f1',
+                          boxShadow: '0 0 0 4px rgba(99,102,241,0.15)',
+                          borderRadius: 10,
+                          filter: 'none',
+                          opacity: 1,
+                          transition: 'box-shadow 0.3s',
+                        } : {}),
+                      }}
                     >
                       <div className={styles.historyImg}>
                         {item.listingImage
@@ -689,8 +773,8 @@ function Profile() {
                           {dateStr && <span className={styles.historyMetaChip}><i className="fas fa-calendar-alt" /> {dateStr}</span>}
                           {otherParty && <span className={styles.historyMetaChip}><i className={`fas ${isBuyer ? 'fa-store' : 'fa-user'}`} />{isBuyer ? `From: ${otherParty}` : `To: ${otherParty}`}</span>}
                           {item.price && !isTrade && !isCancelled && <span className={styles.historyMetaPrice}>{item.price}</span>}
-                          {tradeItemDisplay && !isCancelled && <span className={styles.historyMetaChip}><i className="fas fa-exchange-alt" /> Traded for: {tradeItemDisplay}</span>}
-                          {isCancelled && <span className={styles.historyMetaChip} style={{ color: '#6b7280' }}><i className="fas fa-ban" /> Transaction overdue — cancelled</span>}
+                          {tradeItemDisplay && <span className={styles.historyMetaChip}><i className="fas fa-exchange-alt" /> {isCancelled ? 'Buyer offered:' : 'Traded for:'} {tradeItemDisplay}</span>}
+                          {isCancelled && <span className={styles.historyMetaChip} style={{ color: '#6b7280' }}><i className={`fas ${cancelReasonIcon}`} /> {cancelReasonLabel}</span>}
                         </div>
 
                         {/* ── Rate button ── */}
@@ -706,7 +790,9 @@ function Profile() {
                       </div>
                       <div className={styles.historyBadgeWrap}>
                         {isCancelled ? (
-                          <span className={styles.historyBadge} style={{ background: '#e5e7eb', color: '#6b7280', border: '1px solid #d1d5db' }}>Overdue</span>
+                          <span className={styles.historyBadge} style={{ background: '#e5e7eb', color: '#6b7280', border: '1px solid #d1d5db' }}>
+                            {badgeLabel}
+                          </span>
                         ) : (
                           <span className={`${styles.historyBadge} ${item.type === 'purchase' ? styles.historyBadgeBought : isTrade ? styles.historyBadgeTrade : styles.historyBadgeSold}`}>
                             {item.type === 'purchase' && 'Bought'}
