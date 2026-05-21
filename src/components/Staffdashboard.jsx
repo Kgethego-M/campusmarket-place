@@ -86,8 +86,14 @@ async function notifyBothParties(txn, stage) {
 }
 
 async function notifyOverdueCollection(txn) {
+    
+    if (txn.status !== "awaiting_collection") return;
+   
+    if (txn.collectedAt || txn.buyerCollectedAt || txn.collectionConfirmed) return;
+
     if (!txn.buyerId || !txn.sellerId) return;
-    const title = txn.listingTitle || txn.item;
+    const title   = txn.listingTitle || txn.item;
+    const isTrade = (txn.type || "").toLowerCase() === "trade";
 
     const buyerExists  = await notificationAlreadyExists(txn.id, "overdue_collection_buyer");
     const sellerExists = await notificationAlreadyExists(txn.id, "overdue_collection_seller");
@@ -98,7 +104,9 @@ async function notifyOverdueCollection(txn) {
             listingId:     txn.listingId || null,
             transactionId: txn.id,
             listingTitle:  title,
-            message:       `Your collection of "${title}" is overdue. You have 24 hours to collect your item from the trade facility — please come in as soon as possible. If the item is not collected within 24 hours, this transaction will be automatically cancelled and the item returned to the seller.`,
+            message: isTrade
+                ? `Your collection of "${title}" is overdue. You have 24 hours to collect your item from the trade facility — please come in as soon as possible. If the item is not collected within 24 hours, this transaction will be automatically cancelled and the uncollected item will be donated.`
+                : `Your collection of "${title}" is overdue. You have 24 hours to collect your item from the trade facility — please come in as soon as possible. If the item is not collected within 24 hours, this transaction will be automatically cancelled and the item returned to the seller.`,
         });
     }
 
@@ -108,36 +116,76 @@ async function notifyOverdueCollection(txn) {
             listingId:     txn.listingId || null,
             transactionId: txn.id,
             listingTitle:  title,
-            message:       `The buyer has not yet collected "${title}". They have been notified and given 24 hours to collect. If they do not collect within 24 hours, the transaction will be cancelled and you will be asked to come collect your item.`,
+            message: isTrade
+                ? `The other party has not yet collected their item from your trade for "${title}". They have been notified and given 24 hours to collect. If they do not collect in time, the transaction will be cancelled — uncollected items will be donated, and any item you dropped off will be held at the facility for you to retrieve.`
+                : `The buyer has not yet collected "${title}". They have been notified and given 24 hours to collect. If they do not collect within 24 hours, the transaction will be cancelled and you will be asked to come collect your item.`,
         });
     }
 }
 
 async function notifyOverdueDropOff(txn) {
+    
+    if (txn.status !== "pending") return;
+    
+    if (txn.dropOffConfirmed || txn.sellerDropOffConfirmed || txn.droppedOffAt) return;
+
     if (!txn.buyerId || !txn.sellerId) return;
-    const title = txn.listingTitle || txn.item;
+    const title   = txn.listingTitle || txn.item;
+    const isTrade = (txn.type || "").toLowerCase() === "trade";
 
     const buyerExists  = await notificationAlreadyExists(txn.id, "overdue_dropoff_buyer");
     const sellerExists = await notificationAlreadyExists(txn.id, "overdue_dropoff_seller");
 
-    if (!sellerExists) {
-        await sendNotification(txn.sellerId, {
-            type:          "overdue_dropoff_seller",
-            listingId:     txn.listingId || null,
-            transactionId: txn.id,
-            listingTitle:  title,
-            message:       `Your drop-off for "${title}" is overdue. Please drop off the item at the trade facility within the next 24 hours. If the item is not dropped off within the next 24 hours, this transaction will be automatically cancelled.`,
-        });
-    }
+    if (isTrade) {
+        // Determine which party is overdue based on confirmed flags.
+        const sellerOverdue = !txn.sellerDropOffConfirmed;
+        const buyerOverdue  = !txn.buyerDropOffConfirmed && !!txn.tradeItem;
+        const buyerDropped  = !!txn.buyerDropOffConfirmed;
+        const sellerDropped = !!txn.sellerDropOffConfirmed;
 
-    if (!buyerExists) {
-        await sendNotification(txn.buyerId, {
-            type:          "overdue_dropoff_buyer",
-            listingId:     txn.listingId || null,
-            transactionId: txn.id,
-            listingTitle:  title,
-            message:       `The seller has not yet dropped off "${title}" at the trade facility. They have been notified and must drop off within the next 24 hours. If they do not drop off in time, this transaction will be cancelled.`,
-        });
+        if (sellerOverdue && !sellerExists) {
+            await sendNotification(txn.sellerId, {
+                type: "overdue_dropoff_seller", listingId: txn.listingId || null,
+                transactionId: txn.id, listingTitle: title,
+                message: `Your drop-off for "${title}" is overdue. Please drop off the item at the trade facility within the next 24 hours. If the item is not dropped off in time, this trade will be automatically cancelled${buyerDropped ? " — the other party has already dropped off their item and will be asked to retrieve it" : ""}.`,
+            });
+        }
+        if (buyerOverdue && !buyerExists) {
+            const buyerItemTitle = txn.tradeItem?.name || txn.tradeItem?.title || "your trade item";
+            await sendNotification(txn.buyerId, {
+                type: "overdue_dropoff_buyer", listingId: txn.listingId || null,
+                transactionId: txn.id, listingTitle: title,
+                message: `Your drop-off of "${buyerItemTitle}" for the trade of "${title}" is overdue. Please drop off your item at the trade facility within the next 24 hours. If it is not dropped off in time, this trade will be automatically cancelled${sellerDropped ? " — the other party has already dropped off their item and will be asked to retrieve it" : ""}.`,
+            });
+        }
+        // If neither is individually overdue yet but the whole txn is, alert both
+        if (!sellerOverdue && !buyerOverdue && !sellerExists) {
+            await sendNotification(txn.sellerId, {
+                type: "overdue_dropoff_seller", listingId: txn.listingId || null,
+                transactionId: txn.id, listingTitle: title,
+                message: `Your trade drop-off for "${title}" is overdue. Please drop off your item within the next 24 hours or this transaction will be cancelled.`,
+            });
+        }
+    } else {
+        if (!sellerExists) {
+            await sendNotification(txn.sellerId, {
+                type:          "overdue_dropoff_seller",
+                listingId:     txn.listingId || null,
+                transactionId: txn.id,
+                listingTitle:  title,
+                message:       `Your drop-off for "${title}" is overdue. Please drop off the item at the trade facility within the next 24 hours. If the item is not dropped off within the next 24 hours, this transaction will be automatically cancelled.`,
+            });
+        }
+
+        if (!buyerExists) {
+            await sendNotification(txn.buyerId, {
+                type:          "overdue_dropoff_buyer",
+                listingId:     txn.listingId || null,
+                transactionId: txn.id,
+                listingTitle:  title,
+                message:       `The seller has not yet dropped off "${title}" at the trade facility. They have been notified and must drop off within the next 24 hours. If they do not drop off in time, this transaction will be cancelled.`,
+            });
+        }
     }
 }
 
@@ -187,9 +235,105 @@ async function notifyCancelledCollection(txn) {
         listingId:     txn.listingId || null,
         transactionId: txn.id,
         listingTitle:  title,
-        message:       `The buyer did not collect "${title}" — the transaction has been cancelled. Your item is being held at the trade facility. Please come in to collect it back at your earliest convenience. Show your original receipt to staff when collecting.`,
+        message:       `The buyer did not collect "${title}" — the transaction has been cancelled. Your item is still being held at the trade facility. Please come in to retrieve it at your earliest convenience — show your original receipt to staff when collecting.`,
         actionUrl:     `/profile?tab=history&highlight=${txn.id}`,
     });
+}
+
+async function notifyCancelledTradeDropOff(txn, txnUpdate) {
+    if (!txn.buyerId || !txn.sellerId) return;
+    const sellerTitle = txn.listingTitle || txn.item;
+    const buyerTitle  = txn.tradeItem?.name || txn.tradeItem?.title || "your trade item";
+    const sellerFailed = txnUpdate.cancelReason === "seller_no_dropoff";
+
+    if (sellerFailed) {
+        // Seller didn't drop off
+        await sendNotification(txn.sellerId, {
+            type: "cancelled_dropoff_seller", listingId: txn.listingId || null,
+            transactionId: txn.id, listingTitle: sellerTitle,
+            message: `Your trade transaction for "${sellerTitle}" has been cancelled — you did not drop off your item in time.`,
+            actionUrl: `/profile?tab=history&highlight=${txn.id}`,
+        });
+        if (txn.buyerDropOffConfirmed) {
+            await sendNotification(txn.buyerId, {
+                type: "cancelled_dropoff_buyer", listingId: txn.listingId || null,
+                transactionId: txn.id, listingTitle: sellerTitle,
+                message: `Your trade for "${sellerTitle}" has been cancelled — the other party did not drop off their item in time. Your item ("${buyerTitle}") is still at the facility. Please come in to retrieve it — show your receipt to staff.`,
+                actionUrl: `/profile?tab=history&highlight=${txn.id}`,
+            });
+        } else {
+            await sendNotification(txn.buyerId, {
+                type: "cancelled_dropoff_buyer", listingId: txn.listingId || null,
+                transactionId: txn.id, listingTitle: sellerTitle,
+                message: `Your trade for "${sellerTitle}" has been cancelled — the other party did not drop off their item in time. No items were transferred.`,
+                actionUrl: `/profile?tab=history&highlight=${txn.id}`,
+            });
+        }
+    } else {
+        // Buyer didn't drop off their trade item
+        await sendNotification(txn.buyerId, {
+            type: "cancelled_dropoff_buyer", listingId: txn.listingId || null,
+            transactionId: txn.id, listingTitle: sellerTitle,
+            message: `Your trade transaction for "${sellerTitle}" has been cancelled — you did not drop off your trade item ("${buyerTitle}") in time.`,
+            actionUrl: `/profile?tab=history&highlight=${txn.id}`,
+        });
+        if (txn.sellerDropOffConfirmed) {
+            await sendNotification(txn.sellerId, {
+                type: "cancelled_dropoff_seller", listingId: txn.listingId || null,
+                transactionId: txn.id, listingTitle: sellerTitle,
+                message: `Your trade for "${sellerTitle}" has been cancelled — the other party did not drop off their item in time. Your item is still at the facility. Please come in to retrieve it — show your receipt to staff.`,
+                actionUrl: `/profile?tab=history&highlight=${txn.id}`,
+            });
+        } else {
+            await sendNotification(txn.sellerId, {
+                type: "cancelled_dropoff_seller", listingId: txn.listingId || null,
+                transactionId: txn.id, listingTitle: sellerTitle,
+                message: `Your trade for "${sellerTitle}" has been cancelled — the other party did not drop off their item in time. No items were transferred.`,
+                actionUrl: `/profile?tab=history&highlight=${txn.id}`,
+            });
+        }
+    }
+}
+
+async function notifyCancelledTradeCollection(txn, txnUpdate) {
+    if (!txn.buyerId || !txn.sellerId) return;
+    const sellerTitle = txn.listingTitle || txn.item;
+    const buyerTitle  = txn.tradeItem?.name || txn.tradeItem?.title || "your trade item";
+    const buyerFailed = txnUpdate.buyerFailedCollection;
+
+    if (buyerFailed) {
+        // Buyer didn't collect the seller's item → it is donated
+        await sendNotification(txn.buyerId, {
+            type: "cancelled_collection_buyer", listingId: txn.listingId || null,
+            transactionId: txn.id, listingTitle: sellerTitle,
+            message: `Your trade for "${sellerTitle}" has been cancelled — you did not collect the item in time. The uncollected item has been donated. Contact the facility if you believe this was an error.`,
+            actionUrl: `/profile?tab=history&highlight=${txn.id}`,
+        });
+        if (txnUpdate.awaitingSellerReturn) {
+            await sendNotification(txn.sellerId, {
+                type: "cancelled_collection_seller", listingId: txn.listingId || null,
+                transactionId: txn.id, listingTitle: sellerTitle,
+                message: `Your trade for "${sellerTitle}" has been cancelled — the other party did not collect in time. Your item ("${sellerTitle}") is still at the facility. Please come in to retrieve it — show your receipt to staff.`,
+                actionUrl: `/profile?tab=history&highlight=${txn.id}`,
+            });
+        }
+    } else {
+        // Seller didn't collect the buyer's trade item → it is donated
+        await sendNotification(txn.sellerId, {
+            type: "cancelled_collection_seller", listingId: txn.listingId || null,
+            transactionId: txn.id, listingTitle: sellerTitle,
+            message: `Your trade for "${sellerTitle}" has been cancelled — you did not collect your trade item ("${buyerTitle}") in time. The uncollected item has been donated. Contact the facility if you believe this was an error.`,
+            actionUrl: `/profile?tab=history&highlight=${txn.id}`,
+        });
+        if (txnUpdate.awaitingBuyerReturn) {
+            await sendNotification(txn.buyerId, {
+                type: "cancelled_collection_buyer", listingId: txn.listingId || null,
+                transactionId: txn.id, listingTitle: sellerTitle,
+                message: `Your trade for "${sellerTitle}" has been cancelled — the other party did not collect in time. Your item ("${buyerTitle}") is still at the facility. Please come in to retrieve it — show your receipt to staff.`,
+                actionUrl: `/profile?tab=history&highlight=${txn.id}`,
+            });
+        }
+    }
 }
 
 const TABS = [
@@ -1214,7 +1358,7 @@ function AwaitingReturnsView({ transactions, onMarkCollected }) {
             <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 12, padding: "60px 24px", color: "#64748b", textAlign: "center" }}>
                 <i className="fa-solid fa-box-archive" style={{ fontSize: "2.5rem", color: "#0891b2", opacity: 0.5 }} />
                 <p style={{ margin: 0, fontWeight: 600, fontSize: "1rem" }}>No items awaiting return</p>
-                <p style={{ margin: 0, fontSize: "0.85rem", color: "#94a3b8" }}>Items from cancelled overdue-collection transactions will appear here for tracking.</p>
+                <p style={{ margin: 0, fontSize: "0.85rem", color: "#94a3b8" }}>Items from cancelled overdue transactions will appear here for tracking.</p>
             </div>
         );
     }
@@ -1224,31 +1368,50 @@ function AwaitingReturnsView({ transactions, onMarkCollected }) {
             <div style={{ margin: "0 0 16px", padding: "12px 16px", background: "#f0f9ff", border: "1px solid #bae6fd", borderRadius: 10, display: "flex", alignItems: "flex-start", gap: 10 }}>
                 <i className="fa-solid fa-circle-info" style={{ color: "#0891b2", marginTop: 2, flexShrink: 0 }} />
                 <div>
-                    <p style={{ margin: "0 0 2px", fontWeight: 700, fontSize: "0.85rem", color: "#0369a1" }}>Items held for seller return ({transactions.length})</p>
+                    <p style={{ margin: "0 0 2px", fontWeight: 700, fontSize: "0.85rem", color: "#0369a1" }}>Items held for return ({transactions.length})</p>
                     <p style={{ margin: 0, fontSize: "0.8rem", color: "#0369a1" }}>
-                        These items were not collected by the buyer and are being held at the facility. The seller has been notified to come collect them. Press <strong>"Mark Collected"</strong> when the seller arrives and picks up their item.
+                        These items were not collected and are being held at the facility. The relevant party has been notified to come collect them. Press <strong>"Mark Collected"</strong> when they arrive and pick up their item.
                     </p>
                 </div>
             </div>
 
-            {transactions.map(txn => {
+            {transactions.map((txn, idx) => {
                 const payConfig    = getPaymentConfig(txn);
-                const sinceDateStr = txn.awaitingSellerReturnSince ? new Date(txn.awaitingSellerReturnSince).toLocaleDateString("en-ZA", { day: "numeric", month: "short", year: "numeric" }) : null;
-                const sinceTimeStr = txn.awaitingSellerReturnSince ? new Date(txn.awaitingSellerReturnSince).toLocaleTimeString("en-ZA", { hour: "2-digit", minute: "2-digit" }) : null;
+                const returnRole   = txn._returnRole   || "seller";
+                const returnItem   = txn._returnItem   || txn.item;
+                const returnImage  = txn._returnImage  ?? txn.itemImage;
+                const returnParty  = txn._returnParty  || (returnRole === "seller" ? txn.seller : txn.buyer);
+                const isBuyerReturn = returnRole === "buyer";
+
+                const sinceDateStr = txn.awaitingSellerReturnSince || txn.awaitingBuyerReturnSince
+                    ? new Date(isBuyerReturn ? txn.awaitingBuyerReturnSince : txn.awaitingSellerReturnSince).toLocaleDateString("en-ZA", { day: "numeric", month: "short", year: "numeric" })
+                    : null;
+                const sinceTimeStr = txn.awaitingSellerReturnSince || txn.awaitingBuyerReturnSince
+                    ? new Date(isBuyerReturn ? txn.awaitingBuyerReturnSince : txn.awaitingSellerReturnSince).toLocaleTimeString("en-ZA", { hour: "2-digit", minute: "2-digit" })
+                    : null;
+
+                const cardKey = isBuyerReturn ? `${txn.id}_buyer_return` : `${txn.id}_seller_return`;
 
                 return (
-                    <div key={txn.id} style={{ background: "#fff", border: "1.5px solid #e2e8f0", borderLeft: "4px solid #0891b2", borderRadius: 10, padding: "14px 16px", marginBottom: 10, display: "flex", alignItems: "center", gap: 14 }}>
+                    <div key={cardKey} style={{ background: "#fff", border: "1.5px solid #e2e8f0", borderLeft: `4px solid ${isBuyerReturn ? "#7c3aed" : "#0891b2"}`, borderRadius: 10, padding: "14px 16px", marginBottom: 10, display: "flex", alignItems: "center", gap: 14 }}>
                         <div style={{ width: 52, height: 52, borderRadius: 8, flexShrink: 0, background: "#f1f5f9", overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                            {txn.itemImage
-                                ? <img src={txn.itemImage} alt={txn.item} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                            {returnImage
+                                ? <img src={returnImage} alt={returnItem} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                                 : <i className="fa-solid fa-box-archive" style={{ color: "#94a3b8", fontSize: "1.3rem" }} />
                             }
                         </div>
                         <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontWeight: 700, fontSize: "0.92rem", color: "#1e293b", marginBottom: 3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{txn.item}</div>
+                            <div style={{ fontWeight: 700, fontSize: "0.92rem", color: "#1e293b", marginBottom: 3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{returnItem}</div>
                             <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 4 }}>
-                                <span style={{ fontSize: "0.75rem", color: "#64748b" }}><i className="fa-solid fa-store" style={{ marginRight: 3 }} />Seller: <strong style={{ color: "#334155" }}>{txn.seller}</strong></span>
-                                <span style={{ fontSize: "0.75rem", color: "#64748b" }}><i className="fa-solid fa-user" style={{ marginRight: 3 }} />Buyer: <strong style={{ color: "#334155" }}>{txn.buyer}</strong></span>
+                                <span style={{ fontSize: "0.75rem", color: "#64748b" }}>
+                                    <i className={`fa-solid ${isBuyerReturn ? "fa-user" : "fa-store"}`} style={{ marginRight: 3 }} />
+                                    {isBuyerReturn ? "Buyer" : "Seller"}: <strong style={{ color: "#334155" }}>{returnParty}</strong>
+                                </span>
+                                {isBuyerReturn && (
+                                    <span style={{ fontSize: "0.72rem", color: "#7c3aed", fontWeight: 600, background: "#ede9fe", borderRadius: 99, padding: "1px 7px" }}>
+                                        <i className="fa-solid fa-arrows-rotate" style={{ marginRight: 3 }} />Trade item
+                                    </span>
+                                )}
                             </div>
                             {sinceDateStr && (
                                 <div style={{ fontSize: "0.72rem", color: "#94a3b8" }}>
@@ -1550,6 +1713,12 @@ export default function StaffDashboard() {
             awaitingSellerReturnSince: data.awaitingSellerReturnSince?.toDate ? data.awaitingSellerReturnSince.toDate().toISOString() : data.awaitingSellerReturnSince || null,
             sellerReturnCollected:     data.sellerReturnCollected     || false,
             sellerReturnCollectedAt:   data.sellerReturnCollectedAt?.toDate ? data.sellerReturnCollectedAt.toDate().toISOString() : data.sellerReturnCollectedAt || null,
+            awaitingBuyerReturn:       data.awaitingBuyerReturn       || false,
+            awaitingBuyerReturnSince:  data.awaitingBuyerReturnSince?.toDate  ? data.awaitingBuyerReturnSince.toDate().toISOString()  : data.awaitingBuyerReturnSince  || null,
+            buyerReturnCollected:      data.buyerReturnCollected      || false,
+            buyerReturnCollectedAt:    data.buyerReturnCollectedAt?.toDate  ? data.buyerReturnCollectedAt.toDate().toISOString()  : data.buyerReturnCollectedAt  || null,
+            buyerFailedCollection:     data.buyerFailedCollection     || false,
+            sellerFailedCollection:    data.sellerFailedCollection    || false,
             cancelReason: data.cancelReason || null,
             date: data.createdAt?.toDate ? data.createdAt.toDate() : new Date(),
         };
@@ -1634,49 +1803,118 @@ export default function StaffDashboard() {
     const handleCancelOverdue = async (txn, overdueType) => {
         try {
             const isOverdueCollection = overdueType === "collection";
+            const isTrade = (txn.type || "").toLowerCase() === "trade";
 
             const txnUpdate = {
                 status:           "overdue_cancelled",
                 cancelledAt:      serverTimestamp(),
-                cancelReason:     isOverdueCollection ? "buyer_no_collection" : "seller_no_dropoff",
                 cancelledByStaff: true,
             };
 
-            // For overdue collections: item is at the facility — track it in Awaiting Returns
             if (isOverdueCollection) {
-                txnUpdate.awaitingSellerReturn      = true;
-                txnUpdate.awaitingSellerReturnSince = serverTimestamp();
+                if (isTrade) {
+                    // ── Trade overdue collection ──────────────────────────────
+                    // Determine which party failed to collect.
+                    // _collectionRole on the expanded card tells us who this card belongs to.
+                    const failedRole = txn._collectionRole || null;
+
+                    // The party who FAILED gets flagged; their item is donated (not returned).
+                    // The party who DID drop off but whose counterpart failed gets awaitingReturn.
+                    const buyerFailed  = failedRole === "buyer"  || (!failedRole && !txn.buyerCollectionConfirmed  && txn.sellerDropOffConfirmed);
+                    const sellerFailed = failedRole === "seller" || (!failedRole && !txn.sellerCollectionConfirmed && txn.buyerDropOffConfirmed);
+
+                    txnUpdate.cancelReason = buyerFailed ? "buyer_no_collection" : "seller_no_collection";
+
+                    // Flag the failing party
+                    if (buyerFailed)  txnUpdate.buyerFailedCollection  = true;
+                    if (sellerFailed) txnUpdate.sellerFailedCollection = true;
+
+                    // The other party's item (which they dropped off) must be returned to them.
+                    // Seller dropped off → seller needs their item back if buyer failed.
+                    if (buyerFailed && txn.sellerDropOffConfirmed) {
+                        txnUpdate.awaitingSellerReturn      = true;
+                        txnUpdate.awaitingSellerReturnSince = serverTimestamp();
+                    }
+                    // Buyer dropped off → buyer needs their trade-item back if seller failed.
+                    if (sellerFailed && txn.buyerDropOffConfirmed) {
+                        txnUpdate.awaitingBuyerReturn      = true;
+                        txnUpdate.awaitingBuyerReturnSince = serverTimestamp();
+                    }
+                } else {
+                    // ── Standard overdue collection ───────────────────────────
+                    // Item is at the facility — track for seller return.
+                    txnUpdate.cancelReason              = "buyer_no_collection";
+                    txnUpdate.awaitingSellerReturn      = true;
+                    txnUpdate.awaitingSellerReturnSince = serverTimestamp();
+                }
+            } else {
+                // ── Overdue drop-off ──────────────────────────────────────────
+                if (isTrade) {
+                    // Determine which side failed.
+                    const dropOffRole = txn._dropOffRole || null;
+                    const sellerFailed = dropOffRole === "seller" || (!dropOffRole && !txn.sellerDropOffConfirmed);
+                    const buyerFailed  = dropOffRole === "buyer"  || (!dropOffRole && !txn.buyerDropOffConfirmed && txn.tradeItem);
+
+                    txnUpdate.cancelReason = sellerFailed ? "seller_no_dropoff" : "buyer_no_dropoff";
+
+                    // If one party already dropped off and the other didn't,
+                    // the one who dropped off must retrieve their item.
+                    if (sellerFailed && txn.buyerDropOffConfirmed) {
+                        // Buyer dropped off their item → needs it back.
+                        txnUpdate.awaitingBuyerReturn      = true;
+                        txnUpdate.awaitingBuyerReturnSince = serverTimestamp();
+                    }
+                    if (buyerFailed && txn.sellerDropOffConfirmed) {
+                        // Seller dropped off their item → needs it back.
+                        txnUpdate.awaitingSellerReturn      = true;
+                        txnUpdate.awaitingSellerReturnSince = serverTimestamp();
+                    }
+                } else {
+                    txnUpdate.cancelReason = "seller_no_dropoff";
+                }
             }
 
             await updateDoc(doc(db, "transactions", txn.id), txnUpdate);
 
-            // Listing: only touch it for overdue drop-offs (item never arrived)
+            // Listing: only touch it for overdue drop-offs where item never arrived.
             if (!isOverdueCollection && txn.listingId) {
                 await updateDoc(doc(db, "listings", txn.listingId), {
                     status:           "cancelled",
-                    cancelReason:     "seller_no_dropoff",
+                    cancelReason:     txnUpdate.cancelReason,
                     cancelledAt:      serverTimestamp(),
                     cancelledByStaff: true,
                 });
             }
 
+            // Notifications
             if (!isOverdueCollection) {
-                await notifyCancelledDropOff({
-                    id: txn.id, sellerId: txn.sellerId, buyerId: txn.buyerId,
-                    listingId: txn.listingId, listingTitle: txn.listingTitle || txn.item,
-                    paymentType: txn.paymentType, paymentMethod: txn.paymentMethod,
-                });
+                if (isTrade) {
+                    await notifyCancelledTradeDropOff(txn, txnUpdate);
+                } else {
+                    await notifyCancelledDropOff({
+                        id: txn.id, sellerId: txn.sellerId, buyerId: txn.buyerId,
+                        listingId: txn.listingId, listingTitle: txn.listingTitle || txn.item,
+                        paymentType: txn.paymentType, paymentMethod: txn.paymentMethod,
+                    });
+                }
             } else {
-                await notifyCancelledCollection({
-                    id: txn.id, sellerId: txn.sellerId, buyerId: txn.buyerId,
-                    listingId: txn.listingId, listingTitle: txn.listingTitle || txn.item,
-                });
+                if (isTrade) {
+                    await notifyCancelledTradeCollection(txn, txnUpdate);
+                } else {
+                    await notifyCancelledCollection({
+                        id: txn.id, sellerId: txn.sellerId, buyerId: txn.buyerId,
+                        listingId: txn.listingId, listingTitle: txn.listingTitle || txn.item,
+                    });
+                }
             }
 
             setTransactions(prev => prev.map(t => t.id === txn.id ? {
                 ...t,
-                status: "overdue_cancelled",
-                awaitingSellerReturn: isOverdueCollection ? true : t.awaitingSellerReturn,
+                status:               "overdue_cancelled",
+                awaitingSellerReturn: txnUpdate.awaitingSellerReturn  ? true : t.awaitingSellerReturn,
+                awaitingBuyerReturn:  txnUpdate.awaitingBuyerReturn   ? true : t.awaitingBuyerReturn,
+                buyerFailedCollection:  txnUpdate.buyerFailedCollection  || t.buyerFailedCollection,
+                sellerFailedCollection: txnUpdate.sellerFailedCollection || t.sellerFailedCollection,
             } : t));
         } catch (err) { console.error("Failed to cancel overdue transaction:", err); }
     };
@@ -1730,19 +1968,32 @@ export default function StaffDashboard() {
         } finally { setBulkActioning(false); setSelectedOverdue(new Set()); }
     };
 
-    // ─── Mark seller return collected ─────────────────────────────────────────
-    const handleMarkSellerReturn = async (txn) => {
+    // ─── Mark return collected ────────────────────────────────────────────────
+    const handleMarkReturn = async (txn) => {
+        const role = txn._returnRole || "seller";
         try {
-            await updateDoc(doc(db, "transactions", txn.id), {
-                sellerReturnCollected:   true,
-                sellerReturnCollectedAt: serverTimestamp(),
-                sellerReturnCollectedBy: auth.currentUser?.uid || null,
-                awaitingSellerReturn:    false,
-            });
-            setTransactions(prev => prev.map(t => t.id === txn.id ? {
-                ...t, sellerReturnCollected: true, sellerReturnCollectedAt: new Date().toISOString(), awaitingSellerReturn: false,
-            } : t));
-        } catch (err) { console.error("Failed to mark seller return:", err); }
+            if (role === "buyer") {
+                await updateDoc(doc(db, "transactions", txn.id), {
+                    buyerReturnCollected:   true,
+                    buyerReturnCollectedAt: serverTimestamp(),
+                    buyerReturnCollectedBy: auth.currentUser?.uid || null,
+                    awaitingBuyerReturn:    false,
+                });
+                setTransactions(prev => prev.map(t => t.id === txn.id ? {
+                    ...t, buyerReturnCollected: true, buyerReturnCollectedAt: new Date().toISOString(), awaitingBuyerReturn: false,
+                } : t));
+            } else {
+                await updateDoc(doc(db, "transactions", txn.id), {
+                    sellerReturnCollected:   true,
+                    sellerReturnCollectedAt: serverTimestamp(),
+                    sellerReturnCollectedBy: auth.currentUser?.uid || null,
+                    awaitingSellerReturn:    false,
+                });
+                setTransactions(prev => prev.map(t => t.id === txn.id ? {
+                    ...t, sellerReturnCollected: true, sellerReturnCollectedAt: new Date().toISOString(), awaitingSellerReturn: false,
+                } : t));
+            }
+        } catch (err) { console.error("Failed to mark return collected:", err); }
     };
 
     const handleLogout = async () => {
@@ -1955,8 +2206,47 @@ export default function StaffDashboard() {
     }, 0);
     const completed      = transactions.filter(t => t.status === "completed");
     const pendingDropOff = transactions.filter(t => t.status === "pending");
-    const overdueCount   = transactions.filter(t => isDropOffOverdue(t) || isCollectionOverdue(t)).length;
-    const awaitingReturns = transactions.filter(t => t.status === "overdue_cancelled" && t.awaitingSellerReturn && !t.sellerReturnCollected);
+
+    // Count overdue cards the same way the overdue tab expands them.
+    // A single trade transaction can produce 2 overdue cards (one per party),
+    // so we expand before counting instead of counting raw transactions.
+    const overdueDropOffCount = transactions
+        .filter(t => isDropOffOverdue(t) && t.status !== "overdue_cancelled")
+        .reduce((sum, t) => {
+            const isTrade = (t.type || "").toLowerCase() === "trade";
+            if (!isTrade) return sum + 1;
+            let count = 0;
+            if (!t.sellerDropOffConfirmed) count++;
+            if (!t.buyerDropOffConfirmed && t.tradeItem) count++;
+            return sum + Math.max(count, 1);
+        }, 0);
+
+    const overdueCollectionCount = transactions
+        .filter(t => isCollectionOverdue(t) && t.status !== "overdue_cancelled")
+        .reduce((sum, t) => {
+            const isTrade = (t.type || "").toLowerCase() === "trade";
+            if (!isTrade) return sum + 1;
+            let count = 0;
+            if (!t.sellerCollectionConfirmed && t.buyerDropOffConfirmed)  count++;
+            if (!t.buyerCollectionConfirmed  && t.sellerDropOffConfirmed) count++;
+            return sum + Math.max(count, 1);
+        }, 0);
+
+    const overdueCount = overdueDropOffCount + overdueCollectionCount;
+    const awaitingReturns = transactions
+        .filter(t => t.status === "overdue_cancelled")
+        .flatMap(t => {
+            const cards = [];
+            if (t.awaitingSellerReturn && !t.sellerReturnCollected) {
+                cards.push({ ...t, _returnRole: "seller", _returnItem: t.item, _returnImage: t.itemImage, _returnParty: t.seller, _returnPartyId: t.sellerId });
+            }
+            if (t.awaitingBuyerReturn && !t.buyerReturnCollected) {
+                const tradeItemName  = t.tradeItem?.name || t.tradeItem?.title || "Trade item";
+                const tradeItemImage = t.tradeItem?.imageUrl || null;
+                cards.push({ ...t, _returnRole: "buyer", _returnItem: tradeItemName, _returnImage: tradeItemImage, _returnParty: t.buyer, _returnPartyId: t.buyerId });
+            }
+            return cards;
+        });
 
     const timeSlotToMinutes = (slot) => {
         if (!slot || slot === "TBD") return Infinity;
@@ -2079,7 +2369,7 @@ export default function StaffDashboard() {
     const STATS = [
         { label: "Pending Drop-off",    value: pendingDropOff.length,  icon: "fa-truck-arrow-right",  color: "#f59e0b" },
         { label: "Awaiting Collection", value: awaitingCollCount,       icon: "fa-person-walking",     color: "#8b5cf6" },
-        { label: "Overdue",             value: overdueCount,            icon: "fa-circle-exclamation", color: "#ef4444", onClick: () => setActiveTab("overdue") },
+        { label: "Overdue", value: overdueCount, icon: "fa-circle-exclamation", color: "#ef4444", onClick: () => setActiveTab("overdue") },
         { label: "Awaiting Returns",    value: awaitingReturns.length,  icon: "fa-box-archive",        color: "#0891b2", onClick: () => setActiveTab("awaiting_returns") },
         { label: "Completed",           value: completed.length,        icon: "fa-circle-check",       color: "#10b981" },
     ];
@@ -2161,21 +2451,29 @@ export default function StaffDashboard() {
                     </div>
 
                     {activeTab === "overdue" ? (() => {
-                        const overdueDropOffs = transactions.filter(t => isDropOffOverdue(t)    && t.status !== "overdue_cancelled");
-                        const overdueCollects = transactions.filter(t => isCollectionOverdue(t) && t.status !== "overdue_cancelled");
+                        const overdueDropOffs = expandForDropOffs(transactions.filter(t => isDropOffOverdue(t)    && t.status !== "overdue_cancelled"));
+                        const overdueCollects = expandForCollections(transactions.filter(t => isCollectionOverdue(t) && t.status !== "overdue_cancelled"));
                         const subList      = overdueSubTab === "drop_offs" ? overdueDropOffs : overdueCollects;
-                        const allSelected  = subList.length > 0 && subList.every(t => selectedOverdue.has(t.id));
-                        const someSelected = subList.some(t => selectedOverdue.has(t.id));
-                        const selectedTxns = subList.filter(t => selectedOverdue.has(t.id));
+                        // Stable unique key for an (possibly-expanded) card
+                        function cardKey(t) {
+                            if (t._dropOffRole === "buyer")       return `${t.id}_buyer_dropoff`;
+                            if (t._collectionRole === "seller")   return `${t.id}_seller_collection`;
+                            if (t._collectionRole === "buyer")    return `${t.id}_buyer_collection`;
+                            return t.id;
+                        }
+
+                        const allSelected  = subList.length > 0 && subList.every(t => selectedOverdue.has(cardKey(t)));
+                        const someSelected = subList.some(t => selectedOverdue.has(cardKey(t)));
+                        const selectedTxns = subList.filter(t => selectedOverdue.has(cardKey(t)));
                         const allAlerted   = selectedTxns.length > 0 && selectedTxns.every(t => !!t.overdueAlertSentAt);
                         const noneAlerted  = selectedTxns.every(t => !t.overdueAlertSentAt);
 
                         function toggleAll() {
-                            if (allSelected) setSelectedOverdue(prev => { const next = new Set(prev); subList.forEach(t => next.delete(t.id)); return next; });
-                            else             setSelectedOverdue(prev => { const next = new Set(prev); subList.forEach(t => next.add(t.id));    return next; });
+                            if (allSelected) setSelectedOverdue(prev => { const next = new Set(prev); subList.forEach(t => next.delete(cardKey(t))); return next; });
+                            else             setSelectedOverdue(prev => { const next = new Set(prev); subList.forEach(t => next.add(cardKey(t)));    return next; });
                         }
-                        function toggleOne(id) {
-                            setSelectedOverdue(prev => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next; });
+                        function toggleOne(key) {
+                            setSelectedOverdue(prev => { const next = new Set(prev); next.has(key) ? next.delete(key) : next.add(key); return next; });
                         }
 
                         return (
@@ -2237,12 +2535,13 @@ export default function StaffDashboard() {
 
                                         <div className={styles.txnList}>
                                             {subList.map(txn => {
+                                                const key        = cardKey(txn);
                                                 const alertSent  = !!txn.overdueAlertSentAt;
-                                                const isSelected = selectedOverdue.has(txn.id);
+                                                const isSelected = selectedOverdue.has(key);
                                                 const payConfig  = getPaymentConfig(txn);
                                                 return (
-                                                    <div key={txn.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", background: isSelected ? "#fff5f5" : "#fff", border: `1.5px solid ${isSelected ? "#fca5a5" : "#fee2e2"}`, borderRadius: 12, marginBottom: 8, transition: "background 0.15s" }}>
-                                                        <input type="checkbox" checked={isSelected} onChange={() => toggleOne(txn.id)} style={{ width: 16, height: 16, accentColor: "#dc2626", cursor: "pointer", flexShrink: 0 }} />
+                                                    <div key={key} style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", background: isSelected ? "#fff5f5" : "#fff", border: `1.5px solid ${isSelected ? "#fca5a5" : "#fee2e2"}`, borderRadius: 12, marginBottom: 8, transition: "background 0.15s" }}>
+                                                        <input type="checkbox" checked={isSelected} onChange={() => toggleOne(key)} style={{ width: 16, height: 16, accentColor: "#dc2626", cursor: "pointer", flexShrink: 0 }} />
                                                         <div style={{ width: 44, height: 44, borderRadius: 8, overflow: "hidden", flexShrink: 0, background: "#f1f5f9", display: "flex", alignItems: "center", justifyContent: "center" }}>
                                                             {txn.itemImage ? <img src={txn.itemImage} alt={txn.item} style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <i className="fa-solid fa-box-open" style={{ color: "#94a3b8" }} />}
                                                         </div>
@@ -2289,9 +2588,9 @@ export default function StaffDashboard() {
                         <AwaitingReturnsView
                             transactions={awaitingReturns}
                             onMarkCollected={(txn) => showConfirmModal(
-                                'Mark as Collected by Seller',
-                                `Confirm that the seller has come in and collected "${txn.item}" back from the facility?`,
-                                () => handleMarkSellerReturn(txn),
+                                'Mark as Collected',
+                                `Confirm that ${txn._returnParty || (txn._returnRole === "buyer" ? txn.buyer : txn.seller)} has come in and collected "${txn._returnItem || txn.item}" from the facility?`,
+                                () => handleMarkReturn(txn),
                                 'Yes, Mark Collected'
                             )}
                         />

@@ -123,7 +123,7 @@ function TradeItemMini({ tradeItem, label = "Buyer's trade item" }) {
 }
 
 // ── Buyer tracker card ────────────────────────────────────────────────────────
-function BuyerTrackerCard({ txn, idx, isHighlighted, highlightRef }) {
+function BuyerTrackerCard({ txn, idx, isHighlighted, isOverdueHL, highlightRef }) {
   const stage    = getPipelineStage(txn);
   const failed   = txn.dropOffStatus === "inspection_fail";
   const imageUrl = txn.listing?.photos?.[0] ?? null;
@@ -131,11 +131,15 @@ function BuyerTrackerCard({ txn, idx, isHighlighted, highlightRef }) {
 
   return (
     <div
-      ref={isHighlighted ? highlightRef : null}
+      ref={isHighlighted || isOverdueHL ? highlightRef : null}
       className={`${styles.trackerCard} ${failed ? styles.trackerCardFailed : ""}`}
       style={{
         animationDelay: `${idx * 0.06}s`,
-        ...(isHighlighted ? {
+        ...(isOverdueHL ? {
+          boxShadow: '0 0 0 3px #dc2626, 0 4px 20px rgba(220,38,38,0.22)',
+          borderColor: '#dc2626',
+          background: '#fff8f8',
+        } : isHighlighted ? {
           boxShadow: '0 0 0 3px #8b5cf6, 0 4px 20px rgba(139,92,246,0.18)',
           borderColor: '#8b5cf6',
         } : {}),
@@ -278,6 +282,7 @@ export default function TradeFacility() {
   const [activeTab,          setActiveTab]          = useState("seller");
 
   const [highlightId, setHighlightId] = useState(null);
+  const [overdueHighlightId, setOverdueHighlightId] = useState(null);
   const highlightRef                  = useRef(null);
 
   const navigate = useNavigate();
@@ -292,8 +297,10 @@ export default function TradeFacility() {
     const params    = new URLSearchParams(location.search);
     const tabParam  = params.get('tab');
     const highlight = params.get('highlight');
+    const overdueHL = params.get('overdueHighlight');
     if (tabParam === 'buyer' || tabParam === 'seller') setActiveTab(tabParam);
     if (highlight) setHighlightId(highlight);
+    if (overdueHL) setOverdueHighlightId(overdueHL);
   }, [location.search]);
 
   useEffect(() => {
@@ -662,6 +669,7 @@ export default function TradeFacility() {
                   const imageUrl    = txn.listing?.photos?.[0] ?? null;
                   const isTrade     = txn.type === 'trade';
                   const isHighlighted = highlightId === txn.id;
+                  const isOverdueHL   = overdueHighlightId === txn.id;
 
                   // Derive button/status states
                   const showBookBtn   = canBookDropOff(txn);
@@ -671,11 +679,15 @@ export default function TradeFacility() {
                   return (
                     <div
                       key={txn.id}
-                      ref={isHighlighted ? highlightRef : null}
+                      ref={isHighlighted || isOverdueHL ? highlightRef : null}
                       className={styles.card}
                       style={{
                         animationDelay: `${idx * 0.06}s`,
-                        ...(isHighlighted ? {
+                        ...(isOverdueHL ? {
+                          boxShadow: '0 0 0 3px #dc2626, 0 4px 20px rgba(220,38,38,0.22)',
+                          borderColor: '#dc2626',
+                          background: '#fff8f8',
+                        } : isHighlighted ? {
                           boxShadow: '0 0 0 3px #8b5cf6, 0 4px 20px rgba(139,92,246,0.18)',
                           borderColor: '#8b5cf6',
                         } : {}),
@@ -695,6 +707,17 @@ export default function TradeFacility() {
                       </div>
 
                       <div className={styles.cardBody}>
+                        {isOverdueHL && (
+                          <div style={{
+                            display: 'flex', alignItems: 'center', gap: 7,
+                            background: '#fef2f2', border: '1px solid #fca5a5',
+                            borderRadius: 8, padding: '7px 10px', marginBottom: 8,
+                            fontSize: '0.75rem', color: '#dc2626', fontWeight: 600,
+                          }}>
+                            <i className="fas fa-triangle-exclamation" />
+                            This transaction is overdue — action required
+                          </div>
+                        )}
                         <p className={styles.itemTitle}>
                           {txn.listing?.title ?? "Item"}
                           <span style={{ marginLeft: 6, fontSize: "0.7rem", borderRadius: 4, padding: "1px 6px", background: "#dcfce7", color: "#166534" }}>
@@ -830,15 +853,20 @@ export default function TradeFacility() {
                       const cs            = CONDITION_COLORS[tradeItemObj?.condition] || { color: '#6b7280', bg: '#f3f4f6' };
                       const imageUrl      = txn.listing?.photos?.[0] ?? null;
                       const isHighlighted = highlightId === txn.id;
+                      const isOverdueHL   = overdueHighlightId === txn.id;
 
                       return (
                         <div
                           key={`buyer-trade-${txn.id}`}
-                          ref={isHighlighted ? highlightRef : null}
+                          ref={isHighlighted || isOverdueHL ? highlightRef : null}
                           className={styles.buyerDropOffCard}
                           style={{
                             animationDelay: `${(sellerTransactions.length + idx) * 0.06}s`,
-                            ...(isHighlighted ? {
+                            ...(isOverdueHL ? {
+                              boxShadow: '0 0 0 3px #dc2626, 0 4px 20px rgba(220,38,38,0.22)',
+                              borderColor: '#dc2626',
+                              background: '#fff8f8',
+                            } : isHighlighted ? {
                               boxShadow: '0 0 0 3px #8b5cf6, 0 4px 20px rgba(139,92,246,0.18)',
                               borderColor: '#8b5cf6',
                             } : {}),
@@ -951,6 +979,7 @@ export default function TradeFacility() {
                 txn={txn}
                 idx={idx}
                 isHighlighted={highlightId === txn.id}
+                isOverdueHL={overdueHighlightId === txn.id}
                 highlightRef={highlightRef}
               />
             ))}

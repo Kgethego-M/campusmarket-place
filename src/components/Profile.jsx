@@ -113,6 +113,7 @@ function Profile() {
   const historyItemRefs = useRef({});
 
   const [loading, setLoading]               = useState(true);
+  const [historyLoading, setHistoryLoading] = useState(true);
   const [showRatings, setShowRatings]       = useState(false);
   const [isEditing, setIsEditing]           = useState(false);
   const [incomingOffers, setIncomingOffers] = useState([]);
@@ -444,6 +445,7 @@ function Profile() {
         return newItems.length ? [...prev, ...newItems] : prev;
       });
     } catch (err) { console.warn('fetchUserPurchases:', err); }
+    finally { setHistoryLoading(false); }
   };
 
   const handleInputChange  = (e) => { const { name, value } = e.target; setEditFormData(prev => ({ ...prev, [name]: value })); };
@@ -686,7 +688,12 @@ function Profile() {
         {/* ── History Tab ── */}
         {activeTab === 'history' && (
           <div className={styles.tabContent}>
-            {sortedHistory.length === 0 ? (
+            {historyLoading ? (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '48px 0', gap: 12, color: '#6b7280' }}>
+                <i className="fas fa-spinner fa-spin" style={{ fontSize: '1.6rem' }} />
+                <p style={{ margin: 0, fontSize: '0.9rem' }}>Loading history...</p>
+              </div>
+            ) : sortedHistory.length === 0 ? (
               <div className={styles.emptyState}><i className="fas fa-shopping-bag" /><p>No transaction history yet</p></div>
             ) : (
               <div className={styles.historyList}>

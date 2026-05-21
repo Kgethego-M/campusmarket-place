@@ -744,9 +744,10 @@ describe("Overdue alert notifications appear in the NavBar bell", () => {
 
   test("clicking overdue drop-off notification marks it read and navigates to my-purchases", async () => {
     mockOverdueDropOffNotification();
+    // status must be 'pending' so the stale-check does NOT short-circuit to the toast
     mockGetDoc.mockResolvedValue({
       exists: () => true,
-      data: () => ({ sellerId: "seller-uid", buyerId: "buyer-uid" }),
+      data: () => ({ sellerId: "seller-uid", buyerId: "buyer-uid", status: "pending" }),
     });
 
     await renderNav();
@@ -756,15 +757,16 @@ describe("Overdue alert notifications appear in the NavBar bell", () => {
 
     await waitFor(() => {
       expect(mockUpdateDoc).toHaveBeenCalled();
-      expect(mockNavigate).toHaveBeenCalledWith(expect.stringContaining("/my-purchases"));
+      expect(mockNavigate).toHaveBeenCalledWith(expect.stringContaining("/trade-facility"));
     });
   });
 
-  test("clicking overdue collection notification marks it read and navigates to my-purchases", async () => {
+  test("clicking overdue collection notification marks it read and navigates to trade-facility", async () => {
     mockOverdueCollectionNotification();
+    // status must be 'awaiting_collection' so the stale-check does NOT short-circuit to the toast
     mockGetDoc.mockResolvedValue({
       exists: () => true,
-      data: () => ({ sellerId: "seller-uid", buyerId: "buyer-uid" }),
+      data: () => ({ sellerId: "seller-uid", buyerId: "buyer-uid", status: "awaiting_collection" }),
     });
 
     await renderNav();
@@ -774,7 +776,7 @@ describe("Overdue alert notifications appear in the NavBar bell", () => {
 
     await waitFor(() => {
       expect(mockUpdateDoc).toHaveBeenCalled();
-      expect(mockNavigate).toHaveBeenCalledWith(expect.stringContaining("/my-purchases"));
+      expect(mockNavigate).toHaveBeenCalledWith(expect.stringContaining("/trade-facility"));
     });
   });
 
@@ -831,7 +833,7 @@ describe("Overdue alert notifications appear in the NavBar bell", () => {
   });
 });
 
-// ══════════════════════════════════════════════════════════════════════════════
+ 
 // 8. NavBar bell — additional edge cases
 // ══════════════════════════════════════════════════════════════════════════════
 
@@ -867,11 +869,12 @@ describe("NavBar bell – additional edge cases", () => {
     await waitFor(() => expect(mockUpdateDoc).toHaveBeenCalled());
   });
 
-  test("overdue_dropoff_buyer notification navigates to /my-purchases", async () => {
+  test("overdue_dropoff_buyer notification navigates to /trade-facility", async () => {
     mockNotificationDocs([makeNotifDoc("notif-001")]);
+    // status must be 'pending' so the stale-check does NOT short-circuit to the toast
     mockGetDoc.mockResolvedValue({
       exists: () => true,
-      data: () => ({ sellerId: "seller-uid", buyerId: "buyer-uid" }),
+      data: () => ({ sellerId: "seller-uid", buyerId: "buyer-uid", status: "pending" }),
     });
 
     await renderNav();
@@ -879,19 +882,20 @@ describe("NavBar bell – additional edge cases", () => {
     await waitFor(() => screen.getByTestId("notification-item-notif-001"));
     fireEvent.click(screen.getByTestId("notification-item-notif-001"));
 
-    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith(expect.stringContaining("/my-purchases")));
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith(expect.stringContaining("/trade-facility")));
   });
 
-  test("overdue_collection_buyer notification navigates to /my-purchases", async () => {
+  test("overdue_collection_buyer notification navigates to /trade-facility", async () => {
     mockNotificationDocs([
       makeNotifDoc("notif-002", {
         type:    "overdue_collection_buyer",
         message: `Your collection of "Canon EOS R5" is overdue.`,
       }),
     ]);
+    // status must be 'awaiting_collection' so the stale-check does NOT short-circuit to the toast
     mockGetDoc.mockResolvedValue({
       exists: () => true,
-      data: () => ({ sellerId: "seller-uid", buyerId: "buyer-uid" }),
+      data: () => ({ sellerId: "seller-uid", buyerId: "buyer-uid", status: "awaiting_collection" }),
     });
 
     await renderNav();
@@ -899,6 +903,421 @@ describe("NavBar bell – additional edge cases", () => {
     await waitFor(() => screen.getByTestId("notification-item-notif-002"));
     fireEvent.click(screen.getByTestId("notification-item-notif-002"));
 
-    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith(expect.stringContaining("/my-purchases")));
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith(expect.stringContaining("/trade-facility")));
+  });
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// 9. Stale / already-handled notification branches
+// ══════════════════════════════════════════════════════════════════════════════
+
+describe("Stale notification — already-handled toast branch", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockGetDocs.mockResolvedValue({ docs: [], empty: true });
+    localStorage.clear();
+  });
+
+  test("shows toast when overdue_dropoff_buyer transaction is no longer pending", async () => {
+    // Transaction status 'waiting' → seller already dropped off → action done
+    mockNotificationDocs([makeNotifDoc("notif-stale-001")]);
+    mockGetDoc.mockResolvedValue({
+      exists: () => true,
+      data: () => ({ sellerId: "seller-uid", buyerId: "buyer-uid", status: "waiting" }),
+    });
+
+    await renderNav();
+    fireEvent.click(screen.getByTitle("Notifications"));
+    await waitFor(() => screen.getByTestId("notification-item-notif-stale-001"));
+    fireEvent.click(screen.getByTestId("notification-item-notif-stale-001"));
+
+    await waitFor(() =>
+      expect(screen.getByText(/This has already been handled/)).toBeInTheDocument()
+    );
+    expect(mockNavigate).not.toHaveBeenCalled();
+  });
+
+  test("shows toast when overdue_collection_buyer transaction is no longer awaiting_collection", async () => {
+    mockNotificationDocs([
+      makeNotifDoc("notif-stale-002", {
+        type:    "overdue_collection_buyer",
+        message: `Your collection of "Canon EOS R5" is overdue.`,
+      }),
+    ]);
+    // status 'completed' → buyer already collected → action done
+    mockGetDoc.mockResolvedValue({
+      exists: () => true,
+      data: () => ({ sellerId: "seller-uid", buyerId: "buyer-uid", status: "completed" }),
+    });
+
+    await renderNav();
+    fireEvent.click(screen.getByTitle("Notifications"));
+    await waitFor(() => screen.getByTestId("notification-item-notif-stale-002"));
+    fireEvent.click(screen.getByTestId("notification-item-notif-stale-002"));
+
+    await waitFor(() =>
+      expect(screen.getByText(/This has already been handled/)).toBeInTheDocument()
+    );
+    expect(mockNavigate).not.toHaveBeenCalled();
+  });
+
+  test("shows toast when the transaction document no longer exists", async () => {
+    mockNotificationDocs([makeNotifDoc("notif-stale-003")]);
+    // Transaction deleted from Firestore
+    mockGetDoc.mockResolvedValue({ exists: () => false });
+
+    await renderNav();
+    fireEvent.click(screen.getByTitle("Notifications"));
+    await waitFor(() => screen.getByTestId("notification-item-notif-stale-003"));
+    fireEvent.click(screen.getByTestId("notification-item-notif-stale-003"));
+
+    await waitFor(() =>
+      expect(screen.getByText(/This has already been handled/)).toBeInTheDocument()
+    );
+    expect(mockNavigate).not.toHaveBeenCalled();
+  });
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// 10. resolveAndNavigate routing branches
+// ══════════════════════════════════════════════════════════════════════════════
+
+describe("resolveAndNavigate — routing branches via notification click", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockGetDocs.mockResolvedValue({ docs: [], empty: true });
+    localStorage.clear();
+  });
+
+  /** Helper: renders nav with a single offer notification of the given type. */
+  async function renderWithNotif(overrides = {}) {
+    mockNotificationDocs([
+      makeNotifDoc("notif-route-001", { type: "item_at_facility", ...overrides }),
+    ]);
+    await renderNav();
+    fireEvent.click(screen.getByTitle("Notifications"));
+    await waitFor(() => screen.getByTestId("notification-item-notif-route-001"));
+    fireEvent.click(screen.getByTestId("notification-item-notif-route-001"));
+  }
+
+  test("item_at_facility navigates to /my-purchases?open=<txnId>", async () => {
+    await renderWithNotif({ type: "item_at_facility" });
+    await waitFor(() =>
+      expect(mockNavigate).toHaveBeenCalledWith(expect.stringContaining("/my-purchases"))
+    );
+  });
+
+  test("item_ready_for_collection navigates to /my-purchases", async () => {
+    await renderWithNotif({ type: "item_ready_for_collection" });
+    await waitFor(() =>
+      expect(mockNavigate).toHaveBeenCalledWith(expect.stringContaining("/my-purchases"))
+    );
+  });
+
+  test("offer_accepted with cash payment navigates to /my-purchases", async () => {
+    mockNotificationDocs([
+      makeNotifDoc("notif-offer-cash", {
+        type:          "offer_accepted",
+        paymentMethod: "cash",
+        transactionId: "txn-cash-001",
+      }),
+    ]);
+    await renderNav();
+    fireEvent.click(screen.getByTitle("Notifications"));
+    await waitFor(() => screen.getByTestId("notification-item-notif-offer-cash"));
+    fireEvent.click(screen.getByTestId("notification-item-notif-offer-cash"));
+
+    await waitFor(() =>
+      expect(mockNavigate).toHaveBeenCalledWith(expect.stringContaining("/my-purchases"))
+    );
+  });
+
+  test("offer_accepted with online payment navigates to /payment/<txnId>", async () => {
+    mockNotificationDocs([
+      makeNotifDoc("notif-offer-online", {
+        type:          "offer_accepted",
+        paymentMethod: "card",
+        transactionId: "txn-online-001",
+      }),
+    ]);
+    await renderNav();
+    fireEvent.click(screen.getByTitle("Notifications"));
+    await waitFor(() => screen.getByTestId("notification-item-notif-offer-online"));
+    fireEvent.click(screen.getByTestId("notification-item-notif-offer-online"));
+
+    await waitFor(() =>
+      expect(mockNavigate).toHaveBeenCalledWith(expect.stringContaining("/payment/"))
+    );
+  });
+
+  test("offer_declined navigates to /view-listing", async () => {
+    mockNotificationDocs([
+      makeNotifDoc("notif-declined", { type: "offer_declined" }),
+    ]);
+    await renderNav();
+    fireEvent.click(screen.getByTitle("Notifications"));
+    await waitFor(() => screen.getByTestId("notification-item-notif-declined"));
+    fireEvent.click(screen.getByTestId("notification-item-notif-declined"));
+
+    await waitFor(() =>
+      expect(mockNavigate).toHaveBeenCalledWith(expect.stringContaining("/view-listing"))
+    );
+  });
+
+  test("new_offer navigates to /profile?tab=offers", async () => {
+    mockNotificationDocs([
+      makeNotifDoc("notif-new-offer", {
+        type:      "new_offer",
+        listingId: "listing-001",
+      }),
+    ]);
+    await renderNav();
+    fireEvent.click(screen.getByTitle("Notifications"));
+    await waitFor(() => screen.getByTestId("notification-item-notif-new-offer"));
+    fireEvent.click(screen.getByTestId("notification-item-notif-new-offer"));
+
+    await waitFor(() =>
+      expect(mockNavigate).toHaveBeenCalledWith(expect.stringContaining("/profile?tab=offers"))
+    );
+  });
+
+  test("offer_accepted_seller navigates to /trade-facility?tab=seller", async () => {
+    mockNotificationDocs([
+      makeNotifDoc("notif-accepted-seller", { type: "offer_accepted_seller" }),
+    ]);
+    await renderNav();
+    fireEvent.click(screen.getByTitle("Notifications"));
+    await waitFor(() => screen.getByTestId("notification-item-notif-accepted-seller"));
+    fireEvent.click(screen.getByTestId("notification-item-notif-accepted-seller"));
+
+    await waitFor(() =>
+      expect(mockNavigate).toHaveBeenCalledWith(expect.stringContaining("/trade-facility?tab=seller"))
+    );
+  });
+
+  test("cancelled_dropoff_buyer navigates to /profile?tab=history", async () => {
+    mockNotificationDocs([
+      makeNotifDoc("notif-cancel-dropoff", { type: "cancelled_dropoff_buyer" }),
+    ]);
+    await renderNav();
+    fireEvent.click(screen.getByTitle("Notifications"));
+    await waitFor(() => screen.getByTestId("notification-item-notif-cancel-dropoff"));
+    fireEvent.click(screen.getByTestId("notification-item-notif-cancel-dropoff"));
+
+    await waitFor(() =>
+      expect(mockNavigate).toHaveBeenCalledWith(expect.stringContaining("/profile?tab=history"))
+    );
+  });
+
+  test("item_collected navigates to /profile?tab=history", async () => {
+    mockNotificationDocs([
+      makeNotifDoc("notif-collected", { type: "item_collected" }),
+    ]);
+    await renderNav();
+    fireEvent.click(screen.getByTitle("Notifications"));
+    await waitFor(() => screen.getByTestId("notification-item-notif-collected"));
+    fireEvent.click(screen.getByTestId("notification-item-notif-collected"));
+
+    await waitFor(() =>
+      expect(mockNavigate).toHaveBeenCalledWith(expect.stringContaining("/profile?tab=history"))
+    );
+  });
+
+  test("overdue_dropoff_seller navigates to /trade-facility?tab=seller", async () => {
+    mockNotificationDocs([
+      makeNotifDoc("notif-od-seller", {
+        type:   "overdue_dropoff_seller",
+        userId: "seller-uid",
+      }),
+    ]);
+    mockGetDoc.mockResolvedValue({
+      exists: () => true,
+      data: () => ({ sellerId: "seller-uid", buyerId: "buyer-uid", status: "pending" }),
+    });
+
+    await renderNav();
+    fireEvent.click(screen.getByTitle("Notifications"));
+    await waitFor(() => screen.getByTestId("notification-item-notif-od-seller"));
+    fireEvent.click(screen.getByTestId("notification-item-notif-od-seller"));
+
+    await waitFor(() =>
+      expect(mockNavigate).toHaveBeenCalledWith(expect.stringContaining("/trade-facility?tab=seller"))
+    );
+  });
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// 11. Mark all as read — overdue already-done toast branch
+// ══════════════════════════════════════════════════════════════════════════════
+
+describe("handleMarkAllRead — overdue already-handled toast", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockGetDocs.mockResolvedValue({ docs: [], empty: true });
+    localStorage.clear();
+  });
+
+  test("shows 'Some actions were already completed' toast when marking all-read with a stale overdue notif", async () => {
+    mockNotificationDocs([makeNotifDoc("notif-mark-all-001")]);
+    // transaction already past 'pending' → stale
+    mockGetDoc.mockResolvedValue({
+      exists: () => true,
+      data: () => ({ sellerId: "seller-uid", buyerId: "buyer-uid", status: "waiting" }),
+    });
+
+    await renderNav();
+    await waitFor(() => expect(screen.getByText("1")).toBeInTheDocument());
+
+    fireEvent.click(screen.getByTitle("Notifications"));
+    await waitFor(() => screen.getByText("Mark all as read"));
+    fireEvent.click(screen.getByText("Mark all as read"));
+
+    await waitFor(() =>
+      expect(screen.getByText(/Some actions were already completed/)).toBeInTheDocument()
+    );
+    expect(mockUpdateDoc).toHaveBeenCalled();
+  });
+
+  test("does NOT show toast when overdue notif is still active (pending status)", async () => {
+    mockNotificationDocs([makeNotifDoc("notif-mark-all-002")]);
+    mockGetDoc.mockResolvedValue({
+      exists: () => true,
+      data: () => ({ sellerId: "seller-uid", buyerId: "buyer-uid", status: "pending" }),
+    });
+
+    await renderNav();
+    await waitFor(() => expect(screen.getByText("1")).toBeInTheDocument());
+
+    fireEvent.click(screen.getByTitle("Notifications"));
+    await waitFor(() => screen.getByText("Mark all as read"));
+    fireEvent.click(screen.getByText("Mark all as read"));
+
+    await waitFor(() => expect(mockUpdateDoc).toHaveBeenCalled());
+    expect(screen.queryByText(/Some actions were already completed/)).not.toBeInTheDocument();
+  });
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// 12. Dropdown — close on outside click / close on bell re-click
+// ══════════════════════════════════════════════════════════════════════════════
+
+describe("Notification dropdown — open/close behaviour", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockGetDoc.mockResolvedValue({ exists: () => false });
+    mockGetDocs.mockResolvedValue({ docs: [], empty: true });
+    mockNotificationDocs([]);
+    localStorage.clear();
+  });
+
+  test("dropdown opens when bell is clicked", async () => {
+    await renderNav();
+    fireEvent.click(screen.getByTitle("Notifications"));
+    await waitFor(() =>
+      expect(screen.getByText("Notifications")).toBeInTheDocument()
+    );
+  });
+
+  test("dropdown closes when bell is clicked a second time", async () => {
+    await renderNav();
+    const bell = screen.getByTitle("Notifications");
+    fireEvent.click(bell);
+    await waitFor(() => expect(screen.getByText("Notifications")).toBeInTheDocument());
+    fireEvent.click(bell);
+    await waitFor(() =>
+      expect(screen.queryByText(/^Notifications$/)).not.toBeInTheDocument()
+    );
+  });
+
+  test("shows 'No new notifications' when bell is open and list is empty", async () => {
+    await renderNav();
+    fireEvent.click(screen.getByTitle("Notifications"));
+    await waitFor(() =>
+      expect(screen.getByText("No new notifications")).toBeInTheDocument()
+    );
+  });
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// 13. Avatar menu
+// ══════════════════════════════════════════════════════════════════════════════
+
+describe("Avatar menu", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockGetDoc.mockResolvedValue({ exists: () => false });
+    mockGetDocs.mockResolvedValue({ docs: [], empty: true });
+    mockNotificationDocs([]);
+    localStorage.clear();
+  });
+
+  test("opens avatar dropdown when avatar button is clicked", async () => {
+    await renderNav();
+    fireEvent.click(screen.getByRole("button", { name: /Account menu/i }));
+    await waitFor(() => expect(screen.getByText("My Profile")).toBeInTheDocument());
+  });
+
+  test("clicking My Profile navigates to /profile", async () => {
+    await renderNav();
+    fireEvent.click(screen.getByRole("button", { name: /Account menu/i }));
+    await waitFor(() => screen.getByText("My Profile"));
+    fireEvent.click(screen.getByText("My Profile"));
+    expect(mockNavigate).toHaveBeenCalledWith("/profile");
+  });
+
+  test("displays correct user initials from auth", async () => {
+    await renderNav();
+    // "Athalia Mamba" → "AM"
+    expect(screen.getByText("AM")).toBeInTheDocument();
+  });
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// 14. formatTime helper — time-label branches
+// ══════════════════════════════════════════════════════════════════════════════
+
+describe("formatTime — time label branches visible in dropdown", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockGetDoc.mockResolvedValue({ exists: () => false });
+    mockGetDocs.mockResolvedValue({ docs: [], empty: true });
+    localStorage.clear();
+  });
+
+  test("shows '2m ago' for a notification created 2 minutes ago", async () => {
+    mockNotificationDocs([
+      makeNotifDoc("notif-time-min", {
+        createdAt: { toDate: () => new Date(Date.now() - 2 * 60 * 1000) },
+      }),
+    ]);
+    await renderNav();
+    fireEvent.click(screen.getByTitle("Notifications"));
+    await waitFor(() => expect(screen.getByText("2m ago")).toBeInTheDocument());
+  });
+
+  test("shows 'Xh ago' for a notification created 2 hours ago", async () => {
+    mockNotificationDocs([
+      makeNotifDoc("notif-time-hr", {
+        createdAt: { toDate: () => new Date(Date.now() - 2 * 3600 * 1000) },
+      }),
+    ]);
+    await renderNav();
+    fireEvent.click(screen.getByTitle("Notifications"));
+    await waitFor(() => expect(screen.getByText("2h ago")).toBeInTheDocument());
+  });
+
+  test("shows a locale date string for a notification older than 24 hours", async () => {
+    mockNotificationDocs([
+      makeNotifDoc("notif-time-old", {
+        createdAt: { toDate: () => new Date(Date.now() - 2 * 86400 * 1000) },
+      }),
+    ]);
+    await renderNav();
+    fireEvent.click(screen.getByTitle("Notifications"));
+    // Just check it's not one of the relative labels
+    await waitFor(() => {
+      expect(screen.queryByText("Just now")).not.toBeInTheDocument();
+      expect(screen.queryByText(/ago$/)).not.toBeInTheDocument();
+    });
   });
 });

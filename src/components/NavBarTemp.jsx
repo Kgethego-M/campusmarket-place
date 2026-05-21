@@ -68,10 +68,30 @@ const SELLER_TYPES = [
 ];
 
 /**
- * Resolves the best deep-link URL for a notification and navigates to it.
  *
- * MyPurchases  supports: ?filter=<status>&open=<transactionId>
- * TradeFacility supports: ?tab=<seller|buyer>&highlight=<transactionId>
+ * Routing rules per notification type:
+ *
+ * SELLER notifications:
+ *   overdue_dropoff_seller        → /trade-facility?tab=buyer&highlight=<id>&overdueHighlight=<id>
+ *                                   (Track Pick-up tab, red highlight — seller checks if buyer collected)
+ *                                   Actually: seller needs to come drop off → Book Drop-off tab, red highlight
+ *   overdue_collection_seller     → /trade-facility?tab=seller&highlight=<id>&overdueHighlight=<id>
+ *                                   (Book Drop-off tab, red highlight)
+ *   cancelled_dropoff_seller      → /profile?tab=history&highlight=<id>
+ *   cancelled_collection_seller   → /profile?tab=history&highlight=<id>
+ *   item_received_at_facility     → /trade-facility?tab=seller&highlight=<id>
+ *   transaction_complete          → /profile?tab=history&highlight=<id>
+ *   buyer_paid / offer_accepted_seller / dropoff_booked / trade_waiting
+ *                                 → /trade-facility?tab=seller&highlight=<id>
+ *
+ * BUYER notifications:
+ *   overdue_dropoff_buyer         → /trade-facility?tab=buyer&highlight=<id>&overdueHighlight=<id>
+ *   overdue_collection_buyer      → /trade-facility?tab=buyer&highlight=<id>&overdueHighlight=<id>
+ *   cancelled_dropoff_buyer       → /profile?tab=history&highlight=<id>
+ *   cancelled_collection_buyer    → /profile?tab=history&highlight=<id>
+ *   item_at_facility / item_ready_for_collection / item_collected
+ *                                 → /my-purchases?open=<id>
+ *   collection_booked             → /trade-facility?tab=buyer&highlight=<id>
  */
 async function resolveAndNavigate(notification, currentUser, navigate) {
     const transactionId =
@@ -81,28 +101,95 @@ async function resolveAndNavigate(notification, currentUser, navigate) {
         notification.txId           ||
         null;
 
-    // If we have a transactionId, verify the role from Firestore and use it
+    const type = notification.type || '';
+
+    // ── History routes — these always go to /profile?tab=history ──────────────
+    const HISTORY_TYPES = [
+        'cancelled_dropoff_seller',
+        'cancelled_dropoff_buyer',
+        'cancelled_collection_seller',
+        'cancelled_collection_buyer',
+        'transaction_complete',
+        'item_collected',
+    ];
+    if (HISTORY_TYPES.includes(type)) {
+        const dest = transactionId
+            ? `/profile?tab=history&highlight=${transactionId}`
+            : '/profile?tab=history';
+        navigate(dest);
+        return;
+    }
+
+  
+    if (type === 'overdue_dropoff_seller' || type === 'overdue_collection_seller') {
+        const dest = transactionId
+            ? `/trade-facility?tab=seller&highlight=${transactionId}&overdueHighlight=${transactionId}`
+            : '/trade-facility?tab=seller';
+        navigate(dest);
+        return;
+    }
+    if (type === 'overdue_dropoff_buyer' || type === 'overdue_collection_buyer') {
+        const dest = transactionId
+            ? `/trade-facility?tab=buyer&highlight=${transactionId}&overdueHighlight=${transactionId}`
+            : '/trade-facility?tab=buyer';
+        navigate(dest);
+        return;
+    }
+
+    // ── Seller trade/facility routes ──────────────────────────────────────────
+    const SELLER_TRADE_FACILITY_TYPES = [
+        'buyer_paid',
+        'offer_accepted_seller',
+        'dropoff_booked',
+        'trade_waiting',
+        'item_received_at_facility',
+        'collection_booked',
+    ];
+    if (SELLER_TRADE_FACILITY_TYPES.includes(type)) {
+        const dest = transactionId
+            ? `/trade-facility?tab=seller&highlight=${transactionId}`
+            : '/trade-facility?tab=seller';
+        navigate(dest);
+        return;
+    }
+
+    // ── Buyer My Purchases routes ─────────────────────────────────────────────
+    const BUYER_MY_PURCHASES_TYPES = [
+        'item_at_facility',
+        'item_ready_for_collection',
+        'offer_accepted',
+    ];
+    if (BUYER_MY_PURCHASES_TYPES.includes(type)) {
+        const dest = transactionId
+            ? `/my-purchases?open=${transactionId}`
+            : '/my-purchases';
+        navigate(dest);
+        return;
+    }
+
+    // ── Generic fallback: look up transaction in Firestore to determine role ──
     if (transactionId && currentUser) {
         try {
             const txSnap = await getDoc(doc(db, 'transactions', transactionId));
             if (txSnap.exists()) {
-                const isSeller = txSnap.data().sellerId === currentUser.uid;
-                const status   = txSnap.data().status;
+                const txData   = txSnap.data();
+                const isSeller = txData.sellerId === currentUser.uid;
+                const status   = txData.status;
+                const isHistorical = status === 'completed' || status === 'cancelled';
 
-                // Map transaction status → MyPurchases filter
-                const STATUS_TO_FILTER = {
-                    accepted:            'accepted',
-                    pending_payment:     'accepted',
-                    waiting:             'waiting',
-                    awaiting_collection: 'awaiting_collection',
-                };
-                const filter = STATUS_TO_FILTER[status] || 'all';
-
-                if (isSeller) {
-                    // Seller → Trade Facility, highlight the transaction card
+                if (isHistorical) {
+                    navigate(`/profile?tab=history&highlight=${transactionId}`);
+                } else if (isSeller) {
                     navigate(`/trade-facility?tab=seller&highlight=${transactionId}`);
                 } else {
-                    // Buyer → My Purchases, open + filter the transaction card
+                    const STATUS_TO_FILTER = {
+                        accepted:            'accepted',
+                        pending_payment:     'accepted',
+                        waiting:             'waiting',
+                        awaiting_collection: 'awaiting_collection',
+                        pending:             'pending',
+                    };
+                    const filter = STATUS_TO_FILTER[status] || 'all';
                     navigate(`/my-purchases?filter=${filter}&open=${transactionId}`);
                 }
                 return;
@@ -112,18 +199,12 @@ async function resolveAndNavigate(notification, currentUser, navigate) {
         }
     }
 
-    // Fallback: use notification type to determine destination
-    const isBuyerNotification = BUYER_TYPES.includes(notification.type);
+    // ── Last-resort fallback ──────────────────────────────────────────────────
+    const isBuyerNotification = BUYER_TYPES.includes(type);
     if (isBuyerNotification) {
-        const dest = transactionId
-            ? `/my-purchases?open=${transactionId}`
-            : '/my-purchases';
-        navigate(dest);
+        navigate(transactionId ? `/my-purchases?open=${transactionId}` : '/my-purchases');
     } else {
-        const dest = transactionId
-            ? `/trade-facility?tab=seller&highlight=${transactionId}`
-            : '/trade-facility';
-        navigate(dest);
+        navigate(transactionId ? `/trade-facility?tab=seller&highlight=${transactionId}` : '/trade-facility');
     }
 }
 
@@ -141,6 +222,14 @@ export default function Navbar() {
     const [userDisplay, setUserDisplay] = useState({
         name: 'Student', email: '', photoURL: '', initials: 'S',
     });
+
+    // ── Toast for "action already handled" ───────────────────────────────────
+    const [toast, setToast] = useState(null); 
+    const showToast = (message) => {
+        const id = Date.now();
+        setToast({ message, id });
+        setTimeout(() => setToast((t) => (t?.id === id ? null : t)), 3500);
+    };
 
     const notificationRef = useRef(null);
     const avatarRef       = useRef(null);
@@ -164,6 +253,40 @@ export default function Navbar() {
         setNotificationsOpen(false);
 
         if (n.source === 'offer') {
+            
+            const OVERDUE_TYPES = [
+                'overdue_dropoff_seller',
+                'overdue_dropoff_buyer',
+                'overdue_collection_seller',
+                'overdue_collection_buyer',
+            ];
+            if (OVERDUE_TYPES.includes(n.type) && n.transactionId) {
+                try {
+                    const txSnap = await getDoc(doc(db, 'transactions', n.transactionId));
+                    if (txSnap.exists()) {
+                        const txStatus = txSnap.data().status;
+                        const isDropOffOverdue   = n.type === 'overdue_dropoff_seller'   || n.type === 'overdue_dropoff_buyer';
+                        const isCollectionOverdue = n.type === 'overdue_collection_seller' || n.type === 'overdue_collection_buyer';
+                        const actionAlreadyDone =
+                            (isDropOffOverdue   && txStatus !== 'pending') ||
+                            (isCollectionOverdue && txStatus !== 'awaiting_collection');
+
+                        if (actionAlreadyDone) {
+                            await markOfferAsRead(n.id);
+                            showToast('This has already been handled ✓');
+                            return;
+                        }
+                    } else {
+                        // Transaction no longer exists — dismiss silently with toast
+                        await markOfferAsRead(n.id);
+                        showToast('This has already been handled ✓');
+                        return;
+                    }
+                } catch (err) {
+                    console.error('NavBar: stale-check error', err);
+                }
+            }
+
             await markOfferAsRead(n.id);
 
             if (n.type === 'new_offer') {
@@ -196,9 +319,7 @@ export default function Navbar() {
             }
 
         } else if (n.source === 'rating') {
-            // Save to localStorage so the test (and any session-level tracking) can confirm
-            // the click was registered — but we do NOT remove it from state here.
-            // The notification stays in the bell until the user actually submits a review.
+            
             markRatingAsRead(n.id);
             navigate(
                 `/review/${n.listingId}` +
@@ -216,10 +337,35 @@ export default function Navbar() {
         const pendingOffers = [...offerNotifications];
         if (pendingOffers.length === 0) return;
 
+        // For overdue notifications, do a live Firestore check first and show a toast if any were already acted on, so the user knows they're cleared.
+        const OVERDUE_TYPES = new Set([
+            'overdue_dropoff_seller', 'overdue_dropoff_buyer',
+            'overdue_collection_seller', 'overdue_collection_buyer',
+        ]);
+        const overdueNotifs = pendingOffers.filter(n => OVERDUE_TYPES.has(n.type) && n.transactionId);
+        let anyAlreadyDone = false;
+        await Promise.all(
+            overdueNotifs.map(async (n) => {
+                try {
+                    const txSnap = await getDoc(doc(db, 'transactions', n.transactionId));
+                    if (!txSnap.exists()) { anyAlreadyDone = true; return; }
+                    const txStatus = txSnap.data().status;
+                    const isDropOff   = n.type === 'overdue_dropoff_seller'   || n.type === 'overdue_dropoff_buyer';
+                    const isCollection = n.type === 'overdue_collection_seller' || n.type === 'overdue_collection_buyer';
+                    if ((isDropOff && txStatus !== 'pending') || (isCollection && txStatus !== 'awaiting_collection')) {
+                        anyAlreadyDone = true;
+                    }
+                } catch (_) {}
+            })
+        );
+
         // Mark each offer notification as read in Firestore.
         // The onSnapshot listener removes them from state once Firestore confirms.
         try {
             await Promise.all(pendingOffers.map((n) => markOfferAsRead(n.id)));
+            if (anyAlreadyDone) {
+                showToast('Some actions were already completed — all notifications cleared ✓');
+            }
         } catch (err) {
             console.error('Failed to mark all as read:', err);
         }
@@ -727,6 +873,24 @@ export default function Navbar() {
                         <i className="fas fa-spinner fa-spin" />
                         <p>Logging out...</p>
                     </div>
+                </div>
+            )}
+
+            {/* ── "Action already done" toast ── */}
+            {toast && (
+                <div style={{
+                    position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)',
+                    zIndex: 9999, pointerEvents: 'none',
+                    background: '#1e293b', color: '#fff',
+                    padding: '10px 20px', borderRadius: 10,
+                    fontSize: '0.85rem', fontWeight: 600,
+                    boxShadow: '0 4px 20px rgba(0,0,0,0.25)',
+                    display: 'flex', alignItems: 'center', gap: 8,
+                    animation: 'fadeInUp 0.2s ease',
+                }}>
+                    <i className="fas fa-circle-check" style={{ color: '#4ade80', fontSize: '0.9rem' }} />
+                    {toast.message}
+                    <style>{`@keyframes fadeInUp { from { opacity:0; transform:translateX(-50%) translateY(8px); } to { opacity:1; transform:translateX(-50%) translateY(0); } }`}</style>
                 </div>
             )}
         </>
