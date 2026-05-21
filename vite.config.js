@@ -17,21 +17,27 @@ export default defineConfig(({ mode }) => ({
     }
   },
 
-  test: {
-    globals: true,
-    environment: "jsdom",
-    setupFiles: "./src/tests/setup.js",
-    deps: {
-      inline: ["firebase"],
-    },
-    coverage: {
-      provider: 'v8',
-      reporter: ['text', 'lcov'],
-    },
-    // Mocks only apply when running tests
-    alias: {
-      "@firebase/auth": new URL("src/__mocks__/firebase.js", import.meta.url).pathname,
-      "@firebase/firestore": new URL("src/__mocks__/firebase.js", import.meta.url).pathname,
-    },
+test: {
+  globals: true,
+  environment: "jsdom",
+  setupFiles: "./src/tests/setup.js",
+  deps: {
+    inline: ["firebase"],
   },
+  coverage: {
+    provider: 'v8',
+    reporter: ['text', 'lcov'],
+    reportsDirectory: './coverage',   // ← explicit output path
+    include: ['src/**/*.{js,jsx,ts,tsx}'],  // ← force ALL src files to appear
+    exclude: [
+      'src/__mocks__/**',
+      'src/tests/**',
+      '**/*.config.*',
+    ],
+  },
+  alias: {
+    "@firebase/auth": new URL("src/__mocks__/firebase.js", import.meta.url).pathname,
+    "@firebase/firestore": new URL("src/__mocks__/firebase.js", import.meta.url).pathname,
+  },
+},
 }));

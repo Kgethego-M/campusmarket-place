@@ -16,3 +16,12 @@ comment:
   behavior: default
   require_changes: true
 
+flags:
+  frontend:
+    carryforward: true
+    paths:
+      - src/
+  backend:
+    carryforward: true
+    paths:
+      - backend/
