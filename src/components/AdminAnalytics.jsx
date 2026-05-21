@@ -381,7 +381,8 @@ export default function AdminAnalytics() {
         );
     }
 
-    function BarChart({ data: chartData, color = "#6AA6DA", height = 140 }) {
+    // FIXED: BarChart for bookings - shows raw counts (no R symbol)
+    function BarChart({ data: chartData, color = "#6AA6DA", height = 140, isCurrency = false }) {
         const entries = Object.entries(chartData);
         if (!entries.length) return <p className={styles.emptyNote}>No data yet.</p>;
         const max = Math.max(...entries.map(([, v]) => v), 1);
@@ -389,7 +390,9 @@ export default function AdminAnalytics() {
             <div className={styles.barChart}>
                 {entries.map(([label, value]) => (
                     <div key={label} className={styles.barGroup}>
-                        <span className={styles.barValue}>R{value.toLocaleString()}</span>
+                        <span className={styles.barValue}>
+                            {isCurrency ? `R${value.toLocaleString()}` : value.toLocaleString()}
+                        </span>
                         <div className={styles.barTrack} style={{ height }}>
                             <div className={styles.barFill} style={{ height: `${(value / max) * 100}%`, background: color }} />
                         </div>
@@ -525,14 +528,14 @@ export default function AdminAnalytics() {
                     </div>
                 </div>
 
-                {/* Bookings by day */}
+                {/* Bookings by day - FIXED: No R symbol, raw counts only */}
                 <div className={styles.card}>
                     <h3 className={styles.cardTitle}>
                         <i className="fas fa-calendar-alt" style={{ marginRight: 8, color: "#f59e0b" }} />
                         Drop-off bookings by day of week
                     </h3>
                     <div className={styles.revenueContainer}>
-                        <BarChart data={data.bookingsByDay} color="#6AA6DA" height={160} />
+                        <BarChart data={data.bookingsByDay} color="#6AA6DA" height={160} isCurrency={false} />
                     </div>
                 </div>
 
@@ -545,7 +548,7 @@ export default function AdminAnalytics() {
                     <HorizontalBarChart data={data.byCategory} />
                 </div>
 
-                {/* Revenue by month */}
+                {/* Revenue by month - keeps R symbol because it's revenue */}
                 <div className={styles.card}>
                     <h3 className={styles.cardTitle}>
                         <i className="fas fa-chart-line" style={{ marginRight: 8, color: "#34d399" }} />
@@ -562,6 +565,7 @@ export default function AdminAnalytics() {
                                 )}
                                 color="#34d399"
                                 height={140}
+                                isCurrency={true}
                             />
                         }
                     </div>
