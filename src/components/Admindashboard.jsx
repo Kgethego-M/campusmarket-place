@@ -15,7 +15,7 @@ import UtilisationReport from "./UtilisationReport.jsx";
 import AdminNavbar from "./AdminNavbar";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Small inline toast
+// Toast
 // ─────────────────────────────────────────────────────────────────────────────
 function Toast({ message, type = "success", onDismiss }) {
   useEffect(() => {
@@ -29,8 +29,7 @@ function Toast({ message, type = "success", onDismiss }) {
       position: "fixed", bottom: 24, right: 24, zIndex: 99999,
       background: bg, color: "#fff", padding: "12px 20px",
       borderRadius: 10, fontSize: "0.85rem", fontWeight: 600,
-      boxShadow: "0 8px 24px rgba(0,0,0,0.18)",
-      maxWidth: 320,
+      boxShadow: "0 8px 24px rgba(0,0,0,0.18)", maxWidth: 320,
     }}>
       {message}
     </div>
@@ -38,7 +37,7 @@ function Toast({ message, type = "success", onDismiss }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Moderation Summary — E9 (unchanged)
+// Moderation Summary
 // ─────────────────────────────────────────────────────────────────────────────
 const PERIODS = [
   { label: "Last 7 days",  days: 7  },
@@ -70,7 +69,13 @@ function ModerationSummaryTab({ reports }) {
 
   const byType = ["user", "listing", "review"].map(type => {
     const rows = filtered.filter(r => r.reportType === type);
-    return { type, total: rows.length, pending: rows.filter(r => r.status === "pending").length, resolved: rows.filter(r => r.status === "resolved").length, dismissed: rows.filter(r => r.resolution === "dismiss").length };
+    return {
+      type,
+      total: rows.length,
+      pending:   rows.filter(r => r.status === "pending").length,
+      resolved:  rows.filter(r => r.status === "resolved").length,
+      dismissed: rows.filter(r => r.resolution === "dismiss").length,
+    };
   });
 
   const reasonCounts = {};
@@ -89,25 +94,38 @@ function ModerationSummaryTab({ reports }) {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-      {/* Period selector */}
       <div style={{ background: "#fff", border: "1.5px solid #e2e8f0", borderRadius: 12, padding: "14px 18px", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 10 }}>
         <div>
-          <h3 style={{ margin: 0, fontSize: "0.95rem", fontWeight: 700, color: "#0f172a" }}><i className="fas fa-chart-bar" style={{ marginRight: 7, color: "#6AA6DA" }} />Moderation Summary</h3>
-          <p style={{ margin: "2px 0 0", fontSize: "0.78rem", color: "#64748b" }}>Overview of flagged content, actions taken and dismissals</p>
+          <h3 style={{ margin: 0, fontSize: "0.95rem", fontWeight: 700, color: "#0f172a" }}>
+            <i className="fas fa-chart-bar" style={{ marginRight: 7, color: "#6AA6DA" }} />
+            Moderation Summary
+          </h3>
+          <p style={{ margin: "2px 0 0", fontSize: "0.78rem", color: "#64748b" }}>
+            Overview of flagged content, actions taken and dismissals
+          </p>
         </div>
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
           {PERIODS.map(p => (
-            <button key={p.label} onClick={() => setSelectedDays(p.days)} style={{ padding: "5px 13px", borderRadius: 20, border: "1.5px solid", fontSize: "0.76rem", fontWeight: 600, cursor: "pointer", fontFamily: "inherit", borderColor: selectedDays === p.days ? "#6AA6DA" : "#e2e8f0", background: selectedDays === p.days ? "#6AA6DA" : "#fff", color: selectedDays === p.days ? "#fff" : "#64748b" }}>
+            <button
+              key={p.label}
+              onClick={() => setSelectedDays(p.days)}
+              style={{
+                padding: "5px 13px", borderRadius: 20, border: "1.5px solid",
+                fontSize: "0.76rem", fontWeight: 600, cursor: "pointer", fontFamily: "inherit",
+                borderColor: selectedDays === p.days ? "#6AA6DA" : "#e2e8f0",
+                background:  selectedDays === p.days ? "#6AA6DA" : "#fff",
+                color:       selectedDays === p.days ? "#fff"    : "#64748b",
+              }}
+            >
               {p.label}
             </button>
           ))}
         </div>
       </div>
 
-      {/* Stat cards */}
       <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
         {card("fas fa-flag",         "Total Reports",    total)}
-        {card("fas fa-clock",        "Pending",          pending,        pending  > 0 ? "#d97706" : "#1e293b")}
+        {card("fas fa-clock",        "Pending",          pending,        pending        > 0 ? "#d97706" : "#1e293b")}
         {card("fas fa-check-circle", "Resolved",         resolved,       "#16a34a")}
         {card("fas fa-times-circle", "Dismissed",        dismissed)}
         {card("fas fa-star",         "Reviews Removed",  removedReviews, removedReviews > 0 ? "#dc2626" : "#1e293b")}
@@ -115,15 +133,18 @@ function ModerationSummaryTab({ reports }) {
         {card("fas fa-ban",          "Users Suspended",  suspended,      suspended      > 0 ? "#dc2626" : "#1e293b")}
       </div>
 
-      {/* Breakdown table */}
       <div style={{ background: "#fff", border: "1.5px solid #e2e8f0", borderRadius: 12, overflow: "hidden" }}>
-        <div style={{ padding: "12px 18px", borderBottom: "1px solid #f1f5f9" }}><h4 style={{ margin: 0, fontSize: "0.85rem", fontWeight: 700, color: "#0f172a" }}>Breakdown by Report Type</h4></div>
+        <div style={{ padding: "12px 18px", borderBottom: "1px solid #f1f5f9" }}>
+          <h4 style={{ margin: 0, fontSize: "0.85rem", fontWeight: 700, color: "#0f172a" }}>Breakdown by Report Type</h4>
+        </div>
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.82rem" }}>
-          <thead><tr style={{ background: "#f8fafc" }}>
-            {["Type", "Total", "Pending", "Resolved", "Dismissed"].map(h => (
-              <th key={h} style={{ padding: "9px 14px", textAlign: "left", fontWeight: 700, color: "#64748b", fontSize: "0.72rem", textTransform: "uppercase", letterSpacing: "0.05em", borderBottom: "1px solid #f1f5f9" }}>{h}</th>
-            ))}
-          </tr></thead>
+          <thead>
+            <tr style={{ background: "#f8fafc" }}>
+              {["Type", "Total", "Pending", "Resolved", "Dismissed"].map(h => (
+                <th key={h} style={{ padding: "9px 14px", textAlign: "left", fontWeight: 700, color: "#64748b", fontSize: "0.72rem", textTransform: "uppercase", letterSpacing: "0.05em", borderBottom: "1px solid #f1f5f9" }}>{h}</th>
+              ))}
+            </tr>
+          </thead>
           <tbody>
             {byType.map(row => (
               <tr key={row.type} style={{ borderBottom: "1px solid #f8fafc" }}>
@@ -132,8 +153,16 @@ function ModerationSummaryTab({ reports }) {
                   {row.type.charAt(0).toUpperCase() + row.type.slice(1)}
                 </td>
                 <td style={{ padding: "11px 14px", fontWeight: 700, color: row.total > 0 ? "#1e293b" : "#94a3b8" }}>{row.total}</td>
-                <td style={{ padding: "11px 14px" }}>{row.pending > 0 ? <span style={{ background: "#fef3c7", color: "#d97706", borderRadius: 20, padding: "2px 9px", fontWeight: 700, fontSize: "0.72rem" }}>{row.pending}</span> : <span style={{ color: "#94a3b8" }}>0</span>}</td>
-                <td style={{ padding: "11px 14px" }}>{row.resolved > 0 ? <span style={{ background: "#f0fdf4", color: "#16a34a", borderRadius: 20, padding: "2px 9px", fontWeight: 700, fontSize: "0.72rem" }}>{row.resolved}</span> : <span style={{ color: "#94a3b8" }}>0</span>}</td>
+                <td style={{ padding: "11px 14px" }}>
+                  {row.pending > 0
+                    ? <span style={{ background: "#fef3c7", color: "#d97706", borderRadius: 20, padding: "2px 9px", fontWeight: 700, fontSize: "0.72rem" }}>{row.pending}</span>
+                    : <span style={{ color: "#94a3b8" }}>0</span>}
+                </td>
+                <td style={{ padding: "11px 14px" }}>
+                  {row.resolved > 0
+                    ? <span style={{ background: "#f0fdf4", color: "#16a34a", borderRadius: 20, padding: "2px 9px", fontWeight: 700, fontSize: "0.72rem" }}>{row.resolved}</span>
+                    : <span style={{ color: "#94a3b8" }}>0</span>}
+                </td>
                 <td style={{ padding: "11px 14px", color: row.dismissed > 0 ? "#64748b" : "#94a3b8", fontWeight: row.dismissed > 0 ? 600 : 400 }}>{row.dismissed}</td>
               </tr>
             ))}
@@ -148,10 +177,11 @@ function ModerationSummaryTab({ reports }) {
         </table>
       </div>
 
-      {/* Top reasons bar chart */}
       {topReasons.length > 0 && (
         <div style={{ background: "#fff", border: "1.5px solid #e2e8f0", borderRadius: 12, overflow: "hidden" }}>
-          <div style={{ padding: "12px 18px", borderBottom: "1px solid #f1f5f9" }}><h4 style={{ margin: 0, fontSize: "0.85rem", fontWeight: 700, color: "#0f172a" }}>Top Report Reasons</h4></div>
+          <div style={{ padding: "12px 18px", borderBottom: "1px solid #f1f5f9" }}>
+            <h4 style={{ margin: 0, fontSize: "0.85rem", fontWeight: 700, color: "#0f172a" }}>Top Report Reasons</h4>
+          </div>
           <div style={{ padding: "12px 18px", display: "flex", flexDirection: "column", gap: 10 }}>
             {topReasons.map(([reason, count]) => {
               const pct = total > 0 ? Math.round((count / total) * 100) : 0;
@@ -181,75 +211,149 @@ function ModerationSummaryTab({ reports }) {
   );
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Correct utilisation calculation
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// Definitions:
+//   timeSlot       = a distinct hour-slot string e.g. "09:00", "10:00"
+//   slotsPerHour   = how many concurrent bookings are allowed in one timeSlot
+//   dailyCapacity  = (number of distinct timeSlots that exist in the config) × slotsPerHour
+//
+// For each calendar date:
+//   bookedCount    = total booking rows for that date
+//   uniqueSlots    = distinct timeSlot values used on that date
+//
+// We know the *full* slot list from facilityConfig (openTime → closeTime).
+// That gives us the true denominator regardless of which slots were actually used.
+//
+//   dailyUtil % = (bookedCount / dailyCapacity) × 100   capped at 100
+//
+// avgUtilisation = mean of dailyUtil across all dates that had ≥1 booking.
+//
+// If facilityConfig is unavailable we fall back to using the unique slots
+// seen within each day's bookings as the denominator (previous behaviour,
+// but still using the correct count instead of the set size).
+
+export function calculateAvgUtilisation(bookings, facilityConfig) {
+  const { openTime, closeTime, slotsPerHour: rawSlotsPerHour } = facilityConfig || {};
+  const slotsPerHour = Number(rawSlotsPerHour) || 1;
+
+  // Build the full list of valid time slots from config
+  let totalSlotsPerDay = 0;
+  if (openTime && closeTime) {
+    const [openH]  = openTime.split(":").map(Number);
+    const [closeH] = closeTime.split(":").map(Number);
+    const hours = closeH - openH; // e.g. 09:00→16:00 = 7 hours → 7 distinct slots
+    totalSlotsPerDay = hours > 0 ? hours : 0;
+  }
+
+  // Group bookings by date
+  const bookingsByDate = {};
+  bookings.forEach(b => {
+    if (b.date && b.timeSlot) {
+      if (!bookingsByDate[b.date]) bookingsByDate[b.date] = [];
+      bookingsByDate[b.date].push(b.timeSlot);
+    }
+  });
+
+  const datesWithBookings = Object.keys(bookingsByDate);
+  if (datesWithBookings.length === 0) return 0;
+
+  let totalUtilisation = 0;
+  for (const date of datesWithBookings) {
+    const slots = bookingsByDate[date];
+    const bookedCount = slots.length;
+
+    // Determine denominator:
+    // - If we have facility config, use the full configured slot count × slotsPerHour
+    // - Otherwise fall back to unique slots seen that day × slotsPerHour
+    const effectiveSlotCount = totalSlotsPerDay > 0
+      ? totalSlotsPerDay
+      : new Set(slots).size;
+
+    const dailyCapacity = effectiveSlotCount * slotsPerHour;
+    const dailyUtil     = dailyCapacity > 0 ? (bookedCount / dailyCapacity) * 100 : 0;
+    totalUtilisation   += Math.min(dailyUtil, 100);
+  }
+
+  return Math.round(totalUtilisation / datesWithBookings.length);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Main component
+// ─────────────────────────────────────────────────────────────────────────────
 export default function AdminDashboard() {
   const navigate = useNavigate();
   const dropdownRef = useRef(null);
 
-  // ── UI state ─────────────────────────────────────────────────────────────
-  const [activeTab, setActiveTab]       = useState("users");
-  const [modSubTab, setModSubTab]       = useState("listings");
-  const [reportSearch, setReportSearch] = useState("");
+  // ── UI state ────────────────────────────────────────────────────────────
+  const [activeTab, setActiveTab]           = useState("users");
+  const [modSubTab, setModSubTab]           = useState("listings");
+  const [reportSearch, setReportSearch]     = useState("");
   const [expandedReport, setExpandedReport] = useState(null);
-  const [dropdownOpen, setDropdownOpen] = useState(false);
-  const [isLoggingOut, setIsLoggingOut] = useState(false);
-  const [userSearch, setUserSearch] = useState("");
-  const [listingSearch, setListingSearch] = useState("");
+  const [dropdownOpen, setDropdownOpen]     = useState(false);
+  const [isLoggingOut, setIsLoggingOut]     = useState(false);
+  const [userSearch, setUserSearch]         = useState("");
+  const [listingSearch, setListingSearch]   = useState("");
 
-  // ── Data state ───────────────────────────────────────────────────────────
-  const [adminUser, setAdminUser] = useState({ name: "Admin", email: "", photoURL: "", initials: "A" });
-  const [stats, setStats] = useState({ totalUsers: 0, openReports: 0, transactions: 0, revenue: 0 });
-  const [adRevenueTotal, setAdRevenueTotal] = useState(0); // NEW: ad revenue sum
+  // ── Data state ──────────────────────────────────────────────────────────
+  const [adminUser, setAdminUser]     = useState({ name: "Admin", email: "", photoURL: "", initials: "A" });
+  const [stats, setStats]             = useState({ totalUsers: 0, openReports: 0, transactions: 0, revenue: 0, avgUtilisation: 0 });
+  const [adRevenueTotal, setAdRevenueTotal] = useState(0);
   const [pendingStaff, setPendingStaff] = useState([]);
-  const [allUsers, setAllUsers] = useState([]);
-  const [listings, setListings] = useState([]);
-  const [reports, setReports] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [allUsers, setAllUsers]       = useState([]);
+  const [listings, setListings]       = useState([]);
+  const [reports, setReports]         = useState([]);
+  const [bookings, setBookings]       = useState([]);
+  const [loading, setLoading]         = useState(true);
   const [unreadReports, setUnreadReports] = useState(0);
 
-  // ── Facility config state ─────────────────────────────────────────────────
+  // ── Facility config state ────────────────────────────────────────────────
   const [facilityConfig, setFacilityConfig] = useState({
     openTime: "09:00",
     closeTime: "16:00",
     slotsPerHour: 1,
   });
   const [configLoading, setConfigLoading] = useState(false);
-  const [configSaving, setConfigSaving] = useState(false);
-  const [configError, setConfigError] = useState("");
+  const [configSaving, setConfigSaving]   = useState(false);
+  const [configError, setConfigError]     = useState("");
   const [configSuccess, setConfigSuccess] = useState("");
 
   // ── Confirm modal & toast ────────────────────────────────────────────────
   const [confirm, setConfirm] = useState({ open: false, title: "", message: "", onConfirm: null, variant: "danger" });
-  const [toast, setToast] = useState(null);
+  const [toast, setToast]     = useState(null);
 
-  const showToast = (message, type = "success") => setToast({ message, type });
-  const hideToast = () => setToast(null);
-
-  const openConfirm = ({ title, message, variant = "danger", onConfirm }) =>
+  const showToast  = (message, type = "success") => setToast({ message, type });
+  const hideToast  = () => setToast(null);
+  const openConfirm  = ({ title, message, variant = "danger", onConfirm }) =>
     setConfirm({ open: true, title, message, variant, onConfirm });
   const closeConfirm = () => setConfirm(c => ({ ...c, open: false }));
 
   // ── Export hooks ─────────────────────────────────────────────────────────
   const summaryHeaders = ["Metric", "Value"];
   const summaryRows = [
-    { Metric: "Total Users", Value: stats.totalUsers },
-    { Metric: "Open Reports", Value: stats.openReports },
-    { Metric: "Transactions", Value: stats.transactions },
-    { Metric: "Listing Revenue", Value: `R ${stats.revenue.toLocaleString()}` },
-    { Metric: "Ad Revenue", Value: `R ${adRevenueTotal.toLocaleString()}` },
-    { Metric: "Total Revenue", Value: `R ${(stats.revenue + adRevenueTotal).toLocaleString()}` },
+    { Metric: "Total Users",       Value: stats.totalUsers },
+    { Metric: "Open Reports",      Value: stats.openReports },
+    { Metric: "Transactions",      Value: stats.transactions },
+    { Metric: "Listing Revenue",   Value: `R ${stats.revenue.toLocaleString()}` },
+    { Metric: "Ad Revenue",        Value: `R ${adRevenueTotal.toLocaleString()}` },
+    { Metric: "Total Revenue",     Value: `R ${(stats.revenue + adRevenueTotal).toLocaleString()}` },
+    { Metric: "Avg Utilisation",   Value: `${stats.avgUtilisation}%` },
   ];
-  const { exportToCSV: exportSummaryCSV, exportToPDF: exportSummaryPDF } = useExportReport("Admin_Summary", summaryHeaders, summaryRows);
+  const { exportToCSV: exportSummaryCSV, exportToPDF: exportSummaryPDF } =
+    useExportReport("Admin_Summary", summaryHeaders, summaryRows);
 
-  // Prepare data (unchanged)
+  // ── Derived / filtered lists ─────────────────────────────────────────────
   const filteredUsers = allUsers.filter(u =>
     `${u.firstName} ${u.lastName} ${u.email}`.toLowerCase().includes(userSearch.toLowerCase())
   );
   const userExportData = filteredUsers.map(u => ({
-    Name: `${u.firstName || ""} ${u.lastName || ""}`.trim(),
-    Email: u.email || "",
-    Role: u.userType || "student",
-    Rating: u.rating || 0,
-    Trades: u.totalRatings || 0,
+    Name:      `${u.firstName || ""} ${u.lastName || ""}`.trim(),
+    Email:     u.email || "",
+    Role:      u.userType || "student",
+    Rating:    u.rating || 0,
+    Trades:    u.totalRatings || 0,
     Suspended: u.suspended ? "Yes" : "No",
   }));
   const userHeaders = ["Name", "Email", "Role", "Rating", "Trades", "Suspended"];
@@ -258,11 +362,11 @@ export default function AdminDashboard() {
     `${l.title || ""} ${l.category || ""} ${l.status || ""}`.toLowerCase().includes(listingSearch.toLowerCase())
   );
   const listingsExportData = filteredListings.map(l => ({
-    Title: l.title || "",
-    Category: l.category || "",
-    Price: l.price || 0,
-    Status: l.status || "active",
-    Condition: l.condition || "",
+    Title:       l.title      || "",
+    Category:    l.category   || "",
+    Price:       l.price      || 0,
+    Status:      l.status     || "active",
+    Condition:   l.condition  || "",
     ListingType: l.listingType || "",
   }));
   const listingsHeaders = ["Title", "Category", "Price", "Status", "Condition", "ListingType"];
@@ -270,10 +374,10 @@ export default function AdminDashboard() {
   const paymentsExportData = listings
     .filter(l => l.status === "sold" || l.status === "traded")
     .map(l => ({
-      Item: l.title || "",
-      Type: l.listingType || "—",
-      Amount: l.price || 0,
-      Status: l.status || "",
+      Item:   l.title      || "",
+      Type:   l.listingType || "—",
+      Amount: l.price      || 0,
+      Status: l.status     || "",
     }));
   const paymentsHeaders = ["Item", "Type", "Amount", "Status"];
 
@@ -283,23 +387,23 @@ export default function AdminDashboard() {
     (r.reportedName || "").toLowerCase().includes(reportSearch.toLowerCase())
   );
   const reportsExportData = filteredReports.map(r => ({
-    Type: r.reportType || "",
+    Type:         r.reportType  || "",
     ReportedItem: r.reportedName || r.reportedId,
-    Reason: r.reason || "",
-    Details: r.details || "",
-    ReportedBy: r.reporterName || "",
-    Status: r.status || "pending",
-    Resolution: r.resolution || "",
-    Date: r.createdAt?.toDate ? r.createdAt.toDate().toLocaleDateString() : "",
+    Reason:       r.reason      || "",
+    Details:      r.details     || "",
+    ReportedBy:   r.reporterName || "",
+    Status:       r.status      || "pending",
+    Resolution:   r.resolution  || "",
+    Date:         r.createdAt?.toDate ? r.createdAt.toDate().toLocaleDateString() : "",
   }));
   const reportsHeaders = ["Type", "ReportedItem", "Reason", "Details", "ReportedBy", "Status", "Resolution", "Date"];
 
   const reportTypeIcon = (type) => {
-    if (type === "listing") return <i className="fas fa-store"     style={{ fontSize: "1rem", color: "#6AA6DA" }} />;
-    if (type === "review")  return <i className="fas fa-star"      style={{ fontSize: "1rem", color: "#f59e0b" }} />;
-    return                         <i className="fas fa-user"      style={{ fontSize: "1rem", color: "#94a3b8" }} />;
+    if (type === "listing") return <i className="fas fa-store"  style={{ fontSize: "1rem", color: "#6AA6DA" }} />;
+    if (type === "review")  return <i className="fas fa-star"   style={{ fontSize: "1rem", color: "#f59e0b" }} />;
+    return                         <i className="fas fa-user"   style={{ fontSize: "1rem", color: "#94a3b8" }} />;
   };
-  // ── Helper: navigate to the reported item ─────────────────────────────────
+
   const navigateToReported = (e, report) => {
     e.stopPropagation();
     if (report.reportType === "listing") navigate(`/listing/${report.reportedId}?preview=true`);
@@ -307,15 +411,14 @@ export default function AdminDashboard() {
   };
 
   const reportedNameStyle = (reportType) => ({
-    fontWeight: 700,
-    fontSize: "0.88rem",
+    fontWeight: 700, fontSize: "0.88rem",
     color: reportType === "listing" || reportType === "user" ? "#2563eb" : "#0f172a",
     cursor: reportType === "listing" || reportType === "user" ? "pointer" : "default",
     textDecoration: reportType === "listing" || reportType === "user" ? "underline" : "none",
     textDecorationStyle: "dotted",
   });
 
-  // Auth effect (unchanged)
+  // ── Auth effect ──────────────────────────────────────────────────────────
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (user) => {
       if (!user) { navigate("/login"); return; }
@@ -324,10 +427,10 @@ export default function AdminDashboard() {
         const data = snap.exists() ? snap.data() : {};
         if (data.userType !== "admin") { navigate("/"); return; }
         const fn = data.firstName || user.displayName?.split(" ")[0] || "Admin";
-        const ln = data.lastName || user.displayName?.split(" ").slice(1).join(" ") || "";
+        const ln = data.lastName  || user.displayName?.split(" ").slice(1).join(" ") || "";
         setAdminUser({
-          name: `${fn} ${ln}`.trim(),
-          email: data.email || user.email,
+          name:     `${fn} ${ln}`.trim(),
+          email:    data.email || user.email,
           photoURL: data.photoURL || user.photoURL || "",
           initials: `${fn[0] || "A"}${ln[0] || ""}`.toUpperCase(),
         });
@@ -336,7 +439,7 @@ export default function AdminDashboard() {
     return () => unsub();
   }, [navigate]);
 
-  // ── Fetch dashboard data (listings and users) ─────────────────────────────────
+  // ── Load users + listings (one-time, these don't need realtime here) ────
   useEffect(() => {
     async function load() {
       try {
@@ -349,12 +452,12 @@ export default function AdminDashboard() {
         const listData = listSnap.docs.map(d => ({ id: d.id, ...d.data() }));
         setListings(listData);
 
-        const sold = listData.filter(l => l.status === "sold");
+        const sold    = listData.filter(l => l.status === "sold");
         const revenue = sold.reduce((sum, l) => sum + (Number(l.price) || 0), 0);
 
         setStats(prev => ({
           ...prev,
-          totalUsers: users.length,
+          totalUsers:   users.length,
           transactions: sold.length,
           revenue,
         }));
@@ -367,7 +470,30 @@ export default function AdminDashboard() {
     load();
   }, []);
 
-  // ── Fetch ad revenue from Firestore ──────────────────────────────────────
+  // ── Load bookings + compute utilisation (realtime so stat stays fresh) ──
+  useEffect(() => {
+    const unsub = onSnapshot(
+      collection(db, "bookings"),
+      async (snap) => {
+        const bks = snap.docs.map(d => d.data());
+        setBookings(bks);
+
+        // Re-read config to get up-to-date slotsPerHour / open+close times
+        try {
+          const configSnap = await getDoc(doc(db, "facilityConfig", "default"));
+          const cfg = configSnap.exists() ? configSnap.data() : {};
+          const avgUtil = calculateAvgUtilisation(bks, cfg);
+          setStats(prev => ({ ...prev, avgUtilisation: avgUtil }));
+        } catch (e) {
+          console.error("Error computing utilisation:", e);
+        }
+      },
+      (err) => console.error("bookings snapshot error:", err),
+    );
+    return () => unsub();
+  }, []);
+
+  // ── Ad revenue ───────────────────────────────────────────────────────────
   useEffect(() => {
     const fetchAdRevenue = async () => {
       try {
@@ -394,7 +520,7 @@ export default function AdminDashboard() {
     return () => unsub();
   }, []);
 
-  // ── Load facility config ─────────────────────────────────────────────────
+  // ── Load facility config (when settings tab opens) ───────────────────────
   useEffect(() => {
     if (activeTab !== "settings") return;
     (async () => {
@@ -405,8 +531,8 @@ export default function AdminDashboard() {
         if (snap.exists()) {
           const data = snap.data();
           setFacilityConfig({
-            openTime: data.openTime ?? "09:00",
-            closeTime: data.closeTime ?? "16:00",
+            openTime:     data.openTime     ?? "09:00",
+            closeTime:    data.closeTime    ?? "16:00",
             slotsPerHour: data.slotsPerHour ?? 1,
           });
         }
@@ -432,10 +558,15 @@ export default function AdminDashboard() {
     setConfigSaving(true);
     try {
       await setDoc(doc(db, "facilityConfig", "default"), {
-        openTime: parsed.openTime,
-        closeTime: parsed.closeTime,
+        openTime:     parsed.openTime,
+        closeTime:    parsed.closeTime,
         slotsPerHour: parsed.slotsPerHour,
       });
+
+      // Recompute utilisation immediately with the new config
+      const avgUtil = calculateAvgUtilisation(bookings, parsed);
+      setStats(prev => ({ ...prev, avgUtilisation: avgUtil }));
+
       setConfigSuccess("Facility settings saved successfully.");
       setTimeout(() => setConfigSuccess(""), 3500);
     } catch (e) {
@@ -467,7 +598,7 @@ export default function AdminDashboard() {
       return;
     }
     openConfirm({
-      title: "Suspend User",
+      title:   "Suspend User",
       message: `Suspend ${user.firstName} ${user.lastName}? They will no longer be able to log in or access the marketplace.`,
       variant: "warning",
       onConfirm: async () => {
@@ -485,7 +616,10 @@ export default function AdminDashboard() {
         : { suspended: true,  suspendedBy: adminUid, suspendedAt: new Date() };
       await updateDoc(doc(db, "users", userId), update);
       setAllUsers(prev => prev.map(u => u.id === userId ? { ...u, ...update } : u));
-      showToast(currentlySuspended ? "User unsuspended." : "User suspended.", currentlySuspended ? "success" : "warning");
+      showToast(
+        currentlySuspended ? "User unsuspended." : "User suspended.",
+        currentlySuspended ? "success" : "warning",
+      );
     } catch (err) {
       console.error(err);
       showToast("Failed to update user status.", "error");
@@ -494,7 +628,7 @@ export default function AdminDashboard() {
 
   const handleRemoveListing = (listing) => {
     openConfirm({
-      title: "Remove Listing",
+      title:   "Remove Listing",
       message: `Permanently remove "${listing.title}"? This cannot be undone.`,
       variant: "danger",
       onConfirm: async () => {
@@ -545,7 +679,7 @@ export default function AdminDashboard() {
     }, 1500);
   };
 
-  // ── Close dropdown on outside click ──────────────────────────────────────
+  // ── Close dropdown on outside click ─────────────────────────────────────
   useEffect(() => {
     const handler = (e) => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target))
@@ -555,7 +689,7 @@ export default function AdminDashboard() {
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
-  const previewSlots = generateTimeSlots(facilityConfig.openTime, facilityConfig.closeTime);
+  const previewSlots    = generateTimeSlots(facilityConfig.openTime, facilityConfig.closeTime);
   const previewCapacity = getTotalCapacity({ ...facilityConfig, slotsPerHour: Number(facilityConfig.slotsPerHour) });
 
   if (loading) return (
@@ -588,21 +722,26 @@ export default function AdminDashboard() {
               <p>System management, moderation &amp; oversight</p>
             </div>
             <div style={{ display: "flex", gap: "8px" }}>
-              <button onClick={exportSummaryCSV} style={{ background: "#4a90d9", color: "white", border: "none", padding: "8px 16px", borderRadius: "8px", cursor: "pointer", fontWeight: "500", fontSize: "0.85rem" }}> Export Summary CSV</button>
-              <button onClick={exportSummaryPDF} style={{ background: "#4a90d9", color: "white", border: "none", padding: "8px 16px", borderRadius: "8px", cursor: "pointer", fontWeight: "500", fontSize: "0.85rem" }}> Export Summary PDF</button>
+              <button onClick={exportSummaryCSV} style={{ background: "#4a90d9", color: "white", border: "none", padding: "8px 16px", borderRadius: "8px", cursor: "pointer", fontWeight: "500", fontSize: "0.85rem" }}>
+                Export Summary CSV
+              </button>
+              <button onClick={exportSummaryPDF} style={{ background: "#4a90d9", color: "white", border: "none", padding: "8px 16px", borderRadius: "8px", cursor: "pointer", fontWeight: "500", fontSize: "0.85rem" }}>
+                Export Summary PDF
+              </button>
             </div>
           </div>
         </div>
 
-        {/* Stat cards - updated to show listing, ad, and total revenue */}
+        {/* Stat cards */}
         <div className={styles.statsRow}>
           {[
-            { label: "Total Users", value: stats.totalUsers, icon: "fas fa-users" },
-            { label: "Open Reports", value: stats.openReports, icon: "fas fa-flag", highlight: stats.openReports > 0 },
-            { label: "Completed Transactions", value: stats.transactions, icon: "fas fa-exchange-alt" },
-            { label: "Listing Revenue", value: `R ${stats.revenue.toLocaleString()}`, icon: "fas fa-store" },
-            { label: "Ad Revenue", value: `R ${adRevenueTotal.toLocaleString()}`, icon: "fas fa-ad" },
-            { label: "Total Revenue", value: `R ${(stats.revenue + adRevenueTotal).toLocaleString()}`, icon: "fas fa-chart-line" },
+            { label: "Total Users",              value: stats.totalUsers,                                   icon: "fas fa-users"        },
+            { label: "Open Reports",             value: stats.openReports,                                  icon: "fas fa-flag",         highlight: stats.openReports > 0 },
+            { label: "Completed Transactions",   value: stats.transactions,                                 icon: "fas fa-exchange-alt" },
+            { label: "Listing Revenue",          value: `R ${stats.revenue.toLocaleString()}`,              icon: "fas fa-store"        },
+            { label: "Ad Revenue",               value: `R ${adRevenueTotal.toLocaleString()}`,             icon: "fas fa-ad"           },
+            { label: "Total Revenue",            value: `R ${(stats.revenue + adRevenueTotal).toLocaleString()}`, icon: "fas fa-chart-line" },
+            { label: "Avg Facility Utilisation", value: `${stats.avgUtilisation || 0}%`,                   icon: "fas fa-calendar-check" },
           ].map(({ label, value, icon, highlight }) => (
             <div key={label} className={`${styles.statCard} ${highlight ? styles.statCardAlert : ""}`}>
               <span className={styles.statLabel}>{label}</span>
@@ -612,15 +751,15 @@ export default function AdminDashboard() {
           ))}
         </div>
 
-        {/* Tabs and rest of content unchanged */}
+        {/* Tabs */}
         <div className={styles.tabs}>
           {[
-            { id: "users",       icon: "fas fa-users",       label: "Users" },
-            { id: "suspended",   icon: "fas fa-ban",          label: "Suspended" },
-            { id: "moderation",  icon: "fas fa-shield-alt",   label: "Moderation" },
-            { id: "payments",    icon: "fas fa-credit-card",  label: "Payments" },
-            { id: "utilisation", icon: "fas fa-calendar-alt", label: "Utilisation Reports" },
-            { id: "settings",    icon: "fas fa-cog",          label: "Settings" },
+            { id: "users",       icon: "fas fa-users",        label: "Users" },
+            { id: "suspended",   icon: "fas fa-ban",           label: "Suspended" },
+            { id: "moderation",  icon: "fas fa-shield-alt",    label: "Moderation" },
+            { id: "payments",    icon: "fas fa-credit-card",   label: "Payments" },
+            { id: "utilisation", icon: "fas fa-calendar-alt",  label: "Utilisation Reports" },
+            { id: "settings",    icon: "fas fa-cog",           label: "Settings" },
           ].map(t => (
             <button
               key={t.id}
@@ -642,7 +781,9 @@ export default function AdminDashboard() {
                   {pendingStaff.map(u => (
                     <div key={u.id} className={styles.approvalRow}>
                       <div className={styles.approvalAvatar}>
-                        {u.photoURL ? <img src={u.photoURL} alt="" /> : <span>{(u.firstName?.[0] || "?").toUpperCase()}</span>}
+                        {u.photoURL
+                          ? <img src={u.photoURL} alt="" />
+                          : <span>{(u.firstName?.[0] || "?").toUpperCase()}</span>}
                       </div>
                       <div className={styles.approvalInfo}>
                         <span className={styles.approvalName}>{u.firstName} {u.lastName}</span>
@@ -650,7 +791,7 @@ export default function AdminDashboard() {
                       </div>
                       <div className={styles.approvalActions}>
                         <button className={styles.btnApprove} onClick={() => approveStaff(u.id)}>Approve</button>
-                        <button className={styles.btnReject} onClick={() => rejectStaff(u.id)}>Reject</button>
+                        <button className={styles.btnReject}  onClick={() => rejectStaff(u.id)}>Reject</button>
                       </div>
                     </div>
                   ))}
@@ -662,7 +803,13 @@ export default function AdminDashboard() {
               <div className={styles.cardHeader} style={{ marginBottom: "16px" }}>
                 <div className={styles.searchWrap}>
                   <i className="fas fa-search" />
-                  <input className={styles.searchInput} type="text" placeholder="Search users…" value={userSearch} onChange={e => setUserSearch(e.target.value)} />
+                  <input
+                    className={styles.searchInput}
+                    type="text"
+                    placeholder="Search users…"
+                    value={userSearch}
+                    onChange={e => setUserSearch(e.target.value)}
+                  />
                 </div>
               </div>
               <div className={styles.userList}>
@@ -670,7 +817,9 @@ export default function AdminDashboard() {
                 {filteredUsers.map(u => (
                   <div key={u.id} className={`${styles.userRow} ${u.suspended ? styles.userRowSuspended : ""}`}>
                     <div className={styles.userAvatar}>
-                      {u.photoURL ? <img src={u.photoURL} alt="" /> : <span>{(u.firstName?.[0] || "?").toUpperCase()}</span>}
+                      {u.photoURL
+                        ? <img src={u.photoURL} alt="" />
+                        : <span>{(u.firstName?.[0] || "?").toUpperCase()}</span>}
                     </div>
                     <div className={styles.userInfo}>
                       <span className={styles.userName}>{u.firstName} {u.lastName}</span>
@@ -717,7 +866,9 @@ export default function AdminDashboard() {
                   {suspendedUsers.map(u => (
                     <div key={u.id} className={styles.userRow} style={{ opacity: 0.85 }}>
                       <div className={styles.userAvatar}>
-                        {u.photoURL ? <img src={u.photoURL} alt="" /> : <span>{(u.firstName?.[0] || "?").toUpperCase()}</span>}
+                        {u.photoURL
+                          ? <img src={u.photoURL} alt="" />
+                          : <span>{(u.firstName?.[0] || "?").toUpperCase()}</span>}
                       </div>
                       <div className={styles.userInfo}>
                         <span className={styles.userName}>{u.firstName} {u.lastName}</span>
@@ -732,7 +883,7 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* ── MODERATION TAB*/}
+        {/* ── MODERATION TAB ── */}
         {activeTab === "moderation" && (
           <div className={styles.tabContent}>
             {modSubTab === "listings" && (
@@ -740,11 +891,19 @@ export default function AdminDashboard() {
                 <div className={styles.cardHeader}>
                   <div className={styles.searchWrap}>
                     <i className="fas fa-search" />
-                    <input className={styles.searchInput} type="text" placeholder="Search listings…" value={listingSearch} onChange={e => setListingSearch(e.target.value)} />
+                    <input
+                      className={styles.searchInput}
+                      type="text"
+                      placeholder="Search listings…"
+                      value={listingSearch}
+                      onChange={e => setListingSearch(e.target.value)}
+                    />
                   </div>
                 </div>
                 {filteredListings.length === 0 ? (
-                  <p className={styles.emptyNote}>{listingSearch ? "No listings match your search." : "No listings to moderate."}</p>
+                  <p className={styles.emptyNote}>
+                    {listingSearch ? "No listings match your search." : "No listings to moderate."}
+                  </p>
                 ) : (
                   <div className={styles.modList}>
                     {filteredListings.map(l => {
@@ -754,7 +913,9 @@ export default function AdminDashboard() {
                           <div className={styles.modThumb}>
                             {img
                               ? <img src={img} alt={l.title || "listing"} style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: 8 }} />
-                              : <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", background: "#f1f5f9", borderRadius: 8, color: "#94a3b8" }}><i className="fas fa-image" style={{ fontSize: "1.4rem" }} /></div>
+                              : <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", background: "#f1f5f9", borderRadius: 8, color: "#94a3b8" }}>
+                                  <i className="fas fa-image" style={{ fontSize: "1.4rem" }} />
+                                </div>
                             }
                           </div>
                           <div className={styles.modInfo}>
@@ -826,18 +987,41 @@ export default function AdminDashboard() {
                   <div className={styles.configRow}>
                     <div className={styles.configField}>
                       <label className={styles.configLabel}><i className="fas fa-door-open" /> Opening time</label>
-                      <input type="time" className={styles.configInput} value={facilityConfig.openTime} onChange={e => setFacilityConfig(prev => ({ ...prev, openTime: e.target.value }))} required />
+                      <input
+                        type="time"
+                        className={styles.configInput}
+                        value={facilityConfig.openTime}
+                        onChange={e => setFacilityConfig(prev => ({ ...prev, openTime: e.target.value }))}
+                        required
+                      />
                     </div>
                     <div className={styles.configField}>
                       <label className={styles.configLabel}><i className="fas fa-door-closed" /> Closing time</label>
-                      <input type="time" className={styles.configInput} value={facilityConfig.closeTime} onChange={e => setFacilityConfig(prev => ({ ...prev, closeTime: e.target.value }))} required />
+                      <input
+                        type="time"
+                        className={styles.configInput}
+                        value={facilityConfig.closeTime}
+                        onChange={e => setFacilityConfig(prev => ({ ...prev, closeTime: e.target.value }))}
+                        required
+                      />
                     </div>
                     <div className={styles.configField}>
                       <label className={styles.configLabel}><i className="fas fa-layer-group" /> Slots per hour</label>
-                      <select className={styles.configInput} value={facilityConfig.slotsPerHour} onChange={e => setFacilityConfig(prev => ({ ...prev, slotsPerHour: Number(e.target.value) }))}>
+                      <select
+                        className={styles.configInput}
+                        value={facilityConfig.slotsPerHour}
+                        onChange={e => setFacilityConfig(prev => ({ ...prev, slotsPerHour: Number(e.target.value) }))}
+                      >
                         {[1, 2, 3, 4].map(n => <option key={n} value={n}>{n}</option>)}
                       </select>
                     </div>
+                  </div>
+
+                  {/* Live utilisation preview with current config */}
+                  <div style={{ margin: "12px 0", padding: "12px 16px", background: "#f0fdf4", borderRadius: 10, border: "1px solid #bbf7d0", fontSize: "0.82rem", color: "#166534" }}>
+                    <i className="fas fa-info-circle" style={{ marginRight: 6 }} />
+                    With these settings: <strong>{previewSlots.length} time slots/day</strong>, each accepting up to <strong>{facilityConfig.slotsPerHour} concurrent booking{facilityConfig.slotsPerHour > 1 ? "s" : ""}</strong> → max <strong>{previewCapacity} bookings/day</strong>.
+                    {" "}Current avg utilisation: <strong>{stats.avgUtilisation || 0}%</strong>
                   </div>
 
                   {previewSlots.length > 0 && (
@@ -852,19 +1036,18 @@ export default function AdminDashboard() {
                     </div>
                   )}
 
-                  {configError && (
-                    <div className={styles.configError}>
-                      <i className="fas fa-exclamation-circle" /> {configError}
-                    </div>
-                  )}
-                  {configSuccess && (
-                    <div className={styles.configSuccess}>
-                      <i className="fas fa-check-circle" /> {configSuccess}
-                    </div>
-                  )}
+                  {configError   && <div className={styles.configError}>  <i className="fas fa-exclamation-circle" /> {configError}</div>}
+                  {configSuccess && <div className={styles.configSuccess}><i className="fas fa-check-circle" />       {configSuccess}</div>}
 
-                  <button type="submit" className={styles.btnApprove} disabled={configSaving} style={{ marginTop: 4, width: "fit-content" }}>
-                    {configSaving ? <><i className="fas fa-spinner fa-spin" /> Saving…</> : <><i className="fas fa-save" /> Save facility settings</>}
+                  <button
+                    type="submit"
+                    className={styles.btnApprove}
+                    disabled={configSaving}
+                    style={{ marginTop: 4, width: "fit-content" }}
+                  >
+                    {configSaving
+                      ? <><i className="fas fa-spinner fa-spin" /> Saving…</>
+                      : <><i className="fas fa-save" /> Save facility settings</>}
                   </button>
                 </form>
               )}

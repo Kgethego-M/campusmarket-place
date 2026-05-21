@@ -7,7 +7,7 @@ import { getRevenueAnalytics } from "../services/revenueService";
 import styles from "./AdminAnalytics.module.css";
 import AdminNavbar from "./AdminNavbar";
 
-// Helper: show toast notifications (inline, matches dashboard)
+// Helper: show toast notifications
 function Toast({ message, type = "success", onDismiss }) {
   useEffect(() => {
     const t = setTimeout(onDismiss, 3500);
@@ -34,7 +34,6 @@ async function ensureRevenueDocument() {
   const docSnap = await getDoc(revenueDocRef);
   
   if (!docSnap.exists()) {
-    // Create the document with default values
     await setDoc(revenueDocRef, {
       totalRevenue: 0,
       onlineRevenue: 0,
@@ -51,6 +50,52 @@ async function ensureRevenueDocument() {
   return revenueDocRef;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// CORRECTED UTILISATION CALCULATION - MATCHES DASHBOARD
+// ─────────────────────────────────────────────────────────────────────────────
+function calculateAvgUtilisation(bookings, facilityConfig) {
+  const { openTime, closeTime, slotsPerHour: rawSlotsPerHour } = facilityConfig || {};
+  const slotsPerHour = Number(rawSlotsPerHour) || 1;
+
+  // Build the full list of valid time slots from config
+  let totalSlotsPerDay = 0;
+  if (openTime && closeTime) {
+    const [openH] = openTime.split(":").map(Number);
+    const [closeH] = closeTime.split(":").map(Number);
+    const hours = closeH - openH;
+    totalSlotsPerDay = hours > 0 ? hours : 0;
+  }
+
+  // Group bookings by date
+  const bookingsByDate = {};
+  bookings.forEach(b => {
+    if (b.date && b.timeSlot) {
+      if (!bookingsByDate[b.date]) bookingsByDate[b.date] = [];
+      bookingsByDate[b.date].push(b.timeSlot);
+    }
+  });
+
+  const datesWithBookings = Object.keys(bookingsByDate);
+  if (datesWithBookings.length === 0) return 0;
+
+  let totalUtilisation = 0;
+  for (const date of datesWithBookings) {
+    const slots = bookingsByDate[date];
+    const bookedCount = slots.length;
+
+    // Determine denominator
+    const effectiveSlotCount = totalSlotsPerDay > 0
+      ? totalSlotsPerDay
+      : new Set(slots).size;
+
+    const dailyCapacity = effectiveSlotCount * slotsPerHour;
+    const dailyUtil = dailyCapacity > 0 ? (bookedCount / dailyCapacity) * 100 : 0;
+    totalUtilisation += Math.min(dailyUtil, 100);
+  }
+
+  return Math.round(totalUtilisation / datesWithBookings.length);
+}
+
 export default function AdminAnalytics() {
     const navigate = useNavigate();
 
@@ -61,7 +106,7 @@ export default function AdminAnalytics() {
     const [toast, setToast] = useState(null);
     const [adminUser, setAdminUser] = useState({ name: "Admin", email: "", initials: "A", photoURL: "" });
 
-    // ── Auth guard + realtime profile listener (matches dashboard UI) ──
+    // ── Auth guard + realtime profile listener ──
     useEffect(() => {
         const unsub = onAuthStateChanged(auth, async (user) => {
             if (!user) { navigate("/login"); return; }
@@ -96,7 +141,7 @@ export default function AdminAnalytics() {
       }
     };
 
-    // ── Load analytics + setup realtime listeners for revenue/promotions ──
+    // ── Load analytics + setup realtime listeners ──
     useEffect(() => {
         let unsubscribeTransactions = null;
         let unsubscribePromotions = null;
@@ -117,12 +162,13 @@ export default function AdminAnalytics() {
             setError("");
             try {
                 // Firestore collections
-                const [usersSnap, listSnap, bookingsSnap, txnSnap, revenueStats] = await Promise.all([
+                const [usersSnap, listSnap, bookingsSnap, txnSnap, revenueStats, configSnap] = await Promise.all([
                     getDocs(collection(db, "users")),
                     getDocs(collection(db, "listings")),
                     getDocs(collection(db, "bookings")),
                     getDocs(collection(db, "transactions")),
                     getRevenueAnalytics(),
+                    getDoc(doc(db, "facilityConfig", "default")),
                 ]);
 
                 if (!isMounted) return;
@@ -134,6 +180,13 @@ export default function AdminAnalytics() {
 
                 // Set revenue data from dedicated analytics collection
                 setRevenueData(revenueStats);
+
+                // Get facility config for utilisation calculation
+                const config = configSnap.exists() ? configSnap.data() : { 
+                    openTime: "09:00", 
+                    closeTime: "16:00", 
+                    slotsPerHour: 1 
+                };
 
                 const userTypes = users.reduce((acc, u) => {
                     const t = u.userType || "student";
@@ -179,28 +232,10 @@ export default function AdminAnalytics() {
 
                 const soldListings = lists.filter(l => l.status === "sold");
 
+                // ── USE CORRECTED UTILISATION CALCULATION ──
                 let avgUtilisation = 0;
                 try {
-                    const configSnap = await getDoc(doc(db, "facilityConfig", "default"));
-                    const config = configSnap.exists() ? configSnap.data() : { slotsPerHour: 1 };
-                    const slotsPerHour = config.slotsPerHour || 1;
-                    const bookingsByDate = {};
-                    bookings.forEach(b => {
-                        if (b.date && b.timeSlot) {
-                            if (!bookingsByDate[b.date]) bookingsByDate[b.date] = [];
-                            bookingsByDate[b.date].push(b.timeSlot);
-                        }
-                    });
-                    const datesWithBookings = Object.keys(bookingsByDate);
-                    if (datesWithBookings.length > 0) {
-                        let totalUtilisation = 0;
-                        for (const date of datesWithBookings) {
-                            const uniqueSlots = new Set(bookingsByDate[date]);
-                            const dailyUtilisation = (uniqueSlots.size / slotsPerHour) * 100;
-                            totalUtilisation += Math.min(dailyUtilisation, 100);
-                        }
-                        avgUtilisation = Math.round(totalUtilisation / datesWithBookings.length);
-                    }
+                    avgUtilisation = calculateAvgUtilisation(bookings, config);
                 } catch (e) {
                     console.error("Error calculating utilisation:", e);
                 }
@@ -389,7 +424,6 @@ export default function AdminAnalytics() {
     function RevenueMetricsCards() {
         if (!revenueData) return null;
         
-        // Display ad payments prominently (new feature)
         const cards = [
             { label: "Total Revenue", value: `R ${(revenueData.totalRevenue || 0).toLocaleString()}`, icon: "fas fa-chart-line", color: "#10b981" },
             { label: "Ad Payments", value: `R ${(revenueData.adPayments || 0).toLocaleString()}`, icon: "fas fa-bullhorn", color: "#8b5cf6" },
@@ -448,7 +482,7 @@ export default function AdminAnalytics() {
                     <p>Live platform overview — revenue, users, listings, bookings &amp; more</p>
                 </div>
 
-                {/* ── Revenue Metrics Section (with Ad Payments) ── */}
+                {/* Revenue Metrics Section */}
                 <div className={styles.section}>
                     <h2 className={styles.sectionTitle}>
                         <i className="fas fa-wallet" style={{ marginRight: 8, color: "#10b981" }} />
@@ -457,7 +491,7 @@ export default function AdminAnalytics() {
                     <RevenueMetricsCards />
                 </div>
 
-                {/* ── Summary stat cards ── */}
+                {/* Summary stat cards */}
                 <div className={styles.statsRow}>
                     {[
                         { label: "Total Listings", value: data.totalListings, icon: "fas fa-tag", color: "#6AA6DA" },
@@ -473,7 +507,7 @@ export default function AdminAnalytics() {
                     ))}
                 </div>
 
-                {/* ── User breakdown + Listing status ── */}
+                {/* User breakdown + Listing status */}
                 <div className={styles.grid2}>
                     <div className={styles.card}>
                         <h3 className={styles.cardTitle}>
@@ -491,7 +525,7 @@ export default function AdminAnalytics() {
                     </div>
                 </div>
 
-                {/* ── Bookings by day ── */}
+                {/* Bookings by day */}
                 <div className={styles.card}>
                     <h3 className={styles.cardTitle}>
                         <i className="fas fa-calendar-alt" style={{ marginRight: 8, color: "#f59e0b" }} />
@@ -502,7 +536,7 @@ export default function AdminAnalytics() {
                     </div>
                 </div>
 
-                {/* ── Popular Categories ── */}
+                {/* Popular Categories */}
                 <div className={styles.card}>
                     <h3 className={styles.cardTitle}>
                         <i className="fas fa-layer-group" style={{ marginRight: 8, color: "#a78bfa" }} />
@@ -511,7 +545,7 @@ export default function AdminAnalytics() {
                     <HorizontalBarChart data={data.byCategory} />
                 </div>
 
-                {/* ── Revenue by month (from sold listings) ── */}
+                {/* Revenue by month */}
                 <div className={styles.card}>
                     <h3 className={styles.cardTitle}>
                         <i className="fas fa-chart-line" style={{ marginRight: 8, color: "#34d399" }} />
@@ -533,7 +567,7 @@ export default function AdminAnalytics() {
                     </div>
                 </div>
 
-                {/* ── Transaction status breakdown ── */}
+                {/* Transaction status breakdown */}
                 <div className={styles.card}>
                     <h3 className={styles.cardTitle}>
                         <i className="fas fa-exchange-alt" style={{ marginRight: 8, color: "#f87171" }} />

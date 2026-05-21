@@ -486,7 +486,10 @@ describe('ListingDetailView - trade transaction', () => {
     
     await waitFor(() => {
       expect(createTransaction).toHaveBeenCalledWith(
-        expect.objectContaining({ type: 'trade', tradeItem: 'My old laptop' })
+        expect.objectContaining({ 
+          type: 'trade', 
+          tradeItem: expect.objectContaining({ name: 'My old laptop' })
+        })
       );
     });
   });

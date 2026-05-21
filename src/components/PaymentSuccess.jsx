@@ -12,9 +12,12 @@ export default function PaymentSuccess() {
 
   const txId      = searchParams.get('tx');
   const sessionId = searchParams.get('session_id');
+  const isWallet  = searchParams.get('wallet') === 'true';
 
   const [confirmed, setConfirmed]     = useState(false);
-  const [message, setMessage]         = useState('Verifying your payment...');
+  const [message, setMessage]         = useState(
+    isWallet ? 'Confirming your wallet payment...' : 'Verifying your payment...'
+  );
   const [txStatus, setTxStatus]       = useState('');
   const [cashAmount, setCashAmount]   = useState(0);
   const [verifyError, setVerifyError] = useState('');
@@ -22,9 +25,11 @@ export default function PaymentSuccess() {
   // Prevent calling verify-session more than once
   const hasVerified = useRef(false);
 
-  // ── Step 1: Call backend to verify Stripe session and update Firestore ───────
+  // ── Step 1: Stripe only — call backend to verify session ─────────────────
   useEffect(() => {
-    if (!sessionId || !txId || hasVerified.current) return;
+    // Wallet payments are already confirmed in Firestore before redirect —
+    // skip the Stripe verify call entirely.
+    if (isWallet || !sessionId || !txId || hasVerified.current) return;
     hasVerified.current = true;
 
     const verify = async () => {
@@ -49,8 +54,6 @@ export default function PaymentSuccess() {
         if (!data.paid) {
           setVerifyError('Payment not confirmed by Stripe. Please contact support.');
         }
-        // If paid, the Firestore listener below will pick up the Firestore update automatically
-
       } catch (e) {
         console.error('[PaymentSuccess] verify-session error:', e);
         setVerifyError('Network error during verification. Check My Purchases.');
@@ -58,12 +61,12 @@ export default function PaymentSuccess() {
     };
 
     verify();
-  }, [sessionId, txId]);
+  }, [sessionId, txId, isWallet]);
 
-  // ── Step 2: Wait for auth, then listen to Firestore ──────────────────────────
+  // ── Step 2: Wait for auth, then listen to Firestore ──────────────────────
   useEffect(() => {
     if (!txId) {
-      if (sessionId) {
+      if (sessionId || isWallet) {
         setConfirmed(true);
         setMessage('Payment successful. Your transaction will update shortly in My Purchases.');
       } else {
@@ -75,30 +78,22 @@ export default function PaymentSuccess() {
 
     let snapshotUnsub = () => {};
 
-    // ✅ Wait for Firebase Auth before attaching the snapshot listener.
-    // Without this, the listener fires unauthenticated and Firestore
-    // returns permission-denied, which surfaces as "Transaction not found".
     const authUnsub = onAuthStateChanged(auth, (user) => {
-      // Clean up any previous snapshot listener before attaching a new one
       snapshotUnsub();
 
       if (!user) {
-        // User not logged in — if we have a sessionId, show optimistic success
-        // rather than blocking on a login that may be in progress
-        if (sessionId) {
+        if (sessionId || isWallet) {
           setConfirmed(true);
           setMessage('Payment successful. Your transaction will update shortly in My Purchases.');
         }
         return;
       }
 
-      // User is authenticated — safe to listen to Firestore
       snapshotUnsub = onSnapshot(
         doc(db, 'transactions', txId),
         (snap) => {
           if (!snap.exists()) {
-            // Doc genuinely missing (rare) — show optimistic message if Stripe confirmed
-            if (sessionId) {
+            if (sessionId || isWallet) {
               setConfirmed(true);
               setMessage('Payment successful. Your transaction will update shortly.');
             } else {
@@ -111,8 +106,19 @@ export default function PaymentSuccess() {
           setTxStatus(tx.status || '');
           setCashAmount(Number(tx.cashAmount || 0));
 
-          // Stripe payment fully confirmed in Firestore
-          if (tx.paymentProvider === 'stripe' && tx.paymentStatus === 'paid') {
+          // ── Wallet payment confirmed ──────────────────────────────────
+          if (isWallet && (tx.paymentStatus === 'paid' || tx.status === 'waiting')) {
+            setConfirmed(true);
+            setMessage(
+              Number(tx.cashAmount || 0) > 0
+                ? `Wallet payment received! R ${Number(tx.cashAmount).toLocaleString('en-ZA')} cash is still due at drop-off.`
+                : 'Wallet payment received! Your transaction is now waiting for collection.'
+            );
+            return;
+          }
+
+          // ── Stripe payment confirmed ──────────────────────────────────
+          if (!isWallet && tx.paymentProvider === 'stripe' && tx.paymentStatus === 'paid') {
             setConfirmed(true);
             setMessage(
               Number(tx.cashAmount || 0) > 0
@@ -128,17 +134,15 @@ export default function PaymentSuccess() {
             return;
           }
 
-          // Stripe redirected here so payment definitely happened —
-          // show optimistic success while Firestore catches up
-          if (sessionId) {
+          // Optimistic fallback while Firestore catches up
+          if (sessionId || isWallet) {
             setConfirmed(true);
             setMessage('Payment successful. Your transaction will update shortly in My Purchases.');
           }
         },
         (error) => {
-          // Firestore listener error — log it and show optimistic message
           console.error('[PaymentSuccess] Firestore snapshot error:', error);
-          if (sessionId) {
+          if (sessionId || isWallet) {
             setConfirmed(true);
             setMessage('Payment successful. Your transaction will update shortly in My Purchases.');
           } else {
@@ -152,7 +156,7 @@ export default function PaymentSuccess() {
       authUnsub();
       snapshotUnsub();
     };
-  }, [txId, sessionId]);
+  }, [txId, sessionId, isWallet]);
 
   return (
     <>
@@ -179,12 +183,16 @@ export default function PaymentSuccess() {
               </div>
             )}
 
-            {/* Stripe session ref */}
-            {sessionId && (
+            {/* Payment method badge */}
+            {isWallet ? (
+              <div className={styles.refTag}>
+                <i className="fas fa-wallet" /> Paid from wallet balance
+              </div>
+            ) : sessionId ? (
               <div className={styles.refTag}>
                 <i className="fas fa-receipt" /> Stripe Session: {sessionId}
               </div>
-            )}
+            ) : null}
 
             {/* Cash still due */}
             {cashAmount > 0 && (

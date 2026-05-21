@@ -33,27 +33,22 @@ import PaymentSuccess from './components/PaymentSuccess.jsx';
 import PaymentCancelled from './components/PaymentCancelled.jsx';
 import ReportsPage from './components/ReportsPage';
 import ModerationSummaryPage from './components/ModerationSummaryPage';
-
 import CreateListingAzure from './components/CreateListingAzure';
-
 import Chat from './components/Chat';
 import Profile from './components/Profile';
 import StaffDashboard from './components/Staffdashboard.jsx';
 import ProfileListingCard from './components/ProfileListingCard';
-
-// SPRINT 2 IMPORTS
 import TradeFacility from './components/TradeFacility';
 import BookDropOff from './components/BookDropOff';
 import BookCollection from './components/BookCollection';
-
-// SPRINT 3 IMPORTS
 import AdminAnalytics from './components/AdminAnalytics';
 import ViewCart from './components/ViewCart';
 import AdPayment from "./components/AdPayment";
 import PromoteSuccess from "./components/PromoteSuccess";
+import WalletTopUpSuccess from './components/WalletTopUpSuccess';
 
 // -------------------------
-// Protected Route (with return-to URL)
+// Protected Route
 // -------------------------
 function ProtectedRoute({ children, allowedRoles }) {
   const [loading, setLoading] = useState(true);
@@ -145,9 +140,7 @@ function LoginWrapper() {
             navigate('/suspended');
             return;
           }
-
           const role = userData.role || userData.userType;
-
           if (role === 'admin') {
             navigate('/admin');
           } else if (role === 'staff') {
@@ -163,7 +156,6 @@ function LoginWrapper() {
 
 function SignupWrapper() {
   const navigate = useNavigate();
-
   return (
     <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh' }}>
       <SignupForm
@@ -180,14 +172,22 @@ function SignupWrapper() {
 export function AppRoutes() {
   return (
     <Routes>
-      {/* Public Routes */}
+      {/* Public routes */}
       <Route path="/" element={<LandingPageWrapper />} />
       <Route path="/login" element={<LoginWrapper />} />
       <Route path="/signup" element={<SignupWrapper />} />
       <Route path="/suspended" element={<SuspendedPage />} />
       <Route path="/access-denied" element={<AccessDenied />} />
 
-      {/* Ad promotion routes */}
+      {/* Stripe return routes — NO ProtectedRoute wrapper.
+          These pages handle their own auth via authStateReady() internally.
+          Wrapping them causes a race condition after the Stripe redirect. */}
+      <Route path="/payment-success"        element={<PaymentSuccess />} />
+      <Route path="/payment-cancelled"      element={<PaymentCancelled />} />
+      <Route path="/wallet-topup-success"   element={<WalletTopUpSuccess />} />
+      <Route path="/promote-success"        element={<PromoteSuccess />} />
+
+      {/* Ad promotion */}
       <Route
         path="/promote-payment"
         element={
@@ -196,33 +196,18 @@ export function AppRoutes() {
           </ProtectedRoute>
         }
       />
-      <Route path="/promote-success" element={<PromoteSuccess />} />
 
       {/* General */}
-      <Route path="/dashboard" element={<Dashboard />} />
-      <Route path="/profile" element={<Profile />} />
-      <Route path="/profile/:userId" element={<ViewRating />} />
-      <Route path="/view-rating" element={<ViewRating userId="sampleUserId" />} />
-      <Route path="/chat" element={<ProtectedRoute allowedRoles={['student']}><Chat /></ProtectedRoute>} />
-      <Route path="/chat/:transactionId" element={<Chat />} />
-      <Route path="/edit-listing/:id" element={<EditListing />} />
-      <Route path="/staff" element={<ProtectedRoute allowedRoles={['staff']}><StaffDashboard /></ProtectedRoute>} />
-      <Route path="/admin" element={<ProtectedRoute allowedRoles={['admin']}><AdminDashboard /></ProtectedRoute>} />
-      
-      {/* SPRINT 2 ROUTES */}
-      <Route path="/trade-facility" element={<ProtectedRoute allowedRoles={['student']}><TradeFacility /></ProtectedRoute>} />
-      <Route path="/book-dropoff/:transactionId" element={<ProtectedRoute allowedRoles={['student']}><BookDropOff /></ProtectedRoute>} />
-      <Route path="/payment/:txId" element={<ProtectedRoute allowedRoles={['student']}><Payment /></ProtectedRoute>} />
+      <Route path="/dashboard"              element={<Dashboard />} />
+      <Route path="/profile"                element={<Profile />} />
+      <Route path="/profile/:userId"        element={<ViewRating />} />
+      <Route path="/view-rating"            element={<ViewRating userId="sampleUserId" />} />
+      <Route path="/listing/:id"            element={<ListingDetail />} />
+      <Route path="/review/:transactionId"  element={<ReviewForm />} />
+      <Route path="/edit-listing/:id"       element={<EditListing />} />
+      <Route path="/azure/create-listing"   element={<CreateListingAzure />} />
 
-      <Route path="/azure/create-listing" element={<CreateListingAzure/>} />
-      <Route path="/listing/:id" element={<ListingDetail />} />
-      <Route path="/review/:transactionId" element={<ReviewForm />} />
-      <Route path="/edit-listing/:id" element={<EditListing />} />
-      <Route path="/azure/create-listing" element={<CreateListingAzure />} />
-
-      <Route path="/admin/profile" element={<ProtectedRoute allowedRoles={['admin']}><AdminProfile /></ProtectedRoute>} />
-
-      {/* Student Routes */}
+      {/* Student routes */}
       <Route
         path="/view-listing"
         element={
@@ -248,7 +233,6 @@ export function AppRoutes() {
         }
       />
       <Route path="/cart" element={<Navigate to="/favourites" replace />} />
-
       <Route
         path="/chat"
         element={
@@ -297,25 +281,6 @@ export function AppRoutes() {
           </ProtectedRoute>
         }
       />
-
-      {/* Stripe return routes */}
-      <Route
-        path="/payment-success"
-        element={
-          <ProtectedRoute allowedRoles={['student']}>
-            <PaymentSuccess />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/payment-cancelled"
-        element={
-          <ProtectedRoute allowedRoles={['student']}>
-            <PaymentCancelled />
-          </ProtectedRoute>
-        }
-      />
-
       <Route
         path="/notifications"
         element={
@@ -333,7 +298,7 @@ export function AppRoutes() {
         }
       />
 
-      {/* Staff Routes */}
+      {/* Staff routes */}
       <Route
         path="/staff"
         element={
@@ -343,7 +308,7 @@ export function AppRoutes() {
         }
       />
 
-      {/* Admin Routes */}
+      {/* Admin routes */}
       <Route
         path="/admin"
         element={
@@ -373,6 +338,14 @@ export function AppRoutes() {
         element={
           <ProtectedRoute allowedRoles={['admin']}>
             <ModerationSummaryPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/admin/profile"
+        element={
+          <ProtectedRoute allowedRoles={['admin']}>
+            <AdminProfile />
           </ProtectedRoute>
         }
       />

@@ -1,5 +1,5 @@
 import { initializeApp } from "firebase/app";
-import { getAuth, GoogleAuthProvider } from "firebase/auth";
+import { getAuth, GoogleAuthProvider, browserLocalPersistence, setPersistence } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 
@@ -18,6 +18,13 @@ export const auth = getAuth(app);
 export const db = getFirestore(app);
 export const storage = getStorage(app);
 export const googleProvider = new GoogleAuthProvider();
+
+// Persist session in localStorage so it survives page redirects (e.g. Stripe
+// Checkout sends the user away and back — without this Firebase loses the
+// session on return and briefly fires onAuthStateChanged with null).
+setPersistence(auth, browserLocalPersistence).catch((e) => {
+  console.warn('Firebase persistence could not be set:', e);
+});
 
 export const isValidWitsEmail = (email) => {
   return email.endsWith('@wits.ac.za') || email.endsWith('@students.wits.ac.za') || email === 'nontokozombatha797@gmail.com' || email === 's08027456@gmail.com' || email === 'tshegomaphefo48@gmail.com' || email === 'hyginusvictor11@gmail.com' || email === 'dantesebopela@gmail.com' || email === 'kgethim25.o@gmail.com' || email === 'mphelanekgethego20060325@gmail.com' || email === 'anelevanwyk49@gmail.com' || email === 'mbathamathamsanqa@gmail.com'|| email === 'kgethie35@gmail.com' || email === "lialabelle71@gmail.com";
