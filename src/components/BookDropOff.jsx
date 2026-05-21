@@ -14,19 +14,6 @@ const CLOUDINARY_CLOUD_NAME    = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME;
 const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
 const FALLBACK_CONFIG = { openTime: "08:00", closeTime: "18:00", slotsPerHour: 1 };
 
-async function uploadImageToCloudinary(file) {
-  const formData = new FormData();
-  formData.append("file", file);
-  formData.append("upload_preset", CLOUDINARY_UPLOAD_PRESET);
-  const res = await fetch(
-    `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`,
-    { method: "POST", body: formData }
-  );
-  if (!res.ok) throw new Error(`Image upload failed: ${res.statusText}`);
-  const data = await res.json();
-  return data.secure_url;
-}
-
 const DROP_OFF_WINDOW_DAYS = 7;
 
 function getStatusLabel(status) {
@@ -73,7 +60,7 @@ const CONDITION_COLORS = {
 };
 
 // ── Trade exchange card ──────────────────────────────────────────
-function TradeExchangeCard({ listing, tradeItem, tradeImagePreview, tradeImageFile, onReplaceImage, isBuyerFlow }) {
+function TradeExchangeCard({ listing, tradeItem, tradeImagePreview, isBuyerFlow }) {
   const tradeItemObj  = tradeItem && typeof tradeItem === 'object' ? tradeItem : null;
   const tradeItemName = tradeItemObj?.name ?? (typeof tradeItem === 'string' ? tradeItem : null);
 
@@ -117,33 +104,19 @@ function TradeExchangeCard({ listing, tradeItem, tradeImagePreview, tradeImageFi
           </svg>
         </div>
 
-        {/* Buyer's trade item */}
+        {/* Buyer's trade item — image is fixed at offer time, no replacement allowed */}
         <div className={styles.tradeExchangeItem}>
           <div className={styles.tradeExchangeRole} style={{ color: '#6d28d9' }}>
             {isBuyerFlow ? "You drop off" : "You receive"}
           </div>
-          <div className={styles.tradeExchangeImgWrap} style={{ position: 'relative' }}>
+          <div className={styles.tradeExchangeImgWrap}>
             {tradeImagePreview
               ? <img src={tradeImagePreview} alt={tradeItemName} className={styles.tradeExchangeImg} />
               : <div className={styles.tradeExchangeImgPlaceholder} style={{ background: '#ede9fe' }}>
                   <i className="fas fa-exchange-alt" style={{ color: '#a78bfa' }} />
                 </div>
             }
-            {isBuyerFlow && (
-              <label htmlFor="trade-img-replace" className={styles.tradeExchangeReplaceBtn} title="Replace photo">
-                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-                  <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
-                  <polyline points="17 8 12 3 7 8"/>
-                  <line x1="12" y1="3" x2="12" y2="15"/>
-                </svg>
-              </label>
-            )}
           </div>
-          {isBuyerFlow && (
-            <input id="trade-img-replace" type="file" accept="image/*" style={{ display: 'none' }}
-              onChange={onReplaceImage}
-            />
-          )}
           <p className={styles.tradeExchangeItemName}>{tradeItemName ?? "Your trade item"}</p>
           {tradeItemObj?.condition && (
             <span className={styles.tradeExchangeChip} style={CONDITION_COLORS[tradeItemObj.condition] || {}}>
@@ -154,11 +127,6 @@ function TradeExchangeCard({ listing, tradeItem, tradeImagePreview, tradeImageFi
             <span className={styles.tradeExchangeChip} style={{ background: '#f0f9ff', color: '#0369a1' }}>
               {tradeItemObj.category}
             </span>
-          )}
-          {tradeImageFile && (
-            <p style={{ margin: '4px 0 0', fontSize: '0.65rem', color: '#16a34a', textAlign: 'center' }}>
-              New photo selected
-            </p>
           )}
         </div>
       </div>
@@ -189,10 +157,8 @@ export default function BookDropOff() {
   const [maxDate,          setMaxDate]          = useState("");
   const [role,             setRole]             = useState(null);
 
-  const [buyerTradeItem,      setBuyerTradeItem]      = useState(null);
-  const [tradeImageFile,      setTradeImageFile]      = useState(null);
-  const [tradeImagePreview,   setTradeImagePreview]   = useState(null);
-  const [tradeImageUploading, setTradeImageUploading] = useState(false);
+  const [buyerTradeItem,    setBuyerTradeItem]    = useState(null);
+  const [tradeImagePreview, setTradeImagePreview] = useState(null);
 
   const [facilityConfig, setFacilityConfig] = useState(FALLBACK_CONFIG);
   const [slotCounts,     setSlotCounts]     = useState({});
@@ -260,8 +226,6 @@ export default function BookDropOff() {
       if (isSeller && txn.bookingId)
         return setError("A drop-off has already been booked for this transaction.");
 
-      // Rules allow buyer to get their own transaction — buyerBookingId is now
-      // written directly to the transaction, so this simple check is sufficient.
       if (isBuyer && txn.buyerBookingId)
         return setError("You have already booked your drop-off slot for this trade.");
 
@@ -285,7 +249,8 @@ export default function BookDropOff() {
 
       setTransaction(txn);
 
-      if (isBuyer && txn.tradeItem) {
+      // Populate trade item and image for BOTH seller and buyer
+      if (txn.tradeItem) {
         setBuyerTradeItem(txn.tradeItem);
         if (txn.tradeItem.imageUrl) setTradeImagePreview(txn.tradeItem.imageUrl);
       }
@@ -361,9 +326,7 @@ export default function BookDropOff() {
     setError("");
 
     try {
-      // ── SELLER PATH ────────────────────────────────────────────────────────
-      // Sellers can always read their own transaction, so re-fetch to guard
-      // against double-booking races.
+      // ── SELLER PATH ──────────────────────────────────────────────────────
       if (role === 'seller') {
         const latest     = await getDoc(doc(db, "transactions", transaction.id));
         const latestData = latest.data();
@@ -394,7 +357,6 @@ export default function BookDropOff() {
 
         const listingTitle = listing?.title ?? "your item";
 
-        // Notify seller: their drop-off slot is confirmed, with item name
         try {
           await addDoc(collection(db, "notifications"), {
             userId:        transaction.sellerId,
@@ -410,7 +372,6 @@ export default function BookDropOff() {
           });
         } catch (_) {}
 
-        // For trade: prompt buyer to book their own drop-off slot if they haven't yet
         if (transaction.type === 'trade' && !latestData.buyerBookingId) {
           const tradeItemName = typeof transaction.tradeItem === 'object'
             ? transaction.tradeItem?.name
@@ -432,35 +393,12 @@ export default function BookDropOff() {
         }
       }
 
-      // ── BUYER PATH ─────────────────────────────────────────────────────────
-      // Rules allow buyer to update their own transaction (buyerId match).
-      // We mirror the seller pattern exactly:
-      //   1. addDoc to bookings  → get bookingRef.id
-      //   2. updateDoc on transaction with buyerBookingId + all drop-off fields
+      // ── BUYER PATH ──────────────────────────────────────────────────────
       if (role === 'buyer') {
         if (transaction.buyerBookingId)
           return setError("You have already booked your drop-off slot.");
 
-        let finalImageUrl = buyerTradeItem?.imageUrl ?? null;
-        if (tradeImageFile) {
-          setTradeImageUploading(true);
-          try {
-            finalImageUrl = await uploadImageToCloudinary(tradeImageFile);
-          } finally {
-            setTradeImageUploading(false);
-          }
-        }
-
-        const updatedTradeItem = buyerTradeItem
-          ? { ...buyerTradeItem, imageUrl: finalImageUrl }
-          : null;
-
         // 1. Create booking document
-        console.log("[BookDropOff] buyer: creating booking doc...");
-        console.log("[BookDropOff] transaction.id:", transaction.id);
-        console.log("[BookDropOff] transaction.buyerId:", transaction.buyerId);
-        console.log("[BookDropOff] auth uid:", auth.currentUser?.uid);
-
         let bookingRef;
         try {
           bookingRef = await addDoc(collection(db, "bookings"), {
@@ -475,43 +413,38 @@ export default function BookDropOff() {
             createdAt:       serverTimestamp(),
             updatedAt:       serverTimestamp(),
           });
-          console.log("[BookDropOff] booking created:", bookingRef.id);
         } catch (bookingErr) {
           console.error("[BookDropOff] FAILED at addDoc bookings:", bookingErr.code, bookingErr.message);
           throw bookingErr;
         }
 
         // 2. Update transaction with buyer drop-off fields
-        console.log("[BookDropOff] buyer: updating transaction...");
         try {
           await updateDoc(doc(db, "transactions", transaction.id), {
             buyerBookingId:       bookingRef.id,
             buyerDropOffStatus:   "scheduled",
             buyerDropOffDate:     selectedDate,
             buyerDropOffTimeSlot: selectedTimeSlot,
-            ...(updatedTradeItem ? { tradeItem: updatedTradeItem } : {}),
             updatedAt:            serverTimestamp(),
           });
-          console.log("[BookDropOff] transaction updated successfully");
         } catch (txnErr) {
           console.error("[BookDropOff] FAILED at updateDoc transaction:", txnErr.code, txnErr.message);
           throw txnErr;
         }
 
-        const tradeItemName = updatedTradeItem?.name ?? "your trade item";
+        const tradeItemName = buyerTradeItem?.name ?? "your trade item";
         const listingTitle  = listing?.title ?? "the listing";
 
-        // Use notification service
         await notifyDropOffBooked({
           transactionId: transaction.id,
           sellerId:      transaction.sellerId,
           buyerId:       transaction.buyerId,
           listingId:     transaction.listingId,
-          listingTitle:  listingTitle,
+          listingTitle,
           role:          'buyer',
           date:          selectedDate,
           timeSlot:      selectedTimeSlot,
-          tradeItemName: tradeItemName,
+          tradeItemName,
         });
       }
 
@@ -704,17 +637,7 @@ export default function BookDropOff() {
             listing={listing}
             tradeItem={isBuyerFlow ? buyerTradeItem : transaction?.tradeItem}
             tradeImagePreview={tradeImagePreview}
-            tradeImageFile={tradeImageFile}
             isBuyerFlow={isBuyerFlow}
-            onReplaceImage={(e) => {
-              const file = e.target.files[0];
-              if (!file) return;
-              if (file.size > 5 * 1024 * 1024) { setError('Image must be under 5 MB'); return; }
-              setTradeImageFile(file);
-              const reader = new FileReader();
-              reader.onloadend = () => setTradeImagePreview(reader.result);
-              reader.readAsDataURL(file);
-            }}
           />
         ) : (
           /* Standard item summary card (non-trade, seller only) */
@@ -749,7 +672,7 @@ export default function BookDropOff() {
           </div>
         )}
 
-        {/* Trade participants row (for trades) */}
+        {/* Trade participants row */}
         {isTrade && (
           <div className={styles.tradePartiesRow}>
             <div className={styles.tradePartyChip}>
@@ -824,10 +747,10 @@ export default function BookDropOff() {
             <button
               type="submit"
               className={styles.submitBtn}
-              disabled={submitting || !selectedDate || !selectedTimeSlot || (maxDate && selectedDate > maxDate) || tradeImageUploading}
+              disabled={submitting || !selectedDate || !selectedTimeSlot || (maxDate && selectedDate > maxDate)}
             >
-              {(submitting || tradeImageUploading)
-                ? <><span className={styles.spinner} /> {tradeImageUploading ? "Uploading image…" : "Booking…"}</>
+              {submitting
+                ? <><span className={styles.spinner} /> Booking…</>
                 : isBuyerFlow ? "Confirm trade drop-off" : isTrade ? "Confirm trade drop-off" : "Confirm drop-off slot"
               }
             </button>

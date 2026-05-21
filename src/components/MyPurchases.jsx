@@ -35,13 +35,11 @@ const formatDate = (ts) => {
   return d.toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric' });
 };
 
-// FIX 1: Don't default to 'cash' for trade transactions with no paymentType set
 const getPaymentType = (tx) => {
   if (tx.type === 'trade' && !tx.paymentType && !tx.paymentMethod) return null;
   return tx.paymentType || tx.paymentMethod || 'cash';
 };
 
-// FIX 2: Guard against NaN totals on trade-only transactions
 const getTotalAmount = (tx) => {
   if (tx.type === 'trade' && tx.agreedPrice == null) return 0;
   return Number(tx.agreedPrice ?? tx.listingPrice ?? tx.price ?? 0);
@@ -61,7 +59,6 @@ const hasStripePayment = (tx) => Boolean(
 );
 const canCompletePayment = (tx) => {
   if (!tx) return false;
-  // FIX 3a: Trade transactions never need payment completion
   if (tx.type === 'trade') return false;
   return tx.status === 'accepted' || tx.status === 'pending_payment';
 };
@@ -113,8 +110,6 @@ function TradeItemCard({ tradeItem }) {
     'Poor':     { color: '#dc2626', bg: '#fef2f2' },
   };
   const cs = CONDITION_COLORS[tradeItem.condition] || { color: '#6b7280', bg: '#f3f4f6' };
-
-  // FIX 4: Track image load error to fall back to placeholder
   const [imgError, setImgError] = React.useState(false);
 
   return (
@@ -243,17 +238,16 @@ export default function MyPurchases() {
     const enrich = async () => {
       const results = await Promise.all(
         transactions.map(async (tx) => {
-          let listingTitle  = tx.listingTitle || null;
-          let listingImage  = null;
-          let listingPrice  = tx.agreedPrice ?? tx.price ?? null;
-          let sellerName    = tx.sellerName  || null;
+          let listingTitle   = tx.listingTitle || null;
+          let listingImage   = null;
+          let listingPrice   = tx.agreedPrice ?? tx.price ?? null;
+          let sellerName     = tx.sellerName  || null;
           let listingDetails = null;
 
           const isTradeTx = tx.type === 'trade';
 
-          // ── Listing fetch ──────────────────────────────────────────────────
           try {
-            if (tx.listingId && (!isTradeTx || !listingTitle)) {
+            if (tx.listingId) {
               const ls = await getDoc(doc(db, 'listings', tx.listingId));
               if (ls.exists()) {
                 const ld = ls.data();
@@ -271,7 +265,6 @@ export default function MyPurchases() {
             }
           } catch (_) {}
 
-          // ── Seller name ────────────────────────────────────────────────────
           try {
             if (!sellerName && tx.sellerId) {
               const us = await getDoc(doc(db, 'users', tx.sellerId));
@@ -282,7 +275,6 @@ export default function MyPurchases() {
             }
           } catch (_) {}
 
-          // ── Full seller profile (waiting status only) ──────────────────────
           let sellerProfile = null;
           try {
             if (tx.status === 'waiting' && tx.sellerId) {
@@ -312,8 +304,7 @@ export default function MyPurchases() {
             listingDetails,
             sellerName:    sellerName || 'Unknown Seller',
             sellerProfile,
-            // FIX 5: Explicitly preserve tradeItem from Firestore so spread doesn't lose it
-            tradeItem: tx.tradeItem ?? null,
+            tradeItem:     tx.tradeItem ?? null,
           };
         })
       );
@@ -473,7 +464,6 @@ export default function MyPurchases() {
                 const isOverdueCancelled = tx.status === 'overdue_cancelled';
                 const paymentType     = getPaymentType(tx);
                 const isPartialTx     = paymentType === 'partial';
-                // FIX 3b: isCashTx is false when paymentType is null (trade with no payment)
                 const isCashTx        = paymentType === 'cash' || paymentType === 'cod';
                 const total           = getTotalAmount(tx);
                 const cashDue         = getCashDue(tx);
@@ -485,11 +475,9 @@ export default function MyPurchases() {
                 const tradeItemLabel  = getTradeItemLabel(tx.tradeItem);
                 const dropOffBooked   = isTrade && !!tx.buyerBookingId;
 
-                const showTradePanel  = isTrade && (tx.tradeItem || tx.terms);
-                const showNonTradePanel = !isTrade && (
-                  tx.agreedPrice != null || paymentType || tx.terms
-                );
-                const showPanel = showTradePanel || showNonTradePanel;
+                const showTradePanel    = isTrade && (tx.tradeItem || tx.terms);
+                const showNonTradePanel = !isTrade && (tx.agreedPrice != null || paymentType || tx.terms);
+                const showPanel         = showTradePanel || showNonTradePanel;
 
                 return (
                   <React.Fragment key={tx.id}>
@@ -506,7 +494,7 @@ export default function MyPurchases() {
                     tabIndex={isOverdueCancelled ? -1 : 0}
                     onKeyDown={isOverdueCancelled ? undefined : (e) => { if (e.key === 'Enter') { tx.status === 'waiting' ? setExpandedCards(prev => ({ ...prev, [tx.id]: !prev[tx.id] })) : handleArrowClick(tx); } }}
                   >
-                    {/* Image */}
+                    {/* Image — always show the listing (seller's item), never the buyer's trade item */}
                     <div className={styles.cardImage}>
                       {tx.listingImage ? (
                         <img src={tx.listingImage} alt={tx.listingTitle} />
@@ -615,16 +603,12 @@ export default function MyPurchases() {
                                 </span>
                               </>
                             )}
-
                             {isTrade && tradeItemLabel && (
                               <>
                                 <span className={styles.offerPanelLabel}>Trade item</span>
-                                <span className={styles.offerPanelValue}>
-                                  {tradeItemLabel}
-                                </span>
+                                <span className={styles.offerPanelValue}>{tradeItemLabel}</span>
                               </>
                             )}
-
                             {tx.terms && (
                               <>
                                 <span className={styles.offerPanelLabel}>Terms</span>
@@ -632,7 +616,6 @@ export default function MyPurchases() {
                               </>
                             )}
                           </div>
-
                           {isTrade && tradeItemObj && (
                             <TradeItemCard tradeItem={tradeItemObj} />
                           )}
@@ -647,7 +630,6 @@ export default function MyPurchases() {
                         </div>
                       )}
 
-                      {/* FIX 3c: Accepted status — trade vs cash vs stripe, mutually exclusive */}
                       {(tx.status === 'accepted' || tx.status === 'pending_payment') && (
                         isTrade ? (
                           <div className={styles.statusMsg} style={{ borderColor: '#3b82f6', background: '#eff6ff' }}>
@@ -706,7 +688,6 @@ export default function MyPurchases() {
                         </div>
                       )}
 
-                      {/* Trade waiting — drop-off not yet booked */}
                       {isTrade && tx.status === 'waiting' && !dropOffBooked && (
                         <div className={styles.tradeDropOffCta}>
                           <div className={styles.tradeDropOffCtaIcon}>
@@ -727,7 +708,6 @@ export default function MyPurchases() {
                         </div>
                       )}
 
-                      {/* Trade waiting — drop-off already booked */}
                       {isTrade && tx.status === 'waiting' && dropOffBooked && (
                         <div className={styles.statusMsg} style={{ borderColor: '#7c3aed', background: '#f5f3ff' }}>
                           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" strokeWidth="2.5">
@@ -768,16 +748,10 @@ export default function MyPurchases() {
                                 Show your receipt to staff when collecting.
                               </span>
                             </div>
-                            {/* Receipt card */}
                             <div style={{
-                              marginTop: 6,
-                              padding: '0.6rem 0.75rem',
-                              background: '#faf5ff',
-                              border: '1.5px dashed #a78bfa',
-                              borderRadius: 8,
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '0.75rem',
+                              marginTop: 6, padding: '0.6rem 0.75rem',
+                              background: '#faf5ff', border: '1.5px dashed #a78bfa',
+                              borderRadius: 8, display: 'flex', alignItems: 'center', gap: '0.75rem',
                             }}>
                               <div style={{ flexShrink: 0, width: 32, height: 32, background: '#7c3aed', borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                                 <i className="fas fa-receipt" style={{ color: '#fff', fontSize: '0.85rem' }} />
@@ -834,7 +808,6 @@ export default function MyPurchases() {
                         </div>
                       )}
 
-                      {/* Waiting: full listing-detail expanded view (non-trade only) */}
                       {tx.status === 'waiting' && expandedCards[tx.id] && (
                         <div style={{ marginTop: 8 }}>
                           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
@@ -854,17 +827,14 @@ export default function MyPurchases() {
                               </span>
                             )}
                           </div>
-
                           <p style={{ margin: '0 0 4px', fontWeight: 700, fontSize: '1rem', color: '#1a1a1a' }}>
                             {tx.listingTitle}
                           </p>
-
                           {tx.listingPrice != null && (
                             <p style={{ margin: '0 0 10px', fontSize: '1.1rem', fontWeight: 700, color: '#6AA6DA' }}>
                               R {Number(tx.listingPrice).toLocaleString('en-ZA')}
                             </p>
                           )}
-
                           {tx.listingDetails?.description && (
                             <div style={{ borderLeft: '3px solid #6AA6DA', borderRadius: 4, background: '#fdf8f0', padding: '10px 12px', marginBottom: 10 }}>
                               <p style={{ margin: '0 0 4px', fontSize: '0.7rem', fontWeight: 700, color: '#c07a10', textTransform: 'uppercase', letterSpacing: '0.07em' }}>
@@ -875,7 +845,6 @@ export default function MyPurchases() {
                               </p>
                             </div>
                           )}
-
                           {tx.sellerProfile && (
                             <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: 12, border: '1px solid #dde3ea', borderRadius: 10, background: '#fff' }}>
                               {tx.sellerProfile.photoURL
@@ -909,48 +878,46 @@ export default function MyPurchases() {
                           )}
                         </div>
                       )}
-
                     </div>
 
                     {/* Action buttons column */}
                     {!isOverdueCancelled && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, alignSelf: 'center' }}>
-                      {showPaymentButton && (
-                        <button
-                          className={`${styles.viewBtn} ${styles.viewBtnPay}`}
-                          onClick={(e) => { e.stopPropagation(); navigate(`/payment/${tx.id}`); }}
-                          title="Complete payment"
-                        >
-                          <i className="fas fa-credit-card" />
-                        </button>
-                      )}
-                      {!showPaymentButton && tx.status === 'waiting' && (
-                        <button
-                          className={styles.viewBtn}
-                          onClick={(e) => { e.stopPropagation(); setExpandedCards(prev => ({ ...prev, [tx.id]: !prev[tx.id] })); }}
-                          title="View listing details"
-                          style={expandedCards[tx.id] ? { background: '#8b5cf6', color: '#fff' } : {}}
-                        >
-                          <i className={`fas fa-chevron-${expandedCards[tx.id] ? 'up' : 'down'}`} />
-                        </button>
-                      )}
-                      {isTrade && tx.status === 'waiting' && !dropOffBooked && (
-                        <div className={styles.viewBtn} style={{ color: '#7c3aed', borderLeftColor: '#e9d5ff' }}>
-                          <i className="fas fa-chevron-right" style={{ fontSize: '0.7rem' }} />
-                        </div>
-                      )}
-                      {!showPaymentButton && tx.status !== 'waiting' && tx.listingId && (
-                        <button
-                          className={styles.viewBtn}
-                          onClick={(e) => { e.stopPropagation(); navigate(`/listing/${tx.listingId}`); }}
-                          title="View listing"
-                        >
-                          <i className="fas fa-arrow-right" />
-                        </button>
-                      )}
-                    </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, alignSelf: 'center' }}>
+                        {showPaymentButton && (
+                          <button
+                            className={`${styles.viewBtn} ${styles.viewBtnPay}`}
+                            onClick={(e) => { e.stopPropagation(); navigate(`/payment/${tx.id}`); }}
+                            title="Complete payment"
+                          >
+                            <i className="fas fa-credit-card" />
+                          </button>
+                        )}
+                        {!showPaymentButton && tx.status === 'waiting' && (
+                          <button
+                            className={styles.viewBtn}
+                            onClick={(e) => { e.stopPropagation(); setExpandedCards(prev => ({ ...prev, [tx.id]: !prev[tx.id] })); }}
+                            title="View listing details"
+                            style={expandedCards[tx.id] ? { background: '#8b5cf6', color: '#fff' } : {}}
+                          >
+                            <i className={`fas fa-chevron-${expandedCards[tx.id] ? 'up' : 'down'}`} />
+                          </button>
+                        )}
+                        {isTrade && tx.status === 'waiting' && !dropOffBooked && (
+                          <div className={styles.viewBtn} style={{ color: '#7c3aed', borderLeftColor: '#e9d5ff' }}>
+                            <i className="fas fa-chevron-right" style={{ fontSize: '0.7rem' }} />
+                          </div>
+                        )}
+                        {!showPaymentButton && tx.status !== 'waiting' && tx.listingId && (
+                          <button
+                            className={styles.viewBtn}
+                            onClick={(e) => { e.stopPropagation(); navigate(`/listing/${tx.listingId}`); }}
+                            title="View listing"
+                          >
+                            <i className="fas fa-arrow-right" />
+                          </button>
+                        )}
+                      </div>
                     )}
-
                   </div>
                   </React.Fragment>
                 );
