@@ -1,5 +1,6 @@
 codecov:
   require_ci_to_pass: yes
+  max_report_age: off
 
 coverage:
   precision: 2
@@ -22,23 +23,13 @@ flags:
   frontend:
     paths:
       - src/
-    carryforward: false
+    carryforward: true
   backend:
     paths:
       - backend/
-    carryforward: false
+    carryforward: true
 
 comment:
   layout: "reach, diff, flags, files"
   behavior: default
   require_changes: true
-
-flags:
-  frontend:
-    carryforward: true
-    paths:
-      - src/
-  backend:
-    carryforward: true
-    paths:
-      - backend/
