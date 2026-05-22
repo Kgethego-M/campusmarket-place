@@ -38,13 +38,7 @@ Sign up using the **Student** role with a verifiable **`@students.wits.ac.za`** 
 Sign up using the **Staff** role with a verifiable **`@wits.ac.za`** email address.
 
 ### Admin
-Admin access is restricted to pre-approved emails only. The following emails have been granted admin access — sign up using the **Admin** role with one of these:
-
-| Email |
-|-------|
-| `nhlanhla.nkosi@wits.ac.za` |
-| `1064787@students.wits.ac.za` |
-| `2586407@students.wits.ac.za` |
+Admin access is restricted to pre-approved emails only — sign up using the **Admin** role with one of emails specified in the submission document:
 
 > **Note:** If you sign up with an email that does not match the role you selected, access will be denied. Make sure to choose the correct role for your email on the sign-up screen.
 
