@@ -6,10 +6,10 @@ import Message from "./Message";
 
 const WHITELISTED_GMAILS = [
   'nontokozombatha797@gmail.com', 's08027456@gmail.com',
-  'tshegomaphefo48@gmail.com',   'hyginusvictor11@gmail.com',
+  'tshegomaphefo48@gmail.com',   'hyginusvictor11@gmail.com','2826102@students.wits.ac.za',
   'dantesebopela@gmail.com',     'kgethim25.o@gmail.com',
-  'mphelanekgethego20060325@gmail.com', 'anelevanwyk49@gmail.com',
-  'mbathamathamsanqa@gmail.com', 'masegelakamogelo5@gmail.com',
+  'mphelanekgethego20060325@gmail.com', 'anelevanwyk49@gmail.com', 'nhlanhla.mkosi@wits.ac.za',
+  'mbathamathamsanqa@gmail.com', 'masegelakamogelo5@gmail.com', 'hyginusvictor7@gmail.com',
   'kgethie35@gmail.com',         'lialabelle71@gmail.com', 'hyginusvictor7@gmail.com'
 ];
 
