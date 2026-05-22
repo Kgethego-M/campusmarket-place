@@ -2,9 +2,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { ListingDetailView as ListingDetail } from '../components/ListingDetail';
-import { getDocs, addDoc } from 'firebase/firestore';
+import { getDocs, addDoc, updateDoc, setDoc, getDoc, deleteDoc } from 'firebase/firestore';
 import { createTransaction } from '../services/transactionService';
-import { notifySellerOfOffer } from '../services/notificationService';
+import { notifySellerOfOffer, deleteNewOfferNotification } from '../services/notificationService';
 
 // ─── Mocks ────────────────────────────────────────────────────────────────────
 
@@ -29,10 +29,11 @@ vi.mock('firebase/firestore', async () => {
     serverTimestamp: vi.fn(() => new Date()),
     doc: vi.fn(),
     getDoc: vi.fn(() => Promise.resolve({ exists: () => false, data: () => ({}) })),
-    setDoc: vi.fn(),
-    updateDoc: vi.fn(),
-    arrayUnion: vi.fn(),
-    arrayRemove: vi.fn(),
+    setDoc: vi.fn(() => Promise.resolve()),
+    updateDoc: vi.fn(() => Promise.resolve()),
+    deleteDoc: vi.fn(() => Promise.resolve()),
+    arrayUnion: vi.fn(v => v),
+    arrayRemove: vi.fn(v => v),
   };
 });
 
@@ -42,10 +43,14 @@ vi.mock('../services/transactionService', () => ({
 
 vi.mock('../services/notificationService', () => ({
   notifySellerOfOffer: vi.fn(() => Promise.resolve('mock-notification-id')),
+  deleteNewOfferNotification: vi.fn(() => Promise.resolve()),
 }));
 
 vi.mock('../components/ReportModal', () => ({
-  default: () => null,
+  default: ({ open, reportedName }) => {
+    if (!open) return null;
+    return <div data-testid="report-modal">Reporting: {reportedName}</div>;
+  },
 }));
 
 vi.mock('../components/PromoteListingModal', () => ({
@@ -65,7 +70,7 @@ vi.mock('../components/AlertModal', () => ({
   },
 }));
 
-// ─── Shared mock data ─────────────────────────────────────────────────────────
+// ─── Shared fixtures ──────────────────────────────────────────────────────────
 
 const mockNavigate = vi.fn();
 const mockBuyer    = { uid: 'buyer-uid',  displayName: 'Test Buyer'  };
@@ -86,25 +91,26 @@ const saleListing = {
   photos: ['photo1.jpg', 'photo2.jpg'],
 };
 
-const tradeListing = { 
-  ...saleListing, 
-  id: 'listing-124', 
-  type: 'For Trade', 
-  listingType: 'For Trade', 
-  title: 'Scientific Calculator', 
-  price: 80 
+const tradeListing = {
+  ...saleListing,
+  id: 'listing-124',
+  type: 'For Trade',
+  listingType: 'For Trade',
+  title: 'Scientific Calculator',
+  price: 80,
 };
 
-const eitherListing = { 
-  ...saleListing, 
-  id: 'listing-125', 
-  type: 'For Sale or Trade', 
-  listingType: 'For Sale or Trade', 
-  title: 'Physics Textbook', 
-  price: 200 
+const eitherListing = {
+  ...saleListing,
+  id: 'listing-125',
+  type: 'For Sale or Trade',
+  listingType: 'For Sale or Trade',
+  title: 'Physics Textbook',
+  price: 200,
 };
 
-const noPhotoListing = { ...saleListing, photos: [] };
+const noPhotoListing    = { ...saleListing, photos: [] };
+const singlePhotoListing = { ...saleListing, photos: ['photo1.jpg'] };
 
 const pendingTransaction = {
   id: 'tx-existing',
@@ -119,21 +125,20 @@ const pendingTransaction = {
 beforeEach(() => {
   vi.clearAllMocks();
   vi.useRealTimers();
-  
   getDocs.mockResolvedValue({ docs: [] });
   addDoc.mockResolvedValue({ id: 'new-chat-id' });
   createTransaction.mockResolvedValue('mock-transaction-id');
   notifySellerOfOffer.mockResolvedValue('mock-notification-id');
+  getDoc.mockResolvedValue({ exists: () => false, data: () => ({}) });
 });
 
-// ─── Helper to wait for component to settle ───────────────────────────────────
+// ─── Helper ───────────────────────────────────────────────────────────────────
 
 const renderWithAct = async (component) => {
   let result;
   await act(async () => {
     result = render(component);
   });
-  // Wait for any pending promises
   await new Promise(resolve => setTimeout(resolve, 0));
   return result;
 };
@@ -175,21 +180,57 @@ describe('ListingDetail - action buttons', () => {
     expect(screen.getByRole('button', { name: /buy now/i })).toBeInTheDocument();
   });
 
+  it('Test No.4d - pending banner shows "Offer Already Initiated" title', async () => {
+    await renderWithAct(<ListingDetail listing={saleListing} currentUser={mockBuyer} existingTransaction={pendingTransaction} navigate={mockNavigate} />);
+    expect(screen.getByText('Offer Already Initiated')).toBeInTheDocument();
+  });
+
+  it('Test No.4e - pending banner shows "Withdraw offer" button', async () => {
+    await renderWithAct(<ListingDetail listing={saleListing} currentUser={mockBuyer} existingTransaction={pendingTransaction} navigate={mockNavigate} />);
+    expect(screen.getByRole('button', { name: /withdraw offer/i })).toBeInTheDocument();
+  });
+
   it('Test No.8 - calls createTransaction and notifySellerOfOffer when purchase is confirmed', async () => {
     await renderWithAct(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} />);
-    
-    await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: /buy now/i }));
-    });
-    
-    await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: /confirm & send offer/i }));
-    });
-    
+
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /buy now/i })); });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /confirm & send offer/i })); });
+
     await waitFor(() => {
       expect(createTransaction).toHaveBeenCalledTimes(1);
       expect(notifySellerOfOffer).toHaveBeenCalledTimes(1);
     });
+  });
+
+  it('Test No.8b - createTransaction is called with correct buyerId and listingId', async () => {
+    await renderWithAct(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} />);
+
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /buy now/i })); });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /confirm & send offer/i })); });
+
+    await waitFor(() =>
+      expect(createTransaction).toHaveBeenCalledWith(
+        expect.objectContaining({
+          buyerId:   'buyer-uid',
+          listingId: 'listing-123',
+          sellerId:  'seller-uid',
+        })
+      )
+    );
+  });
+
+  it('Test No.8c - notifySellerOfOffer is called with the transactionId returned by createTransaction', async () => {
+    createTransaction.mockResolvedValueOnce('tx-specific-id');
+    await renderWithAct(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} />);
+
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /buy now/i })); });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /confirm & send offer/i })); });
+
+    await waitFor(() =>
+      expect(notifySellerOfOffer).toHaveBeenCalledWith(
+        expect.objectContaining({ transactionId: 'tx-specific-id' })
+      )
+    );
   });
 
   it('Test No.12 - does not show action buttons when the current user is the seller', async () => {
@@ -209,67 +250,66 @@ describe('ListingDetail - action buttons', () => {
 describe('ListingDetail - purchase modal', () => {
   it('Test No.14 - opens the modal when Buy Now button is clicked', async () => {
     await renderWithAct(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} />);
-    
-    await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: /buy now/i }));
-    });
-    
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /buy now/i })); });
     expect(screen.getByText(/initiate purchase/i)).toBeInTheDocument();
   });
 
   it('Test No.15 - closes the modal when the × button is clicked', async () => {
     await renderWithAct(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} />);
-    
-    await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: /buy now/i }));
-    });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /buy now/i })); });
     expect(screen.getByText(/initiate purchase/i)).toBeInTheDocument();
-    
-    await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: /close modal/i }));
-    });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /close modal/i })); });
     expect(screen.queryByText(/initiate purchase/i)).not.toBeInTheDocument();
   });
 
   it("Test No.16 - shows type selector for 'For Sale or Trade' listings before a type is chosen", async () => {
     await renderWithAct(<ListingDetail listing={eitherListing} currentUser={mockBuyer} navigate={mockNavigate} />);
-    
-    await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: /buy now \/ make trade offer/i }));
-    });
-    
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /buy now \/ make trade offer/i })); });
     expect(screen.getByRole('button', { name: /cash purchase/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /trade item/i })).toBeInTheDocument();
   });
 
   it("Test No.17 - shows sale fields after choosing Cash Purchase on a 'For Sale or Trade' listing", async () => {
     await renderWithAct(<ListingDetail listing={eitherListing} currentUser={mockBuyer} navigate={mockNavigate} />);
-    
-    await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: /buy now \/ make trade offer/i }));
-    });
-    
-    await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: /cash purchase/i }));
-    });
-    
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /buy now \/ make trade offer/i })); });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /cash purchase/i })); });
     expect(screen.getByLabelText(/agreed price/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/payment method/i)).toBeInTheDocument();
   });
 
   it("Test No.18 - shows trade fields after choosing Trade Item on a 'For Sale or Trade' listing", async () => {
     await renderWithAct(<ListingDetail listing={eitherListing} currentUser={mockBuyer} navigate={mockNavigate} />);
-    
-    await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: /buy now \/ make trade offer/i }));
-    });
-    
-    await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: /trade item/i }));
-    });
-    
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /buy now \/ make trade offer/i })); });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /trade item/i })); });
     expect(screen.getByLabelText(/trade item name/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/category/i)).toBeInTheDocument();
+  });
+
+  it('Test No.18a - modal header says "Initiate Trade" when trade offer is open', async () => {
+    await renderWithAct(<ListingDetail listing={tradeListing} currentUser={mockBuyer} navigate={mockNavigate} />);
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /make trade offer/i })); });
+    expect(screen.getByText('Initiate Trade')).toBeInTheDocument();
+  });
+
+  it('Test No.18b - modal header says "Initiate Purchase" when sale offer is open', async () => {
+    await renderWithAct(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} />);
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /buy now/i })); });
+    expect(screen.getByText('Initiate Purchase')).toBeInTheDocument();
+  });
+
+  it('Test No.18c - modal header says "Make an Offer" when no type chosen yet on either listing', async () => {
+    await renderWithAct(<ListingDetail listing={eitherListing} currentUser={mockBuyer} navigate={mockNavigate} />);
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /buy now \/ make trade offer/i })); });
+    expect(screen.getByText('Make an Offer')).toBeInTheDocument();
+  });
+
+  it('Test No.18d - closing modal resets purchaseType so type selector reappears on reopen', async () => {
+    await renderWithAct(<ListingDetail listing={eitherListing} currentUser={mockBuyer} navigate={mockNavigate} />);
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /buy now \/ make trade offer/i })); });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /cash purchase/i })); });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /close modal/i })); });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /buy now \/ make trade offer/i })); });
+    expect(screen.getByRole('button', { name: /cash purchase/i })).toBeInTheDocument();
   });
 });
 
@@ -283,6 +323,16 @@ describe('ListingDetail - owner banner', () => {
 
   it('Test No.20 - does not show the owner banner when a buyer views the listing', async () => {
     await renderWithAct(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} />);
+    expect(screen.queryByTestId('owner-listing-banner')).not.toBeInTheDocument();
+  });
+
+  it('Test No.20a - owner banner contains "This is your listing" text', async () => {
+    await renderWithAct(<ListingDetail listing={saleListing} currentUser={mockSeller} navigate={mockNavigate} />);
+    expect(screen.getByText('This is your listing')).toBeInTheDocument();
+  });
+
+  it('Test No.20b - owner banner does not appear when currentUser is null', async () => {
+    await renderWithAct(<ListingDetail listing={saleListing} currentUser={null} navigate={mockNavigate} />);
     expect(screen.queryByTestId('owner-listing-banner')).not.toBeInTheDocument();
   });
 });
@@ -308,10 +358,13 @@ describe('ListingDetailView - images', () => {
   it('switches main image when thumbnail is clicked', async () => {
     await renderWithAct(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} />);
     const thumbs = screen.getAllByAltText(/thumb-/);
-    await act(async () => {
-      fireEvent.click(thumbs[1]);
-    });
+    await act(async () => { fireEvent.click(thumbs[1]); });
     expect(thumbs[1]).toHaveStyle('border: 2px solid #6AA6DA');
+  });
+
+  it('does not render thumbnail row when only one photo exists', async () => {
+    await renderWithAct(<ListingDetail listing={singlePhotoListing} currentUser={mockBuyer} navigate={mockNavigate} />);
+    expect(screen.queryAllByAltText(/thumb-/)).toHaveLength(0);
   });
 });
 
@@ -355,6 +408,29 @@ describe('ListingDetailView - listing details', () => {
     await renderWithAct(<ListingDetail listing={listingWithAvatar} currentUser={mockBuyer} navigate={mockNavigate} />);
     expect(screen.getByAltText('Test Seller')).toBeInTheDocument();
   });
+
+  it('does not show price for a For Trade listing', async () => {
+    await renderWithAct(<ListingDetail listing={tradeListing} currentUser={mockBuyer} navigate={mockNavigate} />);
+    expect(screen.queryByText(/R 80/)).not.toBeInTheDocument();
+  });
+
+  it('does not render description section when description is absent', async () => {
+    const noDescListing = { ...saleListing, description: undefined };
+    await renderWithAct(<ListingDetail listing={noDescListing} currentUser={mockBuyer} navigate={mockNavigate} />);
+    expect(screen.queryByText(/description/i)).not.toBeInTheDocument();
+  });
+
+  it('does not render specification section when specification is absent', async () => {
+    const noSpecListing = { ...saleListing, specification: undefined };
+    await renderWithAct(<ListingDetail listing={noSpecListing} currentUser={mockBuyer} navigate={mockNavigate} />);
+    expect(screen.queryByText(/specifications/i)).not.toBeInTheDocument();
+  });
+
+  it('falls back to "?" initial when sellerName is absent', async () => {
+    const noNameListing = { ...saleListing, sellerName: undefined };
+    await renderWithAct(<ListingDetail listing={noNameListing} currentUser={mockBuyer} navigate={mockNavigate} />);
+    expect(screen.getByText('?')).toBeInTheDocument();
+  });
 });
 
 // ─── Seller card navigation ───────────────────────────────────────────────────
@@ -362,27 +438,31 @@ describe('ListingDetailView - listing details', () => {
 describe('ListingDetailView - seller card navigation', () => {
   it('navigates to seller profile when buyer clicks seller card', async () => {
     await renderWithAct(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} />);
-    await act(async () => {
-      fireEvent.click(screen.getByTitle('View seller profile'));
-    });
+    await act(async () => { fireEvent.click(screen.getByTitle('View seller profile')); });
     expect(mockNavigate).toHaveBeenCalledWith('/profile/seller-uid');
   });
 
   it('navigates to own profile when seller clicks seller card', async () => {
     await renderWithAct(<ListingDetail listing={saleListing} currentUser={mockSeller} navigate={mockNavigate} />);
-    await act(async () => {
-      fireEvent.click(screen.getByTitle('Go to your profile'));
-    });
+    await act(async () => { fireEvent.click(screen.getByTitle('Go to your profile')); });
     expect(mockNavigate).toHaveBeenCalledWith('/profile');
   });
 
   it('navigates via Enter key on seller card', async () => {
     await renderWithAct(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} />);
     const card = screen.getByTitle('View seller profile');
-    await act(async () => {
-      fireEvent.keyDown(card, { key: 'Enter' });
-    });
+    await act(async () => { fireEvent.keyDown(card, { key: 'Enter' }); });
     expect(mockNavigate).toHaveBeenCalledWith('/profile/seller-uid');
+  });
+
+  it('seller card shows "View profile & ratings →" subtitle for buyer', async () => {
+    await renderWithAct(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} />);
+    expect(screen.getByText('View profile & ratings →')).toBeInTheDocument();
+  });
+
+  it('seller card shows "View your profile →" subtitle for seller', async () => {
+    await renderWithAct(<ListingDetail listing={saleListing} currentUser={mockSeller} navigate={mockNavigate} />);
+    expect(screen.getByText('View your profile →')).toBeInTheDocument();
   });
 });
 
@@ -405,17 +485,11 @@ describe('ListingDetailView - message seller', () => {
   });
 
   it('finds existing chat and navigates when Message Seller clicked', async () => {
-    const mockChatDoc = {
-      id: 'existing-chat',
-      data: () => ({ participants: ['buyer-uid', 'seller-uid'] }),
-    };
+    const mockChatDoc = { id: 'existing-chat', data: () => ({ participants: ['buyer-uid', 'seller-uid'] }) };
     getDocs.mockResolvedValueOnce({ docs: [mockChatDoc] });
 
     await renderWithAct(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} />);
-
-    await act(async () => {
-      fireEvent.click(screen.getByTestId('message-seller-btn'));
-    });
+    await act(async () => { fireEvent.click(screen.getByTestId('message-seller-btn')); });
 
     await waitFor(() => {
       expect(mockNavigate).toHaveBeenCalledWith('/chat?open=existing-chat');
@@ -427,10 +501,7 @@ describe('ListingDetailView - message seller', () => {
     addDoc.mockResolvedValueOnce({ id: 'new-chat-id' });
 
     await renderWithAct(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} />);
-
-    await act(async () => {
-      fireEvent.click(screen.getByTestId('message-seller-btn'));
-    });
+    await act(async () => { fireEvent.click(screen.getByTestId('message-seller-btn')); });
 
     await waitFor(() => {
       expect(addDoc).toHaveBeenCalled();
@@ -439,19 +510,28 @@ describe('ListingDetailView - message seller', () => {
   });
 
   it('shows Opening chat text while loading', async () => {
-    // Never-resolving promise keeps chatLoading = true
     getDocs.mockImplementationOnce(() => new Promise(() => {}));
 
     await renderWithAct(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} />);
-
     await act(async () => {
       fireEvent.click(screen.getByTestId('message-seller-btn'));
-      // Yield to let setChatLoading(true) flush
       await new Promise(r => setTimeout(r, 10));
     });
 
     expect(screen.getByTestId('chat-loading-text')).toBeInTheDocument();
     expect(screen.getByTestId('chat-loading-text')).toHaveTextContent('Opening chat…');
+  });
+
+  it('message-seller-btn is disabled while chat is loading', async () => {
+    getDocs.mockImplementationOnce(() => new Promise(() => {}));
+
+    await renderWithAct(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} />);
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('message-seller-btn'));
+      await new Promise(r => setTimeout(r, 10));
+    });
+
+    expect(screen.getByTestId('message-seller-btn')).toBeDisabled();
   });
 });
 
@@ -460,55 +540,79 @@ describe('ListingDetailView - message seller', () => {
 describe('ListingDetailView - trade transaction', () => {
   it('calls createTransaction with trade type when trade offer confirmed', async () => {
     await renderWithAct(<ListingDetail listing={tradeListing} currentUser={mockBuyer} navigate={mockNavigate} />);
-    
-    await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: /make trade offer/i }));
-    });
-    
-    await act(async () => {
-      const nameInput = screen.getByLabelText(/trade item name/i);
-      fireEvent.change(nameInput, { target: { value: 'My old laptop' } });
-    });
-    
-    await act(async () => {
-      const categorySelect = screen.getByLabelText(/category/i);
-      fireEvent.change(categorySelect, { target: { value: 'Electronics' } });
-    });
-    
-    await act(async () => {
-      const conditionButton = screen.getByRole('button', { name: /condition good/i });
-      fireEvent.click(conditionButton);
-    });
-    
-    await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: /confirm & send offer/i }));
-    });
-    
-    await waitFor(() => {
+
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /make trade offer/i })); });
+    await act(async () => { fireEvent.change(screen.getByLabelText(/trade item name/i), { target: { value: 'My old laptop' } }); });
+    await act(async () => { fireEvent.change(screen.getByLabelText(/category/i), { target: { value: 'Electronics' } }); });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /condition good/i })); });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /confirm & send offer/i })); });
+
+    await waitFor(() =>
       expect(createTransaction).toHaveBeenCalledWith(
-        expect.objectContaining({ 
-          type: 'trade', 
-          tradeItem: expect.objectContaining({ name: 'My old laptop' })
-        })
-      );
-    });
+        expect.objectContaining({ type: 'trade', tradeItem: expect.objectContaining({ name: 'My old laptop' }) })
+      )
+    );
   });
 
   it('shows alert modal when trade item is empty', async () => {
     await renderWithAct(<ListingDetail listing={tradeListing} currentUser={mockBuyer} navigate={mockNavigate} />);
-    
-    await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: /make trade offer/i }));
-    });
-    
-    await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: /confirm & send offer/i }));
-    });
-    
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /make trade offer/i })); });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /confirm & send offer/i })); });
+
     await waitFor(() => {
       expect(screen.getByTestId('alert-modal')).toBeInTheDocument();
       expect(screen.getByTestId('alert-message')).toHaveTextContent('Please describe what you want to trade');
     });
+  });
+
+  it('includes tradeItem.category in createTransaction payload', async () => {
+    await renderWithAct(<ListingDetail listing={tradeListing} currentUser={mockBuyer} navigate={mockNavigate} />);
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /make trade offer/i })); });
+    await act(async () => { fireEvent.change(screen.getByLabelText(/trade item name/i), { target: { value: 'Keyboard' } }); });
+    await act(async () => { fireEvent.change(screen.getByLabelText(/category/i), { target: { value: 'Electronics' } }); });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /confirm & send offer/i })); });
+
+    await waitFor(() =>
+      expect(createTransaction).toHaveBeenCalledWith(
+        expect.objectContaining({ tradeItem: expect.objectContaining({ category: 'Electronics' }) })
+      )
+    );
+  });
+
+  it('includes tradeItem.condition when a condition is selected', async () => {
+    await renderWithAct(<ListingDetail listing={tradeListing} currentUser={mockBuyer} navigate={mockNavigate} />);
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /make trade offer/i })); });
+    await act(async () => { fireEvent.change(screen.getByLabelText(/trade item name/i), { target: { value: 'Keyboard' } }); });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /condition like new/i })); });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /confirm & send offer/i })); });
+
+    await waitFor(() =>
+      expect(createTransaction).toHaveBeenCalledWith(
+        expect.objectContaining({ tradeItem: expect.objectContaining({ condition: 'Like New' }) })
+      )
+    );
+  });
+
+  it('trade condition buttons render all five options', async () => {
+    await renderWithAct(<ListingDetail listing={tradeListing} currentUser={mockBuyer} navigate={mockNavigate} />);
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /make trade offer/i })); });
+
+    for (const label of ['Condition New', 'Condition Like New', 'Condition Good', 'Condition Fair', 'Condition Poor']) {
+      expect(screen.getByRole('button', { name: new RegExp(label, 'i') })).toBeInTheDocument();
+    }
+  });
+
+  it('tradeItem.imageUrl is null when no image is uploaded', async () => {
+    await renderWithAct(<ListingDetail listing={tradeListing} currentUser={mockBuyer} navigate={mockNavigate} />);
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /make trade offer/i })); });
+    await act(async () => { fireEvent.change(screen.getByLabelText(/trade item name/i), { target: { value: 'Keyboard' } }); });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /confirm & send offer/i })); });
+
+    await waitFor(() =>
+      expect(createTransaction).toHaveBeenCalledWith(
+        expect.objectContaining({ tradeItem: expect.objectContaining({ imageUrl: null }) })
+      )
+    );
   });
 });
 
@@ -517,39 +621,131 @@ describe('ListingDetailView - trade transaction', () => {
 describe('ListingDetailView - partial payment', () => {
   it('shows partial amount input when Partial Online selected', async () => {
     await renderWithAct(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} />);
-    
-    await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: /buy now/i }));
-    });
-    
-    await act(async () => {
-      fireEvent.change(screen.getByLabelText(/payment method/i), { target: { value: 'partial' } });
-    });
-    
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /buy now/i })); });
+    await act(async () => { fireEvent.change(screen.getByLabelText(/payment method/i), { target: { value: 'partial' } }); });
     expect(screen.getByLabelText(/online payment amount/i)).toBeInTheDocument();
   });
 
   it('calls createTransaction with partialAmount when partial payment used', async () => {
     await renderWithAct(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} />);
-    
-    await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: /buy now/i }));
-    });
-    
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /buy now/i })); });
     await act(async () => {
       fireEvent.change(screen.getByLabelText(/payment method/i), { target: { value: 'partial' } });
       fireEvent.change(screen.getByLabelText(/online payment amount/i), { target: { value: '75' } });
     });
-    
-    await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: /confirm & send offer/i }));
-    });
-    
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /confirm & send offer/i })); });
+
     await waitFor(() =>
       expect(createTransaction).toHaveBeenCalledWith(
         expect.objectContaining({ paymentType: 'partial', partialAmount: 75 })
       )
     );
+  });
+
+  it('shows alert when partial amount is below R10', async () => {
+    await renderWithAct(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} />);
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /buy now/i })); });
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText(/payment method/i), { target: { value: 'partial' } });
+      fireEvent.change(screen.getByLabelText(/online payment amount/i), { target: { value: '5' } });
+    });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /confirm & send offer/i })); });
+
+    await waitFor(() => expect(screen.getByTestId('alert-modal')).toBeInTheDocument());
+  });
+
+  it('shows alert when partial amount equals total agreed price', async () => {
+    await renderWithAct(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} />);
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /buy now/i })); });
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText(/payment method/i), { target: { value: 'partial' } });
+    });
+
+    // Type the full agreed price (150) directly into the partial amount field
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText(/online payment amount/i), { target: { value: '150' } });
+    });
+
+    await waitFor(() => expect(screen.getByTestId('alert-modal')).toBeInTheDocument());
+  });
+
+  it('shows cash remainder label when partial amount entered', async () => {
+    await renderWithAct(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} />);
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /buy now/i })); });
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText(/payment method/i), { target: { value: 'partial' } });
+      fireEvent.change(screen.getByLabelText(/online payment amount/i), { target: { value: '50' } });
+    });
+    expect(screen.getByText(/cash amount to pay on delivery/i)).toBeInTheDocument();
+  });
+
+  it('partial payment input is not shown when Full Cash is selected', async () => {
+    await renderWithAct(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} />);
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /buy now/i })); });
+    await act(async () => { fireEvent.change(screen.getByLabelText(/payment method/i), { target: { value: 'cash' } }); });
+    expect(screen.queryByLabelText(/online payment amount/i)).not.toBeInTheDocument();
+  });
+
+  it('createTransaction paymentMethod is "cod" when Full Cash on Delivery is chosen', async () => {
+    await renderWithAct(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} />);
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /buy now/i })); });
+    await act(async () => { fireEvent.change(screen.getByLabelText(/payment method/i), { target: { value: 'cash' } }); });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /confirm & send offer/i })); });
+
+    await waitFor(() =>
+      expect(createTransaction).toHaveBeenCalledWith(
+        expect.objectContaining({ paymentMethod: 'cod' })
+      )
+    );
+  });
+
+  it('createTransaction paymentMethod is "online" when Fully Online is chosen', async () => {
+    await renderWithAct(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} />);
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /buy now/i })); });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /confirm & send offer/i })); });
+
+    await waitFor(() =>
+      expect(createTransaction).toHaveBeenCalledWith(
+        expect.objectContaining({ paymentMethod: 'online' })
+      )
+    );
+  });
+});
+
+// ─── Agreed price validation ──────────────────────────────────────────────────
+
+describe('ListingDetailView - agreed price validation', () => {
+  it('shows alert when agreed price is below R10', async () => {
+    await renderWithAct(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} />);
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /buy now/i })); });
+    await act(async () => { fireEvent.change(screen.getByLabelText(/agreed price/i), { target: { value: '5' } }); });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /confirm & send offer/i })); });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('alert-modal')).toBeInTheDocument();
+      expect(screen.getByTestId('alert-message')).toHaveTextContent('Agreed price must be at least R10');
+    });
+  });
+
+  it('does not call createTransaction when price validation fails', async () => {
+    await renderWithAct(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} />);
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /buy now/i })); });
+    await act(async () => { fireEvent.change(screen.getByLabelText(/agreed price/i), { target: { value: '0' } }); });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /confirm & send offer/i })); });
+
+    await waitFor(() => expect(screen.getByTestId('alert-modal')).toBeInTheDocument());
+    expect(createTransaction).not.toHaveBeenCalled();
+  });
+
+  it('alert modal closes when OK button is clicked', async () => {
+    await renderWithAct(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} />);
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /buy now/i })); });
+    await act(async () => { fireEvent.change(screen.getByLabelText(/agreed price/i), { target: { value: '5' } }); });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /confirm & send offer/i })); });
+
+    await waitFor(() => expect(screen.getByTestId('alert-modal')).toBeInTheDocument());
+    await act(async () => { fireEvent.click(screen.getByTestId('alert-close-btn')); });
+    expect(screen.queryByTestId('alert-modal')).not.toBeInTheDocument();
   });
 });
 
@@ -558,36 +754,46 @@ describe('ListingDetailView - partial payment', () => {
 describe('ListingDetailView - offer sent', () => {
   it('shows pending banner after offer is successfully sent', async () => {
     await renderWithAct(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} />);
-    
-    await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: /buy now/i }));
-    });
-    
-    await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: /confirm & send offer/i }));
-    });
-    
-    await waitFor(() =>
-      expect(screen.getByTestId('pending-offer-banner')).toBeInTheDocument()
-    );
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /buy now/i })); });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /confirm & send offer/i })); });
+
+    await waitFor(() => expect(screen.getByTestId('pending-offer-banner')).toBeInTheDocument());
   });
 
   it('shows error toast when createTransaction fails', async () => {
     createTransaction.mockRejectedValueOnce(new Error('Network error'));
-    
+
     await renderWithAct(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} />);
-    
-    await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: /buy now/i }));
-    });
-    
-    await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: /confirm & send offer/i }));
-    });
-    
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /buy now/i })); });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /confirm & send offer/i })); });
+
     await waitFor(() => {
       expect(screen.getByText('Failed to create offer. Please try again.')).toBeInTheDocument();
     });
+  });
+
+  it('does not show pending banner when createTransaction fails', async () => {
+    createTransaction.mockRejectedValueOnce(new Error('Network error'));
+
+    await renderWithAct(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} />);
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /buy now/i })); });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /confirm & send offer/i })); });
+
+    await waitFor(() => expect(screen.getByText('Failed to create offer. Please try again.')).toBeInTheDocument());
+    expect(screen.queryByTestId('pending-offer-banner')).not.toBeInTheDocument();
+  });
+
+  it('buy button re-enables after a failed submission', async () => {
+    createTransaction.mockRejectedValueOnce(new Error('fail'));
+
+    await renderWithAct(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} />);
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /buy now/i })); });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /confirm & send offer/i })); });
+
+    await waitFor(() => expect(screen.queryByText(/sending offer/i)).not.toBeInTheDocument());
+
+    // Confirm modal still open with enabled submit button after failure
+    expect(screen.getByRole('button', { name: /confirm & send offer/i })).not.toBeDisabled();
   });
 });
 
@@ -596,69 +802,260 @@ describe('ListingDetailView - offer sent', () => {
 describe('ListingDetailView - terms field', () => {
   it('renders terms textarea in modal', async () => {
     await renderWithAct(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} />);
-    
-    await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: /buy now/i }));
-    });
-    
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /buy now/i })); });
     expect(screen.getByPlaceholderText(/seller agreed to include charger/i)).toBeInTheDocument();
   });
 
   it('passes terms value to createTransaction', async () => {
     await renderWithAct(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} />);
-    
-    await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: /buy now/i }));
-    });
-    
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /buy now/i })); });
     await act(async () => {
       fireEvent.change(screen.getByPlaceholderText(/seller agreed to include charger/i), { target: { value: 'Include charger' } });
     });
-    
-    await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: /confirm & send offer/i }));
-    });
-    
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /confirm & send offer/i })); });
+
     await waitFor(() =>
       expect(createTransaction).toHaveBeenCalledWith(
         expect.objectContaining({ terms: 'Include charger' })
       )
     );
   });
+
+  it('passes null terms when field is left blank', async () => {
+    await renderWithAct(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} />);
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /buy now/i })); });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /confirm & send offer/i })); });
+
+    await waitFor(() =>
+      expect(createTransaction).toHaveBeenCalledWith(
+        expect.objectContaining({ terms: null })
+      )
+    );
+  });
 });
 
-// ─── Final coverage gaps ──────────────────────────────────────────────────────
+// ─── Withdraw offer ───────────────────────────────────────────────────────────
+
+describe('ListingDetailView - withdraw offer', () => {
+  it('shows confirmation prompt when Withdraw offer is clicked', async () => {
+    await renderWithAct(<ListingDetail listing={saleListing} currentUser={mockBuyer} existingTransaction={pendingTransaction} navigate={mockNavigate} />);
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /withdraw offer/i })); });
+    expect(screen.getByText(/are you sure you want to withdraw/i)).toBeInTheDocument();
+  });
+
+  it('shows "Yes, withdraw" and "Keep offer" buttons in confirmation state', async () => {
+    await renderWithAct(<ListingDetail listing={saleListing} currentUser={mockBuyer} existingTransaction={pendingTransaction} navigate={mockNavigate} />);
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /withdraw offer/i })); });
+    expect(screen.getByRole('button', { name: /yes, withdraw/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /keep offer/i })).toBeInTheDocument();
+  });
+
+  it('"Keep offer" cancels the confirmation and reverts to Withdraw offer button', async () => {
+    await renderWithAct(<ListingDetail listing={saleListing} currentUser={mockBuyer} existingTransaction={pendingTransaction} navigate={mockNavigate} />);
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /withdraw offer/i })); });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /keep offer/i })); });
+    expect(screen.getByRole('button', { name: /withdraw offer/i })).toBeInTheDocument();
+    expect(screen.queryByText(/are you sure/i)).not.toBeInTheDocument();
+  });
+
+  it('calls deleteDoc and deleteNewOfferNotification when withdrawal is confirmed', async () => {
+    await renderWithAct(<ListingDetail listing={saleListing} currentUser={mockBuyer} existingTransaction={pendingTransaction} navigate={mockNavigate} />);
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /withdraw offer/i })); });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /yes, withdraw/i })); });
+
+    await waitFor(() => {
+      expect(deleteDoc).toHaveBeenCalledTimes(1);
+      expect(deleteNewOfferNotification).toHaveBeenCalledWith('tx-existing');
+    });
+  });
+});
+
+// ─── Favourites ───────────────────────────────────────────────────────────────
+
+describe('ListingDetailView - favourites', () => {
+  it('renders Add to favourites button for a logged-in buyer', async () => {
+    await renderWithAct(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} />);
+    expect(screen.getByText('Add to favourites')).toBeInTheDocument();
+  });
+
+  it('does not render favourites button when not logged in', async () => {
+    await renderWithAct(<ListingDetail listing={saleListing} currentUser={null} navigate={mockNavigate} />);
+    expect(screen.queryByText('Add to favourites')).not.toBeInTheDocument();
+  });
+
+  it('does not render favourites button for the seller', async () => {
+    await renderWithAct(<ListingDetail listing={saleListing} currentUser={mockSeller} navigate={mockNavigate} />);
+    expect(screen.queryByText('Add to favourites')).not.toBeInTheDocument();
+  });
+
+  it('shows Remove from favourites when listing is already favourited', async () => {
+    getDoc.mockResolvedValueOnce({
+      exists: () => true,
+      data:   () => ({ items: ['listing-123'] }),
+    });
+
+    await renderWithAct(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} />);
+    await waitFor(() => expect(screen.getByText('Remove from favourites')).toBeInTheDocument());
+  });
+
+  it('calls setDoc when a new favourites cart does not exist yet', async () => {
+    getDoc
+      .mockResolvedValueOnce({ exists: () => false, data: () => ({}) }) // initial check
+      .mockResolvedValueOnce({ exists: () => false, data: () => ({}) }); // toggle click
+
+    await renderWithAct(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} />);
+    await act(async () => { fireEvent.click(screen.getByText('Add to favourites')); });
+
+    await waitFor(() => expect(setDoc).toHaveBeenCalledTimes(1));
+  });
+
+  it('calls updateDoc with arrayRemove when unfavouriting', async () => {
+    getDoc
+      .mockResolvedValueOnce({ exists: () => true, data: () => ({ items: ['listing-123'] }) })
+      .mockResolvedValueOnce({ exists: () => true, data: () => ({ items: ['listing-123'] }) });
+
+    await renderWithAct(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} />);
+    await waitFor(() => expect(screen.getByText('Remove from favourites')).toBeInTheDocument());
+
+    await act(async () => { fireEvent.click(screen.getByText('Remove from favourites')); });
+
+    await waitFor(() => expect(updateDoc).toHaveBeenCalledTimes(1));
+  });
+});
+
+// ─── Report listing ───────────────────────────────────────────────────────────
+
+describe('ListingDetailView - report listing', () => {
+  it('renders Report Listing button for a logged-in buyer', async () => {
+    await renderWithAct(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} />);
+    expect(screen.getByText('Report Listing')).toBeInTheDocument();
+  });
+
+  it('does not render Report Listing button when not logged in', async () => {
+    await renderWithAct(<ListingDetail listing={saleListing} currentUser={null} navigate={mockNavigate} />);
+    expect(screen.queryByText('Report Listing')).not.toBeInTheDocument();
+  });
+
+  it('does not render Report Listing button for the seller', async () => {
+    await renderWithAct(<ListingDetail listing={saleListing} currentUser={mockSeller} navigate={mockNavigate} />);
+    expect(screen.queryByText('Report Listing')).not.toBeInTheDocument();
+  });
+
+  it('opens ReportModal when Report Listing is clicked', async () => {
+    await renderWithAct(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} />);
+    await act(async () => { fireEvent.click(screen.getByText('Report Listing')); });
+    expect(screen.getByTestId('report-modal')).toBeInTheDocument();
+  });
+
+  it('report modal shows the listing title', async () => {
+    await renderWithAct(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} />);
+    await act(async () => { fireEvent.click(screen.getByText('Report Listing')); });
+    expect(screen.getByTestId('report-modal')).toHaveTextContent('Calculus Textbook');
+  });
+});
+
+// ─── Admin preview ────────────────────────────────────────────────────────────
+
+describe('ListingDetailView - admin preview', () => {
+  it('shows "Admin preview" banner when isAdminPreview is true', async () => {
+    await renderWithAct(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} isAdminPreview={true} />);
+    expect(screen.getByText('Admin preview')).toBeInTheDocument();
+  });
+
+  it('hides buy button in admin preview mode', async () => {
+    await renderWithAct(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} isAdminPreview={true} />);
+    expect(screen.queryByRole('button', { name: /buy now/i })).not.toBeInTheDocument();
+  });
+
+  it('hides Message Seller button in admin preview mode', async () => {
+    await renderWithAct(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} isAdminPreview={true} />);
+    expect(screen.queryByTestId('message-seller-btn')).not.toBeInTheDocument();
+  });
+
+  it('hides Report Listing button in admin preview mode', async () => {
+    await renderWithAct(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} isAdminPreview={true} />);
+    expect(screen.queryByText('Report Listing')).not.toBeInTheDocument();
+  });
+
+  it('hides owner banner in admin preview mode even when seller views it', async () => {
+    await renderWithAct(<ListingDetail listing={saleListing} currentUser={mockSeller} navigate={mockNavigate} isAdminPreview={true} />);
+    expect(screen.queryByTestId('owner-listing-banner')).not.toBeInTheDocument();
+  });
+
+  it('hides seller card in admin preview mode', async () => {
+    await renderWithAct(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} isAdminPreview={true} />);
+    expect(screen.queryByTitle('View seller profile')).not.toBeInTheDocument();
+  });
+
+  it('shows "Back to reports" button in admin preview mode', async () => {
+    await renderWithAct(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} isAdminPreview={true} />);
+    expect(screen.getByRole('button', { name: /back to reports/i })).toBeInTheDocument();
+  });
+
+  it('calls navigate(-1) when Back to reports is clicked in admin preview', async () => {
+    await renderWithAct(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} isAdminPreview={true} />);
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /back to reports/i })); });
+    expect(mockNavigate).toHaveBeenCalledWith(-1);
+  });
+});
+
+// ─── Edge cases ───────────────────────────────────────────────────────────────
 
 describe('ListingDetailView - edge cases', () => {
-  it('line 79 — does not show Message Seller button when buyer is the seller', async () => {
+  it('does not show Message Seller button when buyer is the seller', async () => {
     const selfListing = { ...saleListing, sellerId: 'buyer-uid' };
     await renderWithAct(<ListingDetail listing={selfListing} currentUser={mockBuyer} navigate={mockNavigate} />);
     expect(screen.queryByText('Message Seller')).not.toBeInTheDocument();
     expect(screen.getByTestId('owner-listing-banner')).toBeInTheDocument();
   });
 
-  it('line 157 — shows alert modal when no purchase type selected and confirm clicked', async () => {
+  it('shows alert modal when no purchase type selected and confirm clicked', async () => {
     await renderWithAct(<ListingDetail listing={eitherListing} currentUser={mockBuyer} navigate={mockNavigate} />);
-    
-    await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: /buy now \/ make trade offer/i }));
-    });
-    
-    await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: /confirm & send offer/i }));
-    });
-    
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /buy now \/ make trade offer/i })); });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /confirm & send offer/i })); });
+
     await waitFor(() => {
       expect(screen.getByTestId('alert-modal')).toBeInTheDocument();
       expect(screen.getByTestId('alert-message')).toHaveTextContent('Please select a transaction type');
     });
   });
 
-  it('line 332 — renders nothing for unrecognised listing type', async () => {
+  it('renders nothing for unrecognised listing type', async () => {
     const unknownListing = { ...saleListing, type: 'Unknown Type', listingType: 'Unknown Type' };
     await renderWithAct(<ListingDetail listing={unknownListing} currentUser={mockBuyer} navigate={mockNavigate} />);
     expect(screen.queryByRole('button', { name: /buy now/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /make trade offer/i })).not.toBeInTheDocument();
     expect(screen.queryByTestId('pending-offer-banner')).not.toBeInTheDocument();
+  });
+
+  it('uses sellerUID field as fallback when sellerId is absent', async () => {
+    const uidListing = { ...saleListing, sellerId: undefined, sellerUID: 'seller-uid' };
+    await renderWithAct(<ListingDetail listing={uidListing} currentUser={mockSeller} navigate={mockNavigate} />);
+    expect(screen.getByTestId('owner-listing-banner')).toBeInTheDocument();
+  });
+
+  it('createTransaction payload has status "pending"', async () => {
+    await renderWithAct(<ListingDetail listing={saleListing} currentUser={mockBuyer} navigate={mockNavigate} />);
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /buy now/i })); });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /confirm & send offer/i })); });
+
+    await waitFor(() =>
+      expect(createTransaction).toHaveBeenCalledWith(
+        expect.objectContaining({ status: 'pending' })
+      )
+    );
+  });
+
+  it('createTransaction buyerName falls back to "Student" when displayName is absent', async () => {
+    const noNameUser = { uid: 'buyer-uid', displayName: undefined };
+    await renderWithAct(<ListingDetail listing={saleListing} currentUser={noNameUser} navigate={mockNavigate} />);
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /buy now/i })); });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /confirm & send offer/i })); });
+
+    await waitFor(() =>
+      expect(createTransaction).toHaveBeenCalledWith(
+        expect.objectContaining({ buyerName: 'Student' })
+      )
+    );
   });
 });
