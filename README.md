@@ -58,6 +58,10 @@ npm install
 ### 2. Environment Variables
 The `.env` file contains sensitive credentials and is not committed to the repository. A restricted Google Drive link containing the `.env` file has been shared with reviewers via Moodle submissions — download it and place it in the root of the project before running the app.
 
+> If you have not received access to the Google Drive link, please contact the project team.
+
+> **Note:** Contact the project team for the actual environment variable values — they are not committed to the repository for security reasons.
+
 ### 3. Run the Backend
 The backend is a Python FastAPI server and must be running before the frontend will function correctly. Open a **separate terminal** in the project root and run:
 
