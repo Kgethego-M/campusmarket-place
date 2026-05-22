@@ -72,6 +72,7 @@ The `.env` file contains sensitive credentials and is not committed to the repos
 The backend is a Python FastAPI server and must be running before the frontend will function correctly. Open a **separate terminal** in the project root and run:
 
 ```bash
+cd backend
 python -m uvicorn main:app --reload --port 8000
 ```
 
