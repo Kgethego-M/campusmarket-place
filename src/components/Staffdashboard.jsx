@@ -2369,8 +2369,8 @@ export default function StaffDashboard() {
     const STATS = [
         { label: "Pending Drop-off",    value: pendingDropOff.length,  icon: "fa-truck-arrow-right",  color: "#f59e0b" },
         { label: "Awaiting Collection", value: awaitingCollCount,       icon: "fa-person-walking",     color: "#8b5cf6" },
-        { label: "Overdue", value: overdueCount, icon: "fa-circle-exclamation", color: "#ef4444", onClick: () => setActiveTab("overdue") },
-        { label: "Awaiting Returns",    value: awaitingReturns.length,  icon: "fa-box-archive",        color: "#0891b2", onClick: () => setActiveTab("awaiting_returns") },
+        { label: "Overdue", value: overdueCount, icon: "fa-circle-exclamation", color: "#ef4444" },
+        { label: "Awaiting Returns",    value: awaitingReturns.length,  icon: "fa-box-archive",        color: "#0891b2" },
         { label: "Completed",           value: completed.length,        icon: "fa-circle-check",       color: "#10b981" },
     ];
 

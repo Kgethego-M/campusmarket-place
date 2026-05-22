@@ -1,7 +1,6 @@
-// src/components/PromoteSuccess.jsx
-import { useEffect, useState } from "react";
+import { useState, useEffect } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
-import { getFirestore, doc, getDoc, setDoc, collection } from "firebase/firestore";
+import { getFirestore, doc, getDoc, setDoc, collection, updateDoc, increment } from "firebase/firestore";
 import { recordAdPayment } from "../services/revenueService";
 import NavBar from "../components/NavBarTemp";
 import styles from "./Payment.module.css";
@@ -12,7 +11,6 @@ export default function PromoteSuccess() {
   const [listing, setListing] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [adCreated, setAdCreated] = useState(false);
 
   const listingId       = searchParams.get("lid");
   const adType          = searchParams.get("type");
@@ -20,11 +18,9 @@ export default function PromoteSuccess() {
   const titleParam      = searchParams.get("title");
   const sessionId       = searchParams.get("session_id");
   const amountParam     = searchParams.get("amount");
-  const amountRand = parseFloat(searchParams.get("price") || "0");
+  const amountRand      = parseFloat(searchParams.get("price") || "0");
   const isWallet        = searchParams.get("wallet") === "true";
 
-  // For wallet payments there is no Stripe session — use listingId + adType
-  // as the idempotency key so the ad is never double-created.
   const uniquePaymentId = isWallet
     ? `wallet_${listingId}_${adType}`
     : (sessionId || stripeRef);
@@ -36,7 +32,6 @@ export default function PromoteSuccess() {
       return;
     }
 
-    // Wallet payments don't need a payment reference — listingId is enough
     if (!isWallet && !uniquePaymentId) {
       setLoading(false);
       setError("Missing payment information.");
@@ -65,67 +60,62 @@ export default function PromoteSuccess() {
         const adDocRef = doc(db, "ads", uniquePaymentId);
         const existingAd = await getDoc(adDocRef);
 
-        if (!existingAd.exists()) {
-          const listingRef = doc(db, "listings", listingId);
-          const listingSnap = await getDoc(listingRef);
-          if (!listingSnap.exists()) throw new Error("Listing not found");
-          const listingData = listingSnap.data();
-          if (isMounted) setListing(listingData);
+        // Always fetch listing data upfront so it's available everywhere below
+        const listingRef  = doc(db, "listings", listingId);
+        const listingSnap = await getDoc(listingRef);
+        if (!listingSnap.exists()) throw new Error("Listing not found");
+        const listingData = listingSnap.data();
+        if (isMounted) setListing(listingData);
 
-          const adData = {
-            listingId,
-            title: listingData.title || titleParam || "Listing",
-            imageUrl: listingData.photos?.[0] || listingData.imageUrl || null,
-            price: listingData.price,
-            type: adType || "banner",
-            status: "active",
-            createdAt: new Date(),
-            expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-            stripeSessionId: uniquePaymentId,
-          };
+        // Build ad payload once so it's available for both create and revenue paths
+        const adData = {
+          listingId,
+          title:           listingData.title || titleParam || "Listing",
+          imageUrl:        listingData.photos?.[0] || listingData.imageUrl || null,
+          price:           listingData.price,
+          type:            adType || "banner",
+          status:          "active",
+          createdAt:       new Date(),
+          expiresAt:       new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+          stripeSessionId: uniquePaymentId,
+        };
+
+        if (!existingAd.exists()) {
           await setDoc(adDocRef, adData);
           console.log("✅ Ad created with ID:", uniquePaymentId);
-        } else {
-          const listingRef = doc(db, "listings", listingId);
-          const listingSnap = await getDoc(listingRef);
-          if (listingSnap.exists()) setListing(listingSnap.data());
         }
 
-        // Your ad revenue write (for admin dashboard)
-        const revenueRef = doc(collection(db, "adRevenue"));
+        // Write ad revenue record
+        const revenueRef  = doc(collection(db, "adRevenue"));
         const revenueData = {
-          amount: amountRand,
+          amount:          amountRand,
           listingId,
           adType,
           paymentMethod:   isWallet ? "wallet" : "stripe",
           stripeSessionId: isWallet ? null : uniquePaymentId,
-          createdAt: new Date(),
+          createdAt:       new Date(),
           sellerId:        listingData.sellerId ?? listingData.userId ?? null,
         };
-        await setDoc(adDocRef, adData);
         await setDoc(revenueRef, revenueData);
-        console.log("✅ Ad created");
+        console.log("✅ Ad revenue recorded");
 
-        // ── Update analytics revenue (Stripe payments only) ───────────────
-        // Wallet payments already deducted from the user's balance in
-        // AdPayment.jsx via deductAdFromWallet — no need to touch analytics
-        // here for wallet. Only update for Stripe payments.
+        // Update analytics (Stripe payments only — wallet already handled in AdPayment.jsx)
         if (!isWallet) {
           const adAmount = amountParam ? Number(amountParam) : amountRand;
           if (adAmount > 0) {
             try {
               const recorded = await recordAdPayment(uniquePaymentId, adAmount, {
                 listingId,
-                adType: adType || "banner",
-                title: listing?.title || titleParam || "Listing",
+                adType:  adType || "banner",
+                title:   listingData.title || titleParam || "Listing",
               });
-              if (recorded) {
-                console.log(`📊 Ad payment of R${adAmount} recorded in analytics`);
-              } else {
-                console.log("⚠️ Ad payment already recorded (idempotent check)");
-              }
-              const analyticsRef = doc(db, "analytics", "platform");
-              const analyticsSnap = await getDoc(analyticsRef)
+              console.log(recorded
+                ? `📊 Ad payment of R${adAmount} recorded`
+                : "⚠️ Ad payment already recorded (idempotent)"
+              );
+
+              const analyticsRef  = doc(db, "analytics", "platform");
+              const analyticsSnap = await getDoc(analyticsRef);
 
               if (analyticsSnap.exists()) {
                 await updateDoc(analyticsRef, {
@@ -153,7 +143,6 @@ export default function PromoteSuccess() {
           }
         }
 
-        setAdCreated(true);
       } catch (err) {
         console.error("Ad creation error:", err);
         if (isMounted) {
@@ -166,7 +155,7 @@ export default function PromoteSuccess() {
 
     createAdAndRevenue();
     return () => { isMounted = false; };
-  }, [listingId, adType, titleParam, uniquePaymentId, amountRand, amountParam, isWallet, listing]);
+  }, [listingId, adType, titleParam, uniquePaymentId, amountRand, amountParam, isWallet]);
 
   if (loading) {
     return (
@@ -187,8 +176,8 @@ export default function PromoteSuccess() {
     );
   }
 
-  const displayTitle = listing?.title || titleParam || "Your listing";
-  const displayImage = listing?.photos?.[0] || listing?.imageUrl || null;
+  const displayTitle     = listing?.title || titleParam || "Your listing";
+  const displayImage     = listing?.photos?.[0] || listing?.imageUrl || null;
   const displayPaymentId = (!isWallet && uniquePaymentId?.length > 30)
     ? `${uniquePaymentId.substring(0, 15)}...${uniquePaymentId.substring(uniquePaymentId.length - 10)}`
     : uniquePaymentId;
@@ -215,7 +204,6 @@ export default function PromoteSuccess() {
               </div>
             )}
 
-            {/* Payment confirmation — wallet vs Stripe */}
             <div className={styles.paymentRefBox}>
               <div className={styles.paymentRefIcon}>
                 <i className={isWallet ? "fas fa-wallet" : "fas fa-receipt"} />
