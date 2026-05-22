@@ -1,23 +1,26 @@
 import { useState } from "react";
 import { signInWithPopup, signOut, GoogleAuthProvider } from "firebase/auth";
 import { doc, getDoc, setDoc } from "firebase/firestore";
-import { auth, db, isValidWitsEmail, getUserType } from "../firebase";
+import {
+  auth, db,
+  isValidWitsEmail,
+  isWhitelistedStaff,
+  isWhitelistedAdmin,
+  isWhitelistedStudent,
+} from "../firebase";
 import Message from "./Message";
 
-const WHITELISTED_GMAILS = [
-  'nontokozombatha797@gmail.com', 's08027456@gmail.com',
-  'tshegomaphefo48@gmail.com',   'hyginusvictor11@gmail.com','2826102@students.wits.ac.za',
-  'dantesebopela@gmail.com',     'kgethim25.o@gmail.com',
-  'mphelanekgethego20060325@gmail.com', 'anelevanwyk49@gmail.com', 'nhlanhla.mkosi@wits.ac.za',
-  'mbathamathamsanqa@gmail.com', 'masegelakamogelo5@gmail.com', 'hyginusvictor7@gmail.com',
-  'kgethie35@gmail.com',         'lialabelle71@gmail.com', 'hyginusvictor7@gmail.com'
-];
+// ── Email-type checks ─────────────────────────────────────────────────────────
+const isStudentEmail = (email) =>
+  email.endsWith('@students.wits.ac.za') || isWhitelistedStudent(email);
 
-const isWhitelisted  = (email) => WHITELISTED_GMAILS.includes(email);
-const isStudentEmail = (email) => email.endsWith('@students.wits.ac.za');
-const isStaffEmail   = (email) => email.endsWith('@wits.ac.za') && !isStudentEmail(email) && isWhitelisted;
-const isAdminEmail   = (email) => email.endsWith('@gmail.com');
+const isStaffEmail = (email) =>
+  (email.endsWith('@wits.ac.za') && !email.endsWith('@students.wits.ac.za')) ||
+  isWhitelistedStaff(email);
 
+const isAdminEmail = (email) => isWhitelistedAdmin(email);
+
+// ── Styles ────────────────────────────────────────────────────────────────────
 const styles = `
   .role-btn {
     display: flex;
@@ -76,6 +79,14 @@ const GoogleSVG = () => (
   </svg>
 );
 
+const popupStyles = {
+  overlay: { position:'fixed', inset:0, backgroundColor:'rgba(0,0,0,0.45)', display:'flex', justifyContent:'center', alignItems:'center', zIndex:1000 },
+  popup:   { background:'#fff', borderRadius:'14px', padding:'28px 36px', boxShadow:'0 12px 48px rgba(0,0,0,0.18)', minWidth:'210px', textAlign:'center', display:'flex', flexDirection:'column', alignItems:'center', gap:'10px' },
+  spinner: { fontSize:'1.8rem', color:'#6AA6DA' },
+  text:    { color:'#6b7280', fontSize:'0.88rem', margin:0 },
+};
+
+// ── Component ─────────────────────────────────────────────────────────────────
 export default function LoginForm({ onSwitchToSignup, onLoginSuccess }) {
   const [msg,       setMsg]       = useState({ text: "", error: false });
   const [loading,   setLoading]   = useState(false);
@@ -95,7 +106,7 @@ export default function LoginForm({ onSwitchToSignup, onLoginSuccess }) {
       const user   = result.user;
       const email  = user.email;
 
-      /* ── 1. Validate email is allowed at all ── */
+      // ── 1. Email must be a valid Wits or whitelisted address ──
       if (!isValidWitsEmail(email)) {
         await signOut(auth);
         setShowPopup(false);
@@ -103,36 +114,29 @@ export default function LoginForm({ onSwitchToSignup, onLoginSuccess }) {
         return;
       }
 
-      /* ── 2. Validate email matches chosen role ── */
-      const expectedRole = isWhitelisted(email) ? getUserType(email) : null;
-
-      if (selectedRole === 'student') {
-        const allowed = isStudentEmail(email) || expectedRole === 'student';
-        if (!allowed) {
-          await signOut(auth);
-          setShowPopup(false);
-          show(`Student login requires a @students.wits.ac.za email. You used: ${email}`, true);
-          return;
-        }
-      } else if (selectedRole === 'staff') {
-        const allowed = isStaffEmail(email) || expectedRole === 'staff';
-        if (!allowed) {
-          await signOut(auth);
-          setShowPopup(false);
-          show(`Staff login requires a @wits.ac.za email. You used: ${email}`, true);
-          return;
-        }
-      } else if (selectedRole === 'admin') {
-        const allowed = isWhitelisted(email) && expectedRole === 'admin';
-        if (!allowed) {
-          await signOut(auth);
-          setShowPopup(false);
-          show(`Admin login requires an approved email address. You used: ${email}`, true);
-          return;
-        }
+      // ── 2. Email must match the chosen role ──
+      if (selectedRole === 'student' && !isStudentEmail(email)) {
+        await signOut(auth);
+        setShowPopup(false);
+        show(`Student login requires a @students.wits.ac.za or approved student email. You used: ${email}`, true);
+        return;
       }
 
-      /* ── 3. Account must already exist ── */
+      if (selectedRole === 'staff' && !isStaffEmail(email)) {
+        await signOut(auth);
+        setShowPopup(false);
+        show(`Staff login requires a @wits.ac.za or approved staff email. You used: ${email}`, true);
+        return;
+      }
+
+      if (selectedRole === 'admin' && !isAdminEmail(email)) {
+        await signOut(auth);
+        setShowPopup(false);
+        show(`Admin login requires an approved admin email. You used: ${email}`, true);
+        return;
+      }
+
+      // ── 3. Account must already exist in Firestore ──
       const docRef  = doc(db, "users", user.uid);
       const docSnap = await getDoc(docRef);
 
@@ -143,10 +147,9 @@ export default function LoginForm({ onSwitchToSignup, onLoginSuccess }) {
         return;
       }
 
-      /* ── 4. Persist login ── */
+      // ── 4. Persist login and proceed ──
       const userData = docSnap.data();
       localStorage.setItem("loggedInUserId", user.uid);
-
       await setDoc(docRef, { lastLogin: new Date().toISOString() }, { merge: true });
 
       setTimeout(() => {
@@ -156,8 +159,9 @@ export default function LoginForm({ onSwitchToSignup, onLoginSuccess }) {
 
     } catch (err) {
       setShowPopup(false);
-      if (!["auth/popup-closed-by-user", "auth/cancelled-popup-request"].includes(err.code))
+      if (!["auth/popup-closed-by-user", "auth/cancelled-popup-request"].includes(err.code)) {
         show("Sign-in failed: " + err.message, true);
+      }
     } finally {
       setLoading(false);
     }
@@ -236,10 +240,3 @@ export default function LoginForm({ onSwitchToSignup, onLoginSuccess }) {
     </>
   );
 }
-
-const popupStyles = {
-  overlay: { position:'fixed', inset:0, backgroundColor:'rgba(0,0,0,0.45)', display:'flex', justifyContent:'center', alignItems:'center', zIndex:1000 },
-  popup:   { background:'#fff', borderRadius:'14px', padding:'28px 36px', boxShadow:'0 12px 48px rgba(0,0,0,0.18)', minWidth:'210px', textAlign:'center', display:'flex', flexDirection:'column', alignItems:'center', gap:'10px' },
-  spinner: { fontSize:'1.8rem', color:'#6AA6DA' },
-  text:    { color:'#6b7280', fontSize:'0.88rem', margin:0 },
-};

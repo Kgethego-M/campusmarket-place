@@ -19,20 +19,56 @@ export const db = getFirestore(app);
 export const storage = getStorage(app);
 export const googleProvider = new GoogleAuthProvider();
 
-// Persist session in localStorage so it survives page redirects (e.g. Stripe
-// Checkout sends the user away and back — without this Firebase loses the
-// session on return and briefly fires onAuthStateChanged with null).
 setPersistence(auth, browserLocalPersistence).catch((e) => {
   console.warn('Firebase persistence could not be set:', e);
 });
 
-export const isValidWitsEmail = (email) => {
-  return email.endsWith('@wits.ac.za') || email.endsWith('@students.wits.ac.za') || email === 'nontokozombatha797@gmail.com' || email === 's08027456@gmail.com' || email === 'tshegomaphefo48@gmail.com' || email === 'hyginusvictor11@gmail.com' || email === 'dantesebopela@gmail.com' || email === 'kgethim25.o@gmail.com' || email === 'mphelanekgethego20060325@gmail.com' || email === 'anelevanwyk49@gmail.com' || email === 'mbathamathamsanqa@gmail.com'|| email === 'masegelakamogelo5@gmail.com'||email === 'kgethie35@gmail.com' || email === "lialabelle71@gmail.com";
-};
+// ── Whitelisted Gmail groups ──────────────────────────────────────────────────
+export const WHITELISTED_STAFF_GMAILS = [
+  'nontokozombatha797@gmail.com',
+  's08027456@gmail.com',
+  'tshegomaphefo48@gmail.com',
+  'hyginusvictor11@gmail.com',
+  'kgethim25.o@gmail.com',
+  'sebopelatebogo68@gmail.com',
+];
+
+export const WHITELISTED_ADMIN_GMAILS = [
+  'mbathamathamsanqa@gmail.com',
+  'mphelanekgethego20060325@gmail.com',
+  'anelevanwyk49@gmail.com',
+  'lialabelle71@gmail.com',
+  'dantesebopela@gmail.com',
+  'hyginusvictor7@gmail.com',
+  'nhlanhla.nkosi@wits.ac.za',
+  '1064787@students.wits.ac.za',
+  '2586407@students.wits.ac.za',
+];
+
+// Students who sign in with Gmail instead of their Wits student email
+export const WHITELISTED_STUDENT_GMAILS = [
+  'kgethie35@gmail.com',
+  'masegelakamogelo5@gmail.com',
+];
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+export const isWhitelistedStaff   = (email) => WHITELISTED_STAFF_GMAILS.includes(email);
+export const isWhitelistedAdmin   = (email) => WHITELISTED_ADMIN_GMAILS.includes(email);
+export const isWhitelistedStudent = (email) => WHITELISTED_STUDENT_GMAILS.includes(email);
+
+export const isAnyWhitelisted = (email) =>
+  isWhitelistedStaff(email) || isWhitelistedAdmin(email) || isWhitelistedStudent(email);
+
+export const isValidWitsEmail = (email) =>
+  email.endsWith('@wits.ac.za') ||
+  email.endsWith('@students.wits.ac.za') ||
+  isAnyWhitelisted(email);
 
 export const getUserType = (email) => {
-  if (email.endsWith('@wits.ac.za') || email === 'nontokozombatha797@gmail.com' || email === 's08027456@gmail.com' || email === 'tshegomaphefo48@gmail.com' || email === 'hyginusvictor11@gmail.com' || email === 'kgethim25.o@gmail.com') return 'staff';
-  if (email === 'mbathamathamsanqa@gmail.com' || email === 'mphelanekgethego20060325@gmail.com' || email === 'anelevanwyk49@gmail.com'|| email === "lialabelle71@gmail.com" || email === 'dantesebopela@gmail.com') return 'admin';
-  if (email.endsWith('@students.wits.ac.za')|| email === 'kgethie35@gmail.com' || email === 'masegelakamogelo5@gmail.com') return 'student';
+  if (email.endsWith('@wits.ac.za') && !email.endsWith('@students.wits.ac.za')) return 'staff';
+  if (email.endsWith('@students.wits.ac.za')) return 'student';
+  if (isWhitelistedStaff(email))   return 'staff';
+  if (isWhitelistedAdmin(email))   return 'admin';
+  if (isWhitelistedStudent(email)) return 'student';
   return 'unknown';
 };

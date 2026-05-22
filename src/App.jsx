@@ -154,18 +154,26 @@ function LoginWrapper() {
   );
 }
 
-function SignupWrapper() {
-  const navigate = useNavigate();
-  return (
-    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh' }}>
-      <SignupForm
-        onSwitchToLogin={() => navigate('/login')}
-        onLoginSuccess={() => navigate('/view-listing')}
-      />
-    </div>
-  );
-}
-
+  function SignupWrapper() {
+    const navigate = useNavigate();
+    return (
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh' }}>
+        <SignupForm
+          onSwitchToLogin={() => navigate('/login')}
+          onLoginSuccess={(userData) => {
+            const role = userData.role || userData.userType;
+            if (role === 'admin') {
+              navigate('/admin');
+            } else if (role === 'staff') {
+              navigate('/staff');
+            } else {
+              navigate('/view-listing');
+            }
+          }}
+        />
+      </div>
+    );
+  }
 // -------------------------
 // Routes
 // -------------------------
