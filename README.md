@@ -88,6 +88,6 @@ The app will be available at `http://localhost:5173` by default.
 
 ## CI/CD Pipeline
 - **Provider:** GitHub Actions
-- **Trigger:** Automatic deployment on every push to the `main` branch
+- **Trigger:** Automatic deployment on every push to the `develop` branch
 - **Build Command:** `npm run build` (Vite)
 - **Deploy Target:** Azure App Service
