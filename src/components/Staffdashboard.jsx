@@ -414,8 +414,8 @@ function isSlotMissed(txn) {
 function isDropOffOverdue(txn) {
     if (txn.status !== "pending" || !txn.dropOffBooked) return false;
     if (!txn.dropOffDate) return false;
-    // Slot must have passed AND 15-minute grace period must have elapsed
-    const GRACE_MS = 15 * 60 * 1000;
+    // Slot must have passed AND 24-hour grace period must have elapsed
+    const GRACE_MS = 24 * 60 * 60 * 1000;
     const slotEnd = parseSlotEnd(txn.dropOffTimeSlot || txn.timeSlot);
     const graceStart = new Date(txn.dropOffDate + "T00:00:00");
     if (slotEnd) graceStart.setHours(slotEnd.hour, slotEnd.minute + 1, 0, 0);
@@ -425,7 +425,8 @@ function isDropOffOverdue(txn) {
 function isDropOffInGracePeriod(txn) {
     if (txn.status !== "pending" || !txn.dropOffBooked) return false;
     if (!txn.dropOffDate) return false;
-    const GRACE_MS = 15 * 60 * 1000;
+    // Grace period: slot end → slot end + 24 hours (alert sent, not yet overdue)
+    const GRACE_MS = 24 * 60 * 60 * 1000;
     const slotEnd = parseSlotEnd(txn.dropOffTimeSlot || txn.timeSlot);
     const graceStart = new Date(txn.dropOffDate + "T00:00:00");
     if (slotEnd) graceStart.setHours(slotEnd.hour, slotEnd.minute + 1, 0, 0);
@@ -434,12 +435,20 @@ function isDropOffInGracePeriod(txn) {
     return now >= graceStartMs && now < graceStartMs + GRACE_MS;
 }
 
-const COLLECTION_GRACE_MS = 15 * 60 * 1000;
+// Buyers have 7 days to collect; alert fires after 6 days
+const COLLECTION_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;  // 7 days → overdue
+const COLLECTION_ALERT_MS  = 6 * 24 * 60 * 60 * 1000;  // 6 days → alert
 
 function getCollectionDeadlineMs(txn) {
     if (txn.collectionDeadline) return new Date(txn.collectionDeadline).getTime();
-    if (txn.droppedOffAt)       return new Date(txn.droppedOffAt).getTime() + COLLECTION_GRACE_MS;
-    if (txn.dropOffDate)        return new Date(txn.dropOffDate + "T00:00:00").getTime() + COLLECTION_GRACE_MS;
+    if (txn.droppedOffAt)       return new Date(txn.droppedOffAt).getTime() + COLLECTION_WINDOW_MS;
+    if (txn.dropOffDate)        return new Date(txn.dropOffDate + "T00:00:00").getTime() + COLLECTION_WINDOW_MS;
+    return null;
+}
+
+function getCollectionAlertMs(txn) {
+    if (txn.droppedOffAt)  return new Date(txn.droppedOffAt).getTime() + COLLECTION_ALERT_MS;
+    if (txn.dropOffDate)   return new Date(txn.dropOffDate + "T00:00:00").getTime() + COLLECTION_ALERT_MS;
     return null;
 }
 
@@ -1923,15 +1932,14 @@ export default function StaffDashboard() {
     useEffect(() => {
         if (transactions.length === 0) return;
         async function autoAlert() {
-            const COLLECTION_ALERT_MS = 15 * 60 * 1000; // 15 min demo; production = 6 * 24 * 60 * 60 * 1000
             for (const txn of transactions) {
                 if (txn.status === "overdue_cancelled") continue;
                 if (txn.overdueAlertSentAt) continue;
                 const slotMissed = isSlotMissed(txn);
                 let overdueCollection = false;
-                if (isCollectionOverdue(txn)) {
-                    const droppedAt = txn.droppedOffAt ? new Date(txn.droppedOffAt).getTime() : null;
-                    overdueCollection = droppedAt ? (Date.now() - droppedAt >= COLLECTION_ALERT_MS) : true;
+                if (txn.status === "awaiting_collection") {
+                    const alertMs = getCollectionAlertMs(txn);
+                    overdueCollection = alertMs ? Date.now() >= alertMs : false;
                 }
                 if (!slotMissed && !overdueCollection) continue;
                 try {
@@ -2019,12 +2027,13 @@ export default function StaffDashboard() {
         const confirmingBuyer  = role === "buyer";
         const confirmingSeller = !confirmingBuyer;
 
-        const sellerNowDone = confirmingSeller || txn.sellerDropOffConfirmed;
-        const buyerNowDone  = confirmingBuyer  || txn.buyerDropOffConfirmed || !isTrade;
+        const sellerNowDone = confirmingSeller || !!txn.sellerDropOffConfirmed;
+        const buyerNowDone  = confirmingBuyer  || !!txn.buyerDropOffConfirmed || !isTrade;
         const bothDone      = sellerNowDone && buyerNowDone;
 
-        // Move to awaiting_collection after first drop-off for trades (so both cards appear)
-        const shouldMoveToAwaiting = bothDone || isTrade;
+        // For trades: only move to awaiting_collection when BOTH parties have dropped off.
+        // For standard transactions: move after seller (only party) drops off.
+        const shouldMoveToAwaiting = bothDone;
 
         setTransactions(prev => prev.map(t => {
             if (t.id !== id) return t;
@@ -2063,10 +2072,18 @@ export default function StaffDashboard() {
                 const sellerItemTitle = txn.listingTitle || txn.item;
                 const buyerItemTitle  = txn.tradeItem?.name || txn.tradeItem?.title || "Trade item";
 
-                if (confirmingSeller) {
+                if (confirmingSeller && !buyerNowDone) {
+                    // Seller dropped off but buyer hasn't yet — notify buyer that seller's item is at facility
                     await sendNotification(txn.buyerId, {
                         type: "item_at_facility", listingId: txn.listingId || null, transactionId: txn.id, listingTitle: sellerItemTitle,
                         message: `"${sellerItemTitle}" has been dropped off at the trade facility. You can come collect it once your own trade item has also been dropped off.`,
+                    });
+                }
+                if (confirmingBuyer && !sellerNowDone) {
+                    // Buyer dropped off but seller hasn't yet — notify seller that buyer's item is at facility
+                    await sendNotification(txn.sellerId, {
+                        type: "item_at_facility", listingId: txn.listingId || null, transactionId: txn.id, listingTitle: buyerItemTitle,
+                        message: `"${buyerItemTitle}" has been dropped off at the trade facility by the other party. Please drop off your own item to complete the exchange.`,
                     });
                 }
                 if (bothDone) {
@@ -2369,8 +2386,8 @@ export default function StaffDashboard() {
     const STATS = [
         { label: "Pending Drop-off",    value: pendingDropOff.length,  icon: "fa-truck-arrow-right",  color: "#f59e0b" },
         { label: "Awaiting Collection", value: awaitingCollCount,       icon: "fa-person-walking",     color: "#8b5cf6" },
-        { label: "Overdue", value: overdueCount, icon: "fa-circle-exclamation", color: "#ef4444" },
-        { label: "Awaiting Returns",    value: awaitingReturns.length,  icon: "fa-box-archive",        color: "#0891b2" },
+        { label: "Overdue", value: overdueCount, icon: "fa-circle-exclamation", color: "#ef4444", onClick: () => setActiveTab("overdue") },
+        { label: "Awaiting Returns",    value: awaitingReturns.length,  icon: "fa-box-archive",        color: "#0891b2", onClick: () => setActiveTab("awaiting_returns") },
         { label: "Completed",           value: completed.length,        icon: "fa-circle-check",       color: "#10b981" },
     ];
 
